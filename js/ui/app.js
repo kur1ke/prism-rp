@@ -4,7 +4,7 @@
    переезд между платформами — через бэкап JSON. */
 (function () {
   "use strict";
-  const { util: U, store: DB, scene: SC, experience: EX, assembler: AS, ccard: CC, openai: OA, perchance: PC, tree: TR, render: R, views: V, imgCompose: IC, imgBackends: IB, imgCompile: ICP } = window.PRP;
+  const { util: U, store: DB, scene: SC, experience: EX, assembler: AS, ccard: CC, openai: OA, perchance: PC, tree: TR, render: R, views: V, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST } = window.PRP;
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
 
@@ -37,6 +37,7 @@
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
+    assist: null, assistList: [],
   };
 
   /* ── Мелочи ─────────────────────────────────────────────────────────── */
@@ -113,6 +114,9 @@
       stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
       imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
       origin: location.origin && location.origin !== "null" ? location.origin : "*",
+      assist: S.assist, assistList: S.assistList,
+      assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
+      assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
     };
   }
 
@@ -129,7 +133,15 @@
     const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
     const feedEl = $("#feed");
     const scroll = feedEl ? feedEl.scrollTop : null;
-    if (S.view === "chat" && m.chat && m.card) {
+    if (S.view === "assist" && S.assist) {
+      $("#stage").innerHTML = V.assist(m);
+      app.classList.remove("messenger");
+      if (keep) {
+        const i = $("#input"); i.value = keep.v; autoGrow(i);
+        if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+      }
+      if (scroll != null && $("#feed")) $("#feed").scrollTop = scroll;
+    } else if (S.view === "chat" && m.chat && m.card) {
       $("#stage").innerHTML = V.chat(m);
       app.classList.toggle("messenger", m.chat.mode === "messenger");
       if (keep) {
@@ -145,6 +157,7 @@
     app.classList.toggle("generating", !!S.gen);
   }
   function renderFeed() {
+    if (S.view === "assist") return renderStage();
     const inner = $("#feed-inner");
     if (!inner) return renderStage();
     inner.innerHTML = V.feed(vm());
@@ -212,11 +225,15 @@
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
     S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
+    S.assistList = await DB.all("assist");
     const ui = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!ui.drawerOpen && !narrow();
     if (ui.chatId && S.chats.some((c) => c.id === ui.chatId)) await openChat(ui.chatId, true);
+    else if (ui.view === "assist") openAssist(ui.assistId, null, true);
   }
-  function rememberUi() { DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen }); }
+  function rememberUi() {
+    DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen, view: S.view, assistId: S.view === "assist" && S.assist && S.assist.messages.length ? S.assist.id : null });
+  }
 
   async function openChat(chatId, quiet) {
     const c = S.chats.find((x) => x.id === chatId);
@@ -302,6 +319,7 @@
     if (!input) return;
     const text = input.value.trim();
     if (!text || S.gen) return;
+    if (S.view === "assist") { input.value = ""; autoGrow(input); return assistSend(text); }
     const c = chat();
     input.value = "";
     autoGrow(input);
@@ -626,6 +644,121 @@
     toast("Событие сохранено в опыт.");
   }
 
+
+  /* ── Ассистент: разговор с моделью вне игры ─────────────────────────── */
+  function openAssist(id, ctx, quiet) {
+    if (S.gen) { toast("Дождитесь окончания ответа или остановите его.", true); return; }
+    const found = id && S.assistList.find((a) => a.id === id);
+    if (found) S.assist = found;
+    else if (!ctx && S.assist && !S.assist.messages.length) { /* пустой разговор уже открыт */ }
+    else {
+      // Новый разговор наследует персонажа из текущего контекста.
+      const base = ctx || (S.assist ? { cardId: S.assist.ctx.cardId, chatId: null } : (S.view === "chat" && S.cardId ? { cardId: S.cardId, chatId: null } : {}));
+      S.assist = AST.blank(base);
+    }
+    S.view = "assist";
+    S.find = null;
+    S.drawerOpen = S.drawerOpen && !narrow();
+    rememberUi();
+    $("#rail").classList.remove("open");
+    if (!quiet) { renderAll(); scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !narrow()) i.focus(); }, 30); }
+  }
+  async function saveAssist() {
+    const a = S.assist;
+    await DB.put("assist", a);
+    if (!S.assistList.includes(a)) S.assistList.push(a);
+    rememberUi();
+  }
+  async function assistChatLines(chatId) {
+    const c = S.chats.find((x) => x.id === chatId);
+    if (!c) return { lines: [], scene: "" };
+    const msgs = await DB.byIndex("messages", "chatId", chatId);
+    const path = TR.path(TR.index(msgs), c.leafId);
+    const cd = S.cards.find((x) => x.id === c.cardId);
+    const lines = path.map((m) => ({ name: m.role === "user" ? persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
+    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, ops: TR.activeSwipe(m).sceneOps || [] })));
+    return { lines, scene: SC.summaryLine(st) || "" };
+  }
+  async function assistSend(text) {
+    const a = S.assist;
+    if (!a || S.gen) return;
+    if (!a.messages.length) a.title = AST.title(text);
+    a.messages.push({ id: U.uid("am"), role: "user", text, at: Date.now() });
+    await saveAssist();
+    await assistGenerate();
+  }
+  async function assistGenerate() {
+    const a = S.assist;
+    const prov = activeProvider();
+    if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
+    const cd = a.ctx.cardId ? S.cards.find((c) => c.id === a.ctx.cardId) : null;
+    const chatCtx = a.ctx.chatId ? await assistChatLines(a.ctx.chatId) : { lines: [], scene: "" };
+    const target = { id: U.uid("am"), role: "assistant", text: "", at: Date.now() };
+    const history = a.messages.map((x) => ({ role: x.role, text: x.text }));
+    a.messages.push(target);
+    const built = AST.build({
+      system: (S.settings.assistSystem || "").trim() || AST.SYSTEM, card: cd, chatLines: chatCtx.lines, sceneLine: chatCtx.scene,
+      userName: persona().name, history, contextTokens: contextTokens(), reserveTokens: 1500,
+    });
+    const ctrl = new AbortController();
+    S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", assist: true };
+    renderStage();
+    scrollBottom();
+    const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; paintAssist(); };
+    let raw = "", reasoning = "", error = null;
+    try {
+      const sp = S.settings.sampler;
+      const res = prov.kind === "perchance"
+        ? await PC.chat({ char: "Ассистент", user: persona().name }, built.messages, { signal: ctrl.signal, onDelta })
+        : await OA.chat(prov, built.messages, Object.assign({}, sp, { temperature: Math.min(sp.temperature || 0.7, 0.8), max_tokens: Math.max(sp.max_tokens || 0, 1500) }), { signal: ctrl.signal, onDelta });
+      raw = res.text; reasoning = res.reasoning;
+    } catch (e) {
+      raw = e.partial != null ? e.partial : (S.gen ? S.gen.raw : "");
+      reasoning = S.gen ? S.gen.reasoning : "";
+      if (e.name !== "AbortError") error = e.message || String(e);
+    }
+    const th = OA.splitThink(raw || "");
+    target.text = th.text.trim();
+    target.reasoning = [reasoning, th.reasoning].filter(Boolean).join("\n").trim();
+    if (error) target.error = error;
+    S.gen = null;
+    if (!target.text && !error) a.messages.pop();
+    await saveAssist();
+    if (S.view === "assist") { renderStage(); scrollBottom(); }
+  }
+  let assistPaintQueued = false;
+  function paintAssist() {
+    if (assistPaintQueued) return;
+    assistPaintQueued = true;
+    requestAnimationFrame(() => {
+      assistPaintQueued = false;
+      if (!S.gen || !S.gen.assist) return;
+      const el = document.getElementById("text-" + S.gen.msgId);
+      if (!el) return;
+      el.innerHTML = R.md(OA.splitThink(S.gen.raw).text);
+      const box = $("#feed");
+      if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
+    });
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } finally { ta.remove(); }
+    }
+    toast("Скопировано.");
+  }
+  async function assistCutFrom(id) {
+    const a = S.assist;
+    const i = a.messages.findIndex((x) => x.id === id);
+    if (i < 0) return null;
+    const removed = a.messages.splice(i);
+    await saveAssist();
+    return removed;
+  }
+
   /* ── Персонажи ──────────────────────────────────────────────────────── */
   function openCardEditor(cd) {
     S.modal = { kind: "card", section: "main", draft: U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })) };
@@ -870,6 +1003,44 @@
     "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; refreshPrism(); renderDrawer(); renderFeed(); },
     "chat-menu": (t) => openPop(V.chatMenu(vm()), t),
     "model-pop": (t) => openPop(V.modelPop(vm()), t),
+    assist: () => openAssist(S.assist && S.assist.messages.length ? S.assist.id : null),
+    "assist-new": () => { closePop(); if (S.assist && !S.assist.messages.length) { $("#input") && $("#input").focus(); return; } openAssist(null, S.assist ? { cardId: S.assist.ctx.cardId, chatId: S.assist.ctx.chatId } : null); },
+    "assist-open": (t) => { closePop(); openAssist(t.dataset.id); },
+    "assist-list": (t) => openPop(V.assistListPop(vm()), t),
+    "assist-ctx": (t) => openPop(V.assistCtxPop(vm()), t),
+    "assist-pick-card": async (t) => {
+      const a = S.assist; a.ctx.cardId = t.dataset.id || null; a.ctx.chatId = null;
+      if (a.messages.length) await saveAssist();
+      renderStage();
+      const anchor = $("[data-act=assist-ctx]");
+      if (a.ctx.cardId && anchor) openPop(V.assistCtxPop(vm()), anchor); else closePop();
+    },
+    "assist-pick-chat": async (t) => {
+      const a = S.assist; a.ctx.chatId = t.dataset.id || null;
+      if (a.messages.length) await saveAssist();
+      closePop(); renderStage();
+    },
+    "assist-about-chat": () => { closePop(); openAssist(null, { cardId: S.cardId, chatId: S.chatId }); },
+    "assist-starter": (t) => { if (S.gen) return; assistSend(t.dataset.q); },
+    "assist-copy": (t) => { const m = S.assist.messages.find((x) => x.id === t.dataset.id); if (m) copyText(m.text); },
+    "copy-code": (t) => { const c = t.parentElement.querySelector("code"); if (c) copyText(c.textContent); },
+    "assist-regen": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); await assistGenerate(); },
+    "assist-edit": async (t) => {
+      if (S.gen) return;
+      const removed = await assistCutFrom(t.dataset.id);
+      renderStage();
+      const i = $("#input"); if (i && removed) { i.value = removed[0].text; autoGrow(i); i.focus(); }
+    },
+    "assist-msg-del": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); renderStage(); },
+    "assist-del": async () => {
+      const a = S.assist;
+      if (!a || S.gen || !confirm(`Удалить разговор «${a.title}»?`)) return;
+      await DB.del("assist", a.id);
+      S.assistList = S.assistList.filter((x) => x !== a);
+      S.assist = null;
+      openAssist(null);
+      toast("Разговор удалён.");
+    },
     "new-chat": (t) => { closePop(); newChat(t.dataset.mode); },
     "edit-card": (t) => { closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : card()); },
     "rename-chat": async () => {
@@ -1024,7 +1195,7 @@
   };
 
   async function onClick(e) {
-    if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=model-pop],[data-act=chat-menu]")) closePop();
+    if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=model-pop],[data-act=chat-menu],[data-act=assist-ctx],[data-act=assist-list]")) closePop();
     const t = e.target.closest("[data-act]");
     if (!t || t.disabled) return;
     const fn = ACTS[t.dataset.act];
@@ -1056,6 +1227,7 @@
       if (t.dataset.imgCheck) { collectImgForm(); S.settings.images[t.dataset.imgCheck] = t.checked; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await saveSettings(); refreshAfterSettings(); return; }
+      if (t.dataset.setText) { S.settings[t.dataset.setText] = t.value; await saveSettings(); return; }
       if (t.dataset.setNum) { S.settings[t.dataset.setNum] = +t.value; await saveSettings(); refreshAfterSettings(); return; }
       if (t.dataset.setRange) { S.settings[t.dataset.setRange] = +t.value; applyLook(); await saveSettings(); return; }
       if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; await saveSettings(); refreshAfterSettings(); if (S.drawerOpen) renderDrawer(); return; }

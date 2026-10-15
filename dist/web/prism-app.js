@@ -1,12 +1,12 @@
-/* Prism RP 0.3.1 — сборка для загрузчика. Исходники: github.com/kur1ke/prism-rp */
+/* Prism RP 0.4.0 — сборка для загрузчика. Исходники: github.com/kur1ke/prism-rp */
 (function () {
   var d = document;
   ["https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap"].forEach(function (h) { var l = d.createElement("link"); l.rel = "stylesheet"; l.href = h; d.head.appendChild(l); });
-  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n"; d.head.appendChild(st);
+  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n"; d.head.appendChild(st);
   var boot = d.getElementById("prism-boot"); if (boot) boot.remove();
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n</div>";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
-  window.PRISM_RP_VERSION = "0.3.1";
+  window.PRISM_RP_VERSION = "0.4.0";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -77,8 +77,8 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
-  const DB_VERSION = 2;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images"];
+  const DB_VERSION = 3;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist"];
   let dbPromise = null;
 
   function open() {
@@ -94,6 +94,8 @@
         if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings", { keyPath: "key" });
         // v2: картинки отдельно от сообщений, чтобы правка текста не переписывала мегабайты.
         if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" }).createIndex("chatId", "chatId");
+        // v3: разговоры с ассистентом (вне ролевой игры), сообщения хранятся внутри разговора.
+        if (!db.objectStoreNames.contains("assist")) db.createObjectStore("assist", { keyPath: "id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -137,7 +139,7 @@
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 2, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 3, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
@@ -745,6 +747,120 @@
 
   PRP.assembler = { build, matchLore, TEMPLATES };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.assembler;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/assist/assist.js */
+/* Prism RP — ассистент: разговор с самой моделью вне ролевой игры.
+   Консультации по карточкам, сценам, промптам, разбор чата. Модель здесь —
+   помощник автора, а не персонаж; Prism-рамка (Card/Experience/Scene) не применяется.
+   По желанию к разговору подключается карточка персонажа и выдержка из его чата. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util;
+
+  const SYSTEM = [
+    "Ты — ассистент внутри Prism RP, среды для ролевой игры с ИИ-персонажами. Сейчас ты говоришь с автором напрямую, вне игры: ты не персонаж и не продолжаешь сцену, если тебя об этом прямо не просят.",
+    "Помогаешь с тем, что нужно автору: писать и улучшать карточки персонажей (поля Character Card V2: description, personality, scenario, first_mes, alternate_greetings, mes_example, system_prompt, post_history_instructions, лорбук), придумывать сюжетные ходы и приветствия, разбирать, почему персонаж ведёт себя так или иначе, подбирать теги для картинок (danbooru) и настройки моделей.",
+    "Как устроен Prism RP: карточка задаёт склонности персонажа, а не команды; опыт — свидетельства прошлого, а не инструкции; сцену (время, место, одежду, отношения) ведёт приложение. Хорошая карточка описывает характер через конкретные привычки и реакции, а не через списки прилагательных.",
+    "Отвечай по существу и на языке собеседника. Если просят текст для поля карточки — дай готовый текст, который можно скопировать целиком. Если вопрос неясен — уточни одним вопросом.",
+  ].join("\n\n");
+
+  // need: "" — без персонажа, "card" — нужен персонаж, "chat" — нужен и чат.
+  const STARTERS = [
+    { need: "", t: "Помоги придумать персонажа", q: "Помоги придумать нового персонажа для ролевой игры. Сначала задай мне 3–4 вопроса, потом собери черновик карточки по полям." },
+    { need: "", t: "Как написать живую карточку", q: "Как написать карточку персонажа, чтобы он ощущался живым, а не набором прилагательных? Дай короткие правила и небольшой пример." },
+    { need: "", t: "Какую модель выбрать", q: "Какие модели и настройки генерации лучше подходят для ролевой игры на русском языке? Учти, что у меня может быть бесплатная модель Perchance или локальная модель." },
+    { need: "card", t: "Улучши описание персонажа", q: "Посмотри на описание персонажа и предложи, как сделать его живее: что убрать, что добавить. Затем дай переписанный вариант целиком." },
+    { need: "card", t: "Придумай приветствие", q: "Придумай альтернативное приветствие для этого персонажа — другая ситуация знакомства, 2–3 абзаца." },
+    { need: "card", t: "Теги для картинок", q: "Составь теги danbooru для внешности и основных нарядов этого персонажа в формате гардероба Prism: «название | alias: теги»." },
+    { need: "chat", t: "Разбери поведение в чате", q: "Почему персонаж в этом чате ведёт себя именно так? Что в карточке или контексте на это влияет и что поправить, если я хочу иначе?" },
+    { need: "chat", t: "Куда развить сюжет", q: "Предложи три разных направления, куда можно развить сюжет этого чата дальше, и как подтолкнуть к каждому своей репликой." },
+  ];
+  function starters(hasCard, hasChat) {
+    return STARTERS.filter((x) => (x.need === "" && !hasCard) || (x.need === "card" && hasCard) || (x.need === "chat" && hasChat));
+  }
+
+
+  // Карточка → компактный текст для контекста ассистента.
+  function cardText(card) {
+    if (!card) return "";
+    const f = (label, v) => (v && String(v).trim() ? `${label}:\n${String(v).trim()}` : "");
+    const alts = (card.altGreetings || []).filter(Boolean);
+    const lore = (card.lore || []).filter((e) => e && e.content).slice(0, 20)
+      .map((e) => `- [${(e.keys || []).join(", ") || "без ключей"}${e.constant ? ", постоянная" : ""}] ${e.content}`).join("\n");
+    const im = card.image || {};
+    return [
+      `Имя: ${card.name}`,
+      f("Описание (description)", card.description),
+      f("Личность (personality)", card.personality),
+      f("Сценарий (scenario)", card.scenario),
+      f("Первое сообщение (first_mes)", card.firstMes),
+      alts.length ? `Альтернативные приветствия: ${alts.length}` : "",
+      f("Примеры диалогов (mes_example)", card.mesExample),
+      f("Системный промпт карточки", card.systemPrompt),
+      f("Инструкции после истории", card.postHistory),
+      lore ? `Лорбук:\n${lore}` : "",
+      im.trigger || im.wardrobe || im.look ? f("Изображения — триггер", im.trigger) + (im.look ? `\nВнешность для картинок:\n${im.look}` : "") + (im.wardrobe ? `\nГардероб:\n${im.wardrobe}` : "") : "",
+    ].filter(Boolean).join("\n\n");
+  }
+
+  // Последние сообщения чата → стенограмма (самые свежие важнее, режем с начала).
+  function chatText(lines, budgetTokens) {
+    const out = [];
+    let used = 0;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const s = `${lines[i].name}: ${lines[i].text}`;
+      const c = U.estimateTokens(s) + 2;
+      if (used + c > budgetTokens) break;
+      out.unshift(s); used += c;
+    }
+    const cut = lines.length - out.length;
+    return (cut > 0 ? `(ранние ${cut} сообщ. не поместились)\n\n` : "") + out.join("\n\n");
+  }
+
+  /* o: { system, card, chatLines, sceneLine, userName, history:[{role,text}], contextTokens, reserveTokens }
+     → { messages, report } */
+  function build(o) {
+    const budget = Math.max(1024, (o.contextTokens || 8192) - (o.reserveTokens || 1200));
+    const sys = [o.system || SYSTEM];
+    if (o.userName) sys.push(`Собеседника зовут ${o.userName}.`);
+    let used = U.estimateTokens(sys.join("\n\n"));
+    const ct = cardText(o.card);
+    if (ct) { const b = `### Карточка персонажа, о котором идёт речь\n${ct}`; sys.push(b); used += U.estimateTokens(b); }
+    const hist = o.history || [];
+    // История разговора с ассистентом: от новых к старым.
+    const kept = [];
+    let histBudget = Math.max(600, Math.floor((budget - used) * (o.chatLines && o.chatLines.length ? 0.5 : 1)));
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const c = U.estimateTokens(hist[i].text) + 4;
+      if (c > histBudget && kept.length) break;
+      kept.unshift(hist[i]); histBudget -= c; used += c;
+    }
+    let chatBlock = "";
+    if (o.chatLines && o.chatLines.length) {
+      chatBlock = `### Выдержка из ролевого чата${o.sceneLine ? ` (сцена сейчас: ${o.sceneLine})` : ""}\n${chatText(o.chatLines, Math.max(300, budget - used))}`;
+      sys.push(chatBlock);
+      used += U.estimateTokens(chatBlock);
+    }
+    const messages = [{ role: "system", content: sys.join("\n\n") }]
+      .concat(kept.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text })));
+    return { messages, report: { budget, used, historyKept: kept.length, historyTotal: hist.length, card: !!ct, chat: !!chatBlock } };
+  }
+
+  // Заголовок разговора по первой реплике.
+  function title(text) {
+    const s = String(text || "").replace(/\s+/g, " ").trim();
+    return s.length > 48 ? s.slice(0, 46).replace(/\s+\S*$/, "") + "…" : s || "Новый разговор";
+  }
+
+  function blank(ctx) {
+    const now = Date.now();
+    return { id: U.uid("as"), title: "Новый разговор", messages: [], ctx: Object.assign({ cardId: null, chatId: null }, ctx || {}), createdAt: now, updatedAt: now };
+  }
+
+  PRP.assist = { SYSTEM, STARTERS, starters, cardText, chatText, build, title, blank };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.assist;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/cards/ccard.js */
@@ -2044,6 +2160,7 @@
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17 5-4.5 3.5 3 3-2.5 4.5 4"/>',
     brush: '<path d="M14.5 4.5 19.5 9.5 11 18l-5-5z"/><path d="M6 13c-2 0-2.5 2-2.5 3.5S2.5 20 2.5 20s4 .5 5.5-1 1-3 1-3"/>',
     pin: '<path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"/>',
+    assist: '<path d="M20 12.5c0 3.9-3.6 7-8 7-1.2 0-2.3-.2-3.3-.6L4 20l1.3-3.6A6.6 6.6 0 0 1 4 12.5c0-3.9 3.6-7 8-7"/><path d="M17.5 2.8l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z"/>',
     info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/>',
   };
   function icon(name, cls) {
@@ -2085,6 +2202,51 @@
     return h;
   }
 
+  // Ответы ассистента: безопасный минимум Markdown. Сначала всё экранируется,
+  // затем размечаются блоки кода, заголовки, списки, цитаты, **жирный**, *курсив*, `код`.
+  function md(text) {
+    const src = String(text || "").replace(/\r\n?/g, "\n");
+    const parts = src.split(/(```[^\n]*\n[\s\S]*?(?:```|$))/g);
+    const inline = (s) => s
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
+      .replace(/(^|[^_\w])_([^_\n]+)_(?!\w)/g, "$1<em>$2</em>");
+    let out = "";
+    parts.forEach((p, i) => {
+      if (i % 2 === 1) {
+        const m = p.match(/^```([^\n]*)\n([\s\S]*?)(?:```)?$/);
+        const code = m ? m[2].replace(/\n$/, "") : p;
+        out += `<div class="mdcode"><button class="tool code-copy" data-act="copy-code" title="Скопировать">${icon("copy")}</button><pre><code>${esc(code)}</code></pre></div>`;
+        return;
+      }
+      const lines = esc(p).split("\n");
+      let list = null, para = [];
+      const flush = () => {
+        if (para.length) { out += `<p>${inline(para.join("<br>"))}</p>`; para = []; }
+        if (list) { out += `<${list.tag}>${list.items.map((x) => `<li>${inline(x)}</li>`).join("")}</${list.tag}>`; list = null; }
+      };
+      for (const line of lines) {
+        let m;
+        if (!line.trim()) { flush(); continue; }
+        if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flush(); const hl = Math.max(3, m[1].length + 1); out += `<h${hl}>${inline(m[2])}</h${hl}>`; continue; }
+        if ((m = line.match(/^&gt;\s?(.*)$/))) { flush(); out += `<blockquote>${inline(m[1])}</blockquote>`; continue; }
+        if ((m = line.match(/^\s*[-*•]\s+(.*)$/)) || (m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+          const tag = /^\s*\d/.test(line) ? "ol" : "ul";
+          if (para.length) { out += `<p>${inline(para.join("<br>"))}</p>`; para = []; }
+          if (list && list.tag !== tag) flush();
+          if (!list) list = { tag, items: [] };
+          list.items.push(m[1]);
+          continue;
+        }
+        if (list) flush();
+        para.push(line);
+      }
+      flush();
+    });
+    return out;
+  }
+
   // Мессенджер: ответ делится на отдельные сообщения по пустым строкам.
   function bubbles(text) {
     return String(text || "").split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
@@ -2117,7 +2279,7 @@
     return many;
   }
 
-  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, bubbles, time, day, ago, plural, hue };
+  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/ui/views.js */
@@ -2148,6 +2310,7 @@
       <button class="brand" data-act="home" title="На главную">${R.GLYPH}<span>Prism RP</span></button>
       <nav class="rail-nav">
         <button class="rail-item ${m.view === "home" ? "active" : ""}" data-act="home">${icon("home")}Персонажи</button>
+        <button class="rail-item ${m.view === "assist" ? "active" : ""}" data-act="assist" title="Разговор с моделью вне игры: советы, карточки, разбор чата">${icon("assist")}Ассистент</button>
         <button class="rail-item" data-act="import">${icon("upload")}Импорт карточки</button>
       </nav>
       <div class="rail-head"><span>Недавние чаты</span></div>
@@ -2432,6 +2595,7 @@
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
       <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка</button>
       <div class="pop-sep"></div>
+      <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>
       <button class="pop-item" data-act="edit-card">${icon("card")}Редактировать персонажа</button>
       <button class="pop-item" data-act="rename-chat">${icon("edit")}Переименовать чат</button>
       <button class="pop-item" data-act="export-chat" data-fmt="txt">${icon("download")}Скачать чат как текст</button>
@@ -2583,7 +2747,10 @@
           <div class="field"><label>Записей опыта за ход</label><input type="number" min="0" max="30" data-set-num="expLimit" value="${s.expLimit}"></div></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
-        <label class="check"><input type="checkbox" data-set="sceneProtocol" ${s.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сцены<small>Время, место, одежда, настроение — короткой служебной строкой, которую приложение прячет.</small></span></label>`;
+        <label class="check"><input type="checkbox" data-set="sceneProtocol" ${s.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сцены<small>Время, место, одежда, настроение — короткой служебной строкой, которую приложение прячет.</small></span></label>
+        <div class="block-title" style="margin-top:20px">Ассистент</div>
+        <div class="field"><label for="assist-sys">Инструкция ассистента</label><textarea id="assist-sys" rows="5" data-set-text="assistSystem" placeholder="${esc(PRP.assist.SYSTEM)}">${esc(s.assistSystem || "")}</textarea>
+          <span class="help">Как модель ведёт себя в разделе «Ассистент». Пусто — встроенная инструкция (видна серым).</span></div>`;
     } else if (section === "images") {
       body = imagesSettings(m);
     } else if (section === "persona") {
@@ -2675,6 +2842,77 @@
       <p class="hint" style="margin:10px 0 0">Ключ хранится только в этом браузере.</p></div>`;
   }
 
+
+  /* ── Ассистент: разговор с моделью вне игры ───────────────────────── */
+  function assist(m) {
+    const a = m.assist;
+    const AS = PRP.assist;
+    const cd = m.assistCard, ch = m.assistChat;
+    const ctxLabel = cd ? `${esc(cd.name)}${ch ? " + чат" : ""}` : "Без персонажа";
+    const head = `<header class="chat-head assist-head">
+      <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
+      <div class="assist-mark">${icon("assist")}</div>
+      <div class="head-who"><div class="head-name">Ассистент</div><span class="head-scene">${esc(a.messages.length ? a.title : "Разговор с моделью вне игры")}</span></div>
+      <div class="head-tools">
+        <button class="pill" data-act="assist-ctx" title="Что ассистент видит: карточку персонажа и выдержку из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
+        <button class="icon-btn" data-act="assist-list" title="Все разговоры">${icon("clock")}</button>
+        <button class="icon-btn" data-act="assist-new" title="Новый разговор">${icon("plus")}</button>
+        ${a.messages.length ? `<button class="icon-btn" data-act="assist-del" title="Удалить разговор">${icon("trash")}</button>` : ""}
+      </div></header>`;
+    const empty = !a.messages.length ? `<div class="assist-empty">
+        <div class="assist-hero">${icon("assist")}</div>
+        <h2>О чём поговорим?</h2>
+        <p>Здесь модель — ваш помощник, а не персонаж. Спросите совета по карточке, сцене или настройкам. ${cd ? `Ассистент видит карточку ${esc(cd.name)}${ch ? " и выдержку из выбранного чата" : ""}.` : "Подключите персонажа кнопкой вверху — тогда ассистент увидит его карточку и, по желанию, чат."}</p>
+        <div class="starters">${AS.starters(!!cd, !!ch).map((x) => `<button class="starter" data-act="assist-starter" data-q="${esc(x.q)}">${esc(x.t)}</button>`).join("")}</div>
+      </div>` : "";
+    const feed = a.messages.map((msg, i) => {
+      const live = m.gen && m.gen.assist && m.gen.msgId === msg.id;
+      const last = i === a.messages.length - 1;
+      const text = live ? m.gen.raw : msg.text;
+      const th = OA.splitThink(text || "");
+      const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
+      const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
+        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
+      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${msg.id}">
+        ${body}
+        ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
+        ${live ? "" : `<div class="tools">
+          <button class="tool" data-act="assist-copy" data-id="${msg.id}">${icon("copy")}Скопировать</button>
+          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${msg.id}">${icon("regen")}Другой ответ</button>` : ""}
+          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${msg.id}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
+          <button class="tool" data-act="assist-msg-del" data-id="${msg.id}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
+      </article>`;
+    }).join("");
+    const p = m.provider;
+    const composer = `<div class="composer-wrap"><div class="composer">
+      <textarea id="input" rows="1" placeholder="Спросите ассистента…" aria-label="Сообщение ассистенту"></textarea>
+      <div class="composer-bar">
+        <button class="pill" data-act="model-pop" title="Модель">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}</span></button>
+        <span class="spacer"></span>
+        ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>` : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
+      </div></div></div>`;
+    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div>${composer}</section>`;
+  }
+
+  function assistCtxPop(m) {
+    const cd = m.assistCard;
+    const chats = cd ? m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 12) : [];
+    return `<div class="pop-title">Персонаж для разговора</div>
+      <button class="pop-item ${!cd ? "on" : ""}" data-act="assist-pick-card" data-id="">${icon("x")}<span>Без персонажа</span></button>
+      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${c.id}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
+      ${cd ? `<div class="pop-sep"></div><div class="pop-title">Показать ассистенту чат</div>
+        <button class="pop-item ${!m.assistChat ? "on" : ""}" data-act="assist-pick-chat" data-id="">${icon("x")}<span>Не показывать</span></button>
+        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${c.id}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
+  }
+
+  function assistListPop(m) {
+    const list = (m.assistList || []).slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    return `<div class="pop-title">Разговоры с ассистентом</div>
+      <button class="pop-item" data-act="assist-new">${icon("plus")}<span>Новый разговор</span></button>
+      ${list.length ? `<div class="pop-sep"></div>` : ""}
+      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${a.id}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
+  }
+
   /* ── Редактор персонажа ───────────────────────────────────────────── */
   // Поля и их порядок — как в Character Card V2/V3 и SillyTavern. Рядом с подписью
   // мелко показан ключ спецификации, чтобы было видно, куда поле попадёт при экспорте.
@@ -2749,7 +2987,7 @@
       <div class="modal-body">${body}</div></div></div>`;
   }
 
-  PRP.views = { rail, home, chat, chatHead, feed, composer, drawer, modelPop, chatMenu, settingsModal, cardModal, imageInfo, SAMPLER_PRESETS, THEMES };
+  PRP.views = { rail, home, chat, chatHead, feed, composer, drawer, modelPop, chatMenu, assist, assistCtxPop, assistListPop, settingsModal, cardModal, imageInfo, SAMPLER_PRESETS, THEMES };
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/ui/app.js */
@@ -2759,7 +2997,7 @@
    переезд между платформами — через бэкап JSON. */
 (function () {
   "use strict";
-  const { util: U, store: DB, scene: SC, experience: EX, assembler: AS, ccard: CC, openai: OA, perchance: PC, tree: TR, render: R, views: V, imgCompose: IC, imgBackends: IB, imgCompile: ICP } = window.PRP;
+  const { util: U, store: DB, scene: SC, experience: EX, assembler: AS, ccard: CC, openai: OA, perchance: PC, tree: TR, render: R, views: V, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST } = window.PRP;
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
 
@@ -2792,6 +3030,7 @@
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
+    assist: null, assistList: [],
   };
 
   /* ── Мелочи ─────────────────────────────────────────────────────────── */
@@ -2868,6 +3107,9 @@
       stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
       imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
       origin: location.origin && location.origin !== "null" ? location.origin : "*",
+      assist: S.assist, assistList: S.assistList,
+      assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
+      assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
     };
   }
 
@@ -2884,7 +3126,15 @@
     const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
     const feedEl = $("#feed");
     const scroll = feedEl ? feedEl.scrollTop : null;
-    if (S.view === "chat" && m.chat && m.card) {
+    if (S.view === "assist" && S.assist) {
+      $("#stage").innerHTML = V.assist(m);
+      app.classList.remove("messenger");
+      if (keep) {
+        const i = $("#input"); i.value = keep.v; autoGrow(i);
+        if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+      }
+      if (scroll != null && $("#feed")) $("#feed").scrollTop = scroll;
+    } else if (S.view === "chat" && m.chat && m.card) {
       $("#stage").innerHTML = V.chat(m);
       app.classList.toggle("messenger", m.chat.mode === "messenger");
       if (keep) {
@@ -2900,6 +3150,7 @@
     app.classList.toggle("generating", !!S.gen);
   }
   function renderFeed() {
+    if (S.view === "assist") return renderStage();
     const inner = $("#feed-inner");
     if (!inner) return renderStage();
     inner.innerHTML = V.feed(vm());
@@ -2967,11 +3218,15 @@
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
     S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
+    S.assistList = await DB.all("assist");
     const ui = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!ui.drawerOpen && !narrow();
     if (ui.chatId && S.chats.some((c) => c.id === ui.chatId)) await openChat(ui.chatId, true);
+    else if (ui.view === "assist") openAssist(ui.assistId, null, true);
   }
-  function rememberUi() { DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen }); }
+  function rememberUi() {
+    DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen, view: S.view, assistId: S.view === "assist" && S.assist && S.assist.messages.length ? S.assist.id : null });
+  }
 
   async function openChat(chatId, quiet) {
     const c = S.chats.find((x) => x.id === chatId);
@@ -3057,6 +3312,7 @@
     if (!input) return;
     const text = input.value.trim();
     if (!text || S.gen) return;
+    if (S.view === "assist") { input.value = ""; autoGrow(input); return assistSend(text); }
     const c = chat();
     input.value = "";
     autoGrow(input);
@@ -3381,6 +3637,121 @@
     toast("Событие сохранено в опыт.");
   }
 
+
+  /* ── Ассистент: разговор с моделью вне игры ─────────────────────────── */
+  function openAssist(id, ctx, quiet) {
+    if (S.gen) { toast("Дождитесь окончания ответа или остановите его.", true); return; }
+    const found = id && S.assistList.find((a) => a.id === id);
+    if (found) S.assist = found;
+    else if (!ctx && S.assist && !S.assist.messages.length) { /* пустой разговор уже открыт */ }
+    else {
+      // Новый разговор наследует персонажа из текущего контекста.
+      const base = ctx || (S.assist ? { cardId: S.assist.ctx.cardId, chatId: null } : (S.view === "chat" && S.cardId ? { cardId: S.cardId, chatId: null } : {}));
+      S.assist = AST.blank(base);
+    }
+    S.view = "assist";
+    S.find = null;
+    S.drawerOpen = S.drawerOpen && !narrow();
+    rememberUi();
+    $("#rail").classList.remove("open");
+    if (!quiet) { renderAll(); scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !narrow()) i.focus(); }, 30); }
+  }
+  async function saveAssist() {
+    const a = S.assist;
+    await DB.put("assist", a);
+    if (!S.assistList.includes(a)) S.assistList.push(a);
+    rememberUi();
+  }
+  async function assistChatLines(chatId) {
+    const c = S.chats.find((x) => x.id === chatId);
+    if (!c) return { lines: [], scene: "" };
+    const msgs = await DB.byIndex("messages", "chatId", chatId);
+    const path = TR.path(TR.index(msgs), c.leafId);
+    const cd = S.cards.find((x) => x.id === c.cardId);
+    const lines = path.map((m) => ({ name: m.role === "user" ? persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
+    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, ops: TR.activeSwipe(m).sceneOps || [] })));
+    return { lines, scene: SC.summaryLine(st) || "" };
+  }
+  async function assistSend(text) {
+    const a = S.assist;
+    if (!a || S.gen) return;
+    if (!a.messages.length) a.title = AST.title(text);
+    a.messages.push({ id: U.uid("am"), role: "user", text, at: Date.now() });
+    await saveAssist();
+    await assistGenerate();
+  }
+  async function assistGenerate() {
+    const a = S.assist;
+    const prov = activeProvider();
+    if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
+    const cd = a.ctx.cardId ? S.cards.find((c) => c.id === a.ctx.cardId) : null;
+    const chatCtx = a.ctx.chatId ? await assistChatLines(a.ctx.chatId) : { lines: [], scene: "" };
+    const target = { id: U.uid("am"), role: "assistant", text: "", at: Date.now() };
+    const history = a.messages.map((x) => ({ role: x.role, text: x.text }));
+    a.messages.push(target);
+    const built = AST.build({
+      system: (S.settings.assistSystem || "").trim() || AST.SYSTEM, card: cd, chatLines: chatCtx.lines, sceneLine: chatCtx.scene,
+      userName: persona().name, history, contextTokens: contextTokens(), reserveTokens: 1500,
+    });
+    const ctrl = new AbortController();
+    S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", assist: true };
+    renderStage();
+    scrollBottom();
+    const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; paintAssist(); };
+    let raw = "", reasoning = "", error = null;
+    try {
+      const sp = S.settings.sampler;
+      const res = prov.kind === "perchance"
+        ? await PC.chat({ char: "Ассистент", user: persona().name }, built.messages, { signal: ctrl.signal, onDelta })
+        : await OA.chat(prov, built.messages, Object.assign({}, sp, { temperature: Math.min(sp.temperature || 0.7, 0.8), max_tokens: Math.max(sp.max_tokens || 0, 1500) }), { signal: ctrl.signal, onDelta });
+      raw = res.text; reasoning = res.reasoning;
+    } catch (e) {
+      raw = e.partial != null ? e.partial : (S.gen ? S.gen.raw : "");
+      reasoning = S.gen ? S.gen.reasoning : "";
+      if (e.name !== "AbortError") error = e.message || String(e);
+    }
+    const th = OA.splitThink(raw || "");
+    target.text = th.text.trim();
+    target.reasoning = [reasoning, th.reasoning].filter(Boolean).join("\n").trim();
+    if (error) target.error = error;
+    S.gen = null;
+    if (!target.text && !error) a.messages.pop();
+    await saveAssist();
+    if (S.view === "assist") { renderStage(); scrollBottom(); }
+  }
+  let assistPaintQueued = false;
+  function paintAssist() {
+    if (assistPaintQueued) return;
+    assistPaintQueued = true;
+    requestAnimationFrame(() => {
+      assistPaintQueued = false;
+      if (!S.gen || !S.gen.assist) return;
+      const el = document.getElementById("text-" + S.gen.msgId);
+      if (!el) return;
+      el.innerHTML = R.md(OA.splitThink(S.gen.raw).text);
+      const box = $("#feed");
+      if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
+    });
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } finally { ta.remove(); }
+    }
+    toast("Скопировано.");
+  }
+  async function assistCutFrom(id) {
+    const a = S.assist;
+    const i = a.messages.findIndex((x) => x.id === id);
+    if (i < 0) return null;
+    const removed = a.messages.splice(i);
+    await saveAssist();
+    return removed;
+  }
+
   /* ── Персонажи ──────────────────────────────────────────────────────── */
   function openCardEditor(cd) {
     S.modal = { kind: "card", section: "main", draft: U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })) };
@@ -3625,6 +3996,44 @@
     "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; refreshPrism(); renderDrawer(); renderFeed(); },
     "chat-menu": (t) => openPop(V.chatMenu(vm()), t),
     "model-pop": (t) => openPop(V.modelPop(vm()), t),
+    assist: () => openAssist(S.assist && S.assist.messages.length ? S.assist.id : null),
+    "assist-new": () => { closePop(); if (S.assist && !S.assist.messages.length) { $("#input") && $("#input").focus(); return; } openAssist(null, S.assist ? { cardId: S.assist.ctx.cardId, chatId: S.assist.ctx.chatId } : null); },
+    "assist-open": (t) => { closePop(); openAssist(t.dataset.id); },
+    "assist-list": (t) => openPop(V.assistListPop(vm()), t),
+    "assist-ctx": (t) => openPop(V.assistCtxPop(vm()), t),
+    "assist-pick-card": async (t) => {
+      const a = S.assist; a.ctx.cardId = t.dataset.id || null; a.ctx.chatId = null;
+      if (a.messages.length) await saveAssist();
+      renderStage();
+      const anchor = $("[data-act=assist-ctx]");
+      if (a.ctx.cardId && anchor) openPop(V.assistCtxPop(vm()), anchor); else closePop();
+    },
+    "assist-pick-chat": async (t) => {
+      const a = S.assist; a.ctx.chatId = t.dataset.id || null;
+      if (a.messages.length) await saveAssist();
+      closePop(); renderStage();
+    },
+    "assist-about-chat": () => { closePop(); openAssist(null, { cardId: S.cardId, chatId: S.chatId }); },
+    "assist-starter": (t) => { if (S.gen) return; assistSend(t.dataset.q); },
+    "assist-copy": (t) => { const m = S.assist.messages.find((x) => x.id === t.dataset.id); if (m) copyText(m.text); },
+    "copy-code": (t) => { const c = t.parentElement.querySelector("code"); if (c) copyText(c.textContent); },
+    "assist-regen": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); await assistGenerate(); },
+    "assist-edit": async (t) => {
+      if (S.gen) return;
+      const removed = await assistCutFrom(t.dataset.id);
+      renderStage();
+      const i = $("#input"); if (i && removed) { i.value = removed[0].text; autoGrow(i); i.focus(); }
+    },
+    "assist-msg-del": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); renderStage(); },
+    "assist-del": async () => {
+      const a = S.assist;
+      if (!a || S.gen || !confirm(`Удалить разговор «${a.title}»?`)) return;
+      await DB.del("assist", a.id);
+      S.assistList = S.assistList.filter((x) => x !== a);
+      S.assist = null;
+      openAssist(null);
+      toast("Разговор удалён.");
+    },
     "new-chat": (t) => { closePop(); newChat(t.dataset.mode); },
     "edit-card": (t) => { closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : card()); },
     "rename-chat": async () => {
@@ -3779,7 +4188,7 @@
   };
 
   async function onClick(e) {
-    if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=model-pop],[data-act=chat-menu]")) closePop();
+    if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=model-pop],[data-act=chat-menu],[data-act=assist-ctx],[data-act=assist-list]")) closePop();
     const t = e.target.closest("[data-act]");
     if (!t || t.disabled) return;
     const fn = ACTS[t.dataset.act];
@@ -3811,6 +4220,7 @@
       if (t.dataset.imgCheck) { collectImgForm(); S.settings.images[t.dataset.imgCheck] = t.checked; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await saveSettings(); refreshAfterSettings(); return; }
+      if (t.dataset.setText) { S.settings[t.dataset.setText] = t.value; await saveSettings(); return; }
       if (t.dataset.setNum) { S.settings[t.dataset.setNum] = +t.value; await saveSettings(); refreshAfterSettings(); return; }
       if (t.dataset.setRange) { S.settings[t.dataset.setRange] = +t.value; applyLook(); await saveSettings(); return; }
       if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; await saveSettings(); refreshAfterSettings(); if (S.drawerOpen) renderDrawer(); return; }

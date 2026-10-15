@@ -13,7 +13,9 @@ require(J("chat/tree.js"));
 require(J("images/compose.js"));
 require(J("images/backends.js"));
 require(J("images/compile.js"));
-const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP } = globalThis.PRP;
+require(J("assist/assist.js"));
+require(J("ui/render.js"));
+const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN } = globalThis.PRP;
 
 let passed = 0, failed = 0;
 function t(name, fn) {
@@ -358,6 +360,41 @@ async function asyncTests() {
   t("перевод: при ошибке модели — исходный текст", () => assert.strictEqual(d.text, "Она стоит"));
 }
 asyncTests().then(() => {
+/* ── Ассистент ── */
+t("ассистент: системная инструкция, карточка и чат в контексте, история по порядку", () => {
+  const cd = { name: "Юки", description: "Тихая библиотекарша.", firstMes: "Привет.", lore: [{ keys: ["кафе"], content: "Кафе до полуночи", constant: true }] };
+  const r = AST.build({ card: cd, chatLines: [{ name: "Кира", text: "Привет" }, { name: "Юки", text: "Здравствуй" }], sceneLine: "Библиотека",
+    userName: "Кира", history: [{ role: "user", text: "Как улучшить описание?" }] });
+  const sys = r.messages[0].content;
+  assert.ok(sys.includes("не персонаж") && sys.includes("Тихая библиотекарша") && sys.includes("Кафе до полуночи"));
+  assert.ok(sys.includes("Юки: Здравствуй") && sys.includes("Библиотека") && sys.includes("Собеседника зовут Кира"));
+  assert.deepStrictEqual(r.messages.slice(1).map((m) => m.role), ["user"]);
+  assert.ok(r.report.card && r.report.chat);
+});
+t("ассистент: без персонажа — только инструкция; своя инструкция заменяет встроенную", () => {
+  const r = AST.build({ system: "СВОЯ", history: [{ role: "user", text: "a" }, { role: "assistant", text: "b" }, { role: "user", text: "c" }] });
+  assert.strictEqual(r.messages[0].content, "СВОЯ");
+  assert.deepStrictEqual(r.messages.slice(1).map((m) => m.content), ["a", "b", "c"]);
+  assert.ok(!r.report.card && !r.report.chat);
+});
+t("ассистент: длинный чат режется с начала, свежие реплики остаются", () => {
+  const lines = Array.from({ length: 400 }, (_, i) => ({ name: "A", text: "реплика номер " + i + " " + "слово ".repeat(30) }));
+  const txt = AST.chatText(lines, 500);
+  assert.ok(txt.includes("реплика номер 399") && !txt.includes("реплика номер 0 ") && txt.startsWith("(ранние"));
+});
+t("ассистент: заголовок и подсказки по контексту", () => {
+  assert.strictEqual(AST.title("  Короткий   вопрос "), "Короткий вопрос");
+  assert.ok(AST.title("слово ".repeat(30)).endsWith("…"));
+  assert.ok(AST.starters(false, false).every((x) => x.need === ""));
+  assert.ok(AST.starters(true, true).some((x) => x.need === "chat") && !AST.starters(true, false).some((x) => x.need === "chat"));
+});
+t("markdown: экранирование, списки, код, жирный", () => {
+  const h = RN.md("# Заголовок\n\n**жирно** и *курсив* и `код`\n\n- раз\n- два\n\n1. один\n\n```\n<script>x</script>\n```\n<b>не тег</b>");
+  assert.ok(h.includes("<h3>Заголовок</h3>") && h.includes("<strong>жирно</strong>") && h.includes("<em>курсив</em>") && h.includes("<code>код</code>"));
+  assert.ok(h.includes("<ul><li>раз</li><li>два</li></ul>") && h.includes("<ol><li>один</li></ol>"));
+  assert.ok(h.includes("&lt;script&gt;x&lt;/script&gt;") && !h.includes("<script>") && h.includes("&lt;b&gt;не тег&lt;/b&gt;"));
+});
+
 console.log(`\n${passed} пройдено, ${failed} с ошибками`);
 process.exit(failed ? 1 : 0);
 });

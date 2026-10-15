@@ -363,6 +363,47 @@ try:
         check("бэкап со всеми коллекциями", all(len(data[k]) > 0 for k in ["cards", "chats", "messages", "experience", "settings"]))
         page.click("[data-act=modal-close]")
 
+        # Ассистент: разговор с моделью вне игры
+        page.click("[data-act=chat-menu]")
+        page.click(".pop [data-act=assist-about-chat]")
+        page.wait_for_selector(".assist-empty")
+        check("ассистент: открыт с карточкой и чатом", "Химэ + чат" in page.inner_text(".assist-head"))
+        page.click(".starter:has-text('Разбери поведение')")
+        try:
+            page.wait_for_selector(".aturn.assistant .tools", timeout=10000)
+            ok = True
+        except Exception:
+            ok = False
+        check("ассистент: ответ с разметкой", ok)
+        md_txt = page.inner_text(".aturn.assistant .md") if ok else ""
+        check("ассистент: модель видит карточку и чат", "карточка: да, чат: да" in md_txt)
+        if "карточка: да, чат: да" not in md_txt: print("    md:", repr(md_txt[:300]), page.locator(".aturn").count())
+        check("ассистент: списки и блок кода", page.locator(".aturn.assistant .md li").count() == 2 and page.locator(".aturn.assistant .md pre").count() == 1)
+        shot(page, "15-assistant.png")
+        page.click("[data-act=assist-new]")
+        page.wait_for_selector(".assist-empty")
+        page.click("[data-act=assist-ctx]")
+        page.click(".pop [data-act=assist-pick-card][data-id='']")
+        check("ассистент: можно отключить персонажа", "Без персонажа" in page.inner_text(".assist-head"))
+        page.fill("#input", "Как написать хорошую карточку?")
+        page.keyboard.press("Enter")
+        try:
+            page.wait_for_function("document.querySelector('.aturn.assistant .md') && document.querySelector('.aturn.assistant .md').innerText.includes('карточка: нет')", timeout=10000)
+            check("ассистент: без персонажа карточка не уходит", True)
+        except Exception:
+            check("ассистент: без персонажа карточка не уходит", False)
+        page.click("[data-act=assist-list]")
+        check("ассистент: список разговоров", page.locator(".pop [data-act=assist-open]").count() == 2)
+        page.keyboard.press("Escape")
+        page.click("[data-act=assist-regen]")
+        page.wait_for_timeout(800)
+        check("ассистент: «Другой ответ» заменяет ответ", page.locator(".aturn.assistant").count() == 1)
+        page.reload()
+        page.wait_for_selector(".assist-head")
+        check("ассистент: после перезагрузки открыт тот же разговор", page.locator(".aturn").count() == 2)
+        page.click(".rail-chat")
+        page.wait_for_selector(".chat-head .head-card")
+
         # Экспорт карточки
         page.click("[data-act=chat-menu]")
         page.click(".pop [data-act=edit-card]")

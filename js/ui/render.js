@@ -45,6 +45,7 @@
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17 5-4.5 3.5 3 3-2.5 4.5 4"/>',
     brush: '<path d="M14.5 4.5 19.5 9.5 11 18l-5-5z"/><path d="M6 13c-2 0-2.5 2-2.5 3.5S2.5 20 2.5 20s4 .5 5.5-1 1-3 1-3"/>',
     pin: '<path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"/>',
+    assist: '<path d="M20 12.5c0 3.9-3.6 7-8 7-1.2 0-2.3-.2-3.3-.6L4 20l1.3-3.6A6.6 6.6 0 0 1 4 12.5c0-3.9 3.6-7 8-7"/><path d="M17.5 2.8l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z"/>',
     info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/>',
   };
   function icon(name, cls) {
@@ -86,6 +87,51 @@
     return h;
   }
 
+  // Ответы ассистента: безопасный минимум Markdown. Сначала всё экранируется,
+  // затем размечаются блоки кода, заголовки, списки, цитаты, **жирный**, *курсив*, `код`.
+  function md(text) {
+    const src = String(text || "").replace(/\r\n?/g, "\n");
+    const parts = src.split(/(```[^\n]*\n[\s\S]*?(?:```|$))/g);
+    const inline = (s) => s
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
+      .replace(/(^|[^_\w])_([^_\n]+)_(?!\w)/g, "$1<em>$2</em>");
+    let out = "";
+    parts.forEach((p, i) => {
+      if (i % 2 === 1) {
+        const m = p.match(/^```([^\n]*)\n([\s\S]*?)(?:```)?$/);
+        const code = m ? m[2].replace(/\n$/, "") : p;
+        out += `<div class="mdcode"><button class="tool code-copy" data-act="copy-code" title="Скопировать">${icon("copy")}</button><pre><code>${esc(code)}</code></pre></div>`;
+        return;
+      }
+      const lines = esc(p).split("\n");
+      let list = null, para = [];
+      const flush = () => {
+        if (para.length) { out += `<p>${inline(para.join("<br>"))}</p>`; para = []; }
+        if (list) { out += `<${list.tag}>${list.items.map((x) => `<li>${inline(x)}</li>`).join("")}</${list.tag}>`; list = null; }
+      };
+      for (const line of lines) {
+        let m;
+        if (!line.trim()) { flush(); continue; }
+        if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flush(); const hl = Math.max(3, m[1].length + 1); out += `<h${hl}>${inline(m[2])}</h${hl}>`; continue; }
+        if ((m = line.match(/^&gt;\s?(.*)$/))) { flush(); out += `<blockquote>${inline(m[1])}</blockquote>`; continue; }
+        if ((m = line.match(/^\s*[-*•]\s+(.*)$/)) || (m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+          const tag = /^\s*\d/.test(line) ? "ol" : "ul";
+          if (para.length) { out += `<p>${inline(para.join("<br>"))}</p>`; para = []; }
+          if (list && list.tag !== tag) flush();
+          if (!list) list = { tag, items: [] };
+          list.items.push(m[1]);
+          continue;
+        }
+        if (list) flush();
+        para.push(line);
+      }
+      flush();
+    });
+    return out;
+  }
+
   // Мессенджер: ответ делится на отдельные сообщения по пустым строкам.
   function bubbles(text) {
     return String(text || "").split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
@@ -118,5 +164,5 @@
     return many;
   }
 
-  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, bubbles, time, day, ago, plural, hue };
+  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
 })(typeof window !== "undefined" ? window : globalThis);

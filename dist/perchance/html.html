@@ -1,4 +1,4 @@
-<!-- Prism RP 0.3.1 · собрано 2026-10-15 · исходники: index.html, css/, js/ -->
+<!-- Prism RP 0.4.0 · собрано 2026-10-15 · исходники: index.html, css/, js/ -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -505,6 +505,47 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 
+/* Ассистент — разговор с моделью вне игры */
+.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }
+.assist-mark svg { width: 22px; height: 22px; }
+.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }
+.pop-item .av { flex: none; }
+.av-18 { width: 18px; height: 18px; font-size: 10px; }
+.av-22 { width: 22px; height: 22px; font-size: 11px; }
+.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }
+.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }
+.assist-hero svg { width: 34px; height: 34px; }
+.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }
+.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }
+.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }
+.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }
+.starter:hover { border-color: var(--accent); background: var(--accent-wash); }
+.aturn { display: flex; flex-direction: column; min-width: 0; }
+.aturn.user { align-items: flex-end; }
+.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }
+.aturn .tools { margin-top: 4px; }
+.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }
+.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 .75em; }
+.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }
+.md li { margin: .2em 0; }
+.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }
+.md h3 { font-size: 1.15em; }
+.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }
+.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }
+.md .mdcode { position: relative; margin: 0 0 .9em; }
+.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }
+.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }
+.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }
+.md .code-copy:hover { opacity: 1; }
+.md.cursor > :last-child::after, .md.cursor:empty::after { content: ""; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }
+.md.cursor::after { content: none; }
+@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }
+.assist-head .head-who { overflow: hidden; }
+.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 </style>
 <div id="app" class="app">
   <aside class="rail" id="rail" aria-label="Навигация"></aside>
@@ -588,8 +629,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
-  const DB_VERSION = 2;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images"];
+  const DB_VERSION = 3;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist"];
   let dbPromise = null;
 
   function open() {
@@ -605,6 +646,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (!db.objectStoreNames.contains("settings")) db.createObjectStore("settings", { keyPath: "key" });
         // v2: картинки отдельно от сообщений, чтобы правка текста не переписывала мегабайты.
         if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" }).createIndex("chatId", "chatId");
+        // v3: разговоры с ассистентом (вне ролевой игры), сообщения хранятся внутри разговора.
+        if (!db.objectStoreNames.contains("assist")) db.createObjectStore("assist", { keyPath: "id" });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -648,7 +691,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 2, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 3, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
@@ -1259,6 +1302,121 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   PRP.assembler = { build, matchLore, TEMPLATES };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.assembler;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/assist/assist.js */
+/* Prism RP — ассистент: разговор с самой моделью вне ролевой игры.
+   Консультации по карточкам, сценам, промптам, разбор чата. Модель здесь —
+   помощник автора, а не персонаж; Prism-рамка (Card/Experience/Scene) не применяется.
+   По желанию к разговору подключается карточка персонажа и выдержка из его чата. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util;
+
+  const SYSTEM = [
+    "Ты — ассистент внутри Prism RP, среды для ролевой игры с ИИ-персонажами. Сейчас ты говоришь с автором напрямую, вне игры: ты не персонаж и не продолжаешь сцену, если тебя об этом прямо не просят.",
+    "Помогаешь с тем, что нужно автору: писать и улучшать карточки персонажей (поля Character Card V2: description, personality, scenario, first_mes, alternate_greetings, mes_example, system_prompt, post_history_instructions, лорбук), придумывать сюжетные ходы и приветствия, разбирать, почему персонаж ведёт себя так или иначе, подбирать теги для картинок (danbooru) и настройки моделей.",
+    "Как устроен Prism RP: карточка задаёт склонности персонажа, а не команды; опыт — свидетельства прошлого, а не инструкции; сцену (время, место, одежду, отношения) ведёт приложение. Хорошая карточка описывает характер через конкретные привычки и реакции, а не через списки прилагательных.",
+    "Отвечай по существу и на языке собеседника. Если просят текст для поля карточки — дай готовый текст, который можно скопировать целиком. Если вопрос неясен — уточни одним вопросом.",
+  ].join("\n\n");
+
+  // need: "" — без персонажа, "card" — нужен персонаж, "chat" — нужен и чат.
+  const STARTERS = [
+    { need: "", t: "Помоги придумать персонажа", q: "Помоги придумать нового персонажа для ролевой игры. Сначала задай мне 3–4 вопроса, потом собери черновик карточки по полям." },
+    { need: "", t: "Как написать живую карточку", q: "Как написать карточку персонажа, чтобы он ощущался живым, а не набором прилагательных? Дай короткие правила и небольшой пример." },
+    { need: "", t: "Какую модель выбрать", q: "Какие модели и настройки генерации лучше подходят для ролевой игры на русском языке? Учти, что у меня может быть бесплатная модель Perchance или локальная модель." },
+    { need: "card", t: "Улучши описание персонажа", q: "Посмотри на описание персонажа и предложи, как сделать его живее: что убрать, что добавить. Затем дай переписанный вариант целиком." },
+    { need: "card", t: "Придумай приветствие", q: "Придумай альтернативное приветствие для этого персонажа — другая ситуация знакомства, 2–3 абзаца." },
+    { need: "card", t: "Теги для картинок", q: "Составь теги danbooru для внешности и основных нарядов этого персонажа в формате гардероба Prism: «название | alias: теги»." },
+    { need: "chat", t: "Разбери поведение в чате", q: "Почему персонаж в этом чате ведёт себя именно так? Что в карточке или контексте на это влияет и что поправить, если я хочу иначе?" },
+    { need: "chat", t: "Куда развить сюжет", q: "Предложи три разных направления, куда можно развить сюжет этого чата дальше, и как подтолкнуть к каждому своей репликой." },
+  ];
+  function starters(hasCard, hasChat) {
+    return STARTERS.filter((x) => (x.need === "" && !hasCard) || (x.need === "card" && hasCard) || (x.need === "chat" && hasChat));
+  }
+
+
+  // Карточка → компактный текст для контекста ассистента.
+  function cardText(card) {
+    if (!card) return "";
+    const f = (label, v) => (v && String(v).trim() ? `${label}:\n${String(v).trim()}` : "");
+    const alts = (card.altGreetings || []).filter(Boolean);
+    const lore = (card.lore || []).filter((e) => e && e.content).slice(0, 20)
+      .map((e) => `- [${(e.keys || []).join(", ") || "без ключей"}${e.constant ? ", постоянная" : ""}] ${e.content}`).join("\n");
+    const im = card.image || {};
+    return [
+      `Имя: ${card.name}`,
+      f("Описание (description)", card.description),
+      f("Личность (personality)", card.personality),
+      f("Сценарий (scenario)", card.scenario),
+      f("Первое сообщение (first_mes)", card.firstMes),
+      alts.length ? `Альтернативные приветствия: ${alts.length}` : "",
+      f("Примеры диалогов (mes_example)", card.mesExample),
+      f("Системный промпт карточки", card.systemPrompt),
+      f("Инструкции после истории", card.postHistory),
+      lore ? `Лорбук:\n${lore}` : "",
+      im.trigger || im.wardrobe || im.look ? f("Изображения — триггер", im.trigger) + (im.look ? `\nВнешность для картинок:\n${im.look}` : "") + (im.wardrobe ? `\nГардероб:\n${im.wardrobe}` : "") : "",
+    ].filter(Boolean).join("\n\n");
+  }
+
+  // Последние сообщения чата → стенограмма (самые свежие важнее, режем с начала).
+  function chatText(lines, budgetTokens) {
+    const out = [];
+    let used = 0;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const s = `${lines[i].name}: ${lines[i].text}`;
+      const c = U.estimateTokens(s) + 2;
+      if (used + c > budgetTokens) break;
+      out.unshift(s); used += c;
+    }
+    const cut = lines.length - out.length;
+    return (cut > 0 ? `(ранние ${cut} сообщ. не поместились)\n\n` : "") + out.join("\n\n");
+  }
+
+  /* o: { system, card, chatLines, sceneLine, userName, history:[{role,text}], contextTokens, reserveTokens }
+     → { messages, report } */
+  function build(o) {
+    const budget = Math.max(1024, (o.contextTokens || 8192) - (o.reserveTokens || 1200));
+    const sys = [o.system || SYSTEM];
+    if (o.userName) sys.push(`Собеседника зовут ${o.userName}.`);
+    let used = U.estimateTokens(sys.join("\n\n"));
+    const ct = cardText(o.card);
+    if (ct) { const b = `### Карточка персонажа, о котором идёт речь\n${ct}`; sys.push(b); used += U.estimateTokens(b); }
+    const hist = o.history || [];
+    // История разговора с ассистентом: от новых к старым.
+    const kept = [];
+    let histBudget = Math.max(600, Math.floor((budget - used) * (o.chatLines && o.chatLines.length ? 0.5 : 1)));
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const c = U.estimateTokens(hist[i].text) + 4;
+      if (c > histBudget && kept.length) break;
+      kept.unshift(hist[i]); histBudget -= c; used += c;
+    }
+    let chatBlock = "";
+    if (o.chatLines && o.chatLines.length) {
+      chatBlock = `### Выдержка из ролевого чата${o.sceneLine ? ` (сцена сейчас: ${o.sceneLine})` : ""}\n${chatText(o.chatLines, Math.max(300, budget - used))}`;
+      sys.push(chatBlock);
+      used += U.estimateTokens(chatBlock);
+    }
+    const messages = [{ role: "system", content: sys.join("\n\n") }]
+      .concat(kept.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text })));
+    return { messages, report: { budget, used, historyKept: kept.length, historyTotal: hist.length, card: !!ct, chat: !!chatBlock } };
+  }
+
+  // Заголовок разговора по первой реплике.
+  function title(text) {
+    const s = String(text || "").replace(/\s+/g, " ").trim();
+    return s.length > 48 ? s.slice(0, 46).replace(/\s+\S*$/, "") + "…" : s || "Новый разговор";
+  }
+
+  function blank(ctx) {
+    const now = Date.now();
+    return { id: U.uid("as"), title: "Новый разговор", messages: [], ctx: Object.assign({ cardId: null, chatId: null }, ctx || {}), createdAt: now, updatedAt: now };
+  }
+
+  PRP.assist = { SYSTEM, STARTERS, starters, cardText, chatText, build, title, blank };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.assist;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -2566,6 +2724,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17 5-4.5 3.5 3 3-2.5 4.5 4"/>',
     brush: '<path d="M14.5 4.5 19.5 9.5 11 18l-5-5z"/><path d="M6 13c-2 0-2.5 2-2.5 3.5S2.5 20 2.5 20s4 .5 5.5-1 1-3 1-3"/>',
     pin: '<path d="M9 4h6l-1 5 3 3H7l3-3zM12 12v8"/>',
+    assist: '<path d="M20 12.5c0 3.9-3.6 7-8 7-1.2 0-2.3-.2-3.3-.6L4 20l1.3-3.6A6.6 6.6 0 0 1 4 12.5c0-3.9 3.6-7 8-7"/><path d="M17.5 2.8l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z"/>',
     info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.2"/>',
   };
   function icon(name, cls) {
@@ -2607,6 +2766,51 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return h;
   }
 
+  // Ответы ассистента: безопасный минимум Markdown. Сначала всё экранируется,
+  // затем размечаются блоки кода, заголовки, списки, цитаты, **жирный**, *курсив*, `код`.
+  function md(text) {
+    const src = String(text || "").replace(/\r\n?/g, "\n");
+    const parts = src.split(/(```[^\n]*\n[\s\S]*?(?:```|$))/g);
+    const inline = (s) => s
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>")
+      .replace(/(^|[^_\w])_([^_\n]+)_(?!\w)/g, "$1<em>$2</em>");
+    let out = "";
+    parts.forEach((p, i) => {
+      if (i % 2 === 1) {
+        const m = p.match(/^```([^\n]*)\n([\s\S]*?)(?:```)?$/);
+        const code = m ? m[2].replace(/\n$/, "") : p;
+        out += `<div class="mdcode"><button class="tool code-copy" data-act="copy-code" title="Скопировать">${icon("copy")}</button><pre><code>${esc(code)}</code></pre></div>`;
+        return;
+      }
+      const lines = esc(p).split("\n");
+      let list = null, para = [];
+      const flush = () => {
+        if (para.length) { out += `<p>${inline(para.join("<br>"))}</p>`; para = []; }
+        if (list) { out += `<${list.tag}>${list.items.map((x) => `<li>${inline(x)}</li>`).join("")}</${list.tag}>`; list = null; }
+      };
+      for (const line of lines) {
+        let m;
+        if (!line.trim()) { flush(); continue; }
+        if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flush(); const hl = Math.max(3, m[1].length + 1); out += `<h${hl}>${inline(m[2])}</h${hl}>`; continue; }
+        if ((m = line.match(/^&gt;\s?(.*)$/))) { flush(); out += `<blockquote>${inline(m[1])}</blockquote>`; continue; }
+        if ((m = line.match(/^\s*[-*•]\s+(.*)$/)) || (m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+          const tag = /^\s*\d/.test(line) ? "ol" : "ul";
+          if (para.length) { out += `<p>${inline(para.join("<br>"))}</p>`; para = []; }
+          if (list && list.tag !== tag) flush();
+          if (!list) list = { tag, items: [] };
+          list.items.push(m[1]);
+          continue;
+        }
+        if (list) flush();
+        para.push(line);
+      }
+      flush();
+    });
+    return out;
+  }
+
   // Мессенджер: ответ делится на отдельные сообщения по пустым строкам.
   function bubbles(text) {
     return String(text || "").split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
@@ -2639,7 +2843,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return many;
   }
 
-  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, bubbles, time, day, ago, plural, hue };
+  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -2671,6 +2875,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <button class="brand" data-act="home" title="На главную">${R.GLYPH}<span>Prism RP</span></button>
       <nav class="rail-nav">
         <button class="rail-item ${m.view === "home" ? "active" : ""}" data-act="home">${icon("home")}Персонажи</button>
+        <button class="rail-item ${m.view === "assist" ? "active" : ""}" data-act="assist" title="Разговор с моделью вне игры: советы, карточки, разбор чата">${icon("assist")}Ассистент</button>
         <button class="rail-item" data-act="import">${icon("upload")}Импорт карточки</button>
       </nav>
       <div class="rail-head"><span>Недавние чаты</span></div>
@@ -2955,6 +3160,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
       <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка</button>
       <div class="pop-sep"></div>
+      <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>
       <button class="pop-item" data-act="edit-card">${icon("card")}Редактировать персонажа</button>
       <button class="pop-item" data-act="rename-chat">${icon("edit")}Переименовать чат</button>
       <button class="pop-item" data-act="export-chat" data-fmt="txt">${icon("download")}Скачать чат как текст</button>
@@ -3106,7 +3312,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           <div class="field"><label>Записей опыта за ход</label><input type="number" min="0" max="30" data-set-num="expLimit" value="${s.expLimit}"></div></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
-        <label class="check"><input type="checkbox" data-set="sceneProtocol" ${s.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сцены<small>Время, место, одежда, настроение — короткой служебной строкой, которую приложение прячет.</small></span></label>`;
+        <label class="check"><input type="checkbox" data-set="sceneProtocol" ${s.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сцены<small>Время, место, одежда, настроение — короткой служебной строкой, которую приложение прячет.</small></span></label>
+        <div class="block-title" style="margin-top:20px">Ассистент</div>
+        <div class="field"><label for="assist-sys">Инструкция ассистента</label><textarea id="assist-sys" rows="5" data-set-text="assistSystem" placeholder="${esc(PRP.assist.SYSTEM)}">${esc(s.assistSystem || "")}</textarea>
+          <span class="help">Как модель ведёт себя в разделе «Ассистент». Пусто — встроенная инструкция (видна серым).</span></div>`;
     } else if (section === "images") {
       body = imagesSettings(m);
     } else if (section === "persona") {
@@ -3198,6 +3407,77 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <p class="hint" style="margin:10px 0 0">Ключ хранится только в этом браузере.</p></div>`;
   }
 
+
+  /* ── Ассистент: разговор с моделью вне игры ───────────────────────── */
+  function assist(m) {
+    const a = m.assist;
+    const AS = PRP.assist;
+    const cd = m.assistCard, ch = m.assistChat;
+    const ctxLabel = cd ? `${esc(cd.name)}${ch ? " + чат" : ""}` : "Без персонажа";
+    const head = `<header class="chat-head assist-head">
+      <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
+      <div class="assist-mark">${icon("assist")}</div>
+      <div class="head-who"><div class="head-name">Ассистент</div><span class="head-scene">${esc(a.messages.length ? a.title : "Разговор с моделью вне игры")}</span></div>
+      <div class="head-tools">
+        <button class="pill" data-act="assist-ctx" title="Что ассистент видит: карточку персонажа и выдержку из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
+        <button class="icon-btn" data-act="assist-list" title="Все разговоры">${icon("clock")}</button>
+        <button class="icon-btn" data-act="assist-new" title="Новый разговор">${icon("plus")}</button>
+        ${a.messages.length ? `<button class="icon-btn" data-act="assist-del" title="Удалить разговор">${icon("trash")}</button>` : ""}
+      </div></header>`;
+    const empty = !a.messages.length ? `<div class="assist-empty">
+        <div class="assist-hero">${icon("assist")}</div>
+        <h2>О чём поговорим?</h2>
+        <p>Здесь модель — ваш помощник, а не персонаж. Спросите совета по карточке, сцене или настройкам. ${cd ? `Ассистент видит карточку ${esc(cd.name)}${ch ? " и выдержку из выбранного чата" : ""}.` : "Подключите персонажа кнопкой вверху — тогда ассистент увидит его карточку и, по желанию, чат."}</p>
+        <div class="starters">${AS.starters(!!cd, !!ch).map((x) => `<button class="starter" data-act="assist-starter" data-q="${esc(x.q)}">${esc(x.t)}</button>`).join("")}</div>
+      </div>` : "";
+    const feed = a.messages.map((msg, i) => {
+      const live = m.gen && m.gen.assist && m.gen.msgId === msg.id;
+      const last = i === a.messages.length - 1;
+      const text = live ? m.gen.raw : msg.text;
+      const th = OA.splitThink(text || "");
+      const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
+      const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
+        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
+      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${msg.id}">
+        ${body}
+        ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
+        ${live ? "" : `<div class="tools">
+          <button class="tool" data-act="assist-copy" data-id="${msg.id}">${icon("copy")}Скопировать</button>
+          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${msg.id}">${icon("regen")}Другой ответ</button>` : ""}
+          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${msg.id}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
+          <button class="tool" data-act="assist-msg-del" data-id="${msg.id}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
+      </article>`;
+    }).join("");
+    const p = m.provider;
+    const composer = `<div class="composer-wrap"><div class="composer">
+      <textarea id="input" rows="1" placeholder="Спросите ассистента…" aria-label="Сообщение ассистенту"></textarea>
+      <div class="composer-bar">
+        <button class="pill" data-act="model-pop" title="Модель">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}</span></button>
+        <span class="spacer"></span>
+        ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>` : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
+      </div></div></div>`;
+    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div>${composer}</section>`;
+  }
+
+  function assistCtxPop(m) {
+    const cd = m.assistCard;
+    const chats = cd ? m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 12) : [];
+    return `<div class="pop-title">Персонаж для разговора</div>
+      <button class="pop-item ${!cd ? "on" : ""}" data-act="assist-pick-card" data-id="">${icon("x")}<span>Без персонажа</span></button>
+      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${c.id}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
+      ${cd ? `<div class="pop-sep"></div><div class="pop-title">Показать ассистенту чат</div>
+        <button class="pop-item ${!m.assistChat ? "on" : ""}" data-act="assist-pick-chat" data-id="">${icon("x")}<span>Не показывать</span></button>
+        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${c.id}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
+  }
+
+  function assistListPop(m) {
+    const list = (m.assistList || []).slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    return `<div class="pop-title">Разговоры с ассистентом</div>
+      <button class="pop-item" data-act="assist-new">${icon("plus")}<span>Новый разговор</span></button>
+      ${list.length ? `<div class="pop-sep"></div>` : ""}
+      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${a.id}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
+  }
+
   /* ── Редактор персонажа ───────────────────────────────────────────── */
   // Поля и их порядок — как в Character Card V2/V3 и SillyTavern. Рядом с подписью
   // мелко показан ключ спецификации, чтобы было видно, куда поле попадёт при экспорте.
@@ -3272,7 +3552,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <div class="modal-body">${body}</div></div></div>`;
   }
 
-  PRP.views = { rail, home, chat, chatHead, feed, composer, drawer, modelPop, chatMenu, settingsModal, cardModal, imageInfo, SAMPLER_PRESETS, THEMES };
+  PRP.views = { rail, home, chat, chatHead, feed, composer, drawer, modelPop, chatMenu, assist, assistCtxPop, assistListPop, settingsModal, cardModal, imageInfo, SAMPLER_PRESETS, THEMES };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -3283,7 +3563,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
    переезд между платформами — через бэкап JSON. */
 (function () {
   "use strict";
-  const { util: U, store: DB, scene: SC, experience: EX, assembler: AS, ccard: CC, openai: OA, perchance: PC, tree: TR, render: R, views: V, imgCompose: IC, imgBackends: IB, imgCompile: ICP } = window.PRP;
+  const { util: U, store: DB, scene: SC, experience: EX, assembler: AS, ccard: CC, openai: OA, perchance: PC, tree: TR, render: R, views: V, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST } = window.PRP;
   const $ = (sel, el) => (el || document).querySelector(sel);
   const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
 
@@ -3316,6 +3596,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
+    assist: null, assistList: [],
   };
 
   /* ── Мелочи ─────────────────────────────────────────────────────────── */
@@ -3392,6 +3673,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
       imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
       origin: location.origin && location.origin !== "null" ? location.origin : "*",
+      assist: S.assist, assistList: S.assistList,
+      assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
+      assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
     };
   }
 
@@ -3408,7 +3692,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
     const feedEl = $("#feed");
     const scroll = feedEl ? feedEl.scrollTop : null;
-    if (S.view === "chat" && m.chat && m.card) {
+    if (S.view === "assist" && S.assist) {
+      $("#stage").innerHTML = V.assist(m);
+      app.classList.remove("messenger");
+      if (keep) {
+        const i = $("#input"); i.value = keep.v; autoGrow(i);
+        if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+      }
+      if (scroll != null && $("#feed")) $("#feed").scrollTop = scroll;
+    } else if (S.view === "chat" && m.chat && m.card) {
       $("#stage").innerHTML = V.chat(m);
       app.classList.toggle("messenger", m.chat.mode === "messenger");
       if (keep) {
@@ -3424,6 +3716,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     app.classList.toggle("generating", !!S.gen);
   }
   function renderFeed() {
+    if (S.view === "assist") return renderStage();
     const inner = $("#feed-inner");
     if (!inner) return renderStage();
     inner.innerHTML = V.feed(vm());
@@ -3491,11 +3784,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
     S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
+    S.assistList = await DB.all("assist");
     const ui = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!ui.drawerOpen && !narrow();
     if (ui.chatId && S.chats.some((c) => c.id === ui.chatId)) await openChat(ui.chatId, true);
+    else if (ui.view === "assist") openAssist(ui.assistId, null, true);
   }
-  function rememberUi() { DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen }); }
+  function rememberUi() {
+    DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen, view: S.view, assistId: S.view === "assist" && S.assist && S.assist.messages.length ? S.assist.id : null });
+  }
 
   async function openChat(chatId, quiet) {
     const c = S.chats.find((x) => x.id === chatId);
@@ -3581,6 +3878,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (!input) return;
     const text = input.value.trim();
     if (!text || S.gen) return;
+    if (S.view === "assist") { input.value = ""; autoGrow(input); return assistSend(text); }
     const c = chat();
     input.value = "";
     autoGrow(input);
@@ -3905,6 +4203,121 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     toast("Событие сохранено в опыт.");
   }
 
+
+  /* ── Ассистент: разговор с моделью вне игры ─────────────────────────── */
+  function openAssist(id, ctx, quiet) {
+    if (S.gen) { toast("Дождитесь окончания ответа или остановите его.", true); return; }
+    const found = id && S.assistList.find((a) => a.id === id);
+    if (found) S.assist = found;
+    else if (!ctx && S.assist && !S.assist.messages.length) { /* пустой разговор уже открыт */ }
+    else {
+      // Новый разговор наследует персонажа из текущего контекста.
+      const base = ctx || (S.assist ? { cardId: S.assist.ctx.cardId, chatId: null } : (S.view === "chat" && S.cardId ? { cardId: S.cardId, chatId: null } : {}));
+      S.assist = AST.blank(base);
+    }
+    S.view = "assist";
+    S.find = null;
+    S.drawerOpen = S.drawerOpen && !narrow();
+    rememberUi();
+    $("#rail").classList.remove("open");
+    if (!quiet) { renderAll(); scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !narrow()) i.focus(); }, 30); }
+  }
+  async function saveAssist() {
+    const a = S.assist;
+    await DB.put("assist", a);
+    if (!S.assistList.includes(a)) S.assistList.push(a);
+    rememberUi();
+  }
+  async function assistChatLines(chatId) {
+    const c = S.chats.find((x) => x.id === chatId);
+    if (!c) return { lines: [], scene: "" };
+    const msgs = await DB.byIndex("messages", "chatId", chatId);
+    const path = TR.path(TR.index(msgs), c.leafId);
+    const cd = S.cards.find((x) => x.id === c.cardId);
+    const lines = path.map((m) => ({ name: m.role === "user" ? persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
+    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, ops: TR.activeSwipe(m).sceneOps || [] })));
+    return { lines, scene: SC.summaryLine(st) || "" };
+  }
+  async function assistSend(text) {
+    const a = S.assist;
+    if (!a || S.gen) return;
+    if (!a.messages.length) a.title = AST.title(text);
+    a.messages.push({ id: U.uid("am"), role: "user", text, at: Date.now() });
+    await saveAssist();
+    await assistGenerate();
+  }
+  async function assistGenerate() {
+    const a = S.assist;
+    const prov = activeProvider();
+    if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
+    const cd = a.ctx.cardId ? S.cards.find((c) => c.id === a.ctx.cardId) : null;
+    const chatCtx = a.ctx.chatId ? await assistChatLines(a.ctx.chatId) : { lines: [], scene: "" };
+    const target = { id: U.uid("am"), role: "assistant", text: "", at: Date.now() };
+    const history = a.messages.map((x) => ({ role: x.role, text: x.text }));
+    a.messages.push(target);
+    const built = AST.build({
+      system: (S.settings.assistSystem || "").trim() || AST.SYSTEM, card: cd, chatLines: chatCtx.lines, sceneLine: chatCtx.scene,
+      userName: persona().name, history, contextTokens: contextTokens(), reserveTokens: 1500,
+    });
+    const ctrl = new AbortController();
+    S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", assist: true };
+    renderStage();
+    scrollBottom();
+    const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; paintAssist(); };
+    let raw = "", reasoning = "", error = null;
+    try {
+      const sp = S.settings.sampler;
+      const res = prov.kind === "perchance"
+        ? await PC.chat({ char: "Ассистент", user: persona().name }, built.messages, { signal: ctrl.signal, onDelta })
+        : await OA.chat(prov, built.messages, Object.assign({}, sp, { temperature: Math.min(sp.temperature || 0.7, 0.8), max_tokens: Math.max(sp.max_tokens || 0, 1500) }), { signal: ctrl.signal, onDelta });
+      raw = res.text; reasoning = res.reasoning;
+    } catch (e) {
+      raw = e.partial != null ? e.partial : (S.gen ? S.gen.raw : "");
+      reasoning = S.gen ? S.gen.reasoning : "";
+      if (e.name !== "AbortError") error = e.message || String(e);
+    }
+    const th = OA.splitThink(raw || "");
+    target.text = th.text.trim();
+    target.reasoning = [reasoning, th.reasoning].filter(Boolean).join("\n").trim();
+    if (error) target.error = error;
+    S.gen = null;
+    if (!target.text && !error) a.messages.pop();
+    await saveAssist();
+    if (S.view === "assist") { renderStage(); scrollBottom(); }
+  }
+  let assistPaintQueued = false;
+  function paintAssist() {
+    if (assistPaintQueued) return;
+    assistPaintQueued = true;
+    requestAnimationFrame(() => {
+      assistPaintQueued = false;
+      if (!S.gen || !S.gen.assist) return;
+      const el = document.getElementById("text-" + S.gen.msgId);
+      if (!el) return;
+      el.innerHTML = R.md(OA.splitThink(S.gen.raw).text);
+      const box = $("#feed");
+      if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
+    });
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } finally { ta.remove(); }
+    }
+    toast("Скопировано.");
+  }
+  async function assistCutFrom(id) {
+    const a = S.assist;
+    const i = a.messages.findIndex((x) => x.id === id);
+    if (i < 0) return null;
+    const removed = a.messages.splice(i);
+    await saveAssist();
+    return removed;
+  }
+
   /* ── Персонажи ──────────────────────────────────────────────────────── */
   function openCardEditor(cd) {
     S.modal = { kind: "card", section: "main", draft: U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })) };
@@ -4149,6 +4562,44 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; refreshPrism(); renderDrawer(); renderFeed(); },
     "chat-menu": (t) => openPop(V.chatMenu(vm()), t),
     "model-pop": (t) => openPop(V.modelPop(vm()), t),
+    assist: () => openAssist(S.assist && S.assist.messages.length ? S.assist.id : null),
+    "assist-new": () => { closePop(); if (S.assist && !S.assist.messages.length) { $("#input") && $("#input").focus(); return; } openAssist(null, S.assist ? { cardId: S.assist.ctx.cardId, chatId: S.assist.ctx.chatId } : null); },
+    "assist-open": (t) => { closePop(); openAssist(t.dataset.id); },
+    "assist-list": (t) => openPop(V.assistListPop(vm()), t),
+    "assist-ctx": (t) => openPop(V.assistCtxPop(vm()), t),
+    "assist-pick-card": async (t) => {
+      const a = S.assist; a.ctx.cardId = t.dataset.id || null; a.ctx.chatId = null;
+      if (a.messages.length) await saveAssist();
+      renderStage();
+      const anchor = $("[data-act=assist-ctx]");
+      if (a.ctx.cardId && anchor) openPop(V.assistCtxPop(vm()), anchor); else closePop();
+    },
+    "assist-pick-chat": async (t) => {
+      const a = S.assist; a.ctx.chatId = t.dataset.id || null;
+      if (a.messages.length) await saveAssist();
+      closePop(); renderStage();
+    },
+    "assist-about-chat": () => { closePop(); openAssist(null, { cardId: S.cardId, chatId: S.chatId }); },
+    "assist-starter": (t) => { if (S.gen) return; assistSend(t.dataset.q); },
+    "assist-copy": (t) => { const m = S.assist.messages.find((x) => x.id === t.dataset.id); if (m) copyText(m.text); },
+    "copy-code": (t) => { const c = t.parentElement.querySelector("code"); if (c) copyText(c.textContent); },
+    "assist-regen": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); await assistGenerate(); },
+    "assist-edit": async (t) => {
+      if (S.gen) return;
+      const removed = await assistCutFrom(t.dataset.id);
+      renderStage();
+      const i = $("#input"); if (i && removed) { i.value = removed[0].text; autoGrow(i); i.focus(); }
+    },
+    "assist-msg-del": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); renderStage(); },
+    "assist-del": async () => {
+      const a = S.assist;
+      if (!a || S.gen || !confirm(`Удалить разговор «${a.title}»?`)) return;
+      await DB.del("assist", a.id);
+      S.assistList = S.assistList.filter((x) => x !== a);
+      S.assist = null;
+      openAssist(null);
+      toast("Разговор удалён.");
+    },
     "new-chat": (t) => { closePop(); newChat(t.dataset.mode); },
     "edit-card": (t) => { closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : card()); },
     "rename-chat": async () => {
@@ -4303,7 +4754,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   };
 
   async function onClick(e) {
-    if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=model-pop],[data-act=chat-menu]")) closePop();
+    if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=model-pop],[data-act=chat-menu],[data-act=assist-ctx],[data-act=assist-list]")) closePop();
     const t = e.target.closest("[data-act]");
     if (!t || t.disabled) return;
     const fn = ACTS[t.dataset.act];
@@ -4335,6 +4786,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (t.dataset.imgCheck) { collectImgForm(); S.settings.images[t.dataset.imgCheck] = t.checked; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await saveSettings(); refreshAfterSettings(); return; }
+      if (t.dataset.setText) { S.settings[t.dataset.setText] = t.value; await saveSettings(); return; }
       if (t.dataset.setNum) { S.settings[t.dataset.setNum] = +t.value; await saveSettings(); refreshAfterSettings(); return; }
       if (t.dataset.setRange) { S.settings[t.dataset.setRange] = +t.value; applyLook(); await saveSettings(); return; }
       if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; await saveSettings(); refreshAfterSettings(); if (S.drawerOpen) renderDrawer(); return; }

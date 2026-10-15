@@ -67,7 +67,12 @@ class H(BaseHTTPRequestHandler):
             self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": text}}]}) + "\n\ndata: [DONE]\n\n").encode()); self.wfile.flush()
             return
         system = " ".join(m["content"] for m in req.get("messages", []) if m["role"] == "system")
-        if "мессенджере" in system:
+        if "ассистент внутри Prism RP" in system:
+            card = "карточка: да" if "### Карточка персонажа" in system else "карточка: нет"
+            chat = "чат: да" if "### Выдержка из ролевого чата" in system else "чат: нет"
+            text = "## Совет\n\n**Коротко:** " + card + ", " + chat + ".\n\n- первый пункт\n- второй пункт\n\n```\nописание: тихая\n```"
+            reasoning = ""
+        elif "мессенджере" in system:
             text = "привет!) только с пар вышла\n\nты как?\n\n[scene: Химэ.pose=идёт к метро]"
             reasoning = ""
         else:

@@ -498,3 +498,44 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .head-av:hover { box-shadow: 0 0 0 2px var(--accent); }
 .head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Ассистент — разговор с моделью вне игры */
+.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }
+.assist-mark svg { width: 22px; height: 22px; }
+.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }
+.pop-item .av { flex: none; }
+.av-18 { width: 18px; height: 18px; font-size: 10px; }
+.av-22 { width: 22px; height: 22px; font-size: 11px; }
+.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }
+.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }
+.assist-hero svg { width: 34px; height: 34px; }
+.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }
+.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }
+.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }
+.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }
+.starter:hover { border-color: var(--accent); background: var(--accent-wash); }
+.aturn { display: flex; flex-direction: column; min-width: 0; }
+.aturn.user { align-items: flex-end; }
+.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }
+.aturn .tools { margin-top: 4px; }
+.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }
+.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 .75em; }
+.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }
+.md li { margin: .2em 0; }
+.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }
+.md h3 { font-size: 1.15em; }
+.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }
+.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }
+.md .mdcode { position: relative; margin: 0 0 .9em; }
+.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }
+.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }
+.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }
+.md .code-copy:hover { opacity: 1; }
+.md.cursor > :last-child::after, .md.cursor:empty::after { content: ""; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }
+.md.cursor::after { content: none; }
+@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }
+.assist-head .head-who { overflow: hidden; }
+.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
