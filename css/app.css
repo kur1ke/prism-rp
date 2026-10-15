@@ -539,3 +539,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 @media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }
 .assist-head .head-who { overflow: hidden; }
 .assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Prism: переполнение, отбор опыта, непривязанные записи */
+.err-block { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--danger); border-radius: var(--r-m); padding: 10px 12px; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: 14px; }
+.err-block svg { width: 18px; height: 18px; color: var(--danger); flex: none; margin-top: 2px; }
+.exp-debug summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.exp-debug table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+.exp-debug th, .exp-debug td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.exp-debug th { color: var(--muted); font-weight: 500; }
+.exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }
+.exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }
+.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }
+.legacy-block .memo { cursor: default; }

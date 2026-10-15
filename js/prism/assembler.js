@@ -23,6 +23,8 @@
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры речи {{char}} (стиль, не сюжет)",
+      author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
+      authorPost: "Указания автора карточки (после истории)",
     },
     messenger: {
       frame:
@@ -37,6 +39,8 @@
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
+      author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
+      authorPost: "Указания автора карточки (после истории)",
     },
   };
 
@@ -58,118 +62,196 @@
     return body ? `### ${title}\n${body}` : "";
   }
 
-  /* opts: {
+  /* Сборка контекста со строгим бюджетом.
+
+     opts: {
        mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
-       experiences: [] (уже отобранные), history: [{role, text}],
-       contextTokens, reserveTokens, singleSystem, minHistory, sceneProtocol
-     } */
+       experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
+       history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
+       sceneProtocol, extraPost, noPostHistory
+     }
+
+     Итоговый порядок (обычный транспорт):
+       system: РАМКА → УКАЗАНИЯ АВТОРА (system_prompt) → лорбук «до персонажа» → КАРТОЧКА
+               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → СЦЕНА
+       user/assistant: ИСТОРИЯ
+       system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → протокол сцены и рисования
+     При singleSystem всё служебное идёт одним system в начале, затем строго user/assistant.
+
+     Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
+     Если не помещается, уступают по порядку:
+       1 старая история → 2 примеры речи → 3 лорбук → 4 менее релевантный опыт
+       → 5 указания после истории → 6 персона, сценарий, указания автора, хвост описания
+       (по абзацам, затем по предложениям) → 7 самый релевантный опыт → 8 история до последнего сообщения.
+     Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
+     не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
-    const m = (s) => U.macros(s, vars);
+    const m = (x) => U.macros(x, vars);
     const tok = U.estimateTokens;
     const budget = Math.max(512, o.contextTokens - o.reserveTokens);
 
-    const cardBody = [
-      card.description,
-      card.personality ? "Личность: " + card.personality : "",
-      card.scenario ? "Обстоятельства: " + card.scenario : "",
-      card.systemPrompt ? "Указания автора карточки: " + card.systemPrompt : "",
-    ].filter(Boolean).join("\n\n");
-
-    const fixed = {
-      frame: m(T.frame),
-      card: section(m(T.card), m(cardBody)),
-      persona: section(m(T.persona), m(o.userDesc || "")),
-      scene: section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user })),
-      post: [m(card.postHistory || ""), o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n"),
-    };
-    let used = Object.values(fixed).reduce((n, s) => n + tok(s), 0);
-
     const history = (o.history || []).filter((h) => h && h.text);
-    const minH = history.slice(-o.minHistory);
-    used += minH.reduce((n, h) => n + tok(h.text) + 4, 0);
-
-    // Опыт: противовесы и сильные записи не выбрасываются первыми.
-    let exps = (o.experiences || []).slice();
-    const expCost = (list) => tok(EXP.format(list)) + 30;
-    while (exps.length && used + expCost(exps) > budget) {
-      const weakest = exps.filter((e) => !e.__counter).sort((a, b) => (a.weight || 1) - (b.weight || 1))[0] || exps[0];
-      exps = exps.filter((e) => e !== weakest);
-    }
-    const droppedExp = (o.experiences || []).length - exps.length;
-    const memory = exps.length ? section(m(T.memory), EXP.format(exps)) : "";
-    used += tok(memory);
-
-    // Лорбук — по ключам из последних сообщений.
     const recentText = history.slice(-4).map((h) => h.text).join("\n");
     const loreAll = matchLore(card.lore, recentText);
-    const lore = [], loreBefore = [];
-    for (const e of loreAll) {
-      const c = tok(e.content) + 2;
-      if (used + c > budget) break;
-      (e.position === "before_char" ? loreBefore : lore).push(m(e.content)); used += c;
-    }
-    const loreBlock = lore.length ? section(m(T.lore), lore.join("\n\n")) : "";
-    const loreBeforeBlock = loreBefore.length ? section(m(T.lore), loreBefore.join("\n\n")) : "";
 
-    // Примеры речи — если остаётся место.
-    let examples = "";
-    if (card.mesExample) {
-      const ex = section(m(T.examples), m(card.mesExample).replace(/<START>/gi, "").trim());
-      if (used + tok(ex) <= budget - 200) { examples = ex; used += tok(ex); }
-    }
+    // Изменяемое состояние сборки: что сейчас входит.
+    const st = {
+      authorSys: m(card.systemPrompt || "").trim(),
+      description: m(card.description || "").trim(),
+      personality: m(card.personality || "").trim(),
+      scenario: m(card.scenario || "").trim(),
+      examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
+      persona: m(o.userDesc || "").trim(),
+      lore: loreAll.slice(),
+      exps: (o.experiences || []).slice(),
+      postHistory: o.noPostHistory ? "" : m(card.postHistory || "").trim(),
+      keepOld: null, // сколько старых сообщений (сверх minHistory) оставить; null — все
+      minH: Math.min(o.minHistory, history.length),
+    };
+    const frame = m(T.frame);
+    const scene = section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user }));
+    const protocol = [o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
 
-    // История: от новых к старым, сколько влезает.
-    const older = history.slice(0, Math.max(0, history.length - minH.length));
-    const keptOlder = [];
-    for (let i = older.length - 1; i >= 0; i--) {
-      const c = tok(older[i].text) + 4;
-      if (used + c > budget) break;
-      keptOlder.unshift(older[i]); used += c;
+    function parts() {
+      const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
+      const cardBody = [st.description, st.personality ? "Личность: " + st.personality : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+      const older = history.slice(0, history.length - st.minH);
+      const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
+      const kept = keptOlder.concat(history.slice(history.length - st.minH));
+      return {
+        head: [
+          frame,
+          section(T.author, st.authorSys),
+          section(m(T.lore), loreText("before")),
+          section(m(T.card), cardBody || "(описания нет)"),
+          section(m(T.examples), st.examples),
+          section(m(T.persona), st.persona),
+          section(m(T.lore), loreText("after")),
+          section(m(T.memory), EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)))),
+          scene,
+        ].filter(Boolean),
+        post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
+        history: kept,
+      };
     }
-    const keptHistory = keptOlder.concat(minH);
-
-    const head = [fixed.frame, loreBeforeBlock, fixed.card, examples, fixed.persona, loreBlock, memory, fixed.scene].filter(Boolean).join("\n\n");
-    const msgs = keptHistory.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
-    let messages;
-    if (o.singleSystem) {
-      // Строгие Jinja-шаблоны: одно system в начале, затем строго user/assistant.
-      const merged = [];
-      for (const x of msgs) {
-        const last = merged[merged.length - 1];
-        if (last && last.role === x.role) last.content += "\n\n" + x.content;
-        else merged.push(Object.assign({}, x));
+    function render() {
+      const p = parts();
+      const msgs = p.history.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
+      if (o.singleSystem) {
+        // Строгие Jinja-шаблоны: одно system в начале, затем строго user/assistant.
+        const merged = [];
+        for (const x of msgs) {
+          const last = merged[merged.length - 1];
+          if (last && last.role === x.role) last.content += "\n\n" + x.content;
+          else merged.push(Object.assign({}, x));
+        }
+        if (!merged.length || merged[0].role !== "user") merged.unshift({ role: "user", content: "[Начало]" });
+        return { p, messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
       }
-      if (!merged.length || merged[0].role !== "user") merged.unshift({ role: "user", content: "[Начало]" });
-      messages = [{ role: "system", content: [head, fixed.post].filter(Boolean).join("\n\n") }].concat(merged);
-    } else {
-      messages = [{ role: "system", content: head }].concat(msgs);
-      if (fixed.post) messages.push({ role: "system", content: fixed.post });
+      const out = [{ role: "system", content: p.head.join("\n\n") }].concat(msgs);
+      if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
+      return { p, messages: out };
+    }
+    const cost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
+    const fits = () => cost(render().messages) <= budget;
+
+    const truncated = [];
+    const note = (layer, detail) => {
+      const t = truncated.find((x) => x.layer === layer);
+      if (t) { if (typeof detail === "number") t.dropped = (t.dropped || 0) + detail; else if (detail) t.detail = detail; }
+      else truncated.push(Object.assign({ layer }, typeof detail === "number" ? { dropped: detail } : detail ? { detail } : {}));
+    };
+
+    // Порядок уступок. Каждая функция убирает одну порцию и возвращает true, либо false, если убирать нечего.
+    const olderCount = Math.max(0, history.length - st.minH);
+    const reducers = [
+      function oldHistory() {
+        const cur = st.keepOld == null ? olderCount : st.keepOld;
+        if (!cur) return false;
+        // Двоичный поиск: сколько самых свежих старых сообщений можно оставить.
+        let lo = 0, hi = cur - 1;
+        st.keepOld = 0;
+        if (!fits()) { note("history", cur); return true; }
+        while (lo < hi) {
+          const mid = Math.ceil((lo + hi + 1) / 2);
+          st.keepOld = mid;
+          if (fits()) lo = mid; else hi = mid - 1;
+        }
+        st.keepOld = lo;
+        note("history", cur - lo);
+        return true;
+      },
+      function examples() { if (!st.examples) return false; st.examples = ""; note("examples", "примеры речи"); return true; },
+      function lore() { if (!st.lore.length) return false; st.lore.pop(); note("lore", 1); return true; },
+      function lowExperience() { if (st.exps.length <= 1) return false; st.exps.pop(); note("experience", 1); return true; },
+      function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
+      function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
+      function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
+      function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
+      function descriptionTail() {
+        const d = st.description;
+        if (!d) return false;
+        const paras = d.split(/\n\s*\n/);
+        let next;
+        if (paras.length > 1) next = paras.slice(0, -1).join("\n\n");
+        else {
+          const sents = d.match(/[^.!?…]+[.!?…]+[»")\]]*\s*|[^.!?…]+$/g) || [d];
+          if (sents.length <= 1) return false; // первое предложение — минимум описания
+          next = sents.slice(0, -1).join("").trim();
+        }
+        st.description = next;
+        note("card.description", `описание сокращено до ${next.length} симв. из ${(m(card.description || "").trim()).length}`);
+        return true;
+      },
+      function topExperience() { if (!st.exps.length) return false; st.exps.pop(); note("experience", 1); return true; },
+      function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
+    ];
+
+    let overflow = false;
+    if (!fits()) {
+      for (const r of reducers) {
+        while (!fits() && r()) { /* уступаем порциями */ }
+        if (fits()) break;
+      }
+      overflow = !fits();
     }
 
+    const { p, messages } = render();
+    const used = cost(messages);
+    const keptHistory = p.history;
+    const tokLayer = (x) => tok(x) + (x ? 2 : 0);
+    const loreKept = st.lore.length;
     return {
       messages,
       report: {
         budget,
         used,
+        fits: used <= budget,
+        overflow,
+        truncated,
         historyKept: keptHistory.length,
         historyTotal: history.length,
-        experienceKept: exps.length,
-        experienceDropped: droppedExp,
-        loreKept: lore.length + loreBefore.length,
+        experienceKept: st.exps.length,
+        experienceDropped: (o.experiences || []).length - st.exps.length,
+        loreKept,
         loreMatched: loreAll.length,
-        examples: !!examples,
+        loreDropped: loreAll.length - loreKept,
+        examples: !!st.examples,
+        postHistory: !!st.postHistory,
+        postHistoryDisabled: !!o.noPostHistory && !!(card.postHistory || "").trim(),
         layers: {
-          frame: tok(fixed.frame),
-          card: tok(fixed.card) + tok(examples) + tok(fixed.persona),
-          memory: tok(memory),
-          scene: tok(fixed.scene),
-          lore: tok(loreBlock) + tok(loreBeforeBlock),
+          frame: tok(frame),
+          author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
+          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : ""),
+          memory: tokLayer(st.exps.length ? section(m(T.memory), EXP.format(st.exps)) : ""),
+          scene: tok(scene),
+          lore: tokLayer(st.lore.length ? st.lore.map((e) => m(e.content)).join("\n\n") : ""),
           history: keptHistory.reduce((n, h) => n + tok(h.text) + 4, 0),
-          post: tok(fixed.post),
+          post: tok(protocol),
         },
       },
     };

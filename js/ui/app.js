@@ -17,6 +17,7 @@
     autoContext: true,
     singleSystem: false,
     sceneProtocol: true,
+    noPostHistory: false,
     expLimit: 8,
     theme: "dusk",
     proseSize: 17,
@@ -94,6 +95,32 @@
     return S.settings.contextTokens || 8192;
   }
 
+  /* ── Опыт: канон чата и ветки ───────────────────────────────────────── */
+  function pathCtx(path) { return (path || activePath()).map((m) => ({ id: m.id, swipeIdx: m.swipeIdx || 0 })); }
+  // Что показывать во вкладке «Опыт»: видимое в этой ветке, скрытое в других ветках, непривязанное.
+  function expView(path) {
+    const ctx = { chatId: S.chatId, path: pathCtx(path) };
+    const inChat = S.experience.filter((r) => r.chatId === S.chatId && !r.legacyUnscoped);
+    const visible = inChat.filter((r) => EX.visibility(r, ctx).visible);
+    return { visible, hiddenInChat: inChat.length - visible.length, legacy: S.experience.filter((r) => EX.scopeOf(r) === "legacy") };
+  }
+  // Однократная (и повторяемая без вреда) миграция старых записей: привязка к чату без догадок.
+  async function migrateExperience() {
+    const all = await DB.all("experience");
+    const need = all.filter((r) => !r.chatId && !(r.source && r.source.chatId) && r.source && (r.source.messageIds || []).length);
+    const msgChat = new Map();
+    for (const r of need) for (const id of r.source.messageIds) {
+      if (msgChat.has(id)) continue;
+      const msg = await DB.get("messages", id);
+      msgChat.set(id, msg ? msg.chatId : null);
+    }
+    const res = EX.migrate(all, { messageChat: (id) => (msgChat.has(id) ? msgChat.get(id) : null) });
+    const changed = res.records.filter((r) => res.changed.includes(r.id));
+    if (changed.length) await DB.putMany("experience", changed);
+    S.legacyExperience = res.legacy;
+    return res;
+  }
+
   /* ── Модель представления ───────────────────────────────────────────── */
   function activePath() {
     const c = chat();
@@ -101,7 +128,7 @@
   }
   function sceneState(path) {
     const c = chat();
-    return SC.fold(c ? c.sceneInit : "", (path || activePath()).map((m) => ({ msgId: m.id, ops: TR.activeSwipe(m).sceneOps || [] })));
+    return SC.fold(c ? c.sceneInit : "", (path || activePath()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
   }
   function vm() {
     const path = activePath();
@@ -109,7 +136,7 @@
       S, view: S.view, cards: S.cards, chats: S.chats, card: card(), chat: chat(), persona: persona(), path,
       scene: chat() ? sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
       provider: activeProvider(), providers: providerList(), settings: S.settings,
-      exps: S.experience, expDraft: S.expDraft, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
+      exps: S.experience, expView: expView(path), expDraft: S.expDraft, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
       drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
       stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
       imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
@@ -226,6 +253,7 @@
     S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await DB.all("assist");
+    await migrateExperience();
     const ui = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!ui.drawerOpen && !narrow();
     if (ui.chatId && S.chats.some((c) => c.id === ui.chatId)) await openChat(ui.chatId, true);
@@ -349,13 +377,20 @@
     const st = sceneState(path);
     const history = path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })).filter((h) => h.text);
     const recent = history.slice(-4).map((h) => h.text).join("\n");
-    const exps = EX.select(S.experience, { ownerId: cd.id, present: ["user"].concat(st.present), text: recent, limit: S.settings.expLimit });
-    return AS.build({
-      mode: c.mode, card: cd, userName: persona().name, userDesc: persona().description,
-      sceneState: st, experiences: exps, history, extraPost,
-      contextTokens: contextTokens(), reserveTokens: S.settings.sampler.max_tokens || 700,
-      singleSystem: S.settings.singleSystem, sceneProtocol: S.settings.sceneProtocol,
+    const ex = EX.rank(S.experience, {
+      chatId: c.id, path: pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
+      text: recent, names: [cd.name, persona().name].concat(st.present), limit: S.settings.expLimit,
     });
+    const built = AS.build({
+      mode: c.mode, card: cd, userName: persona().name, userDesc: persona().description,
+      sceneState: st, experiences: ex.ranked, history, extraPost,
+      contextTokens: contextTokens(), reserveTokens: S.settings.sampler.max_tokens || 700,
+      singleSystem: S.settings.singleSystem, sceneProtocol: S.settings.sceneProtocol, noPostHistory: !!S.settings.noPostHistory,
+    });
+    built.report.expDebug = ex.debug;
+    built.report.experienceVisible = ex.visibleCount;
+    built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
+    return built;
   }
   function refreshPrism() {
     if (!chat() || !card()) { S.lastPrism = null; return; }
@@ -393,6 +428,15 @@
     S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
 
     const sw = TR.activeSwipe(target);
+    if (built.report.overflow) {
+      // Не отправляем запрос, который заведомо не помещается в контекст модели.
+      sw.error = `Контекст не помещается даже после всех сокращений: ${built.report.used} из ${built.report.budget} токенов. Рамка, сцена и последние сообщения больше, чем позволяет модель. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`;
+      await putMsg(target);
+      await touchChat();
+      renderFeed();
+      if (S.drawerOpen) renderDrawer();
+      return;
+    }
     const ctrl = new AbortController();
     S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
     renderFeed();
@@ -619,9 +663,10 @@
     const path = activePath();
     const idx = path.findIndex((m) => m.id === msgId);
     const st = sceneState(path.slice(0, idx + 1));
-    const d = EX.blank(S.cardId);
+    const d = EX.blank(S.cardId, S.chatId);
     d.about = ["user"];
-    d.source = { chatId: S.chatId, messageIds: [msgId], sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
+    const msg = path[idx];
+    d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 }, sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
     S.expDraft = d;
     S.tab = "memory";
     S.drawerOpen = true;
@@ -635,6 +680,8 @@
     if (!d.event) { toast("Опишите, что произошло.", true); return; }
     if (!d.id) d.id = U.uid("x");
     d.owner = S.cardId;
+    // Новая запись всегда принадлежит текущему чату; непривязанные старые не трогаем.
+    if (!d.chatId && !d.legacyUnscoped) { d.chatId = S.chatId; d.source = Object.assign({ messageIds: [] }, d.source, { chatId: S.chatId }); }
     await DB.put("experience", d);
     const i = S.experience.findIndex((x) => x.id === d.id);
     if (i >= 0) S.experience[i] = d; else S.experience.push(d);
@@ -676,7 +723,7 @@
     const path = TR.path(TR.index(msgs), c.leafId);
     const cd = S.cards.find((x) => x.id === c.cardId);
     const lines = path.map((m) => ({ name: m.role === "user" ? persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
-    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, ops: TR.activeSwipe(m).sceneOps || [] })));
+    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
     return { lines, scene: SC.summaryLine(st) || "" };
   }
   async function assistSend(text) {
@@ -873,8 +920,9 @@
   }
   async function deleteChat() {
     const c = chat();
-    if (!c || !confirm("Удалить этот чат? Опыт персонажа сохранится.")) return;
+    if (!c || !confirm("Удалить этот чат? Вместе с ним удалится опыт персонажа, накопленный в этом мире.")) return;
     const ms = await DB.byIndex("messages", "chatId", c.id);
+    await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
     await DB.delMany("messages", ms.map((m) => m.id));
     await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
     await DB.del("chats", c.id);
@@ -1131,7 +1179,17 @@
     "sc-remove": (t) => applySceneOps([op(t.dataset.name, "remove", t.dataset.item)]),
     "scene-init-save": async () => { const c = chat(); c.sceneInit = $("#scene-init").value.trim(); await putChat(c); refreshPrism(); renderDrawer(); renderFeed(); toast("Начальная сцена сохранена."); },
     // Опыт
-    "exp-new": () => { S.expDraft = Object.assign(EX.blank(S.cardId), { about: ["user"] }); renderDrawer(); },
+    "exp-new": () => { S.expDraft = Object.assign(EX.blank(S.cardId, S.chatId), { about: ["user"] }); renderDrawer(); },
+    "exp-assign": async (t) => {
+      const r = S.experience.find((x) => x.id === t.dataset.id);
+      if (!r || !confirm("Привязать эту запись к текущему чату? Она станет частью этого мира и будет видна во всех его ветках.")) return;
+      const nr = EX.assignToChat(r, S.chatId);
+      await DB.put("experience", nr);
+      S.experience = S.experience.map((x) => (x.id === nr.id ? nr : x));
+      S.legacyExperience = Math.max(0, (S.legacyExperience || 1) - 1);
+      refreshPrism(); renderDrawer();
+      toast("Запись привязана к этому чату.");
+    },
     "exp-edit": (t) => { S.expDraft = U.clone(S.experience.find((x) => x.id === t.dataset.id)); renderDrawer(); },
     "exp-cancel": () => { S.expDraft = null; renderDrawer(); },
     "exp-save": saveExp,
