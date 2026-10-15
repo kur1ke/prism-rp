@@ -81,3 +81,12 @@ ui/app.js ── корень: состояние сессии S, контекс
 - **Начало мира (FOUNDATION-B)** — правило сценария в `prism/assembler`, генерация первой сцены в `generation/service` (новый режим), кнопка в `ui/controllers/chat`.
 - **Переписка (FOUNDATION-C/D)** — `js/messenger/{state,time,activity,initiative}.js` (чистые) и `messenger/service.js`; `app.js` и контроллеры только вызывают.
 - **Мир, линзы, наложения** — `js/world/*`, **процедурные события** — `js/procedural/*`, **отношения** — `prism/relationship.js` (чистый) с подключением в `prism/service`.
+
+## Review protocol
+
+All PrismRP pull requests should be reviewed against:
+
+`docs/PRISMRP_REVIEW_PROTOCOL.md`
+
+The protocol defines protected invariants, architectural boundaries,
+review severity, regression expectations, and final review verdict format.
