@@ -1735,30 +1735,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     };
   }
 
-  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref ? { ref } : {});
-
-  /* Проверка пака. error — сохранить нельзя; warning — можно. На входе — сырые данные (до normalize),
-     чтобы ловить битые факты, а не молча их чинить. */
-  function validatePack(p) {
-    const out = [];
-    if (!isObj(p)) return [issue("error", "not-object", "Пак мира должен быть объектом.")];
-    if (!str(p.id).trim()) out.push(issue("error", "no-id", "У пака нет id."));
-    if (!str(p.name).trim()) out.push(issue("error", "no-name", "У пака нет названия."));
-    if (p.facts != null && !Array.isArray(p.facts)) out.push(issue("error", "facts-not-array", "Поле facts должно быть списком."));
-    const seen = new Set();
-    (Array.isArray(p.facts) ? p.facts : []).forEach((f, i) => {
-      if (!isObj(f)) { out.push(issue("error", "fact-malformed", `Факт №${i + 1} не является объектом.`, String(i))); return; }
-      const id = str(f.id).trim();
-      if (!id) out.push(issue("error", "fact-no-id", `У факта №${i + 1} нет id.`, String(i)));
-      else if (seen.has(id)) out.push(issue("error", "fact-duplicate-id", `Повторяется id факта: ${id}.`, id));
-      else seen.add(id);
-      if (f.text != null && typeof f.text !== "string") out.push(issue("error", "fact-text", `Текст факта ${id || "№" + (i + 1)} не строка.`, id));
-      else if (!str(f.text).trim()) out.push(issue("warning", "fact-empty", `Факт ${id || "№" + (i + 1)} без текста.`, id));
-      for (const k of ["entities", "topics", "locations"]) if (f[k] != null && !Array.isArray(f[k])) out.push(issue("error", "fact-meta", `Поле ${k} факта ${id || "№" + (i + 1)} должно быть списком.`, id));
-    });
-    return out;
-  }
-  const hasErrors = (issues) => issues.some((x) => x.level === "error");
+  const issueOf = (level, code, message) => ({ level, code, message });
 
   /* Экспорт: канонический JSON пака. Линзы персонажей в экспорт пака не входят. */
   function exportPack(p) {
@@ -1772,14 +1749,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   function importPackText(text) {
     let json;
     try { json = JSON.parse(text); }
-    catch (e) { return { ok: false, pack: null, issues: [issue("error", "invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
+    catch (e) { return { ok: false, pack: null, issues: [issueOf("error", "invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
     if (!isObj(json) || json.app !== "prism-rp" || json.format !== FORMAT) {
-      return { ok: false, pack: null, issues: [issue("error", "unknown-format", "Это не пак мира PrismRP (нужны app: \"prism-rp\" и format: \"" + FORMAT + "\").")] };
+      return { ok: false, pack: null, issues: [issueOf("error", "unknown-format", "Это не пак мира PrismRP (нужны app: \"prism-rp\" и format: \"" + FORMAT + "\").")] };
     }
-    if (json.schema !== SCHEMA) return { ok: false, pack: null, issues: [issue("error", "schema", `Версия пака ${json.schema} не поддерживается.`)] };
+    if (json.schema !== SCHEMA) return { ok: false, pack: null, issues: [issueOf("error", "schema", `Версия пака ${json.schema} не поддерживается.`)] };
     const raw = json.pack;
-    const issues = validatePack(raw);
-    if (hasErrors(issues)) return { ok: false, pack: null, issues };
+    const V = PRP.worldValidate; // граница проверки — world/validate.js (загружается после модели)
+    const issues = V.validatePack(raw);
+    if (V.hasErrors(issues)) return { ok: false, pack: null, issues };
     const pack = normalize(raw);
     const now = Date.now();
     pack.id = uid("wp");
@@ -1788,7 +1766,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return { ok: true, pack, issues };
   }
 
-  PRP.worldModel = { SCHEMA, FORMAT, uid, fact, provenance, blank, normalize, validatePack, hasErrors, exportPack, importPackText, strList };
+  PRP.worldModel = { SCHEMA, FORMAT, uid, fact, provenance, blank, normalize, exportPack, importPackText, strList, isObj, str };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldModel;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -1812,9 +1790,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const SCHEMA = 1;
   const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
   const str = (v) => (v == null ? "" : String(v));
-  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref ? { ref } : {});
 
-  // Переопределение факта пака. Необязательные поля метаданных: если не заданы — берутся у целевого факта.
+  /* Переопределение факта пака. Поля метаданных различают «не задано» и «задано пустым»:
+     отсутствует или null → наследуется у целевого факта; задано (в том числе [] или "") → заменяет,
+     то есть пустой список очищает метаданные. Никаких проверок на «истинность». */
   function override(o) {
     const x = isObj(o) ? o : {};
     const out = { id: str(x.id).trim() || WM.uid("wo"), targetFactId: str(x.targetFactId).trim(), text: str(x.text) };
@@ -1846,8 +1825,64 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     };
   }
 
-  /* Проверка линзы. pack (необязательно) — чтобы показать ссылки на несуществующие факты:
-     это предупреждения, а не ошибки — ссылка остаётся видимой и ничего не угадывается. */
+  PRP.worldLens = { SCHEMA, blank, normalize, override };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldLens;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/world/validate.js */
+/* Prism RP — граница проверки мира (чистый модуль): паки мира и линзы персонажей.
+
+   Уровни: error — сохранять нельзя; warning — можно, но человек должен это видеть.
+   Ошибки (блокируют):
+     • повтор id фактов пака; повтор id добавленных фактов линзы;
+     • несколько переопределений одного targetFactId;
+     • битые обязательные объекты и id (нет id, не объект, не список);
+     • вторая линза для того же персонажа (одна линза на карточку).
+   Предупреждения:
+     • переопределение ссылается на факт, которого в паке нет;
+     • выключение ссылается на факт, которого в паке нет.
+   Ссылки на несуществующие факты никогда не исправляются угадыванием (ни по тексту, ни по похожему id).
+   Проверка не меняет входные данные. Без DOM, хранилища, сети и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref != null ? { ref: String(ref) } : {});
+  const hasErrors = (issues) => (issues || []).some((x) => x.level === "error");
+  const META_LISTS = ["entities", "topics", "locations"];
+
+  // Список фактов (пака или добавлений линзы): объекты, непустые и неповторяющиеся id.
+  function checkFacts(list, label, dupCode, out) {
+    const seen = new Set();
+    list.forEach((f, i) => {
+      const n = `${label} №${i + 1}`;
+      if (!isObj(f)) { out.push(issue("error", "fact-malformed", `${n} не является объектом.`, i)); return; }
+      const id = str(f.id).trim();
+      if (!id) out.push(issue("error", "fact-no-id", `У факта (${n}) нет id.`, i));
+      else if (seen.has(id)) out.push(issue("error", dupCode, `Повторяется id факта: ${id}.`, id));
+      else seen.add(id);
+      if (f.text != null && typeof f.text !== "string") out.push(issue("error", "fact-text", `Текст факта ${id || n} не строка.`, id || i));
+      else if (!str(f.text).trim()) out.push(issue("warning", "fact-empty", `Факт ${id || n} без текста.`, id || i));
+      for (const k of META_LISTS) if (f[k] != null && !Array.isArray(f[k])) out.push(issue("error", "fact-meta", `Поле ${k} факта ${id || n} должно быть списком.`, id || i));
+      if (f.provenance != null && !isObj(f.provenance)) out.push(issue("error", "fact-provenance", `Источник факта ${id || n} должен быть объектом.`, id || i));
+    });
+    return seen;
+  }
+
+  function validatePack(p) {
+    const out = [];
+    if (!isObj(p)) return [issue("error", "not-object", "Пак мира должен быть объектом.")];
+    if (!str(p.id).trim()) out.push(issue("error", "no-id", "У пака нет id."));
+    if (!str(p.name).trim()) out.push(issue("error", "no-name", "У пака нет названия."));
+    if (p.facts != null && !Array.isArray(p.facts)) { out.push(issue("error", "facts-not-array", "Поле facts должно быть списком.")); return out; }
+    checkFacts(p.facts || [], "Факт", "fact-duplicate-id", out);
+    return out;
+  }
+
+  /* Линза. pack — необязательно: с ним проверяются ссылки на факты (это предупреждения). */
   function validateLens(l, pack) {
     const out = [];
     if (!isObj(l)) return [issue("error", "not-object", "Линза должна быть объектом.")];
@@ -1858,34 +1893,39 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (l[k] != null && !Array.isArray(l[k])) out.push(issue("error", "not-array", `Поле ${k} должно быть списком.`, k));
     }
     const overrides = Array.isArray(l.overrides) ? l.overrides : [];
-    const targets = new Set();
+    const targets = new Set(), ovIds = new Set();
     overrides.forEach((o, i) => {
-      if (!isObj(o)) { out.push(issue("error", "override-malformed", `Переопределение №${i + 1} не является объектом.`, String(i))); return; }
+      if (!isObj(o)) { out.push(issue("error", "override-malformed", `Переопределение №${i + 1} не является объектом.`, i)); return; }
+      const id = str(o.id).trim();
+      if (!id) out.push(issue("error", "override-no-id", `У переопределения №${i + 1} нет id.`, i));
+      else if (ovIds.has(id)) out.push(issue("error", "override-duplicate-id", `Повторяется id переопределения: ${id}.`, id));
+      else ovIds.add(id);
       const t = str(o.targetFactId).trim();
-      if (!t) out.push(issue("error", "override-no-target", `У переопределения №${i + 1} нет целевого факта.`, str(o.id)));
+      if (!t) out.push(issue("error", "override-no-target", `У переопределения №${i + 1} нет целевого факта.`, id || i));
       else if (targets.has(t)) out.push(issue("error", "override-duplicate-target", `Факт ${t} переопределён больше одного раза — неясно, какой вариант действует.`, t));
       else targets.add(t);
+      for (const k of META_LISTS) if (o[k] != null && !Array.isArray(o[k])) out.push(issue("error", "override-meta", `Поле ${k} переопределения ${id || i + 1} должно быть списком.`, id || i));
     });
-    const addIds = new Set();
-    (Array.isArray(l.additions) ? l.additions : []).forEach((f, i) => {
-      if (!isObj(f)) { out.push(issue("error", "addition-malformed", `Добавленный факт №${i + 1} не является объектом.`, String(i))); return; }
-      const id = str(f.id).trim();
-      if (!id) out.push(issue("error", "addition-no-id", `У добавленного факта №${i + 1} нет id.`, String(i)));
-      else if (addIds.has(id)) out.push(issue("error", "addition-duplicate-id", `Повторяется id добавленного факта: ${id}.`, id));
-      else addIds.add(id);
-    });
-    if (pack && isObj(pack)) {
-      const ids = new Set((pack.facts || []).map((f) => f && f.id));
+    const addIds = checkFacts(Array.isArray(l.additions) ? l.additions : [], "Добавленный факт", "addition-duplicate-id", out);
+    if (isObj(pack)) {
+      const ids = new Set((pack.facts || []).filter(isObj).map((f) => str(f.id)));
       if (str(l.packId) && str(pack.id) && str(l.packId) !== str(pack.id)) out.push(issue("error", "pack-mismatch", "Линза относится к другому паку."));
-      for (const t of targets) if (!ids.has(t)) out.push(issue("warning", "override-target-missing", `Переопределяемого факта ${t} нет в паке.`, t));
-      for (const d of WM.strList(l.disabledFactIds)) if (!ids.has(d)) out.push(issue("warning", "disabled-target-missing", `Выключаемого факта ${d} нет в паке.`, d));
+      for (const t of targets) if (!ids.has(t)) out.push(issue("warning", "override-target-missing", `Переопределяемого факта ${t} нет в паке; ссылка сохранена и не применяется.`, t));
+      for (const d of Array.isArray(l.disabledFactIds) ? l.disabledFactIds : []) if (!ids.has(str(d))) out.push(issue("warning", "disabled-target-missing", `Выключаемого факта ${d} нет в паке; ссылка сохранена и не применяется.`, d));
       for (const a of addIds) if (ids.has(a)) out.push(issue("warning", "addition-id-collides", `id добавленного факта ${a} совпадает с фактом пака.`, a));
     }
     return out;
   }
 
-  PRP.worldLens = { SCHEMA, blank, normalize, override, validateLens };
-  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldLens;
+  /* Одна линза на персонажа: lens нельзя сохранить, если у того же cardId уже есть линза с другим id.
+     existing — уже сохранённые линзы этого персонажа (или все). */
+  function validateOneLensPerCard(lens, existing) {
+    const other = (existing || []).find((x) => x && x.cardId === lens.cardId && x.id !== lens.id);
+    return other ? [issue("error", "lens-exists", "У этого персонажа уже есть линза мира: измените её, а не создавайте вторую.", other.id)] : [];
+  }
+
+  PRP.worldValidate = { validatePack, validateLens, validateOneLensPerCard, hasErrors };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldValidate;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -1895,11 +1935,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
    Порядок власти W1: линза (переопределения, добавления, выключения) > общий пак.
    (Наложение мира на конкретный чат — следующий этап, FOUNDATION-W2; здесь его нет.)
 
-   Правила:
-     • факт, выключенный в самом паке (enabled: false) или линзой (disabledFactIds), не действует;
-     • переопределение заменяет факт пака с тем же id (targetFactId); незаданные поля метаданных
-       берутся у исходного факта; id действующего факта — id факта пака;
-     • добавления линзы идут после фактов пака, в своём порядке;
+   Порядок (зафиксирован):
+     1. факты пака с enabled: false исключаются;
+     2. факты из disabledFactIds линзы исключаются — выключение сильнее переопределения;
+     3. к оставшимся фактам пака применяются переопределения (по targetFactId);
+     4. добавляются факты линзы.
+   Порядок фактов пака сохраняется, добавления идут после них.
+   Идентичность: факт, полученный переопределением, сохраняет id факта пака (targetFactId);
+   откуда значение — видно по origin: "override" и overrideId. Правка текста переопределения id не меняет.
+   У добавлений линзы — свои постоянные id. Поля метаданных переопределения: не задано или null —
+   наследуется у факта пака; задано (в том числе [] или "") — заменяет.
+   Также:
      • ссылки на несуществующие факты и повторы id — предупреждения в отчёте; совпадение по тексту
        не ищется никогда;
      • при повторе id в паке действует первый факт (детерминированно), остальные — в предупреждениях;
@@ -1949,12 +1995,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const overridden = [], packDisabled = [], disabled = [];
     for (const f of packFacts) {
       if (f.enabled === false) { excluded.push({ id: f.id, text: f.text, reason: "pack-disabled" }); packDisabled.push(f.id); continue; }
-      if (disabledIds.has(f.id)) { excluded.push({ id: f.id, text: f.text, reason: "lens-disabled" }); disabled.push(f.id); continue; }
+      if (disabledIds.has(f.id)) {
+        excluded.push(Object.assign({ id: f.id, text: f.text, reason: "lens-disabled" }, overrides.has(f.id) ? { overrideIgnored: overrides.get(f.id).id } : {}));
+        disabled.push(f.id);
+        continue;
+      }
       const o = overrides.get(f.id);
       const base = { id: f.id, text: f.text, entities: f.entities || [], topics: f.topics || [], locations: f.locations || [], timeline: f.timeline || "", variant: f.variant || "", provenance: f.provenance || { kind: "manual" } };
       if (o) {
-        const eff = Object.assign(base, { text: o.text, origin: "override", overrideId: o.id, originalText: f.text });
-        for (const k of META) if (o[k] !== undefined) eff[k] = o[k];
+        const eff = Object.assign(base, { text: o.text, origin: "override", targetFactId: f.id, overrideId: o.id, originalText: f.text });
+        for (const k of META) if (o[k] !== undefined && o[k] !== null) eff[k] = o[k]; // [] и "" — явное очищение
         if (o.note) eff.note = o.note;
         facts.push(eff);
         overridden.push({ targetFactId: f.id, overrideId: o.id });
@@ -6143,12 +6193,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 <script>/* js/world/service.js */
 /* Prism RP — сервис мира (прикладной уровень): общие паки мира и линзы персонажей.
    Загрузка, сохранение с проверкой, правила удаления, импорт и экспорт паков, превью «Мир персонажа».
-   Смысл — в чистых модулях world/model, world/lens, world/resolve; хранилище — через ctx.DB.
+   Смысл — в чистых модулях world/model, world/lens, world/validate, world/resolve; хранилище — через ctx.DB.
+   Сохраняется только то, что прошло проверку world/validate (ошибки блокируют, предупреждения возвращаются).
    Мир в контекст модели здесь НЕ подаётся (это FOUNDATION-W2). DOM не трогает. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const WM = PRP.worldModel, WL = PRP.worldLens, WR = PRP.worldResolve;
+  const WM = PRP.worldModel, WL = PRP.worldLens, WR = PRP.worldResolve, WV = PRP.worldValidate;
 
   const PACKS = "worldPacks", LENSES = "worldLenses";
   const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -6167,9 +6218,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     /* Паки. → { pack } или { error, issues } */
     function newPack(name) { return WM.blank(name || "Новый мир"); }
+    const errorsText = (issues) => issues.filter((x) => x.level === "error").map((x) => x.message).join(" ");
     async function savePack(draft) {
-      const issues = WM.validatePack(draft);
-      if (WM.hasErrors(issues)) return { error: issues.filter((x) => x.level === "error").map((x) => x.message).join(" "), issues };
+      const issues = WV.validatePack(draft);
+      if (WV.hasErrors(issues)) return { error: issues.filter((x) => x.level === "error").map((x) => x.message).join(" "), issues };
       const p = WM.normalize(draft);
       p.updatedAt = Date.now();
       await DB.put(PACKS, p);
@@ -6177,13 +6229,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return { pack: p, issues };
     }
     /* Удаление пака запрещено, пока на него ссылаются линзы: иначе они осиротели бы молча.
-       → { ok } или { blocked: [имена персонажей] } */
+       → { ok } или { blocked: [{ lensId, cardId }] } — имена персонажей для сообщения подставляет интерфейс. */
     async function deletePack(id) {
       const refs = (await DB.byIndex(LENSES, "packId", id)) || [];
-      if (refs.length) {
-        const names = refs.map((l) => (S.cards.find((c) => c.id === l.cardId) || { name: "(персонаж удалён)" }).name);
-        return { blocked: names };
-      }
+      if (refs.length) return { blocked: refs.map((l) => ({ lensId: l.id, cardId: l.cardId })) };
       await DB.del(PACKS, id);
       S.worldPacks = (S.worldPacks || []).filter((p) => p.id !== id);
       return { ok: true };
@@ -6196,19 +6245,19 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // Импорт: проверка до сохранения; битый или чужой файл — ошибка, ничего не сохраняется.
     async function importPack(text) {
       const r = WM.importPackText(text);
-      if (!r.ok) return { error: r.issues.map((x) => x.message).join(" "), issues: r.issues };
+      if (!r.ok) return { error: errorsText(r.issues) || "Файл не принят.", issues: r.issues };
       return savePack(r.pack);
     }
 
     /* Линзы. Одна линза на персонажа; линза хранит только отличия от пака. */
     async function saveLens(draft) {
+      // Проверяется черновик как есть (до приведения), чтобы битые записи не «чинились» молча.
+      const issues = WV.validateLens(draft, packById(draft && draft.packId));
+      if (WV.hasErrors(issues)) return { error: errorsText(issues), issues };
       const l = WL.normalize(draft);
-      if (!l.id) l.id = WL.blank(l.cardId, l.packId).id;
-      const issues = WL.validateLens(l, packById(l.packId));
-      if (issues.some((x) => x.level === "error")) return { error: issues.filter((x) => x.level === "error").map((x) => x.message).join(" "), issues };
       // Одна линза на персонажа: вторая отклоняется (то же ограничение держит уникальный индекс cardId в базе).
-      const other = (await DB.byIndex(LENSES, "cardId", l.cardId)).find((x) => x.id !== l.id);
-      if (other) return { error: "У этого персонажа уже есть линза мира: измените её, а не создавайте вторую.", issues: [{ level: "error", code: "lens-exists", message: "Линза для персонажа уже есть.", ref: other.id }] };
+      const one = WV.validateOneLensPerCard(l, await DB.byIndex(LENSES, "cardId", l.cardId));
+      if (WV.hasErrors(one)) return { error: errorsText(one), issues: one };
       l.updatedAt = Date.now();
       await DB.put(LENSES, l);
       upsert((S.worldLenses = S.worldLenses || []), l);
@@ -6239,7 +6288,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const pack = packById(lensDraft.packId);
       if (!pack) return { pack: null, missingPack: lensDraft.packId, facts: [], excluded: [], report: { warnings: [{ level: "warning", code: "pack-missing", message: "Пак мира не найден." }] } };
       const lens = WL.normalize(lensDraft);
-      return Object.assign({ pack, lensIssues: WL.validateLens(Object.assign({}, lens, { id: lens.id || "draft", cardId: lens.cardId || "draft" }), pack) }, WR.resolve(pack, lens));
+      return Object.assign({ pack, lensIssues: WV.validateLens(Object.assign({}, lensDraft, { id: lensDraft.id || "draft", cardId: lensDraft.cardId || "draft" }), pack) }, WR.resolve(pack, lens));
     }
     // Пустые заготовки для форм (идентификаторы выдаёт модель).
     const newFact = (prefix) => WM.fact({}, prefix || "wf");
@@ -7312,7 +7361,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (!W().packById(d.id)) { S.worldDraft = null; return ui.renderStage(); }
         if (!confirm(`Удалить мир «${d.name}»? Это нельзя отменить.`)) return;
         const r = await W().deletePack(d.id);
-        if (r.blocked) return ui.toast(`Мир используют персонажи: ${r.blocked.join(", ")}. Сначала снимите связь с миром в их карточках (раздел «Мир»).`, true);
+        if (r.blocked) {
+          const names = r.blocked.map((ref) => (S.cards.find((c) => c.id === ref.cardId) || { name: "персонаж " + ref.cardId }).name);
+          return ui.toast(`Мир используют персонажи: ${names.join(", ")}. Сначала снимите связь с миром в их карточках (раздел «Мир»).`, true);
+        }
         S.worldDraft = null;
         ui.renderStage();
         ui.toast("Мир удалён.");

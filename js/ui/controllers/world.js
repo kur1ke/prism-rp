@@ -80,7 +80,10 @@
         if (!W().packById(d.id)) { S.worldDraft = null; return ui.renderStage(); }
         if (!confirm(`Удалить мир «${d.name}»? Это нельзя отменить.`)) return;
         const r = await W().deletePack(d.id);
-        if (r.blocked) return ui.toast(`Мир используют персонажи: ${r.blocked.join(", ")}. Сначала снимите связь с миром в их карточках (раздел «Мир»).`, true);
+        if (r.blocked) {
+          const names = r.blocked.map((ref) => (S.cards.find((c) => c.id === ref.cardId) || { name: "персонаж " + ref.cardId }).name);
+          return ui.toast(`Мир используют персонажи: ${names.join(", ")}. Сначала снимите связь с миром в их карточках (раздел «Мир»).`, true);
+        }
         S.worldDraft = null;
         ui.renderStage();
         ui.toast("Мир удалён.");

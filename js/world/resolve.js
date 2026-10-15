@@ -3,11 +3,17 @@
    Порядок власти W1: линза (переопределения, добавления, выключения) > общий пак.
    (Наложение мира на конкретный чат — следующий этап, FOUNDATION-W2; здесь его нет.)
 
-   Правила:
-     • факт, выключенный в самом паке (enabled: false) или линзой (disabledFactIds), не действует;
-     • переопределение заменяет факт пака с тем же id (targetFactId); незаданные поля метаданных
-       берутся у исходного факта; id действующего факта — id факта пака;
-     • добавления линзы идут после фактов пака, в своём порядке;
+   Порядок (зафиксирован):
+     1. факты пака с enabled: false исключаются;
+     2. факты из disabledFactIds линзы исключаются — выключение сильнее переопределения;
+     3. к оставшимся фактам пака применяются переопределения (по targetFactId);
+     4. добавляются факты линзы.
+   Порядок фактов пака сохраняется, добавления идут после них.
+   Идентичность: факт, полученный переопределением, сохраняет id факта пака (targetFactId);
+   откуда значение — видно по origin: "override" и overrideId. Правка текста переопределения id не меняет.
+   У добавлений линзы — свои постоянные id. Поля метаданных переопределения: не задано или null —
+   наследуется у факта пака; задано (в том числе [] или "") — заменяет.
+   Также:
      • ссылки на несуществующие факты и повторы id — предупреждения в отчёте; совпадение по тексту
        не ищется никогда;
      • при повторе id в паке действует первый факт (детерминированно), остальные — в предупреждениях;
@@ -57,12 +63,16 @@
     const overridden = [], packDisabled = [], disabled = [];
     for (const f of packFacts) {
       if (f.enabled === false) { excluded.push({ id: f.id, text: f.text, reason: "pack-disabled" }); packDisabled.push(f.id); continue; }
-      if (disabledIds.has(f.id)) { excluded.push({ id: f.id, text: f.text, reason: "lens-disabled" }); disabled.push(f.id); continue; }
+      if (disabledIds.has(f.id)) {
+        excluded.push(Object.assign({ id: f.id, text: f.text, reason: "lens-disabled" }, overrides.has(f.id) ? { overrideIgnored: overrides.get(f.id).id } : {}));
+        disabled.push(f.id);
+        continue;
+      }
       const o = overrides.get(f.id);
       const base = { id: f.id, text: f.text, entities: f.entities || [], topics: f.topics || [], locations: f.locations || [], timeline: f.timeline || "", variant: f.variant || "", provenance: f.provenance || { kind: "manual" } };
       if (o) {
-        const eff = Object.assign(base, { text: o.text, origin: "override", overrideId: o.id, originalText: f.text });
-        for (const k of META) if (o[k] !== undefined) eff[k] = o[k];
+        const eff = Object.assign(base, { text: o.text, origin: "override", targetFactId: f.id, overrideId: o.id, originalText: f.text });
+        for (const k of META) if (o[k] !== undefined && o[k] !== null) eff[k] = o[k]; // [] и "" — явное очищение
         if (o.note) eff.note = o.note;
         facts.push(eff);
         overridden.push({ targetFactId: f.id, overrideId: o.id });

@@ -65,30 +65,7 @@
     };
   }
 
-  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref ? { ref } : {});
-
-  /* Проверка пака. error — сохранить нельзя; warning — можно. На входе — сырые данные (до normalize),
-     чтобы ловить битые факты, а не молча их чинить. */
-  function validatePack(p) {
-    const out = [];
-    if (!isObj(p)) return [issue("error", "not-object", "Пак мира должен быть объектом.")];
-    if (!str(p.id).trim()) out.push(issue("error", "no-id", "У пака нет id."));
-    if (!str(p.name).trim()) out.push(issue("error", "no-name", "У пака нет названия."));
-    if (p.facts != null && !Array.isArray(p.facts)) out.push(issue("error", "facts-not-array", "Поле facts должно быть списком."));
-    const seen = new Set();
-    (Array.isArray(p.facts) ? p.facts : []).forEach((f, i) => {
-      if (!isObj(f)) { out.push(issue("error", "fact-malformed", `Факт №${i + 1} не является объектом.`, String(i))); return; }
-      const id = str(f.id).trim();
-      if (!id) out.push(issue("error", "fact-no-id", `У факта №${i + 1} нет id.`, String(i)));
-      else if (seen.has(id)) out.push(issue("error", "fact-duplicate-id", `Повторяется id факта: ${id}.`, id));
-      else seen.add(id);
-      if (f.text != null && typeof f.text !== "string") out.push(issue("error", "fact-text", `Текст факта ${id || "№" + (i + 1)} не строка.`, id));
-      else if (!str(f.text).trim()) out.push(issue("warning", "fact-empty", `Факт ${id || "№" + (i + 1)} без текста.`, id));
-      for (const k of ["entities", "topics", "locations"]) if (f[k] != null && !Array.isArray(f[k])) out.push(issue("error", "fact-meta", `Поле ${k} факта ${id || "№" + (i + 1)} должно быть списком.`, id));
-    });
-    return out;
-  }
-  const hasErrors = (issues) => issues.some((x) => x.level === "error");
+  const issueOf = (level, code, message) => ({ level, code, message });
 
   /* Экспорт: канонический JSON пака. Линзы персонажей в экспорт пака не входят. */
   function exportPack(p) {
@@ -102,14 +79,15 @@
   function importPackText(text) {
     let json;
     try { json = JSON.parse(text); }
-    catch (e) { return { ok: false, pack: null, issues: [issue("error", "invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
+    catch (e) { return { ok: false, pack: null, issues: [issueOf("error", "invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
     if (!isObj(json) || json.app !== "prism-rp" || json.format !== FORMAT) {
-      return { ok: false, pack: null, issues: [issue("error", "unknown-format", "Это не пак мира PrismRP (нужны app: \"prism-rp\" и format: \"" + FORMAT + "\").")] };
+      return { ok: false, pack: null, issues: [issueOf("error", "unknown-format", "Это не пак мира PrismRP (нужны app: \"prism-rp\" и format: \"" + FORMAT + "\").")] };
     }
-    if (json.schema !== SCHEMA) return { ok: false, pack: null, issues: [issue("error", "schema", `Версия пака ${json.schema} не поддерживается.`)] };
+    if (json.schema !== SCHEMA) return { ok: false, pack: null, issues: [issueOf("error", "schema", `Версия пака ${json.schema} не поддерживается.`)] };
     const raw = json.pack;
-    const issues = validatePack(raw);
-    if (hasErrors(issues)) return { ok: false, pack: null, issues };
+    const V = PRP.worldValidate; // граница проверки — world/validate.js (загружается после модели)
+    const issues = V.validatePack(raw);
+    if (V.hasErrors(issues)) return { ok: false, pack: null, issues };
     const pack = normalize(raw);
     const now = Date.now();
     pack.id = uid("wp");
@@ -118,6 +96,6 @@
     return { ok: true, pack, issues };
   }
 
-  PRP.worldModel = { SCHEMA, FORMAT, uid, fact, provenance, blank, normalize, validatePack, hasErrors, exportPack, importPackText, strList };
+  PRP.worldModel = { SCHEMA, FORMAT, uid, fact, provenance, blank, normalize, exportPack, importPackText, strList, isObj, str };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldModel;
 })(typeof window !== "undefined" ? window : globalThis);

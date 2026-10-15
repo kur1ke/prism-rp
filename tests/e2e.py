@@ -681,8 +681,134 @@ try:
               [m["role"] for m in req["messages"]] == ["system", "user"] and req["messages"][1]["content"] == "Привет." and "[Начало]" not in json.dumps(req, ensure_ascii=False))
         page.evaluate("() => { PRP.app.S.settings.singleSystem = false; }")
 
+        # FOUNDATION-W1: общий пак мира и линза персонажа
+        page.set_viewport_size({"width": 1440, "height": 900})
+        cid = lambda name: page.evaluate(f"PRP.app.S.cards.find((c) => c.name === '{name}').id")
+        tile = lambda name: page.locator(f".tile[data-id='{cid(name)}']")
+        page.click("[data-act=world]")
+        page.wait_for_selector(".world-layout")
+        check("W1-26: библиотека миров открывается", page.locator(".world-layout").count() == 1)
+        page.click("[data-act=world-new]")
+        page.fill("#wp-name", "Bleach E2E")
+        page.click("[data-act=world-fact-add]")
+        page.fill("[data-wf='0'][data-k=text]", "WF-HOME: Тацуки живёт в Каракуре.")
+        page.fill("[data-wf='0'][data-k=entities]", "Тацуки")
+        page.fill("[data-wf='0'][data-k=timeline]", "canon")
+        page.click("[data-act=world-fact-add]")
+        page.fill("[data-wf='1'][data-k=text]", "WF-REAPERS: Синигами видят духов.")
+        page.click("[data-act=world-save]")
+        page.wait_for_timeout(300)
+        wp = page.evaluate("PRP.app.S.worldPacks.map((p) => ({ name: p.name, facts: p.facts.map((f) => [f.id, f.text, f.entities, f.timeline]) }))")
+        check("W1-27/W1-28: мир создан, два факта с метками", len(wp) == 1 and wp[0]["name"] == "Bleach E2E" and len(wp[0]["facts"]) == 2 and wp[0]["facts"][0][2] == ["Тацуки"] and wp[0]["facts"][0][3] == "canon")
+        fact_ids = [f[0] for f in wp[0]["facts"]]
+        page.click("[data-act=home] >> nth=0")
+        tile("Химэ").locator(".tile-edit").click()
+        page.wait_for_selector(".modal")
+        page.click("[data-act=card-section][data-section=world]")
+        page.select_option("[data-lens-pack]", label="Bleach E2E")
+        page.wait_for_selector("[data-lens-disable]")
+        check("W1-29: персонаж привязан к миру", page.locator(".lens-fact").count() == 2)
+        page.click("[data-act=lens-override-add] >> nth=0")
+        page.fill("[data-lens-ovr='0']", "WF-OSAKA: Тацуки переехала в Осаку.")
+        page.check(f"[data-lens-disable='{fact_ids[1]}']")
+        page.wait_for_timeout(200)
+        page.click("[data-act=lens-add]")
+        page.fill("[data-lens-add='0'][data-k=text]", "WF-NEIGHBOR: живёт напротив {{user}}.")
+        page.click("[data-act=card-section][data-section=main]")
+        page.click("[data-act=card-section][data-section=world]")
+        eff = page.inner_text(".eff-world")
+        check("W1-30/W1-31/W1-32/W1-33: превью — замена, свой факт, выключенный факт",
+              "заменено для персонажа" in eff and "WF-OSAKA" in eff and "только у персонажа" in eff and "WF-NEIGHBOR" in eff
+              and "не действует для персонажа" in eff and page.locator(".eff-world li.off", has_text="WF-REAPERS").count() == 1)
+        page.click("[data-act=card-save]")
+        page.wait_for_selector(".modal", state="detached")
+        tile("Юки").locator(".tile-edit").click()
+        page.wait_for_selector(".modal")
+        page.click("[data-act=card-section][data-section=world]")
+        page.select_option("[data-lens-pack]", label="Bleach E2E")
+        page.wait_for_selector(".eff-world")
+        eff2 = page.inner_text(".eff-world")
+        check("W1-34: у второго персонажа пак без изменений первого", "WF-HOME" in eff2 and "WF-REAPERS" in eff2 and "WF-OSAKA" not in eff2 and "WF-NEIGHBOR" not in eff2)
+        page.click("[data-act=card-save]")
+        page.wait_for_selector(".modal", state="detached")
+        pk = page.evaluate("PRP.app.S.worldPacks[0].facts.map((f) => f.text)")
+        check("W1-34: сам пак не изменился", pk == ["WF-HOME: Тацуки живёт в Каракуре.", "WF-REAPERS: Синигами видят духов."])
+        page.reload()
+        page.wait_for_selector("#app")
+        page.wait_for_function("PRP.app && PRP.app.S.worldLenses && PRP.app.S.worldLenses.length === 2")
+        page.click("[data-act=home] >> nth=0")
+        tile("Химэ").locator(".tile-edit").click()
+        page.wait_for_selector(".modal")
+        page.click("[data-act=card-section][data-section=world]")
+        page.wait_for_selector(".eff-world")
+        eff3 = page.inner_text(".eff-world")
+        check("W1-35: после перезагрузки мир и линза на месте", "WF-OSAKA" in eff3 and "WF-NEIGHBOR" in eff3 and page.evaluate("PRP.app.S.worldPacks.length") == 1)
+        page.click("[data-act=modal-close]")
+        page.click("[data-act=world]")
+        page.click(".world-item")
+        page.once("dialog", lambda d: d.accept())
+        page.click("[data-act=world-delete]")
+        page.wait_for_timeout(400)
+        check("W1-18: мир со ссылками не удаляется, причина с именами", page.evaluate("PRP.app.S.worldPacks.length") == 1 and "Мир используют персонажи" in page.inner_text("#toast") and "Химэ" in page.inner_text("#toast"))
+        page.click("[data-act=home] >> nth=0")
+        tile("Химэ").locator(".tile-body").click()
+        page.wait_for_selector("#input")
+        n0 = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"]
+        nm = page.evaluate("PRP.app.S.messages.length")  # последний чат Химэ может быть и перепиской
+        page.fill("#input", "Где сейчас Тацуки?")
+        page.keyboard.press("Enter")
+        page.wait_for_function(f"PRP.app.S.messages.length >= {nm + 2}")
+        idle(page)
+        body = json.dumps(json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last")), ensure_ascii=False)
+        check("W1-36: мир не подаётся в модель", json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"] == n0 + 1 and "Где сейчас Тацуки?" in body and "WF-" not in body)
+        shot(page, "14-foundation-w1.png")
+
         check("нет ошибок JS (standalone)", not errors)
         if errors: print("   ", errors[:5])
+
+        # W1-13 / W1-19: обновление базы v3 → v4 без потерь; бэкап и восстановление с коллекциями мира; уникальный cardId
+        p3 = b.new_context().new_page()
+        p3.on("pageerror", lambda e: errors.append(str(e)))
+        p3.goto("http://127.0.0.1:8765/web/version.json")
+        p3.evaluate("""() => new Promise((ok, fail) => {
+          const r = indexedDB.open('prism-rp', 3);
+          r.onupgradeneeded = () => { const db = r.result;
+            db.createObjectStore('cards', { keyPath: 'id' });
+            db.createObjectStore('chats', { keyPath: 'id' }).createIndex('cardId', 'cardId');
+            db.createObjectStore('messages', { keyPath: 'id' }).createIndex('chatId', 'chatId');
+            db.createObjectStore('experience', { keyPath: 'id' }).createIndex('owner', 'owner');
+            db.createObjectStore('settings', { keyPath: 'key' });
+            db.createObjectStore('images', { keyPath: 'id' }).createIndex('chatId', 'chatId');
+            db.createObjectStore('assist', { keyPath: 'id' }); };
+          r.onsuccess = () => { const db = r.result; const t = db.transaction(['cards', 'chats', 'messages', 'experience'], 'readwrite');
+            t.objectStore('cards').put({ id: 'old-card', name: 'Старая', description: 'карточка v3', systemPrompt: 'OLD', lore: [], updatedAt: 1 });
+            t.objectStore('chats').put({ id: 'old-chat', cardId: 'old-card', mode: 'rp', title: 'Сцена', leafId: 'old-m', sceneInit: '' });
+            t.objectStore('messages').put({ id: 'old-m', chatId: 'old-chat', parentId: null, role: 'assistant', swipes: [{ text: 'Старое сообщение', sceneOps: [] }], swipeIdx: 0, createdAt: 1 });
+            t.objectStore('experience').put({ id: 'old-x', owner: 'old-card', chatId: 'old-chat', event: 'старый опыт', createdAt: 1 });
+            t.oncomplete = () => { db.close(); ok(); }; t.onerror = () => fail(t.error); };
+          r.onerror = () => fail(r.error); })""")
+        p3.goto("http://127.0.0.1:8765/standalone/index.html")
+        p3.wait_for_selector(".tile")
+        up = p3.evaluate("""async () => { const DB = PRP.app.ctx.DB;
+          const c = { cards: (await DB.all('cards')).length, chats: (await DB.all('chats')).length, messages: (await DB.all('messages')).length, experience: (await DB.all('experience')).length, packs: (await DB.all('worldPacks')).length };
+          const v = await new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result; ok({ v: db.version, stores: [...db.objectStoreNames] }); db.close(); }; });
+          return Object.assign(c, v); }""")
+        check("W1-13: база v3 → v4 без потерь, новые коллекции на месте", up["v"] == 4 and up["cards"] == 1 and up["chats"] == 1 and up["messages"] == 1 and up["experience"] == 1
+              and "worldPacks" in up["stores"] and "worldLenses" in up["stores"] and up["packs"] == 0 and "Старая" in p3.inner_text(".gallery"))
+        uq = p3.evaluate("""async () => { const DB = PRP.app.ctx.DB;
+          await DB.put('worldLenses', { id: 'l-a', cardId: 'old-card', packId: 'p' });
+          try { await DB.put('worldLenses', { id: 'l-b', cardId: 'old-card', packId: 'p' }); return 'accepted'; } catch (e) { return e.name || 'error'; } }""")
+        check("W1: одна линза на персонажа — вторую отклоняет сама база (уникальный индекс)", uq == "ConstraintError")
+        bk = p3.evaluate("""async () => { const DB = PRP.app.ctx.DB, W = PRP.app.ctx.svc.world;
+          await W.savePack({ id: 'bk-pack', name: 'Бэкап', facts: [{ id: 'f1', text: 'BK-FACT' }] });
+          const data = await DB.exportAll();
+          const has = ['worldPacks', 'worldLenses'].every((k) => Array.isArray(data[k])) && data.worldPacks.length === 1 && data.worldLenses.length === 1;
+          await DB.del('worldPacks', 'bk-pack'); await DB.del('worldLenses', 'l-a');
+          await DB.importAll(JSON.parse(JSON.stringify(data)), true);
+          const packs = await DB.all('worldPacks'), lenses = await DB.all('worldLenses');
+          return { has, packs: packs.map((p) => p.facts[0].text), lenses: lenses.map((l) => l.id), cards: (await DB.all('cards')).length }; }""")
+        check("W1-19: бэкап включает мир, восстановление его возвращает", bk["has"] and bk["packs"] == ["BK-FACT"] and bk["lenses"] == ["l-a"] and bk["cards"] == 1)
+        p3.context.close()
 
         # Сборка для Perchance с заглушкой плагина
         p2 = b.new_context(viewport={"width": 1440, "height": 900}).new_page()
