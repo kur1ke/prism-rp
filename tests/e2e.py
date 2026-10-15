@@ -449,7 +449,12 @@ try:
         page.click("[data-act=tab][data-tab=memory]")
         page.once("dialog", lambda d: d.accept())
         page.click("[data-act=exp-assign][data-id=legacy1]")
-        check("миграция: ручная привязка к чату", wait_text(page, "#drawer-body", "Старое событие без чата") and "Без привязки к чату" not in page.inner_text("#drawer-body"))
+        try:
+            page.wait_for_selector(".legacy-block", state="detached", timeout=8000)
+            assigned = "Старое событие без чата" in page.inner_text("#drawer-body")
+        except Exception:
+            assigned = False
+        check("миграция: ручная привязка к чату", assigned)
         page.click("[data-act=tab][data-tab=scene]")
 
         # OVERFLOW: заведомо непомещающийся контекст не меняет дерево и не уходит в модель (new / regen / continue)
