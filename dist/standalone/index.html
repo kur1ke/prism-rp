@@ -471,7 +471,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }
   .rail.open { transform: none; }
   .only-narrow { display: inline-grid !important; }
-  .modal { grid-template-columns: minmax(0, 1fr); }
+  /* Одна колонка: шапка, лента разделов и тело — три строки. Без третьей строки лента попадала в
+     строку minmax(0, 1fr) высотой 0, а тело (неявная строка) начиналось сразу под шапкой и перекрывало ленту. */
+  .modal { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .modal.narrow { grid-template-rows: auto minmax(0, 1fr); }
   .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }
   .modal-nav .rail-item { width: auto; white-space: nowrap; }
   .card-edit { grid-template-columns: minmax(0, 1fr); }
@@ -6576,6 +6579,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         : S.modal.kind === "import" ? V.importReview(m, S.modal)
         : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
+      // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
+      // вернуть в видимую часть активный раздел (на широком экране лента вертикальная, ничего не меняется).
+      const act = $(".modal-nav .rail-item.active");
+      if (act && act.parentElement.scrollWidth > act.parentElement.clientWidth) {
+        const nav = act.parentElement;
+        const a = act.getBoundingClientRect(), n = nav.getBoundingClientRect();
+        nav.scrollLeft = Math.max(0, nav.scrollLeft + (a.left - n.left) - (nav.clientWidth - a.width) / 2);
+      }
       S.modal.keepScroll = false;
     }
     function renderAll() { applyLook(); renderRail(); renderStage(); renderDrawer(); renderModal(); }

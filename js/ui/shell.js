@@ -135,6 +135,14 @@
         : S.modal.kind === "import" ? V.importReview(m, S.modal)
         : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
+      // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
+      // вернуть в видимую часть активный раздел (на широком экране лента вертикальная, ничего не меняется).
+      const act = $(".modal-nav .rail-item.active");
+      if (act && act.parentElement.scrollWidth > act.parentElement.clientWidth) {
+        const nav = act.parentElement;
+        const a = act.getBoundingClientRect(), n = nav.getBoundingClientRect();
+        nav.scrollLeft = Math.max(0, nav.scrollLeft + (a.left - n.left) - (nav.clientWidth - a.width) / 2);
+      }
       S.modal.keepScroll = false;
     }
     function renderAll() { applyLook(); renderRail(); renderStage(); renderDrawer(); renderModal(); }
