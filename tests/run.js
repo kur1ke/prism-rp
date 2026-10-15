@@ -1175,6 +1175,22 @@ t("W1-20/W1-21/W1-22/W1-23/W1-24/W1-25: мир читает только кан�
   assert.ok(!/world/i.test(asm.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
 });
 
+t("W1 fix: id добавленного факта = id факта пака — блокирующая ошибка; разрешение остаётся однозначным", () => {
+  const l = LENS({ additions: [{ id: "reapers", text: "Дубль id" }, { id: "own-1", text: "Свой факт" }] });
+  const iss = WV.validateLens(l, PACK());
+  const c = iss.find((x) => x.code === "addition-id-collides");
+  assert.ok(c && c.level === "error" && WV.hasErrors(iss));
+  const r = WR.resolve(PACK(), l);
+  const ids = r.facts.map((f) => f.id);
+  assert.strictEqual(new Set(ids).size, ids.length, "id действующих фактов единственны");
+  assert.deepStrictEqual(r.facts.map((f) => [f.id, f.origin]), [["tatsuki-home", "pack"], ["reapers", "pack"], ["festival", "pack"], ["own-1", "lens"]]);
+  assert.ok(r.excluded.some((x) => x.id === "reapers" && x.reason === "addition-id-collides") && codes(r.report.warnings).includes("addition-id-collides"));
+  assert.deepStrictEqual(WR.resolve(PACK(), l), r, "детерминированно");
+  assert.strictEqual(l.additions[0].id, "reapers", "id не переименован");
+  assert.deepStrictEqual(WV.validateLens(LENS({ additions: [{ id: "own-1", text: "x" }] }), PACK()).filter((x) => x.level === "error"), []);
+  assert.strictEqual(WV.packMissing("nope").code, "pack-missing"); assert.strictEqual(WV.packMissing("nope").level, "error");
+});
+
 // Сервисы чата, Prism и генерации на памяти: хранилище — Map, модель — подставная функция.
 let fbLLM = null;
 globalThis.PRP.llm = { chat: (...a) => fbLLM(...a) };
@@ -1468,6 +1484,29 @@ async function foundationB() {
     assert.strictEqual(h.store.worldLenses.size, 1);
     const badLens = await W.saveLens(LENS({ id: "l3", cardId: "c3", overrides: [{ id: "o1", targetFactId: "reapers", text: "a" }, { id: "o2", targetFactId: "reapers", text: "b" }] }));
     assert.ok(badLens.error, "блокирующая ошибка проверки"); assert.strictEqual(h.store.worldLenses.size, 1);
+  });
+
+  await ta("W1 fix: линза к несуществующему паку и линза с id-коллизией не сохраняются; база и состояние не меняются", async () => {
+    const h = fbHarness(CARD_NOFIRST);
+    const W = h.ctx.svc.world;
+    const before = () => JSON.stringify({ db: [...(h.store.worldLenses || new Map()).values()], s: h.S.worldLenses });
+    const b0 = before();
+    const r1 = await W.saveLens(LENS({ id: "l-ghost", cardId: "c1", packId: "no-such-pack" }));
+    assert.ok(r1.error && r1.issues[0].code === "pack-missing");
+    const r2 = await W.saveLensForCard("c1", LENS({ id: "l-ghost", cardId: "c1", packId: "no-such-pack" }));
+    assert.ok(r2.error && r2.issues[0].code === "pack-missing");
+    assert.strictEqual(before(), b0, "ни записи, ни изменения состояния");
+    assert.strictEqual((h.S.worldPacks || []).length + (h.store.worldPacks ? h.store.worldPacks.size : 0), 0, "пак не создан");
+    await W.savePack(PACK());
+    const r3 = await W.saveLensForCard("c1", LENS({ cardId: "c1", additions: [{ id: "festival", text: "дубль" }] }));
+    assert.ok(r3.error && r3.issues.some((x) => x.code === "addition-id-collides"));
+    assert.strictEqual(before(), b0, "коллизия id — тоже без записи");
+    const ok = await W.saveLensForCard("c1", LENS({ cardId: "c1", additions: [{ id: "own-1", text: "Свой факт" }] }));
+    assert.ok(ok.lens && h.store.worldLenses.size === 1 && h.S.worldLenses.length === 1, "существующий пак — сохраняется");
+    const ed = await W.saveLensForCard("c1", Object.assign(JSON.parse(JSON.stringify(ok.lens)), { focusTopics: ["дом"] }));
+    assert.ok(ed.lens && ed.lens.focusTopics[0] === "дом", "правка существующей линзы работает");
+    const r = W.preview(ed.lens);
+    assert.deepStrictEqual(r.facts.map((f) => f.id), ["tatsuki-home", "reapers", "festival", "own-1"], "свои факты — после фактов пака");
   });
   await ta("W1-16/W1-17/W1-18: удаление персонажа и линзы не трогает пак; пак со ссылками не удаляется", async () => {
     const h = fbHarness(CARD_NOFIRST);

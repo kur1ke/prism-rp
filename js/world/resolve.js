@@ -84,7 +84,13 @@
       if (!a || !a.id) { warn("addition-malformed", "Добавленный факт без id пропущен.", ""); continue; }
       if (seenAdd.has(a.id)) { warn("addition-duplicate-id", `Повторяется id добавленного факта ${a.id}: действует первый.`, a.id); continue; }
       seenAdd.add(a.id);
-      if (byId.has(a.id)) warn("addition-id-collides", `id добавленного факта ${a.id} совпадает с фактом пака.`, a.id);
+      // Защита от битых сохранённых данных (проверка такое сохранить не даёт): добавление с id факта пака
+      // в мир не попадает, чтобы id действующих фактов оставались единственными; видно в excluded и warnings.
+      if (byId.has(a.id)) {
+        warn("addition-id-collides", `id добавленного факта ${a.id} совпадает с фактом пака: добавление не применено.`, a.id);
+        excluded.push({ id: a.id, text: a.text, reason: "addition-id-collides" });
+        continue;
+      }
       if (a.enabled === false) { excluded.push({ id: a.id, text: a.text, reason: "lens-addition-disabled" }); continue; }
       facts.push({ id: a.id, text: a.text, entities: a.entities || [], topics: a.topics || [], locations: a.locations || [], timeline: a.timeline || "", variant: a.variant || "", provenance: a.provenance || { kind: "manual" }, origin: "lens" });
       additions++;

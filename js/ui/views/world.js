@@ -112,7 +112,7 @@
   // Превью «Мир персонажа»: что получится из пака и линзы. Только просмотр — в модель это не уходит.
   function effective(pv) {
     const ORIGIN = { pack: ["пак", ""], override: ["заменено для персонажа", "ovr"], lens: ["только у персонажа", "own"] };
-    const WHY = { "pack-disabled": "выключен в паке", "lens-disabled": "не действует для персонажа", "lens-addition-disabled": "выключен" };
+    const WHY = { "pack-disabled": "выключен в паке", "lens-disabled": "не действует для персонажа", "lens-addition-disabled": "выключен", "addition-id-collides": "id совпадает с фактом пака" };
     const r = pv.report;
     const warns = (r.warnings || []).concat((pv.lensIssues || []).filter((x) => x.level === "error"));
     return `<div class="block-title" style="margin-top:22px">Мир персонажа <small>${r.effective} из ${r.packFacts} фактов пака${r.additions ? ` + ${r.additions} своих` : ""}</small></div>

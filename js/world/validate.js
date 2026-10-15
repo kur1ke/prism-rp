@@ -4,6 +4,8 @@
    Ошибки (блокируют):
      • повтор id фактов пака; повтор id добавленных фактов линзы;
      • несколько переопределений одного targetFactId;
+     • id добавленного факта линзы совпадает с id факта пака (иначе в мире было бы два факта с одним id);
+     • линза ссылается на пак, которого нет (pack-missing; наличие пака проверяет сервис — здесь только вид ошибки);
      • битые обязательные объекты и id (нет id, не объект, не список);
      • вторая линза для того же персонажа (одна линза на карточку).
    Предупреждения:
@@ -79,10 +81,15 @@
       if (str(l.packId) && str(pack.id) && str(l.packId) !== str(pack.id)) out.push(issue("error", "pack-mismatch", "Линза относится к другому паку."));
       for (const t of targets) if (!ids.has(t)) out.push(issue("warning", "override-target-missing", `Переопределяемого факта ${t} нет в паке; ссылка сохранена и не применяется.`, t));
       for (const d of Array.isArray(l.disabledFactIds) ? l.disabledFactIds : []) if (!ids.has(str(d))) out.push(issue("warning", "disabled-target-missing", `Выключаемого факта ${d} нет в паке; ссылка сохранена и не применяется.`, d));
-      for (const a of addIds) if (ids.has(a)) out.push(issue("warning", "addition-id-collides", `id добавленного факта ${a} совпадает с фактом пака.`, a));
+      // id не переименовывается и не подбирается автоматически: пользователь должен сам пересоздать добавленный факт.
+      for (const a of addIds) if (ids.has(a)) out.push(issue("error", "addition-id-collides", `id добавленного факта ${a} совпадает с фактом пака — у факта мира id должен быть единственным. Удалите этот факт персонажа и добавьте заново.`, a));
     }
     return out;
   }
+
+  // Линза ссылается на несуществующий пак: блокирующая ошибка. Существование проверяет вызывающий (world/service),
+  // этот модуль хранилище не читает.
+  const packMissing = (packId) => issue("error", "pack-missing", `Пак мира ${packId || "(не указан)"} не найден: линзу можно привязать только к существующему паку.`, packId || "");
 
   /* Одна линза на персонажа: lens нельзя сохранить, если у того же cardId уже есть линза с другим id.
      existing — уже сохранённые линзы этого персонажа (или все). */
@@ -91,6 +98,6 @@
     return other ? [issue("error", "lens-exists", "У этого персонажа уже есть линза мира: измените её, а не создавайте вторую.", other.id)] : [];
   }
 
-  PRP.worldValidate = { validatePack, validateLens, validateOneLensPerCard, hasErrors };
+  PRP.worldValidate = { validatePack, validateLens, validateOneLensPerCard, packMissing, hasErrors };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldValidate;
 })(typeof window !== "undefined" ? window : globalThis);

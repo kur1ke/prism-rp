@@ -58,8 +58,11 @@
 
     /* Линзы. Одна линза на персонажа; линза хранит только отличия от пака. */
     async function saveLens(draft) {
+      // Линза — только к существующему паку: иначе отказ, без записи и без изменения состояния. Пак не создаётся.
+      const pack = packById(draft && draft.packId);
+      if (!pack) { const miss = [WV.packMissing(draft && draft.packId)]; return { error: errorsText(miss), issues: miss }; }
       // Проверяется черновик как есть (до приведения), чтобы битые записи не «чинились» молча.
-      const issues = WV.validateLens(draft, packById(draft && draft.packId));
+      const issues = WV.validateLens(draft, pack);
       if (WV.hasErrors(issues)) return { error: errorsText(issues), issues };
       const l = WL.normalize(draft);
       // Одна линза на персонажа: вторая отклоняется (то же ограничение держит уникальный индекс cardId в базе).

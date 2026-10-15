@@ -1830,6 +1830,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
    Ошибки (блокируют):
      • повтор id фактов пака; повтор id добавленных фактов линзы;
      • несколько переопределений одного targetFactId;
+     • id добавленного факта линзы совпадает с id факта пака (иначе в мире было бы два факта с одним id);
+     • линза ссылается на пак, которого нет (pack-missing; наличие пака проверяет сервис — здесь только вид ошибки);
      • битые обязательные объекты и id (нет id, не объект, не список);
      • вторая линза для того же персонажа (одна линза на карточку).
    Предупреждения:
@@ -1905,10 +1907,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (str(l.packId) && str(pack.id) && str(l.packId) !== str(pack.id)) out.push(issue("error", "pack-mismatch", "Линза относится к другому паку."));
       for (const t of targets) if (!ids.has(t)) out.push(issue("warning", "override-target-missing", `Переопределяемого факта ${t} нет в паке; ссылка сохранена и не применяется.`, t));
       for (const d of Array.isArray(l.disabledFactIds) ? l.disabledFactIds : []) if (!ids.has(str(d))) out.push(issue("warning", "disabled-target-missing", `Выключаемого факта ${d} нет в паке; ссылка сохранена и не применяется.`, d));
-      for (const a of addIds) if (ids.has(a)) out.push(issue("warning", "addition-id-collides", `id добавленного факта ${a} совпадает с фактом пака.`, a));
+      // id не переименовывается и не подбирается автоматически: пользователь должен сам пересоздать добавленный факт.
+      for (const a of addIds) if (ids.has(a)) out.push(issue("error", "addition-id-collides", `id добавленного факта ${a} совпадает с фактом пака — у факта мира id должен быть единственным. Удалите этот факт персонажа и добавьте заново.`, a));
     }
     return out;
   }
+
+  // Линза ссылается на несуществующий пак: блокирующая ошибка. Существование проверяет вызывающий (world/service),
+  // этот модуль хранилище не читает.
+  const packMissing = (packId) => issue("error", "pack-missing", `Пак мира ${packId || "(не указан)"} не найден: линзу можно привязать только к существующему паку.`, packId || "");
 
   /* Одна линза на персонажа: lens нельзя сохранить, если у того же cardId уже есть линза с другим id.
      existing — уже сохранённые линзы этого персонажа (или все). */
@@ -1917,7 +1924,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return other ? [issue("error", "lens-exists", "У этого персонажа уже есть линза мира: измените её, а не создавайте вторую.", other.id)] : [];
   }
 
-  PRP.worldValidate = { validatePack, validateLens, validateOneLensPerCard, hasErrors };
+  PRP.worldValidate = { validatePack, validateLens, validateOneLensPerCard, packMissing, hasErrors };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldValidate;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -2009,7 +2016,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!a || !a.id) { warn("addition-malformed", "Добавленный факт без id пропущен.", ""); continue; }
       if (seenAdd.has(a.id)) { warn("addition-duplicate-id", `Повторяется id добавленного факта ${a.id}: действует первый.`, a.id); continue; }
       seenAdd.add(a.id);
-      if (byId.has(a.id)) warn("addition-id-collides", `id добавленного факта ${a.id} совпадает с фактом пака.`, a.id);
+      // Защита от битых сохранённых данных (проверка такое сохранить не даёт): добавление с id факта пака
+      // в мир не попадает, чтобы id действующих фактов оставались единственными; видно в excluded и warnings.
+      if (byId.has(a.id)) {
+        warn("addition-id-collides", `id добавленного факта ${a.id} совпадает с фактом пака: добавление не применено.`, a.id);
+        excluded.push({ id: a.id, text: a.text, reason: "addition-id-collides" });
+        continue;
+      }
       if (a.enabled === false) { excluded.push({ id: a.id, text: a.text, reason: "lens-addition-disabled" }); continue; }
       facts.push({ id: a.id, text: a.text, entities: a.entities || [], topics: a.topics || [], locations: a.locations || [], timeline: a.timeline || "", variant: a.variant || "", provenance: a.provenance || { kind: "manual" }, origin: "lens" });
       additions++;
@@ -5316,7 +5329,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // Превью «Мир персонажа»: что получится из пака и линзы. Только просмотр — в модель это не уходит.
   function effective(pv) {
     const ORIGIN = { pack: ["пак", ""], override: ["заменено для персонажа", "ovr"], lens: ["только у персонажа", "own"] };
-    const WHY = { "pack-disabled": "выключен в паке", "lens-disabled": "не действует для персонажа", "lens-addition-disabled": "выключен" };
+    const WHY = { "pack-disabled": "выключен в паке", "lens-disabled": "не действует для персонажа", "lens-addition-disabled": "выключен", "addition-id-collides": "id совпадает с фактом пака" };
     const r = pv.report;
     const warns = (r.warnings || []).concat((pv.lensIssues || []).filter((x) => x.level === "error"));
     return `<div class="block-title" style="margin-top:22px">Мир персонажа <small>${r.effective} из ${r.packFacts} фактов пака${r.additions ? ` + ${r.additions} своих` : ""}</small></div>
@@ -6244,8 +6257,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     /* Линзы. Одна линза на персонажа; линза хранит только отличия от пака. */
     async function saveLens(draft) {
+      // Линза — только к существующему паку: иначе отказ, без записи и без изменения состояния. Пак не создаётся.
+      const pack = packById(draft && draft.packId);
+      if (!pack) { const miss = [WV.packMissing(draft && draft.packId)]; return { error: errorsText(miss), issues: miss }; }
       // Проверяется черновик как есть (до приведения), чтобы битые записи не «чинились» молча.
-      const issues = WV.validateLens(draft, packById(draft && draft.packId));
+      const issues = WV.validateLens(draft, pack);
       if (WV.hasErrors(issues)) return { error: errorsText(issues), issues };
       const l = WL.normalize(draft);
       // Одна линза на персонажа: вторая отклоняется (то же ограничение держит уникальный индекс cardId в базе).
