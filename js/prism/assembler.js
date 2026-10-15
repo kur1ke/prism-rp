@@ -78,7 +78,9 @@
        experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        sceneProtocol, extraPost, noPostHistory,
-       includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да)
+       includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
+       allowSyntheticUser — можно ли при singleSystem подставить служебную реплику пользователя «[Начало]»
+         (по умолчанию да, как раньше; для начала сцены — нет, см. report.needsUserFirst)
      }
 
      Итоговый порядок (обычный транспорт):
@@ -96,7 +98,7 @@
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true, allowSyntheticUser: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
@@ -157,15 +159,22 @@
       const p = parts();
       const msgs = p.history.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
       if (o.singleSystem) {
-        // Строгие Jinja-шаблоны: одно system в начале, затем строго user/assistant.
+        /* Строгие Jinja-шаблоны (Mistral, Gemma и подобные): одно system в начале, затем строго
+           user/assistant, начиная с user — иначе шаблон бросает «Conversation roles must alternate
+           user/assistant/…». Поэтому, если история начинается с ответа персонажа (приветствие),
+           в обычном разговоре подставляется служебная реплика «[Начало]». Для начала сцены это
+           запрещено (allowSyntheticUser: false): реплика не подставляется, а needsUserFirst
+           сообщает, что строгому шаблону не хватит первого хода пользователя. */
         const merged = [];
         for (const x of msgs) {
           const last = merged[merged.length - 1];
           if (last && last.role === x.role) last.content += "\n\n" + x.content;
           else merged.push(Object.assign({}, x));
         }
-        if (!merged.length || merged[0].role !== "user") merged.unshift({ role: "user", content: "[Начало]" });
-        return { p, messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
+        const userFirst = merged.length && merged[0].role === "user";
+        if (!userFirst && o.allowSyntheticUser) merged.unshift({ role: "user", content: "[Начало]" });
+        return { p, synthetic: !userFirst && o.allowSyntheticUser, needsUserFirst: !userFirst && !o.allowSyntheticUser,
+          messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
       }
       const out = [{ role: "system", content: p.head.join("\n\n") }].concat(msgs);
       if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
@@ -237,7 +246,7 @@
       overflow = !fits();
     }
 
-    const { p, messages } = render();
+    const { p, messages, synthetic, needsUserFirst } = render();
     const used = cost(messages);
     const keptHistory = p.history;
     const tokLayer = (x) => tok(x) + (x ? 2 : 0);
@@ -263,6 +272,9 @@
         // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "past-first-turn"
         // (граница первого ответа пройдена), "budget" (не поместился).
         scenarioIncluded: !!st.scenario,
+        // singleSystem: подставлена служебная реплика «[Начало]» / её нельзя было подставить, а шаблону нужен ход пользователя.
+        syntheticUser: !!synthetic,
+        needsUserFirst: !!needsUserFirst,
         scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
         layers: {
           frame: tok(frame),

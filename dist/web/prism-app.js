@@ -1715,7 +1715,9 @@
        experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        sceneProtocol, extraPost, noPostHistory,
-       includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да)
+       includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
+       allowSyntheticUser — можно ли при singleSystem подставить служебную реплику пользователя «[Начало]»
+         (по умолчанию да, как раньше; для начала сцены — нет, см. report.needsUserFirst)
      }
 
      Итоговый порядок (обычный транспорт):
@@ -1733,7 +1735,7 @@
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true, allowSyntheticUser: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
@@ -1794,15 +1796,22 @@
       const p = parts();
       const msgs = p.history.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
       if (o.singleSystem) {
-        // Строгие Jinja-шаблоны: одно system в начале, затем строго user/assistant.
+        /* Строгие Jinja-шаблоны (Mistral, Gemma и подобные): одно system в начале, затем строго
+           user/assistant, начиная с user — иначе шаблон бросает «Conversation roles must alternate
+           user/assistant/…». Поэтому, если история начинается с ответа персонажа (приветствие),
+           в обычном разговоре подставляется служебная реплика «[Начало]». Для начала сцены это
+           запрещено (allowSyntheticUser: false): реплика не подставляется, а needsUserFirst
+           сообщает, что строгому шаблону не хватит первого хода пользователя. */
         const merged = [];
         for (const x of msgs) {
           const last = merged[merged.length - 1];
           if (last && last.role === x.role) last.content += "\n\n" + x.content;
           else merged.push(Object.assign({}, x));
         }
-        if (!merged.length || merged[0].role !== "user") merged.unshift({ role: "user", content: "[Начало]" });
-        return { p, messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
+        const userFirst = merged.length && merged[0].role === "user";
+        if (!userFirst && o.allowSyntheticUser) merged.unshift({ role: "user", content: "[Начало]" });
+        return { p, synthetic: !userFirst && o.allowSyntheticUser, needsUserFirst: !userFirst && !o.allowSyntheticUser,
+          messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
       }
       const out = [{ role: "system", content: p.head.join("\n\n") }].concat(msgs);
       if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
@@ -1874,7 +1883,7 @@
       overflow = !fits();
     }
 
-    const { p, messages } = render();
+    const { p, messages, synthetic, needsUserFirst } = render();
     const used = cost(messages);
     const keptHistory = p.history;
     const tokLayer = (x) => tok(x) + (x ? 2 : 0);
@@ -1900,6 +1909,9 @@
         // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "past-first-turn"
         // (граница первого ответа пройдена), "budget" (не поместился).
         scenarioIncluded: !!st.scenario,
+        // singleSystem: подставлена служебная реплика «[Начало]» / её нельзя было подставить, а шаблону нужен ход пользователя.
+        syntheticUser: !!synthetic,
+        needsUserFirst: !!needsUserFirst,
         scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
         layers: {
           frame: tok(frame),
@@ -4532,7 +4544,8 @@
     /* path — ветка, которая уходит в модель как история; extraPost — дополнительное указание в конце
        (например, «продолжи» или «начни сцену»). scenario — решение prism/scenario.js для этой генерации;
        без него — как для нового ответа после path (так же собирается предпросмотр следующего хода). */
-    function build(path, extraPost, scenario) {
+    // extra — дополнительные параметры сборщика (например, allowSyntheticUser: false для начала сцены).
+    function build(path, extraPost, scenario, extra) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
       if (ST.imagesOn(s, ctx.env.perchanceImages()) && s.images.modelDraws) {
@@ -4546,13 +4559,13 @@
         chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
         text: recent, names: [cd.name, ctx.persona().name].concat(st.present), limit: s.expLimit,
       });
-      const built = AS.build({
+      const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
         sceneState: st, experiences: ex.ranked, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
-      });
+      }, extra));
       built.report.expDebug = ex.debug;
       built.report.experienceVisible = ex.visibleCount;
       built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
@@ -4740,8 +4753,9 @@
       // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
       const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }));
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), rootOpening ? { allowSyntheticUser: false } : null);
       if (preflightFailed(built, prov)) return;
+      if (rootOpening && openingBlocked(built, prov)) return;
 
       let target, prefix = "";
       if (mode === "regen") {
@@ -4813,6 +4827,19 @@
       return true;
     }
 
+    /* Начало сцены при «Одно системное сообщение». Реплику пользователя не подделываем никогда.
+       Perchance получает текстовую инструкцию без шаблона чата — запрос только из system допустим.
+       OpenAI-совместимый сервер со строгим шаблоном (Mistral, Gemma…) требует первый ход пользователя:
+       без него шаблон бросает ошибку чередования или молча теряет system. Узнать шаблон заранее нельзя,
+       поэтому для такого провайдера начало сцены отклоняется ДО вызова: ничего не меняется,
+       пользователь может написать первым или выключить режим. → true, если отклонено. */
+    function openingBlocked(built, prov) {
+      if (!built.report.needsUserFirst || prov.kind === "perchance") return false;
+      ui.toast("В режиме «Одно системное сообщение» модель со строгим шаблоном не может начать пустую сцену: шаблону нужен первый ход пользователя, а подделывать его Prism не будет. Напишите первым или выключите этот режим в «Настройки → Генерация».", true);
+      ui.renderFeed();
+      return true;
+    }
+
     /* Начало сцены моделью (пустой чат, по явному действию пользователя).
        Транзакция: сборка Prism → проверка бюджета → вызов модели (поток — только во временном
        состоянии S.gen, в дереве узла нет) → разбор → ОДНА запись корневого сообщения → leafId → сохранение.
@@ -4822,8 +4849,9 @@
     async function opening(prov) {
       const c = ctx.chat(), cd = ctx.card();
       if (chat().path().length) return { ok: false, reason: "not-empty" };
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }));
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), { allowSyntheticUser: false });
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
+      if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
       const ctrl = new AbortController();
       const chatId = c.id;

@@ -14,7 +14,8 @@
     /* path — ветка, которая уходит в модель как история; extraPost — дополнительное указание в конце
        (например, «продолжи» или «начни сцену»). scenario — решение prism/scenario.js для этой генерации;
        без него — как для нового ответа после path (так же собирается предпросмотр следующего хода). */
-    function build(path, extraPost, scenario) {
+    // extra — дополнительные параметры сборщика (например, allowSyntheticUser: false для начала сцены).
+    function build(path, extraPost, scenario, extra) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
       if (ST.imagesOn(s, ctx.env.perchanceImages()) && s.images.modelDraws) {
@@ -28,13 +29,13 @@
         chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
         text: recent, names: [cd.name, ctx.persona().name].concat(st.present), limit: s.expLimit,
       });
-      const built = AS.build({
+      const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
         sceneState: st, experiences: ex.ranked, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
-      });
+      }, extra));
       built.report.expDebug = ex.debug;
       built.report.experienceVisible = ex.visibleCount;
       built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;

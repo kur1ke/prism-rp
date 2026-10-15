@@ -1036,7 +1036,7 @@ function fbHarness(card, opts) {
     delMany: async (st, ids) => ids.forEach((id) => store[st] && store[st].delete(id)),
     del: async (st, id) => store[st] && store[st].delete(id),
   };
-  const S = { settings: STG.merge({}), cards: [Object.assign(CM.blank(), { id: "c1" }, card)], chats: [], cardId: "c1", chatId: null, messages: [], experience: [], gen: null, drawerOpen: false, tab: "scene", lastPrism: null };
+  const S = { settings: Object.assign(STG.merge({}), o.settings || {}), cards: [Object.assign(CM.blank(), { id: "c1" }, card)], chats: [], cardId: "c1", chatId: null, messages: [], experience: [], gen: null, drawerOpen: false, tab: "scene", lastPrism: null };
   const toasts = [];
   const noop = () => {};
   const ctx = {
@@ -1044,7 +1044,7 @@ function fbHarness(card, opts) {
     card: () => S.cards.find((c) => c.id === S.cardId) || null,
     chat: () => S.chats.find((c) => c.id === S.chatId) || null,
     persona: () => STG.persona(S.settings),
-    provider: () => ({ id: "mock", label: "mock", kind: "openai" }),
+    provider: () => o.provider || ({ id: "mock", label: "mock", kind: "openai" }),
     contextTokens: () => o.contextTokens || 8192,
     svc: {}, nav: {},
     ui: { toast: (t, err) => toasts.push({ t, err }), renderFeed: noop, renderDrawer: noop, renderRail: noop, scrollBottom: noop, paintStreaming: noop, openSettings: noop },
@@ -1218,6 +1218,67 @@ async function foundationB() {
     let seen = null; fbLLM = async (p, msgs) => { seen = allText(msgs); return { text: "Начало." }; };
     await h.gen.generate(null, "opening");
     assert.ok(!seen.includes("IMPORTED-OFF") && seen.includes("AUTHORED-ON"));
+  });
+
+  await ta("SS-A: начало сцены в обычном режиме — ни одной реплики пользователя", async () => {
+    const h = fbHarness(CARD_NOFIRST);
+    await h.chat.createChat("rp");
+    let seen = null; fbLLM = async (p, msgs) => { seen = msgs; return { text: "Начало." }; };
+    assert.ok((await h.gen.generate(null, "opening")).ok);
+    assert.ok(!seen.some((m) => m.role === "user") && !allText(seen).includes("[Начало]"));
+  });
+  const SS_CARD = Object.assign({}, CARD_NOFIRST, { directives: { system: CM.directive("AUTH-SYS-ON", "authored"), postHistory: CM.importedDirective("IMPORTED-OFF") } });
+  await ta("SS-B..F: «одно системное сообщение» + Perchance — только system, без «[Начало]»; указание в бюджете, сценарий, указания автора по правилам", async () => {
+    const h = fbHarness(SS_CARD, { settings: { singleSystem: true }, provider: { id: "perchance", label: "Perchance", kind: "perchance" } });
+    await h.chat.createChat("rp");
+    let seen = null, rep = null; fbLLM = async (p, msgs) => { seen = msgs; rep = h.S.lastPrism.report; return { text: "Юки поднимает взгляд." }; };
+    const r = await h.gen.generate(null, "opening");
+    assert.ok(r.ok);
+    assert.deepStrictEqual(seen.map((m) => m.role), ["system"], "B: только system");
+    const txt = allText(seen);
+    assert.ok(!txt.includes("[Начало]"));
+    assert.ok(txt.includes("Начни сцену"), "C: указание есть");
+    assert.strictEqual(seen.reduce((n, x) => n + globalThis.PRP.util.estimateTokens(x.content) + 4, 0), rep.used, "C: в бюджете");
+    assert.ok(rep.used <= rep.budget && !rep.syntheticUser && rep.needsUserFirst);
+    assert.ok(txt.includes("SCEN-LIB"), "D: сценарий");
+    assert.ok(txt.includes("AUTH-SYS-ON"), "E: включённое указание");
+    assert.ok(!txt.includes("IMPORTED-OFF"), "F: выключенное импортированное");
+    assert.strictEqual(h.store.messages.size, 1);
+  });
+  await ta("SS-G: «одно системное сообщение» + OpenAI-совместимый сервер — отказ до вызова, ничего не меняется; можно написать первым", async () => {
+    const h = fbHarness(SS_CARD, { settings: { singleSystem: true } });
+    await h.chat.createChat("rp");
+    let called = 0; fbLLM = async () => { called++; return { text: "x" }; };
+    const r = await h.gen.generate(null, "opening");
+    assert.strictEqual(r.reason, "needs-user-first"); assert.strictEqual(called, 0);
+    assert.strictEqual(h.store.messages.size, 0); assert.strictEqual(h.S.messages.length, 0); assert.strictEqual(h.ctx.chat().leafId, null);
+    assert.strictEqual(h.chat.sceneState().loc, ""); assert.strictEqual(h.S.gen, null);
+    assert.ok(h.toasts.some((x) => x.err && x.t.includes("первый ход пользователя")));
+    // пользователь пишет первым — обычный ход работает, реплика настоящая
+    let seen = null; fbLLM = async (p, msgs) => { called++; seen = msgs; return { text: "Да." }; };
+    await h.chat.addUserMessage("Ты ещё здесь?");
+    await h.gen.generate();
+    assert.strictEqual(called, 1); assert.deepStrictEqual(seen.map((m) => m.role), ["system", "user"]);
+    assert.strictEqual(seen[1].content, "Ты ещё здесь?"); assert.ok(allText(seen).includes("SCEN-LIB"));
+  });
+  await ta("SS-G2: другой вариант корневого начала при строгом шаблоне — отказ до добавления варианта", async () => {
+    const h = fbHarness(Object.assign({}, SS_CARD, { firstMes: "Привет." }), { settings: { singleSystem: true } });
+    await h.chat.createChat("rp");
+    const root = h.chat.path()[0];
+    let called = 0; fbLLM = async () => { called++; return { text: "x" }; };
+    await h.gen.generate(root.id, "regen");
+    assert.strictEqual(called, 0); assert.strictEqual(h.S.messages[0].swipes.length, 1); assert.strictEqual(h.ctx.chat().leafId, root.id);
+  });
+  await ta("SS-H: обычный разговор при «одном системном» — как раньше («[Начало]» перед ответом на приветствие)", async () => {
+    const h = fbHarness(Object.assign({}, SS_CARD, { firstMes: "Привет." }), { settings: { singleSystem: true } });
+    await h.chat.createChat("rp");
+    let seen = null; fbLLM = async (p, msgs) => { seen = msgs; return { text: "Ответ." }; };
+    await h.chat.addUserMessage("Здравствуй.");
+    await h.gen.generate();
+    assert.deepStrictEqual(seen.map((m) => m.role), ["system", "user", "assistant", "user"]);
+    assert.strictEqual(seen[1].content, "[Начало]");
+    const built = A.build({ card: { name: "N", description: "d" }, singleSystem: true, history: [{ role: "assistant", text: "a" }, { role: "user", text: "b" }] });
+    assert.ok(built.report.syntheticUser && !built.report.needsUserFirst);
   });
   await ta("пустой чат: обычная генерация без реплик тоже идёт как начало (без пустого узла)", async () => {
     const h = fbHarness(CARD_NOFIRST);

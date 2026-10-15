@@ -42,8 +42,9 @@
       // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
       const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }));
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), rootOpening ? { allowSyntheticUser: false } : null);
       if (preflightFailed(built, prov)) return;
+      if (rootOpening && openingBlocked(built, prov)) return;
 
       let target, prefix = "";
       if (mode === "regen") {
@@ -115,6 +116,19 @@
       return true;
     }
 
+    /* Начало сцены при «Одно системное сообщение». Реплику пользователя не подделываем никогда.
+       Perchance получает текстовую инструкцию без шаблона чата — запрос только из system допустим.
+       OpenAI-совместимый сервер со строгим шаблоном (Mistral, Gemma…) требует первый ход пользователя:
+       без него шаблон бросает ошибку чередования или молча теряет system. Узнать шаблон заранее нельзя,
+       поэтому для такого провайдера начало сцены отклоняется ДО вызова: ничего не меняется,
+       пользователь может написать первым или выключить режим. → true, если отклонено. */
+    function openingBlocked(built, prov) {
+      if (!built.report.needsUserFirst || prov.kind === "perchance") return false;
+      ui.toast("В режиме «Одно системное сообщение» модель со строгим шаблоном не может начать пустую сцену: шаблону нужен первый ход пользователя, а подделывать его Prism не будет. Напишите первым или выключите этот режим в «Настройки → Генерация».", true);
+      ui.renderFeed();
+      return true;
+    }
+
     /* Начало сцены моделью (пустой чат, по явному действию пользователя).
        Транзакция: сборка Prism → проверка бюджета → вызов модели (поток — только во временном
        состоянии S.gen, в дереве узла нет) → разбор → ОДНА запись корневого сообщения → leafId → сохранение.
@@ -124,8 +138,9 @@
     async function opening(prov) {
       const c = ctx.chat(), cd = ctx.card();
       if (chat().path().length) return { ok: false, reason: "not-empty" };
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }));
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), { allowSyntheticUser: false });
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
+      if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
       const ctrl = new AbortController();
       const chatId = c.id;

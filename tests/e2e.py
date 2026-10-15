@@ -662,6 +662,24 @@ try:
         page.wait_for_selector(".turn.assistant")
         check("B-35: после перезагрузки начало на месте", page.locator(".turn").count() == 1 and page.locator(".opening-start").count() == 0)
         shot(page, "13-foundation-b.png")
+        # «Одно системное сообщение» + OpenAI-совместимый сервер: начать пустую сцену нельзя без подделки реплики — отказ до вызова
+        page.click("[data-act=chat-menu]")
+        page.click("[data-act=new-chat][data-mode=rp]")
+        page.wait_for_selector(".opening-start")
+        page.evaluate("() => { PRP.app.S.settings.singleSystem = true; }")
+        n2 = cnt()
+        page.click("[data-act=opening]")
+        page.wait_for_timeout(400)
+        check("FB single-system: начало отклонено до вызова, чат пуст, причина показана",
+              cnt() == n2 and page.locator(".turn").count() == 0 and page.locator(".opening-start").count() == 1 and "первый ход пользователя" in page.inner_text("#toast"))
+        page.fill("#input", "Привет.")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.turn').length === 2")
+        idle(page)
+        req = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last"))
+        check("FB single-system: можно написать первым — настоящая реплика, без «[Начало]»",
+              [m["role"] for m in req["messages"]] == ["system", "user"] and req["messages"][1]["content"] == "Привет." and "[Начало]" not in json.dumps(req, ensure_ascii=False))
+        page.evaluate("() => { PRP.app.S.settings.singleSystem = false; }")
 
         check("нет ошибок JS (standalone)", not errors)
         if errors: print("   ", errors[:5])
