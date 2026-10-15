@@ -1,6 +1,6 @@
 {
   "name": "prism-rp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Prism RP — среда для ролевой игры с архитектурой Prism (Card + Scene + Experience)",
   "scripts": {

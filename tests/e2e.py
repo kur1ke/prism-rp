@@ -4,6 +4,25 @@
 включая сборку для Perchance с заглушкой ai-text-plugin."""
 import json, os, subprocess, sys, time, urllib.request
 from playwright.sync_api import sync_playwright
+import base64, struct
+
+
+def png_card_lora(png):
+    """Имя первой LoRA из extensions.prism_rp в чанке chara экспортированного PNG."""
+    i = 8
+    while i < len(png):
+        n = struct.unpack(">I", png[i:i + 4])[0]
+        t = png[i + 4:i + 8]
+        if t == b"tEXt":
+            k, _, v = png[i + 8:i + 8 + n].partition(b"\0")
+            if k == b"chara":
+                d = json.loads(base64.b64decode(v).decode("utf8"))["data"]
+                try:
+                    return d["extensions"]["prism_rp"]["image"]["loras"][0]["name"]
+                except Exception:
+                    return None
+        i += 12 + n
+    return None
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp"
@@ -91,15 +110,37 @@ try:
         page.wait_for_selector(".modal")
         page.fill("#cf-name", "Юки")
         page.fill("#cf-desc", "Тихая библиотекарша.")
+        check("редактор: подписи полей по CCv2", all(k in page.inner_text(".modal-body") for k in ["description", "personality", "scenario"]))
+        page.click("[data-act=card-section][data-section=greet]")
+        page.click("[data-act=alt-add]")
+        page.fill("[data-alt='0']", "Второе приветствие.")
         page.click("[data-act=card-section][data-section=lore]")
         page.click("[data-act=lore-add]")
+        page.fill("[data-lore='0'][data-k=comment]", "Библиотека")
         page.fill("[data-lore='0'][data-k=keys]", "библиотека")
+        page.check("[data-lore='0'][data-k=selective]")
+        page.wait_for_selector("[data-lore='0'][data-k=secondary_keys]")
+        page.fill("[data-lore='0'][data-k=secondary_keys]", "вечер")
         page.fill("[data-lore='0'][data-k=content]", "Библиотека закрывается в девять.")
+        page.click("[data-act=card-section][data-section=meta]")
+        page.fill("#cf-creator", "tester")
+        page.fill("#cf-version", "1.2")
         page.click("[data-act=card-section][data-section=main]")
         check("редактор: поля сохраняются при смене раздела", page.input_value("#cf-name") == "Юки")
         page.click("[data-act=card-save]")
         page.wait_for_selector(".modal", state="detached")
         check("создание персонажа", page.locator(".tile").count() == 3)
+        page.locator(".tile", has_text="Юки").locator(".tile-edit").click()
+        page.wait_for_selector(".modal")
+        check("кнопка «Изменить» на плитке открывает карточку", page.input_value("#cf-name") == "Юки")
+        page.click("[data-act=card-section][data-section=greet]")
+        check("альтернативное приветствие сохранено", page.input_value("[data-alt='0']") == "Второе приветствие.")
+        page.click("[data-act=card-section][data-section=lore]")
+        check("лорбук: доп. ключи и название сохранены", page.input_value("[data-lore='0'][data-k=secondary_keys]") == "вечер" and page.input_value("[data-lore='0'][data-k=comment]") == "Библиотека")
+        page.click("[data-act=card-section][data-section=meta]")
+        check("создатель и версия сохранены", page.input_value("#cf-creator") == "tester" and page.input_value("#cf-version") == "1.2")
+        page.click("[data-act=modal-close]")
+        page.wait_for_selector(".modal", state="detached")
         shot(page, "02-home.png")
 
         # Модель
@@ -122,7 +163,7 @@ try:
         page.click("[data-act=modal-close]")
 
         # Открыть Химэ: новый чат-сцена с приветствием
-        page.click(".tile[title='Химэ']")
+        page.locator(".tile", has_text="Химэ").locator(".tile-body").click()
         page.wait_for_selector(".turn.assistant")
         check("приветствие с подстановкой {{user}}", "«Пользователь! Ты пришёл.»" in page.inner_text("#feed"))
         check("строка сцены в шапке", wait_text(page, ".chat-head", "Кафе у кампуса"))
@@ -213,14 +254,12 @@ try:
         check("изображения: модель выбрана из списка", page.input_value("[data-imgcfg=model]") == "illustriousXL_v01.safetensors")
         page.fill("[data-imgcfg=fixedPrompt]", "masterpiece, best quality")
         page.dispatch_event("[data-imgcfg=fixedPrompt]", "change")
-        page.click("[data-act=img-lora-add]")
-        page.fill("[data-img-lora-name='0']", "detail_slider")
-        page.fill("[data-img-lora-w='0']", "0.5")
-        page.dispatch_event("[data-img-lora-w='0']", "change")
+        check("изображения: общих LoRA в настройках нет", page.locator("[data-act=img-lora-add]").count() == 0)
         shot(page, "12-images-settings.png")
         page.click("[data-act=modal-close]")
-        page.click("[data-act=chat-menu]")
-        page.click(".pop [data-act=edit-card]")
+        page.click(".chat-head .head-card")
+        page.wait_for_selector(".modal")
+        check("имя в шапке чата открывает карточку", page.input_value("#cf-name") == "Химэ")
         page.click("[data-act=card-section][data-section=images]")
         page.fill("[data-ci=trigger]", "orihime inoue, long orange hair")
         page.click("[data-act=card-lora-add]")
@@ -240,7 +279,7 @@ try:
         check("директива [draw:] скрыта", "[draw:" not in page.inner_text("#feed"))
         img = json.load(urllib.request.urlopen("http://127.0.0.1:8766/img-last"))
         pr = img.get("prompt", "")
-        check("промпт: LoRA персонажа и общая", "<lora:Orihime_IL:0.8>" in pr and "<lora:detail_slider:0.5>" in pr)
+        check("промпт: LoRA персонажа", "<lora:Orihime_IL:0.8>" in pr and pr.count("<lora:") == 1)
         ok_tw = ("orihime inoue" in pr or "orihime_inoue" in pr) and "long orange hair" in pr and "blue denim jeans" in pr
         check("промпт: триггер и гардероб из сцены", ok_tw)
         if not ok_tw: print("    prompt:", pr)
@@ -327,10 +366,12 @@ try:
         # Экспорт карточки
         page.click("[data-act=chat-menu]")
         page.click(".pop [data-act=edit-card]")
-        page.click("[data-act=card-section][data-section=file]")
+        page.click("[data-act=card-section][data-section=meta]")
         with page.expect_download() as dl:
             page.click("[data-act=card-png]")
-        check("экспорт PNG", open(dl.value.path(), "rb").read(8) == b"\x89PNG\r\n\x1a\n")
+        png = open(dl.value.path(), "rb").read()
+        check("экспорт PNG", png[:8] == b"\x89PNG\r\n\x1a\n")
+        check("экспорт: LoRA едут внутри карточки", png_card_lora(png) == "Orihime_IL")
         page.click("[data-act=modal-close]")
 
         # Мобильная ширина

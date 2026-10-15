@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Prism RP</title>
-<!-- Prism RP 0.3.0 · собрано 2026-10-15 · исходники: index.html, css/, js/ -->
+<!-- Prism RP 0.3.1 · собрано 2026-10-15 · исходники: index.html, css/, js/ -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap">
@@ -110,7 +110,7 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
+body { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }
 button, input, textarea, select { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -119,7 +119,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* ── Каркас ─────────────────────────────────────────────────────────── */
-.app { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }
+/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */
+.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }
 /* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */
 #pop-root, #modal-root { display: contents; }
 .rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }
@@ -161,7 +162,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .file-btn input { display: none; }
 
 .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }
-.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }
 .label svg, .field > label svg { width: 15px; height: 15px; flex: none; }
 .field .help { font-size: 12.5px; color: var(--muted); }
 .input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {
@@ -169,9 +170,13 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
-.row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.row > .btn { align-self: flex-end; }
 .row > .field { flex: 1; min-width: 100px; }
-.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; }
+.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }
+.check > span { flex: 1; min-width: 0; }
+.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }
+.checks .check { margin: 4px 0; }
 .check input { margin-top: 3px; accent-color: var(--accent); }
 .check small { display: block; color: var(--muted); font-size: 12.5px; }
 
@@ -487,6 +492,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   .head-tools .wide { display: none; }
   :root { --prose-fs: 16px; }
 }
+
+/* Редактор карточки: ключ спецификации рядом с подписью */
+.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }
+.alt-greet > label { justify-content: space-between; display: flex; }
+.alt-greet .icon-btn { width: 26px; height: 26px; }
+
+/* Где редактировать персонажа: кнопка на плитке и шапка чата */
+.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;
+  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }
+.tile-edit svg { width: 14px; height: 14px; }
+.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }
+.tile-edit:hover { background: var(--accent); }
+@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }
+.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }
+.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }
+.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 
 </style>
 </head>
@@ -1108,10 +1130,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   };
 
   function matchLore(entries, text) {
-    const low = String(text || "").toLowerCase();
+    const raw = String(text || ""), low = raw.toLowerCase();
+    const hit = (e, keys) => (keys || []).some((k) => {
+      k = String(k || "").trim();
+      return k && (e.case_sensitive ? raw.includes(k) : low.includes(k.toLowerCase()));
+    });
     return (entries || [])
       .filter((e) => e && e.enabled !== false && e.content)
-      .filter((e) => e.constant || (e.keys || []).some((k) => k && low.includes(String(k).toLowerCase().trim())))
+      // Выборочная запись (selective): нужен основной ключ И хотя бы один дополнительный.
+      .filter((e) => e.constant || (hit(e, e.keys) && (!e.selective || !(e.secondary_keys || []).length || hit(e, e.secondary_keys))))
       .sort((a, b) => (a.insertion_order || 0) - (b.insertion_order || 0));
   }
 
@@ -1168,13 +1195,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // Лорбук — по ключам из последних сообщений.
     const recentText = history.slice(-4).map((h) => h.text).join("\n");
     const loreAll = matchLore(card.lore, recentText);
-    const lore = [];
+    const lore = [], loreBefore = [];
     for (const e of loreAll) {
       const c = tok(e.content) + 2;
       if (used + c > budget) break;
-      lore.push(m(e.content)); used += c;
+      (e.position === "before_char" ? loreBefore : lore).push(m(e.content)); used += c;
     }
     const loreBlock = lore.length ? section(m(T.lore), lore.join("\n\n")) : "";
+    const loreBeforeBlock = loreBefore.length ? section(m(T.lore), loreBefore.join("\n\n")) : "";
 
     // Примеры речи — если остаётся место.
     let examples = "";
@@ -1193,7 +1221,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }
     const keptHistory = keptOlder.concat(minH);
 
-    const head = [fixed.frame, fixed.card, examples, fixed.persona, loreBlock, memory, fixed.scene].filter(Boolean).join("\n\n");
+    const head = [fixed.frame, loreBeforeBlock, fixed.card, examples, fixed.persona, loreBlock, memory, fixed.scene].filter(Boolean).join("\n\n");
     const msgs = keptHistory.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
     let messages;
     if (o.singleSystem) {
@@ -1220,7 +1248,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         historyTotal: history.length,
         experienceKept: exps.length,
         experienceDropped: droppedExp,
-        loreKept: lore.length,
+        loreKept: lore.length + loreBefore.length,
         loreMatched: loreAll.length,
         examples: !!examples,
         layers: {
@@ -1228,7 +1256,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           card: tok(fixed.card) + tok(examples) + tok(fixed.persona),
           memory: tok(memory),
           scene: tok(fixed.scene),
-          lore: tok(loreBlock),
+          lore: tok(loreBlock) + tok(loreBeforeBlock),
           history: keptHistory.reduce((n, h) => n + tok(h.text) + 4, 0),
           post: tok(fixed.post),
         },
@@ -1398,13 +1426,19 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       lore: book && Array.isArray(book.entries)
         ? book.entries.map((e, i) => ({
             keys: arr(e.keys).map(String),
+            secondary_keys: arr(e.secondary_keys).map(String),
+            selective: !!e.selective,
             content: e.content || "",
             enabled: e.enabled !== false,
             constant: !!e.constant,
+            case_sensitive: !!e.case_sensitive,
             insertion_order: e.insertion_order != null ? e.insertion_order : i,
+            position: e.position === "before_char" ? "before_char" : "after_char",
             comment: e.comment || e.name || "",
+            raw: e,
           }))
         : [],
+      image: (d.extensions && d.extensions.prism_rp && d.extensions.prism_rp.image) ? JSON.parse(JSON.stringify(d.extensions.prism_rp.image)) : undefined,
       avatar: null,
       spec: spec || "v1",
       raw: json,
@@ -1436,19 +1470,34 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (card.lore && card.lore.length) {
       data.character_book = Object.assign({}, oldBook, {
         extensions: oldBook.extensions || {},
-        entries: card.lore.map((e, i) => ({
-          keys: e.keys || [],
-          content: e.content || "",
-          extensions: {},
-          enabled: e.enabled !== false,
-          insertion_order: e.insertion_order != null ? e.insertion_order : i,
-          constant: !!e.constant,
-          comment: e.comment || "",
-          id: i,
-          ...(v3 ? { use_regex: false } : {}),
-        })),
+        entries: card.lore.map((e, i) => {
+          const raw = e.raw && typeof e.raw === "object" ? JSON.parse(JSON.stringify(e.raw)) : {};
+          return Object.assign(raw, {
+            keys: e.keys || [],
+            secondary_keys: e.secondary_keys || [],
+            selective: !!e.selective,
+            content: e.content || "",
+            extensions: raw.extensions || {},
+            enabled: e.enabled !== false,
+            insertion_order: e.insertion_order != null ? Number(e.insertion_order) || 0 : i,
+            case_sensitive: !!e.case_sensitive,
+            constant: !!e.constant,
+            position: e.position === "before_char" ? "before_char" : "after_char",
+            name: e.comment || "",
+            comment: e.comment || "",
+            id: i,
+            ...(v3 ? { use_regex: !!raw.use_regex } : {}),
+          });
+        }),
       });
     } else delete data.character_book;
+    // Настройки изображений (триггер, LoRA, гардероб) едут вместе с карточкой
+    // в пространстве extensions — другие приложения его не трогают.
+    const ext = Object.assign({}, data.extensions);
+    const im = card.image && Object.keys(card.image).length ? card.image : null;
+    if (im) ext.prism_rp = Object.assign({}, ext.prism_rp, { image: JSON.parse(JSON.stringify(im)) });
+    else if (ext.prism_rp) { ext.prism_rp = Object.assign({}, ext.prism_rp); delete ext.prism_rp.image; if (!Object.keys(ext.prism_rp).length) delete ext.prism_rp; }
+    data.extensions = ext;
     if (v3) {
       data.group_only_greetings = data.group_only_greetings || [];
       data.nickname = data.nickname || undefined;
@@ -2126,7 +2175,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // Стилевые теги персонажа — только те, о которых просит сцена.
     const style = splitTags(im.styleTrigger).filter((t) => mentions(bareTag(t), scene)).join(", ");
     const loras = o.backend === "a1111"
-      ? loraTokens((present ? (im.loras || []) : []).concat(s.loras || []).filter((l, i, a) => a.findIndex((x) => norm(x.name) === norm(l.name)) === i))
+      ? loraTokens((present ? (im.loras || []) : []).filter((l, i, a) => a.findIndex((x) => norm(x.name) === norm(l.name)) === i))
       : "";
     const body = [c.keep, scene, loras, trigger, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
@@ -2686,11 +2735,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <div class="gallery">
         ${cards.map((cd) => {
           const n = m.chats.filter((c) => c.cardId === cd.id).length;
-          return `<button class="tile" data-act="open-card" data-id="${cd.id}" title="${esc(cd.name)}">
+          return `<div class="tile" data-act="open-card" data-id="${cd.id}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
             ${R.art(cd)}<div class="tile-shade"></div>
             ${n ? `<span class="tile-count">${n} ${R.plural(n, "чат", "чата", "чатов")}</span>` : ""}
+            <button class="tile-edit" data-act="edit-card" data-id="${cd.id}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
             <div class="tile-body"><div class="tile-name">${esc(cd.name)}</div><div class="tile-tags">${esc((cd.tags || []).slice(0, 4).join(", ") || cd.creator || " ")}</div></div>
-          </button>`;
+          </div>`;
         }).join("")}
         ${m.cards.length ? `<div class="tile tile-new" role="group">
           ${icon("plus")}<button class="btn btn-sm" data-act="new-card">Создать</button><button class="btn btn-sm btn-ghost" data-act="import">Импорт</button></div>` : ""}
@@ -2720,14 +2770,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       : `<span class="head-scene ${m.gen ? "live" : ""}">${m.gen ? "пишет…" : esc(line || "Сцена не задана — откройте панель сцены")}</span>`;
     return `<header class="chat-head">
       <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
-      ${R.avatar(cd, 40)}
-      <div class="head-who"><div class="head-name">${esc(cd.name)} <button class="tool rename" data-act="rename-chat" title="Переименовать чат">${esc(c.title || "")} ${icon("edit")}</button></div>${status}</div>
+      <button class="head-av" data-act="edit-card" title="Карточка персонажа">${R.avatar(cd, 40)}</button>
+      <div class="head-who"><div class="head-name"><button class="head-card" data-act="edit-card" title="Открыть карточку персонажа">${esc(cd.name)}</button> <button class="tool rename" data-act="rename-chat" title="Переименовать чат">${esc(c.title || "")} ${icon("edit")}</button></div>${status}</div>
       <div class="head-tools">
         <div class="seg wide" role="group" aria-label="Режим">
           <button class="${c.mode === "rp" ? "on" : ""}" data-act="mode" data-mode="rp" title="Сцена">${icon("book")}<span>Сцена</span></button>
           <button class="${c.mode === "messenger" ? "on" : ""}" data-act="mode" data-mode="messenger" title="Переписка">${icon("bubble")}<span>Переписка</span></button>
         </div>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
+        <button class="icon-btn" data-act="edit-card" title="Карточка персонажа">${icon("card")}</button>
         <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, Prism">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
@@ -3117,7 +3168,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     } else if (!m.perchanceImages) {
       conn = `<p class="hint">Генерация Perchance доступна, когда приложение запущено как генератор на Perchance. Здесь выберите локальный сервер или API.</p>`;
     }
-    const loras = (c.loras || []);
     return `<h3>Изображения</h3><p class="lead">Чем рисовать и как собирается промпт. Персональные настройки — LoRA, триггеры, гардероб — задаются в карточке персонажа.</p>
       ${chk("enabled", "Рисовать картинки")}
       <div class="block-title" style="margin-top:14px">Чем рисовать</div>
@@ -3129,11 +3179,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <div class="field"><label>Закреплённый блок</label><textarea data-imgcfg="fixedPrompt" rows="2" placeholder="masterpiece, best quality, amazing quality, absurdres">${esc(c.fixedPrompt || "")}</textarea><span class="help">Одинаковые теги качества и стиля в каждой картинке. Если блок задан, модель свои теги качества не пишет.</span></div>
       <div class="field"><label>Куда ставить блок</label><select data-img-sel="promptMode">${[["append", "в конец"], ["prepend", "в начало"], ["replace", "только блок, без сцены"], ["off", "не использовать"]].map(([v, l]) => `<option value="${v}" ${c.promptMode === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="field"><label>Негатив</label><textarea data-imgcfg="negative" rows="2" placeholder="lowres, bad anatomy, bad hands, extra digits">${esc(c.negative || "")}</textarea></div>
-      ${c.backend === "a1111" ? `<div class="field"><label>LoRA для всех картинок</label>${loraRows("img-lora", loras)}<span class="help">Стиль, детализация. LoRA персонажа задаются в его карточке.</span></div>` : ""}
+      ${c.backend === "a1111" ? `<p class="hint">LoRA задаются в карточке каждого персонажа: «Редактировать карточку → Изображения». Так они переезжают вместе с карточкой и не попадают в чужие картинки.</p>` : ""}
       <div class="block-title" style="margin-top:20px">Когда рисовать</div>
       ${chk("modelDraws", "Модель сама решает, когда показать картинку", "Она пишет короткую служебную строку [draw: …]; приложение её прячет и рисует.")}
-      ${chk("autoDraw", "Рисовать сразу", "Иначе под сообщением появится кнопка «Нарисовать».")}
-      ${dl("dl-loras", lists.loras)}`;
+      ${chk("autoDraw", "Рисовать сразу", "Иначе под сообщением появится кнопка «Нарисовать».")}`;
   }
 
   function loraRows(act, list) {
@@ -3157,31 +3206,48 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
 
   /* ── Редактор персонажа ───────────────────────────────────────────── */
+  // Поля и их порядок — как в Character Card V2/V3 и SillyTavern. Рядом с подписью
+  // мелко показан ключ спецификации, чтобы было видно, куда поле попадёт при экспорте.
   function cardModal(m, d, section) {
-    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["speech", "Речь и указания", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["file", "Файл", "download"]];
-    const f = (id, label, value, rows, help, ph) => `<div class="field"><label for="${id}">${label}</label>${rows
+    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["prompts", "Промпты", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["meta", "Автор и файл", "download"]];
+    const lab = (label, key) => `${label}${key ? ` <span class="spec-key">${key}</span>` : ""}`;
+    const f = (id, label, key, value, rows, help, ph) => `<div class="field"><label for="${id}">${lab(label, key)}</label>${rows
       ? `<textarea id="${id}" rows="${rows}" data-cf="${id}" placeholder="${esc(ph || "")}">${esc(value || "")}</textarea>` : `<input id="${id}" data-cf="${id}" value="${esc(value || "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
     let body = "";
     if (section === "main") {
       body = `<div class="card-edit"><div><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div></div>
-        <div>${f("cf-name", "Имя", d.name)}${f("cf-tags", "Теги", (d.tags || []).join(", "), 0, "через запятую")}
-          ${f("cf-desc", "Описание", d.description, 8, "Внешность, характер, прошлое. Модель читает это как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
-          ${f("cf-pers", "Личность коротко", d.personality, 2)}${f("cf-scen", "Обстоятельства", d.scenario, 3, "Где и почему всё происходит")}</div></div>`;
+        <div>${f("cf-name", "Имя", "name", d.name)}
+          ${f("cf-desc", "Описание", "description", d.description, 9, "Внешность, характер, прошлое — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
+          ${f("cf-pers", "Краткое описание личности", "personality", d.personality, 2, "Несколько черт одной строкой.")}
+          ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
+          ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>`;
     } else if (section === "greet") {
-      body = `${f("cf-first", "Первое сообщение", d.firstMes, 7, "С него начинается новая сцена. Можно добавить в конце строку [scene: …] с начальным местом и одеждой.")}
-        ${f("cf-alt", "Другие приветствия", (d.altGreetings || []).join("\n---\n"), 6, "Разделяйте строкой из трёх дефисов ---. В чате их можно листать стрелками.")}`;
-    } else if (section === "speech") {
-      body = `${f("cf-ex", "Примеры речи", d.mesExample, 7, "Как персонаж говорит: блоки начинаются с &lt;START&gt;, реплики — {{char}}: и {{user}}:")}
-        ${f("cf-sys", "Указания автора карточки", d.systemPrompt, 3)}${f("cf-post", "Указания после истории", d.postHistory, 3, "Добавляются в конец контекста, ближе всего к ответу")}`;
+      const alts = d.altGreetings || [];
+      body = `${f("cf-first", "Первое сообщение", "first_mes", d.firstMes, 7, "С него начинается новый чат. В конце можно добавить строку [scene: …] с начальным местом и одеждой.")}
+        <div class="block-title" style="margin-top:18px">${lab("Альтернативные приветствия", "alternate_greetings")}</div>
+        <p class="hint" style="margin-top:0">В новом чате их можно листать стрелками под первым сообщением.</p>
+        ${alts.map((g, i) => `<div class="field alt-greet"><label for="cf-alt-${i}">Приветствие ${i + 2}<button class="icon-btn" data-act="alt-del" data-i="${i}" title="Убрать">${icon("x")}</button></label><textarea id="cf-alt-${i}" rows="5" data-alt="${i}">${esc(g)}</textarea></div>`).join("")}
+        <button class="btn btn-sm" data-act="alt-add">${icon("plus")}Добавить приветствие</button>`;
+    } else if (section === "prompts") {
+      body = `${f("cf-ex", "Примеры диалогов", "mes_example", d.mesExample, 8, "Как персонаж говорит. Каждый пример начинается с &lt;START&gt;, реплики — {{user}}: и {{char}}:", "<START>\n{{user}}: Привет.\n{{char}}: …")}
+        ${f("cf-sys", "Системный промпт", "system_prompt", d.systemPrompt, 4, "Заменяет общий системный промпт. {{original}} подставит общий. Пусто — используется общий.")}
+        ${f("cf-post", "Инструкции после истории", "post_history_instructions", d.postHistory, 3, "Идут в конец контекста, ближе всего к ответу (jailbreak / UJB в других приложениях).")}`;
     } else if (section === "lore") {
-      body = `<p class="lead">Сведения о мире, которые подмешиваются в контекст, когда в разговоре звучат ключевые слова.</p>
+      const posSel = (i, v) => `<select data-lore="${i}" data-k="position"><option value="before_char" ${v === "before_char" ? "selected" : ""}>Перед описанием персонажа</option><option value="after_char" ${v !== "before_char" ? "selected" : ""}>После описания персонажа</option></select>`;
+      body = `<p class="lead">${lab("Лорбук персонажа", "character_book")}<br>Сведения о мире подмешиваются в контекст, когда в последних сообщениях звучат ключевые слова.</p>
         ${(d.lore || []).map((e, i) => `<div class="lore">
-          <div class="field"><label>Ключевые слова</label><input data-lore="${i}" data-k="keys" value="${esc((e.keys || []).join(", "))}" placeholder="кафе, кампус"></div>
-          <div class="field"><label>Текст</label><textarea data-lore="${i}" data-k="content" rows="3">${esc(e.content)}</textarea></div>
-          <div class="row" style="align-items:center"><label class="check"><input type="checkbox" data-lore="${i}" data-k="constant" ${e.constant ? "checked" : ""}><span>Всегда в контексте</span></label>
-          <label class="check"><input type="checkbox" data-lore="${i}" data-k="enabled" ${e.enabled !== false ? "checked" : ""}><span>Включено</span></label>
-          <span style="flex:1"></span><button class="btn btn-sm btn-ghost" data-act="lore-del" data-i="${i}">${icon("trash")}Удалить</button></div></div>`).join("") || `<p class="empty-note">Лорбук пуст.</p>`}
+          <div class="row"><div class="field" style="flex:2"><label>${lab("Название", "comment")}</label><input data-lore="${i}" data-k="comment" value="${esc(e.comment || "")}" placeholder="Кафе «Луна»"></div>
+            <div class="field" style="flex:1;max-width:170px"><label>${lab("Порядок", "insertion_order")}</label><input type="number" data-lore="${i}" data-k="insertion_order" value="${esc(String(e.insertion_order != null ? e.insertion_order : i))}"></div></div>
+          <div class="field"><label>${lab("Ключевые слова", "keys")}</label><input data-lore="${i}" data-k="keys" value="${esc((e.keys || []).join(", "))}" placeholder="кафе, Луна"></div>
+          ${e.selective ? `<div class="field"><label>${lab("Дополнительные ключи", "secondary_keys")}</label><input data-lore="${i}" data-k="secondary_keys" value="${esc((e.secondary_keys || []).join(", "))}" placeholder="вечер, свидание"><span class="help">Запись сработает, только если звучит и основной, и хотя бы один дополнительный ключ.</span></div>` : ""}
+          <div class="field"><label>${lab("Содержание", "content")}</label><textarea data-lore="${i}" data-k="content" rows="3">${esc(e.content || "")}</textarea></div>
+          <div class="field"><label>${lab("Позиция", "position")}</label>${posSel(i, e.position)}</div>
+          <div class="checks"><label class="check"><input type="checkbox" data-lore="${i}" data-k="enabled" ${e.enabled !== false ? "checked" : ""}><span>Включено</span></label>
+          <label class="check"><input type="checkbox" data-lore="${i}" data-k="constant" ${e.constant ? "checked" : ""}><span>Постоянная — всегда в контексте</span></label>
+          <label class="check"><input type="checkbox" data-lore="${i}" data-k="selective" ${e.selective ? "checked" : ""}><span>Выборочная — нужны доп. ключи</span></label>
+          <label class="check"><input type="checkbox" data-lore="${i}" data-k="case_sensitive" ${e.case_sensitive ? "checked" : ""}><span>С учётом регистра</span></label></div>
+          <div class="row" style="justify-content:flex-end"><button class="btn btn-sm btn-ghost" data-act="lore-del" data-i="${i}">${icon("trash")}Удалить запись</button></div></div>`).join("") || `<p class="empty-note">Лорбук пуст.</p>`}
         <button class="btn btn-sm" data-act="lore-add">${icon("plus")}Добавить запись</button>`;
     } else if (section === "images") {
       const im = d.image || {};
@@ -3191,13 +3257,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ${fi("aliases", "Другие имена в сценах", 0, "Через запятую: как модель может назвать персонажа в [draw:] (латиницей).", "orihime, hime")}
         ${fi("styleTrigger", "Стилевые теги", 1, "Добавляются, только если сцена их упоминает.")}
         ${fi("negative", "Негатив персонажа", 1, "", "short hair, flat chest")}
-        <div class="field"><label>LoRA персонажа</label>${loraRows("card-lora", im.loras || [])}<datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
+        <div class="field"><label>LoRA персонажа</label>${loraRows("card-lora", im.loras || [])}<span class="help">Вес обычно 0.6–1. Применяются, только когда персонаж в кадре. Стилевые LoRA тоже ставьте сюда — у каждого персонажа свой набор.</span><datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
         ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный. Кнопкой у картинки можно закрепить удачный.")}
         ${fi("look", "Внешность", 3, "base: — всегда; «ключ: теги» — когда ключ есть в сцене (улыбка: gentle smile).", "base: brown eyes, large breasts\nочки | glasses: round glasses")}
         ${fi("wardrobe", "Гардероб", 5, "Образ подбирается по одежде из панели сцены: «худи | hoodie: теги». Теги идут в промпт без перевода — как их знает ваша LoRA. Если сцена одевает иначе, образ не добавляется.", "школьная форма | school uniform: serafuku, red neckerchief, pleated skirt\nхуди | hoodie: grey hoodie, denim shorts, <lora:outfit:0.7>")}
         ${fi("nsfw", "Откровенные модификаторы", 3, "Срабатывают только по тексту самой сцены, никогда по одежде из трекера.", "голая | nude: nude, nipples, navel")}`;
     } else {
-      body = `<h3>Файл карточки</h3><p class="lead">Экспорт совместим с другими приложениями (Character Card V2/V3). Неизвестные им поля сохраняются.</p>
+      body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
+        ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
+        ${f("cf-notes", "Заметки создателя", "creator_notes", d.creatorNotes, 4, "Для людей, не для модели: как играть, рекомендованные настройки. В контекст не идут.")}
+        <div class="block-title" style="margin-top:24px">Файл карточки</div><p class="hint">Экспорт в Character Card V2/V3 — открывается в SillyTavern, RisuAI, Chub и других. Поля, которых нет в редакторе, сохраняются как были. Настройки изображений и LoRA едут внутри карточки (extensions.prism_rp).</p>
         <div class="row"><button class="btn" data-act="card-png">${icon("download")}PNG с портретом</button><button class="btn" data-act="card-json">${icon("download")}JSON</button></div>
         ${d.id ? `<div class="block-title" style="margin-top:28px">Удаление</div><p class="hint">Удалит персонажа вместе со всеми чатами и опытом.</p>
         <button class="btn btn-danger" data-act="card-del">${icon("trash")}Удалить ${esc(d.name)}</button>` : ""}`;
@@ -3242,7 +3311,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       enabled: true, backend: "perchance", url: "", key: "", model: "", vae: "", sampler: "", scheduler: "",
       steps: 28, cfg: 5.5, seed: "", sizeMode: "auto", fixedSize: "1024x1024", maxSide: 1216,
       hires: false, hiresScale: 1.5, hiresUpscaler: "R-ESRGAN 4x+ Anime6B", hiresDenoise: 0.4, hiresSteps: 0,
-      fixedPrompt: "", promptMode: "append", negative: "", loras: [], format: "tags", translate: true,
+      fixedPrompt: "", promptMode: "append", negative: "", format: "tags", translate: true,
       modelDraws: true, autoDraw: true, extra: "",
     },
   };
@@ -3851,13 +3920,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
   function collectCard() {
     const d = S.modal.draft;
-    const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory" };
+    const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
     $$("[data-cf]").forEach((el) => {
       const id = el.dataset.cf;
       if (map[id]) d[map[id]] = el.value;
       else if (id === "cf-tags") d.tags = el.value.split(",").map((s) => s.trim()).filter(Boolean);
-      else if (id === "cf-alt") d.altGreetings = el.value.split(/\n-{3,}\n/).map((s) => s.trim()).filter(Boolean);
     });
+    if ($("[data-alt]") || S.modal.section === "greet") {
+      d.altGreetings = (d.altGreetings || []).slice();
+      $$("[data-alt]").forEach((el) => { d.altGreetings[+el.dataset.alt] = el.value; });
+    }
     if ($("[data-ci]") || $("[data-card-lora-name]")) {
       d.image = Object.assign({}, d.image);
       $$("[data-ci]").forEach((el) => { d.image[el.dataset.ci] = el.value; });
@@ -3870,8 +3942,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const e = d.lore[+el.dataset.lore];
       if (!e) return;
       const k = el.dataset.k;
-      if (k === "keys") e.keys = el.value.split(",").map((s) => s.trim()).filter(Boolean);
-      else if (k === "content") e.content = el.value;
+      if (k === "keys" || k === "secondary_keys") e[k] = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+      else if (k === "content" || k === "comment" || k === "position") e[k] = el.value;
+      else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
       else e[k] = el.checked;
     });
     return d;
@@ -3881,6 +3954,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     d.name = (d.name || "").trim();
     if (!d.name) { toast("Дайте персонажу имя.", true); S.modal.section = "main"; renderModal(); return; }
     if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
+    d.altGreetings = (d.altGreetings || []).map((g) => String(g || "").trim()).filter(Boolean);
+    d.updatedAt = Date.now();
     const isNew = !d.id;
     if (isNew) { d.id = U.uid("card"); d.createdAt = Date.now(); }
     await DB.put("cards", d);
@@ -3987,12 +4062,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const k = el.dataset.imgcfg;
       c[k] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value.trim();
     });
-    $$("[data-img-lora-name]").forEach((el) => {
-      const i = +el.dataset.imgLoraName;
-      const w = $(`[data-img-lora-w="${i}"]`);
-      c.loras[i] = { name: el.value.trim(), weight: w && w.value !== "" ? Number(w.value) : 1 };
-    });
-    c.loras = c.loras.filter((l) => l && (l.name || l.name === ""));
+    delete c.loras; // LoRA живут только в карточках персонажей
   }
 
   function refreshAfterSettings() {
@@ -4087,7 +4157,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "chat-menu": (t) => openPop(V.chatMenu(vm()), t),
     "model-pop": (t) => openPop(V.modelPop(vm()), t),
     "new-chat": (t) => { closePop(); newChat(t.dataset.mode); },
-    "edit-card": () => { closePop(); openCardEditor(card()); },
+    "edit-card": (t) => { closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : card()); },
     "rename-chat": async () => {
       closePop();
       const c = chat();
@@ -4146,8 +4216,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       } catch (e) { toast(e.message, true); }
       S.modal.keepScroll = true; renderModal();
     },
-    "img-lora-add": () => { collectImgForm(); S.settings.images.loras.push({ name: "", weight: 0.7 }); S.modal.keepScroll = true; renderModal(); },
-    "img-lora-del": (t) => { collectImgForm(); S.settings.images.loras.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); saveSettings(); },
     "card-lora-add": () => { const d = collectCard(); d.image = d.image || {}; d.image.loras = (d.image.loras || []).concat([{ name: "", weight: 0.8 }]); S.modal.keepScroll = true; renderModal(); },
     "card-lora-del": (t) => { const d = collectCard(); d.image.loras.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
     "img-modal-regen": () => { const { mid, sw, im } = S.modal; const msg = S.messages.find((x) => x.id === mid); S.modal = null; renderModal(); drawImage(msg, msg.swipes[+sw], null, im, { seed: Math.floor(Math.random() * 1e9) }); },
@@ -4198,7 +4266,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "card-section": (t) => { collectCard(); S.modal.section = t.dataset.section; renderModal(); },
     "card-save": saveCard,
     "avatar-pick": () => { collectCard(); $("#file-avatar").click(); },
-    "lore-add": () => { const d = collectCard(); d.lore = (d.lore || []).concat([{ keys: [], content: "", enabled: true, constant: false, insertion_order: (d.lore || []).length }]); S.modal.keepScroll = true; renderModal(); },
+    "lore-add": () => { const d = collectCard(); d.lore = (d.lore || []).concat([{ keys: [], secondary_keys: [], selective: false, content: "", comment: "", enabled: true, constant: false, case_sensitive: false, position: "after_char", insertion_order: (d.lore || []).length * 10 }]); S.modal.keepScroll = true; renderModal(); },
+    "alt-add": () => { const d = collectCard(); d.altGreetings = (d.altGreetings || []).concat([""]); S.modal.keepScroll = true; renderModal(); setTimeout(() => { const el = $(`[data-alt="${d.altGreetings.length - 1}"]`); if (el) el.focus(); }, 30); },
+    "alt-del": (t) => { const d = collectCard(); d.altGreetings.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
     "lore-del": (t) => { const d = collectCard(); d.lore.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
     "card-json": () => { const d = collectCard(); download(`${d.name || "персонаж"}.json`, JSON.stringify(CC.toSpec(d, "v3"), null, 2), "application/json"); },
     "card-png": async () => { const d = collectCard(); download(`${d.name || "персонаж"}.png`, new Blob([CC.embedInPng(await avatarPngBytes(d), d)], { type: "image/png" })); },
@@ -4267,7 +4337,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return; }
       if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return; }
       if (t.dataset.scRel) { applySceneOps([op(t.dataset.scRel, "relset", t.value + " поправлено вручную")]); return; }
-      if (t.dataset.imgcfg !== undefined || t.dataset.imgLoraName !== undefined || t.dataset.imgLoraW !== undefined) { collectImgForm(); await saveSettings(); return; }
+      if (t.dataset.lore !== undefined && t.dataset.k === "selective" && S.modal && S.modal.kind === "card") { collectCard(); S.modal.keepScroll = true; renderModal(); return; }
+      if (t.dataset.imgcfg !== undefined) { collectImgForm(); await saveSettings(); return; }
       if (t.dataset.imgCheck) { collectImgForm(); S.settings.images[t.dataset.imgCheck] = t.checked; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await saveSettings(); refreshAfterSettings(); return; }

@@ -154,13 +154,19 @@
       lore: book && Array.isArray(book.entries)
         ? book.entries.map((e, i) => ({
             keys: arr(e.keys).map(String),
+            secondary_keys: arr(e.secondary_keys).map(String),
+            selective: !!e.selective,
             content: e.content || "",
             enabled: e.enabled !== false,
             constant: !!e.constant,
+            case_sensitive: !!e.case_sensitive,
             insertion_order: e.insertion_order != null ? e.insertion_order : i,
+            position: e.position === "before_char" ? "before_char" : "after_char",
             comment: e.comment || e.name || "",
+            raw: e,
           }))
         : [],
+      image: (d.extensions && d.extensions.prism_rp && d.extensions.prism_rp.image) ? JSON.parse(JSON.stringify(d.extensions.prism_rp.image)) : undefined,
       avatar: null,
       spec: spec || "v1",
       raw: json,
@@ -192,19 +198,34 @@
     if (card.lore && card.lore.length) {
       data.character_book = Object.assign({}, oldBook, {
         extensions: oldBook.extensions || {},
-        entries: card.lore.map((e, i) => ({
-          keys: e.keys || [],
-          content: e.content || "",
-          extensions: {},
-          enabled: e.enabled !== false,
-          insertion_order: e.insertion_order != null ? e.insertion_order : i,
-          constant: !!e.constant,
-          comment: e.comment || "",
-          id: i,
-          ...(v3 ? { use_regex: false } : {}),
-        })),
+        entries: card.lore.map((e, i) => {
+          const raw = e.raw && typeof e.raw === "object" ? JSON.parse(JSON.stringify(e.raw)) : {};
+          return Object.assign(raw, {
+            keys: e.keys || [],
+            secondary_keys: e.secondary_keys || [],
+            selective: !!e.selective,
+            content: e.content || "",
+            extensions: raw.extensions || {},
+            enabled: e.enabled !== false,
+            insertion_order: e.insertion_order != null ? Number(e.insertion_order) || 0 : i,
+            case_sensitive: !!e.case_sensitive,
+            constant: !!e.constant,
+            position: e.position === "before_char" ? "before_char" : "after_char",
+            name: e.comment || "",
+            comment: e.comment || "",
+            id: i,
+            ...(v3 ? { use_regex: !!raw.use_regex } : {}),
+          });
+        }),
       });
     } else delete data.character_book;
+    // Настройки изображений (триггер, LoRA, гардероб) едут вместе с карточкой
+    // в пространстве extensions — другие приложения его не трогают.
+    const ext = Object.assign({}, data.extensions);
+    const im = card.image && Object.keys(card.image).length ? card.image : null;
+    if (im) ext.prism_rp = Object.assign({}, ext.prism_rp, { image: JSON.parse(JSON.stringify(im)) });
+    else if (ext.prism_rp) { ext.prism_rp = Object.assign({}, ext.prism_rp); delete ext.prism_rp.image; if (!Object.keys(ext.prism_rp).length) delete ext.prism_rp; }
+    data.extensions = ext;
     if (v3) {
       data.group_only_greetings = data.group_only_greetings || [];
       data.nickname = data.nickname || undefined;

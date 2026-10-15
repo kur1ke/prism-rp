@@ -294,7 +294,7 @@
     // Стилевые теги персонажа — только те, о которых просит сцена.
     const style = splitTags(im.styleTrigger).filter((t) => mentions(bareTag(t), scene)).join(", ");
     const loras = o.backend === "a1111"
-      ? loraTokens((present ? (im.loras || []) : []).concat(s.loras || []).filter((l, i, a) => a.findIndex((x) => norm(x.name) === norm(l.name)) === i))
+      ? loraTokens((present ? (im.loras || []) : []).filter((l, i, a) => a.findIndex((x) => norm(x.name) === norm(l.name)) === i))
       : "";
     const body = [c.keep, scene, loras, trigger, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");

@@ -41,10 +41,15 @@
   };
 
   function matchLore(entries, text) {
-    const low = String(text || "").toLowerCase();
+    const raw = String(text || ""), low = raw.toLowerCase();
+    const hit = (e, keys) => (keys || []).some((k) => {
+      k = String(k || "").trim();
+      return k && (e.case_sensitive ? raw.includes(k) : low.includes(k.toLowerCase()));
+    });
     return (entries || [])
       .filter((e) => e && e.enabled !== false && e.content)
-      .filter((e) => e.constant || (e.keys || []).some((k) => k && low.includes(String(k).toLowerCase().trim())))
+      // Выборочная запись (selective): нужен основной ключ И хотя бы один дополнительный.
+      .filter((e) => e.constant || (hit(e, e.keys) && (!e.selective || !(e.secondary_keys || []).length || hit(e, e.secondary_keys))))
       .sort((a, b) => (a.insertion_order || 0) - (b.insertion_order || 0));
   }
 
@@ -101,13 +106,14 @@
     // Лорбук — по ключам из последних сообщений.
     const recentText = history.slice(-4).map((h) => h.text).join("\n");
     const loreAll = matchLore(card.lore, recentText);
-    const lore = [];
+    const lore = [], loreBefore = [];
     for (const e of loreAll) {
       const c = tok(e.content) + 2;
       if (used + c > budget) break;
-      lore.push(m(e.content)); used += c;
+      (e.position === "before_char" ? loreBefore : lore).push(m(e.content)); used += c;
     }
     const loreBlock = lore.length ? section(m(T.lore), lore.join("\n\n")) : "";
+    const loreBeforeBlock = loreBefore.length ? section(m(T.lore), loreBefore.join("\n\n")) : "";
 
     // Примеры речи — если остаётся место.
     let examples = "";
@@ -126,7 +132,7 @@
     }
     const keptHistory = keptOlder.concat(minH);
 
-    const head = [fixed.frame, fixed.card, examples, fixed.persona, loreBlock, memory, fixed.scene].filter(Boolean).join("\n\n");
+    const head = [fixed.frame, loreBeforeBlock, fixed.card, examples, fixed.persona, loreBlock, memory, fixed.scene].filter(Boolean).join("\n\n");
     const msgs = keptHistory.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
     let messages;
     if (o.singleSystem) {
@@ -153,7 +159,7 @@
         historyTotal: history.length,
         experienceKept: exps.length,
         experienceDropped: droppedExp,
-        loreKept: lore.length,
+        loreKept: lore.length + loreBefore.length,
         loreMatched: loreAll.length,
         examples: !!examples,
         layers: {
@@ -161,7 +167,7 @@
           card: tok(fixed.card) + tok(examples) + tok(fixed.persona),
           memory: tok(memory),
           scene: tok(fixed.scene),
-          lore: tok(loreBlock),
+          lore: tok(loreBlock) + tok(loreBeforeBlock),
           history: keptHistory.reduce((n, h) => n + tok(h.text) + 4, 0),
           post: tok(fixed.post),
         },

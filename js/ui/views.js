@@ -82,11 +82,12 @@
       <div class="gallery">
         ${cards.map((cd) => {
           const n = m.chats.filter((c) => c.cardId === cd.id).length;
-          return `<button class="tile" data-act="open-card" data-id="${cd.id}" title="${esc(cd.name)}">
+          return `<div class="tile" data-act="open-card" data-id="${cd.id}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
             ${R.art(cd)}<div class="tile-shade"></div>
             ${n ? `<span class="tile-count">${n} ${R.plural(n, "чат", "чата", "чатов")}</span>` : ""}
+            <button class="tile-edit" data-act="edit-card" data-id="${cd.id}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
             <div class="tile-body"><div class="tile-name">${esc(cd.name)}</div><div class="tile-tags">${esc((cd.tags || []).slice(0, 4).join(", ") || cd.creator || " ")}</div></div>
-          </button>`;
+          </div>`;
         }).join("")}
         ${m.cards.length ? `<div class="tile tile-new" role="group">
           ${icon("plus")}<button class="btn btn-sm" data-act="new-card">Создать</button><button class="btn btn-sm btn-ghost" data-act="import">Импорт</button></div>` : ""}
@@ -116,14 +117,15 @@
       : `<span class="head-scene ${m.gen ? "live" : ""}">${m.gen ? "пишет…" : esc(line || "Сцена не задана — откройте панель сцены")}</span>`;
     return `<header class="chat-head">
       <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
-      ${R.avatar(cd, 40)}
-      <div class="head-who"><div class="head-name">${esc(cd.name)} <button class="tool rename" data-act="rename-chat" title="Переименовать чат">${esc(c.title || "")} ${icon("edit")}</button></div>${status}</div>
+      <button class="head-av" data-act="edit-card" title="Карточка персонажа">${R.avatar(cd, 40)}</button>
+      <div class="head-who"><div class="head-name"><button class="head-card" data-act="edit-card" title="Открыть карточку персонажа">${esc(cd.name)}</button> <button class="tool rename" data-act="rename-chat" title="Переименовать чат">${esc(c.title || "")} ${icon("edit")}</button></div>${status}</div>
       <div class="head-tools">
         <div class="seg wide" role="group" aria-label="Режим">
           <button class="${c.mode === "rp" ? "on" : ""}" data-act="mode" data-mode="rp" title="Сцена">${icon("book")}<span>Сцена</span></button>
           <button class="${c.mode === "messenger" ? "on" : ""}" data-act="mode" data-mode="messenger" title="Переписка">${icon("bubble")}<span>Переписка</span></button>
         </div>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
+        <button class="icon-btn" data-act="edit-card" title="Карточка персонажа">${icon("card")}</button>
         <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, Prism">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
@@ -513,7 +515,6 @@
     } else if (!m.perchanceImages) {
       conn = `<p class="hint">Генерация Perchance доступна, когда приложение запущено как генератор на Perchance. Здесь выберите локальный сервер или API.</p>`;
     }
-    const loras = (c.loras || []);
     return `<h3>Изображения</h3><p class="lead">Чем рисовать и как собирается промпт. Персональные настройки — LoRA, триггеры, гардероб — задаются в карточке персонажа.</p>
       ${chk("enabled", "Рисовать картинки")}
       <div class="block-title" style="margin-top:14px">Чем рисовать</div>
@@ -525,11 +526,10 @@
       <div class="field"><label>Закреплённый блок</label><textarea data-imgcfg="fixedPrompt" rows="2" placeholder="masterpiece, best quality, amazing quality, absurdres">${esc(c.fixedPrompt || "")}</textarea><span class="help">Одинаковые теги качества и стиля в каждой картинке. Если блок задан, модель свои теги качества не пишет.</span></div>
       <div class="field"><label>Куда ставить блок</label><select data-img-sel="promptMode">${[["append", "в конец"], ["prepend", "в начало"], ["replace", "только блок, без сцены"], ["off", "не использовать"]].map(([v, l]) => `<option value="${v}" ${c.promptMode === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="field"><label>Негатив</label><textarea data-imgcfg="negative" rows="2" placeholder="lowres, bad anatomy, bad hands, extra digits">${esc(c.negative || "")}</textarea></div>
-      ${c.backend === "a1111" ? `<div class="field"><label>LoRA для всех картинок</label>${loraRows("img-lora", loras)}<span class="help">Стиль, детализация. LoRA персонажа задаются в его карточке.</span></div>` : ""}
+      ${c.backend === "a1111" ? `<p class="hint">LoRA задаются в карточке каждого персонажа: «Редактировать карточку → Изображения». Так они переезжают вместе с карточкой и не попадают в чужие картинки.</p>` : ""}
       <div class="block-title" style="margin-top:20px">Когда рисовать</div>
       ${chk("modelDraws", "Модель сама решает, когда показать картинку", "Она пишет короткую служебную строку [draw: …]; приложение её прячет и рисует.")}
-      ${chk("autoDraw", "Рисовать сразу", "Иначе под сообщением появится кнопка «Нарисовать».")}
-      ${dl("dl-loras", lists.loras)}`;
+      ${chk("autoDraw", "Рисовать сразу", "Иначе под сообщением появится кнопка «Нарисовать».")}`;
   }
 
   function loraRows(act, list) {
@@ -553,31 +553,48 @@
   }
 
   /* ── Редактор персонажа ───────────────────────────────────────────── */
+  // Поля и их порядок — как в Character Card V2/V3 и SillyTavern. Рядом с подписью
+  // мелко показан ключ спецификации, чтобы было видно, куда поле попадёт при экспорте.
   function cardModal(m, d, section) {
-    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["speech", "Речь и указания", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["file", "Файл", "download"]];
-    const f = (id, label, value, rows, help, ph) => `<div class="field"><label for="${id}">${label}</label>${rows
+    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["prompts", "Промпты", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["meta", "Автор и файл", "download"]];
+    const lab = (label, key) => `${label}${key ? ` <span class="spec-key">${key}</span>` : ""}`;
+    const f = (id, label, key, value, rows, help, ph) => `<div class="field"><label for="${id}">${lab(label, key)}</label>${rows
       ? `<textarea id="${id}" rows="${rows}" data-cf="${id}" placeholder="${esc(ph || "")}">${esc(value || "")}</textarea>` : `<input id="${id}" data-cf="${id}" value="${esc(value || "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
     let body = "";
     if (section === "main") {
       body = `<div class="card-edit"><div><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div></div>
-        <div>${f("cf-name", "Имя", d.name)}${f("cf-tags", "Теги", (d.tags || []).join(", "), 0, "через запятую")}
-          ${f("cf-desc", "Описание", d.description, 8, "Внешность, характер, прошлое. Модель читает это как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
-          ${f("cf-pers", "Личность коротко", d.personality, 2)}${f("cf-scen", "Обстоятельства", d.scenario, 3, "Где и почему всё происходит")}</div></div>`;
+        <div>${f("cf-name", "Имя", "name", d.name)}
+          ${f("cf-desc", "Описание", "description", d.description, 9, "Внешность, характер, прошлое — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
+          ${f("cf-pers", "Краткое описание личности", "personality", d.personality, 2, "Несколько черт одной строкой.")}
+          ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
+          ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>`;
     } else if (section === "greet") {
-      body = `${f("cf-first", "Первое сообщение", d.firstMes, 7, "С него начинается новая сцена. Можно добавить в конце строку [scene: …] с начальным местом и одеждой.")}
-        ${f("cf-alt", "Другие приветствия", (d.altGreetings || []).join("\n---\n"), 6, "Разделяйте строкой из трёх дефисов ---. В чате их можно листать стрелками.")}`;
-    } else if (section === "speech") {
-      body = `${f("cf-ex", "Примеры речи", d.mesExample, 7, "Как персонаж говорит: блоки начинаются с &lt;START&gt;, реплики — {{char}}: и {{user}}:")}
-        ${f("cf-sys", "Указания автора карточки", d.systemPrompt, 3)}${f("cf-post", "Указания после истории", d.postHistory, 3, "Добавляются в конец контекста, ближе всего к ответу")}`;
+      const alts = d.altGreetings || [];
+      body = `${f("cf-first", "Первое сообщение", "first_mes", d.firstMes, 7, "С него начинается новый чат. В конце можно добавить строку [scene: …] с начальным местом и одеждой.")}
+        <div class="block-title" style="margin-top:18px">${lab("Альтернативные приветствия", "alternate_greetings")}</div>
+        <p class="hint" style="margin-top:0">В новом чате их можно листать стрелками под первым сообщением.</p>
+        ${alts.map((g, i) => `<div class="field alt-greet"><label for="cf-alt-${i}">Приветствие ${i + 2}<button class="icon-btn" data-act="alt-del" data-i="${i}" title="Убрать">${icon("x")}</button></label><textarea id="cf-alt-${i}" rows="5" data-alt="${i}">${esc(g)}</textarea></div>`).join("")}
+        <button class="btn btn-sm" data-act="alt-add">${icon("plus")}Добавить приветствие</button>`;
+    } else if (section === "prompts") {
+      body = `${f("cf-ex", "Примеры диалогов", "mes_example", d.mesExample, 8, "Как персонаж говорит. Каждый пример начинается с &lt;START&gt;, реплики — {{user}}: и {{char}}:", "<START>\n{{user}}: Привет.\n{{char}}: …")}
+        ${f("cf-sys", "Системный промпт", "system_prompt", d.systemPrompt, 4, "Заменяет общий системный промпт. {{original}} подставит общий. Пусто — используется общий.")}
+        ${f("cf-post", "Инструкции после истории", "post_history_instructions", d.postHistory, 3, "Идут в конец контекста, ближе всего к ответу (jailbreak / UJB в других приложениях).")}`;
     } else if (section === "lore") {
-      body = `<p class="lead">Сведения о мире, которые подмешиваются в контекст, когда в разговоре звучат ключевые слова.</p>
+      const posSel = (i, v) => `<select data-lore="${i}" data-k="position"><option value="before_char" ${v === "before_char" ? "selected" : ""}>Перед описанием персонажа</option><option value="after_char" ${v !== "before_char" ? "selected" : ""}>После описания персонажа</option></select>`;
+      body = `<p class="lead">${lab("Лорбук персонажа", "character_book")}<br>Сведения о мире подмешиваются в контекст, когда в последних сообщениях звучат ключевые слова.</p>
         ${(d.lore || []).map((e, i) => `<div class="lore">
-          <div class="field"><label>Ключевые слова</label><input data-lore="${i}" data-k="keys" value="${esc((e.keys || []).join(", "))}" placeholder="кафе, кампус"></div>
-          <div class="field"><label>Текст</label><textarea data-lore="${i}" data-k="content" rows="3">${esc(e.content)}</textarea></div>
-          <div class="row" style="align-items:center"><label class="check"><input type="checkbox" data-lore="${i}" data-k="constant" ${e.constant ? "checked" : ""}><span>Всегда в контексте</span></label>
-          <label class="check"><input type="checkbox" data-lore="${i}" data-k="enabled" ${e.enabled !== false ? "checked" : ""}><span>Включено</span></label>
-          <span style="flex:1"></span><button class="btn btn-sm btn-ghost" data-act="lore-del" data-i="${i}">${icon("trash")}Удалить</button></div></div>`).join("") || `<p class="empty-note">Лорбук пуст.</p>`}
+          <div class="row"><div class="field" style="flex:2"><label>${lab("Название", "comment")}</label><input data-lore="${i}" data-k="comment" value="${esc(e.comment || "")}" placeholder="Кафе «Луна»"></div>
+            <div class="field" style="flex:1;max-width:170px"><label>${lab("Порядок", "insertion_order")}</label><input type="number" data-lore="${i}" data-k="insertion_order" value="${esc(String(e.insertion_order != null ? e.insertion_order : i))}"></div></div>
+          <div class="field"><label>${lab("Ключевые слова", "keys")}</label><input data-lore="${i}" data-k="keys" value="${esc((e.keys || []).join(", "))}" placeholder="кафе, Луна"></div>
+          ${e.selective ? `<div class="field"><label>${lab("Дополнительные ключи", "secondary_keys")}</label><input data-lore="${i}" data-k="secondary_keys" value="${esc((e.secondary_keys || []).join(", "))}" placeholder="вечер, свидание"><span class="help">Запись сработает, только если звучит и основной, и хотя бы один дополнительный ключ.</span></div>` : ""}
+          <div class="field"><label>${lab("Содержание", "content")}</label><textarea data-lore="${i}" data-k="content" rows="3">${esc(e.content || "")}</textarea></div>
+          <div class="field"><label>${lab("Позиция", "position")}</label>${posSel(i, e.position)}</div>
+          <div class="checks"><label class="check"><input type="checkbox" data-lore="${i}" data-k="enabled" ${e.enabled !== false ? "checked" : ""}><span>Включено</span></label>
+          <label class="check"><input type="checkbox" data-lore="${i}" data-k="constant" ${e.constant ? "checked" : ""}><span>Постоянная — всегда в контексте</span></label>
+          <label class="check"><input type="checkbox" data-lore="${i}" data-k="selective" ${e.selective ? "checked" : ""}><span>Выборочная — нужны доп. ключи</span></label>
+          <label class="check"><input type="checkbox" data-lore="${i}" data-k="case_sensitive" ${e.case_sensitive ? "checked" : ""}><span>С учётом регистра</span></label></div>
+          <div class="row" style="justify-content:flex-end"><button class="btn btn-sm btn-ghost" data-act="lore-del" data-i="${i}">${icon("trash")}Удалить запись</button></div></div>`).join("") || `<p class="empty-note">Лорбук пуст.</p>`}
         <button class="btn btn-sm" data-act="lore-add">${icon("plus")}Добавить запись</button>`;
     } else if (section === "images") {
       const im = d.image || {};
@@ -587,13 +604,16 @@
         ${fi("aliases", "Другие имена в сценах", 0, "Через запятую: как модель может назвать персонажа в [draw:] (латиницей).", "orihime, hime")}
         ${fi("styleTrigger", "Стилевые теги", 1, "Добавляются, только если сцена их упоминает.")}
         ${fi("negative", "Негатив персонажа", 1, "", "short hair, flat chest")}
-        <div class="field"><label>LoRA персонажа</label>${loraRows("card-lora", im.loras || [])}<datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
+        <div class="field"><label>LoRA персонажа</label>${loraRows("card-lora", im.loras || [])}<span class="help">Вес обычно 0.6–1. Применяются, только когда персонаж в кадре. Стилевые LoRA тоже ставьте сюда — у каждого персонажа свой набор.</span><datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
         ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный. Кнопкой у картинки можно закрепить удачный.")}
         ${fi("look", "Внешность", 3, "base: — всегда; «ключ: теги» — когда ключ есть в сцене (улыбка: gentle smile).", "base: brown eyes, large breasts\nочки | glasses: round glasses")}
         ${fi("wardrobe", "Гардероб", 5, "Образ подбирается по одежде из панели сцены: «худи | hoodie: теги». Теги идут в промпт без перевода — как их знает ваша LoRA. Если сцена одевает иначе, образ не добавляется.", "школьная форма | school uniform: serafuku, red neckerchief, pleated skirt\nхуди | hoodie: grey hoodie, denim shorts, <lora:outfit:0.7>")}
         ${fi("nsfw", "Откровенные модификаторы", 3, "Срабатывают только по тексту самой сцены, никогда по одежде из трекера.", "голая | nude: nude, nipples, navel")}`;
     } else {
-      body = `<h3>Файл карточки</h3><p class="lead">Экспорт совместим с другими приложениями (Character Card V2/V3). Неизвестные им поля сохраняются.</p>
+      body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
+        ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
+        ${f("cf-notes", "Заметки создателя", "creator_notes", d.creatorNotes, 4, "Для людей, не для модели: как играть, рекомендованные настройки. В контекст не идут.")}
+        <div class="block-title" style="margin-top:24px">Файл карточки</div><p class="hint">Экспорт в Character Card V2/V3 — открывается в SillyTavern, RisuAI, Chub и других. Поля, которых нет в редакторе, сохраняются как были. Настройки изображений и LoRA едут внутри карточки (extensions.prism_rp).</p>
         <div class="row"><button class="btn" data-act="card-png">${icon("download")}PNG с портретом</button><button class="btn" data-act="card-json">${icon("download")}JSON</button></div>
         ${d.id ? `<div class="block-title" style="margin-top:28px">Удаление</div><p class="hint">Удалит персонажа вместе со всеми чатами и опытом.</p>
         <button class="btn btn-danger" data-act="card-del">${icon("trash")}Удалить ${esc(d.name)}</button>` : ""}`;

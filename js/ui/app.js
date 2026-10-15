@@ -25,7 +25,7 @@
       enabled: true, backend: "perchance", url: "", key: "", model: "", vae: "", sampler: "", scheduler: "",
       steps: 28, cfg: 5.5, seed: "", sizeMode: "auto", fixedSize: "1024x1024", maxSide: 1216,
       hires: false, hiresScale: 1.5, hiresUpscaler: "R-ESRGAN 4x+ Anime6B", hiresDenoise: 0.4, hiresSteps: 0,
-      fixedPrompt: "", promptMode: "append", negative: "", loras: [], format: "tags", translate: true,
+      fixedPrompt: "", promptMode: "append", negative: "", format: "tags", translate: true,
       modelDraws: true, autoDraw: true, extra: "",
     },
   };
@@ -634,13 +634,16 @@
   }
   function collectCard() {
     const d = S.modal.draft;
-    const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory" };
+    const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
     $$("[data-cf]").forEach((el) => {
       const id = el.dataset.cf;
       if (map[id]) d[map[id]] = el.value;
       else if (id === "cf-tags") d.tags = el.value.split(",").map((s) => s.trim()).filter(Boolean);
-      else if (id === "cf-alt") d.altGreetings = el.value.split(/\n-{3,}\n/).map((s) => s.trim()).filter(Boolean);
     });
+    if ($("[data-alt]") || S.modal.section === "greet") {
+      d.altGreetings = (d.altGreetings || []).slice();
+      $$("[data-alt]").forEach((el) => { d.altGreetings[+el.dataset.alt] = el.value; });
+    }
     if ($("[data-ci]") || $("[data-card-lora-name]")) {
       d.image = Object.assign({}, d.image);
       $$("[data-ci]").forEach((el) => { d.image[el.dataset.ci] = el.value; });
@@ -653,8 +656,9 @@
       const e = d.lore[+el.dataset.lore];
       if (!e) return;
       const k = el.dataset.k;
-      if (k === "keys") e.keys = el.value.split(",").map((s) => s.trim()).filter(Boolean);
-      else if (k === "content") e.content = el.value;
+      if (k === "keys" || k === "secondary_keys") e[k] = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+      else if (k === "content" || k === "comment" || k === "position") e[k] = el.value;
+      else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
       else e[k] = el.checked;
     });
     return d;
@@ -664,6 +668,8 @@
     d.name = (d.name || "").trim();
     if (!d.name) { toast("Дайте персонажу имя.", true); S.modal.section = "main"; renderModal(); return; }
     if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
+    d.altGreetings = (d.altGreetings || []).map((g) => String(g || "").trim()).filter(Boolean);
+    d.updatedAt = Date.now();
     const isNew = !d.id;
     if (isNew) { d.id = U.uid("card"); d.createdAt = Date.now(); }
     await DB.put("cards", d);
@@ -770,12 +776,7 @@
       const k = el.dataset.imgcfg;
       c[k] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value.trim();
     });
-    $$("[data-img-lora-name]").forEach((el) => {
-      const i = +el.dataset.imgLoraName;
-      const w = $(`[data-img-lora-w="${i}"]`);
-      c.loras[i] = { name: el.value.trim(), weight: w && w.value !== "" ? Number(w.value) : 1 };
-    });
-    c.loras = c.loras.filter((l) => l && (l.name || l.name === ""));
+    delete c.loras; // LoRA живут только в карточках персонажей
   }
 
   function refreshAfterSettings() {
@@ -870,7 +871,7 @@
     "chat-menu": (t) => openPop(V.chatMenu(vm()), t),
     "model-pop": (t) => openPop(V.modelPop(vm()), t),
     "new-chat": (t) => { closePop(); newChat(t.dataset.mode); },
-    "edit-card": () => { closePop(); openCardEditor(card()); },
+    "edit-card": (t) => { closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : card()); },
     "rename-chat": async () => {
       closePop();
       const c = chat();
@@ -929,8 +930,6 @@
       } catch (e) { toast(e.message, true); }
       S.modal.keepScroll = true; renderModal();
     },
-    "img-lora-add": () => { collectImgForm(); S.settings.images.loras.push({ name: "", weight: 0.7 }); S.modal.keepScroll = true; renderModal(); },
-    "img-lora-del": (t) => { collectImgForm(); S.settings.images.loras.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); saveSettings(); },
     "card-lora-add": () => { const d = collectCard(); d.image = d.image || {}; d.image.loras = (d.image.loras || []).concat([{ name: "", weight: 0.8 }]); S.modal.keepScroll = true; renderModal(); },
     "card-lora-del": (t) => { const d = collectCard(); d.image.loras.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
     "img-modal-regen": () => { const { mid, sw, im } = S.modal; const msg = S.messages.find((x) => x.id === mid); S.modal = null; renderModal(); drawImage(msg, msg.swipes[+sw], null, im, { seed: Math.floor(Math.random() * 1e9) }); },
@@ -981,7 +980,9 @@
     "card-section": (t) => { collectCard(); S.modal.section = t.dataset.section; renderModal(); },
     "card-save": saveCard,
     "avatar-pick": () => { collectCard(); $("#file-avatar").click(); },
-    "lore-add": () => { const d = collectCard(); d.lore = (d.lore || []).concat([{ keys: [], content: "", enabled: true, constant: false, insertion_order: (d.lore || []).length }]); S.modal.keepScroll = true; renderModal(); },
+    "lore-add": () => { const d = collectCard(); d.lore = (d.lore || []).concat([{ keys: [], secondary_keys: [], selective: false, content: "", comment: "", enabled: true, constant: false, case_sensitive: false, position: "after_char", insertion_order: (d.lore || []).length * 10 }]); S.modal.keepScroll = true; renderModal(); },
+    "alt-add": () => { const d = collectCard(); d.altGreetings = (d.altGreetings || []).concat([""]); S.modal.keepScroll = true; renderModal(); setTimeout(() => { const el = $(`[data-alt="${d.altGreetings.length - 1}"]`); if (el) el.focus(); }, 30); },
+    "alt-del": (t) => { const d = collectCard(); d.altGreetings.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
     "lore-del": (t) => { const d = collectCard(); d.lore.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
     "card-json": () => { const d = collectCard(); download(`${d.name || "персонаж"}.json`, JSON.stringify(CC.toSpec(d, "v3"), null, 2), "application/json"); },
     "card-png": async () => { const d = collectCard(); download(`${d.name || "персонаж"}.png`, new Blob([CC.embedInPng(await avatarPngBytes(d), d)], { type: "image/png" })); },
@@ -1050,7 +1051,8 @@
       if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return; }
       if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return; }
       if (t.dataset.scRel) { applySceneOps([op(t.dataset.scRel, "relset", t.value + " поправлено вручную")]); return; }
-      if (t.dataset.imgcfg !== undefined || t.dataset.imgLoraName !== undefined || t.dataset.imgLoraW !== undefined) { collectImgForm(); await saveSettings(); return; }
+      if (t.dataset.lore !== undefined && t.dataset.k === "selective" && S.modal && S.modal.kind === "card") { collectCard(); S.modal.keepScroll = true; renderModal(); return; }
+      if (t.dataset.imgcfg !== undefined) { collectImgForm(); await saveSettings(); return; }
       if (t.dataset.imgCheck) { collectImgForm(); S.settings.images[t.dataset.imgCheck] = t.checked; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; refreshAfterSettings(); await saveSettings(); return; }
       if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await saveSettings(); refreshAfterSettings(); return; }

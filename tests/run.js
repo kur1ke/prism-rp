@@ -169,6 +169,34 @@ t("карточка: V2 → PNG → обратно без потерь, extensio
   const s = Buffer.from(png2).toString("latin1");
   assert.strictEqual(s.split("tEXtchara").length - 1, 1);
 });
+t("карточка: поля CCv2 и лорбук туда-обратно, LoRA в extensions.prism_rp", () => {
+  const src = { spec: "chara_card_v2", spec_version: "2.0", data: { name: "Юки", description: "d", personality: "p", scenario: "s", first_mes: "f", mes_example: "e",
+    creator_notes: "n", system_prompt: "sp", post_history_instructions: "ph", alternate_greetings: ["a1", "a2"], tags: ["t"], creator: "me", character_version: "1.2",
+    extensions: { other_app: { x: 1 } },
+    character_book: { entries: [{ keys: ["кафе"], secondary_keys: ["вечер"], selective: true, content: "c", enabled: true, insertion_order: 5, position: "before_char", comment: "Кафе", constant: false, priority: 7, extensions: { st: 1 } }] } } };
+  const c = C.normalize(src);
+  assert.strictEqual(c.creatorNotes, "n"); assert.strictEqual(c.version, "1.2"); assert.deepStrictEqual(c.altGreetings, ["a1", "a2"]);
+  assert.deepStrictEqual(c.lore[0].secondary_keys, ["вечер"]); assert.strictEqual(c.lore[0].position, "before_char"); assert.strictEqual(c.lore[0].comment, "Кафе");
+  c.image = { trigger: "yuki", loras: [{ name: "Yuki_IL", weight: 0.8 }] };
+  const out = C.toSpec(c, "v2").data;
+  assert.strictEqual(out.creator_notes, "n"); assert.strictEqual(out.character_version, "1.2");
+  const e = out.character_book.entries[0];
+  assert.ok(e.selective && e.secondary_keys[0] === "вечер" && e.position === "before_char" && e.priority === 7 && e.extensions.st === 1 && e.name === "Кафе");
+  assert.strictEqual(out.extensions.other_app.x, 1);
+  assert.strictEqual(out.extensions.prism_rp.image.loras[0].name, "Yuki_IL");
+  assert.strictEqual(C.normalize({ spec: "chara_card_v2", data: out }).image.loras[0].name, "Yuki_IL");
+});
+t("лорбук: выборочная запись требует доп. ключ, позиция before_char", () => {
+  const cd = { name: "Юки", description: "Описание Юки", lore: [
+    { keys: ["кафе"], secondary_keys: ["вечер"], selective: true, content: "LORE-SEL", enabled: true },
+    { keys: ["кафе"], content: "LORE-BEFORE", position: "before_char", enabled: true },
+    { keys: ["Кафе"], case_sensitive: true, content: "LORE-CASE", enabled: true }] };
+  const sys1 = A.build({ card: cd, history: [{ role: "user", text: "пойдём в кафе" }] }).messages[0].content;
+  assert.ok(!sys1.includes("LORE-SEL") && !sys1.includes("LORE-CASE"));
+  assert.ok(sys1.indexOf("LORE-BEFORE") < sys1.indexOf("Описание Юки"));
+  const sys2 = A.build({ card: cd, history: [{ role: "user", text: "Кафе вечером?" }] }).messages[0].content;
+  assert.ok(sys2.includes("LORE-SEL") && sys2.includes("LORE-CASE"));
+});
 t("карточка: CRC верный (сверка с zlib)", () => {
   const zlib = require("zlib");
   const data = Buffer.from("IEND");
@@ -275,7 +303,8 @@ t("compose: внешность пользователя и его тег-суб�
 t("finalise: LoRA и триггер персонажа, закреплённый блок качества, негатив", () => {
   const composed = IC.compose({ draw: "1girl, sitting, cafe, masterpiece", card: imgCard, scene: st0, persona: {} });
   const f = IC.finalise({ composed, card: imgCard, backend: "a1111", settings: { fixedPrompt: "masterpiece, best quality", promptMode: "append", negative: "lowres", loras: [{ name: "detail", weight: 0.5 }] } });
-  assert.ok(f.prompt.includes("<lora:Orihime_IL:0.8>") && f.prompt.includes("<lora:detail:0.5>"));
+  // Общие LoRA из настроек больше не применяются — только LoRA карточки.
+  assert.ok(f.prompt.includes("<lora:Orihime_IL:0.8>") && !f.prompt.includes("<lora:detail"));
   assert.ok(f.prompt.includes("orihime inoue"));
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
