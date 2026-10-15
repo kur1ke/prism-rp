@@ -235,7 +235,7 @@ t("важность не создаёт релевантность: нескол
   const none = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Сегодня хорошая погода.", limit: 8 });
   assert.deepStrictEqual(none.selected, [], "если ничего не относится к теме, опыт не подаётся");
   const built = A.build({ card: { name: "Химэ", description: "d" }, experiences: none.ranked, history: [{ role: "user", text: "Сегодня хорошая погода." }] });
-  assert.ok(!built.messages[0].content.includes("Что Химэ помнит"), "пустой опыт — допустимо");
+  assert.ok(!built.messages[0].content.includes("### Релевантный прошлый опыт Химэ"), "пустой опыт — допустимо");
 });
 t("тема: имена участников не засчитываются как совпадение темы", () => {
   const set = [R1("name", { event: "Химэ рассердилась", domains: ["химэ"], weight: 1 })];
@@ -277,9 +277,9 @@ t("сборка: слои подписаны, макросы подставле�
   const st = S.fold("loc=Кафе", []);
   const r = A.build({ card, userName: "Кира", sceneState: st, experiences: [R1("ev", { event: "Он предал её", weight: 3 })], history: [{ role: "assistant", text: "Привет" }, { role: "user", text: "Как университет?" }] });
   const sys = r.messages[0].content;
-  assert.ok(sys.includes("не диктуют поступки"));
+  assert.ok(sys.includes("### Характер Химэ"));
   assert.ok(sys.includes("Кира — её одногруппник"));
-  assert.ok(sys.includes("Что Химэ помнит"));
+  assert.ok(sys.includes("### Релевантный прошлый опыт Химэ"));
   assert.ok(sys.includes("Токийский университет"));
   assert.ok(sys.includes("Мир — современная Япония"));
   assert.ok(sys.includes("### Сейчас (факты)\nМесто: Кафе"));
@@ -311,10 +311,10 @@ const costOf = (msgs) => msgs.reduce((n, x) => n + Math.ceil(x.content.length / 
 t("PRISM1-13: указания автора отделены от склонностей", () => {
   const r = A.build({ card: authorCard, history: [{ role: "user", text: "hi" }] });
   const head = r.messages[0].content, post = r.messages[r.messages.length - 1].content;
-  const cardSec = head.slice(head.indexOf("### Склонности"));
-  assert.ok(cardSec.startsWith("### Склонности и характер Юки") && cardSec.includes("shy but curious"));
+  const cardSec = head.slice(head.indexOf("### Характер"));
+  assert.ok(cardSec.startsWith("### Характер Юки") && cardSec.includes("shy but curious"));
   assert.ok(!cardSec.split("### ")[1].includes("always answer"), "system_prompt не внутри склонностей");
-  assert.ok(head.indexOf("### Указания автора карточки (правила") < head.indexOf("### Склонности"));
+  assert.ok(head.indexOf("### Указания автора карточки (правила") < head.indexOf("### Характер"));
   assert.ok(head.includes("always answer in first person"));
   assert.ok(post.startsWith("### Указания автора карточки (после истории)\nuse terse sentences"));
   assert.ok(post.indexOf("use terse sentences") < post.indexOf("[scene:"), "после истории — до протокола, ближе всего к ответу среди указаний");
@@ -333,9 +333,35 @@ t("порядок слоёв в итоговом контексте", () => {
   const c = Object.assign({}, authorCard, { lore: [{ keys: [], content: "LORE", constant: true, enabled: true }] });
   const r = A.build({ card: c, userDesc: "PERSONA", sceneState: S.fold("loc=Кафе", []), experiences: [R1("e", { event: "EXP" })], history: [{ role: "user", text: "hi" }] });
   const h = r.messages[0].content;
-  const order = ["Ты ведёшь ролевую игру", "### Указания автора", "### Склонности", "PERSONA", "LORE", "EXP", "### Сейчас (факты)"].map((k) => h.indexOf(k));
+  const order = ["Ты играешь за", "### Указания автора", "### Характер", "PERSONA", "LORE", "EXP", "### Сейчас (факты)"].map((k) => h.indexOf(k));
   assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), JSON.stringify(order));
   assert.strictEqual(r.messages[1].content, "hi");
+});
+
+t("RP frame simplification: граница {{user}}, сцена + характер + опыт, разделы раздельно, без повторов философии", () => {
+  const st = S.fold("loc=Кафе", []);
+  const r = A.build({ card: { name: "Химэ", description: "DESC" }, userName: "Кира", sceneState: st, experiences: [R1("ev", { event: "EVT", weight: 3 })], history: [{ role: "user", text: "hi" }] });
+  const sys = r.messages[0].content;
+  const frame = sys.split("\n\n###")[0];
+  assert.ok(frame.includes("Ты играешь за Химэ") && frame.includes("Кира управляет только собой"));
+  assert.ok(frame.includes("Не пиши мысли, действия или реплики за Кира"), "граница собеседника");
+  assert.ok(frame.includes("текущей сцены") && frame.includes("характера Химэ") && frame.includes("релевантного прошлого опыта"));
+  assert.ok(frame.includes("не являются жёстким сценарием"));
+  // раздельные разделы
+  const iCard = sys.indexOf("### Характер Химэ\nDESC"), iExp = sys.indexOf("### Релевантный прошлый опыт Химэ"), iScene = sys.indexOf("### Сейчас (факты)");
+  assert.ok(iCard > 0 && iExp > iCard && iScene > iExp, JSON.stringify([iCard, iExp, iScene]));
+  assert.ok(sys.slice(iExp).includes("EVT") && !sys.slice(iCard, iExp).includes("EVT"), "опыт не внутри характера");
+  // убранные повторы
+  for (const ph of ["не диктуют поступки", "не предписывают поступков", "свидетельства прошлого", "может действовать вопреки", "может поступить вопреки", "не забывает"]) {
+    assert.ok(!sys.includes(ph), ph);
+  }
+  // кадр не длиннее прежнего
+  assert.ok(A.TEMPLATES.rp.frame.length < 398);
+  // переписка: рамка не тронута, повтор философии в заголовках убран
+  const mf = A.TEMPLATES.messenger.frame;
+  assert.ok(mf.includes("мессенджере") && mf.includes("Не пиши за {{user}}"));
+  const ms = A.build({ mode: "messenger", card: { name: "Химэ", description: "D" }, experiences: [R1("ev", { event: "EVT" })], history: [{ role: "user", text: "hi" }] }).messages[0].content;
+  assert.strictEqual(ms.split("свидетельства прошлого").length - 1, 1, "в переписке — один раз, в рамке");
 });
 const big = (n, ch) => (ch || "слово ").repeat(n);
 const baseScene = S.fold("loc=Кафе; Юки.wear=пальто", []);
@@ -369,7 +395,7 @@ t("PRISM1-19: огромная карточка — детерминирован
   strict(r1);
   assert.deepStrictEqual(r1.messages, r2.messages);
   const h = r1.messages[0].content;
-  assert.ok(h.includes("### Склонности и характер Юки") && h.includes("Абзац 0."));
+  assert.ok(h.includes("### Характер Юки") && h.includes("Абзац 0."));
   assert.ok(!h.includes("Абзац 39."));
   const layers = r1.report.truncated.map((t) => t.layer);
   assert.ok(layers.includes("card.description") && layers.includes("card.scenario") && layers.includes("examples"));
@@ -1009,7 +1035,7 @@ t("FB: сценарий — отдельный раздел «начало ис�
   const cd = { name: "Юки", description: "Тихая.", scenario: "SCEN-LIB дождливый вечер", lore: [] };
   const on = A.build({ card: cd, sceneState: S.fold("loc=Кафе", []), history: [{ role: "user", text: "hi" }] });
   const head = on.messages[0].content;
-  const cardSec = head.slice(head.indexOf("### Склонности")).split("\n### ")[0];
+  const cardSec = head.slice(head.indexOf("### Характер")).split("\n### ")[0];
   assert.ok(!cardSec.includes("SCEN-LIB"), "не внутри склонностей");
   assert.ok(head.includes("### С чего начинается история") && head.includes("SCEN-LIB"));
   assert.ok(head.indexOf("SCEN-LIB") < head.indexOf("### Сейчас"), "перед сценой");

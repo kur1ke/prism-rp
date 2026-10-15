@@ -184,7 +184,7 @@ try:
         check("плашки изменений сцены", page.locator(".turn.last .delta").count() == 4)
         req = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last"))
         sys0 = req["messages"][0]["content"]
-        check("Prism: склонности, сцена, лорбук", "не диктуют поступки" in sys0 and "Место: Кафе у кампуса" in sys0 and "до полуночи" in sys0)
+        check("Prism: склонности, сцена, лорбук", "Ты играешь за" in sys0 and "### Характер Химэ" in sys0 and "Место: Кафе у кампуса" in sys0 and "до полуночи" in sys0)
         check("пресет «Живой» ушёл в запрос", req.get("temperature") == 1.1)
         check("строка сцены обновилась", wait_text(page, ".chat-head", "Кафе, терраса"))
 
@@ -706,7 +706,7 @@ try:
         t2 = p2.inner_text("#feed")
         check("Perchance: стриминг ответа", "Привет из Perchance!" in t2 and "[scene:" not in t2)
         call = p2.evaluate("window.__aiCalls[0]")
-        check("Perchance: инструкция содержит Prism и историю", "не диктуют поступки" in call["instruction"] and "Пользователь: Как дела?" in call["instruction"])
+        check("Perchance: инструкция содержит Prism и историю", "Ты играешь за" in call["instruction"] and "Пользователь: Как дела?" in call["instruction"])
         p2.click(".turn.last [data-act=continue]")
         p2.wait_for_timeout(200)
         idle(p2)
