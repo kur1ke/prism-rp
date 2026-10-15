@@ -1,0 +1,5 @@
+// Prism RP 0.3.0 — панель Lists генератора Perchance
+// Бесплатная текстовая модель Perchance. Приложение вызывает её из HTML-панели как ai(...).
+ai = {import:ai-text-plugin}
+// Бесплатная генерация изображений Perchance. Приложение вызывает её как image(...).
+image = {import:text-to-image-plugin}

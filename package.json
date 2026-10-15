@@ -1,0 +1,10 @@
+{
+  "name": "prism-rp",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Prism RP — среда для ролевой игры с архитектурой Prism (Card + Scene + Experience)",
+  "scripts": {
+    "test": "node tests/run.js",
+    "build": "node build.js"
+  }
+}

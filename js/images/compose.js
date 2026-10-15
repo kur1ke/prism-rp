@@ -1,0 +1,414 @@
+/* Prism RP — сборка промпта изображения (чистые функции).
+   Перенос логики из модулей форка (image-endpoint / image-prompt / промпт
+   персонажа), переписанной под архитектуру Prism RP: данные берутся из
+   карточки (card.image), персоны (persona.image) и состояния сцены.
+
+   Конвейер:
+     [draw: …] из ответа  ─┐
+     сцена (одежда, поза) ─┼─ compose()  → { scene, keep, absence }
+     карточка и персона   ─┘        scene ─ compile (перевод LLM) ─┐
+                                    keep ─ «как есть», в начало ───┴─ finalise() → { prompt, negative }
+
+   Принципы, вынесенные из форка:
+   • Сцена важнее устаревшего трекера: если [draw:] одевает персонажа иначе,
+     теги гардероба не добавляются — иначе одежда «усредняется».
+   • Теги гардероба и внешности — это словарь LoRA; LLM-переводчик их не видит
+     и не переписывает, они ставятся в начало промпта без изменений.
+   • Триггер, негатив и LoRA персонажа — только когда он в кадре.
+   • Повтор тега ничего не даёт; «solo» неверен, когда в кадре двое.
+   • POV: камера — глаза пользователя; его внешность не добавляется. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  /* ── Словоформы и карты «ключ: теги» ───────────────────────────────── */
+  const WORD_RE = /[^\p{L}\p{N}]+/u;
+  function words(s) { return String(s || "").toLowerCase().split(WORD_RE).filter(Boolean); }
+
+  // «красное» ~ «красном», «Лёня» ~ «Лёне», но «girl» не совпадает с «1girl».
+  function wordFormMatch(key, word) {
+    if (key === word) return true;
+    if (key.length < 4 || word.length < 4) return false;
+    const stem = key.slice(0, Math.max(3, key.length - 2));
+    return word.startsWith(stem) && Math.abs(word.length - key.length) <= 3;
+  }
+  // Все слова ключа встречаются в тексте (в любой словоформе) → число слов, иначе 0.
+  function mentions(key, text) {
+    const k = words(key).filter((w) => w.length >= 2);
+    if (!k.length) return 0;
+    const hay = words(text);
+    for (const w of k) if (!hay.some((h) => wordFormMatch(w, h))) return 0;
+    return k.length;
+  }
+
+  const cleanTags = (t) => String(t || "").split(",").map((s) => s.trim().replace(/^["'«»„“”]+|["'«»„“”]+$/g, "")).filter(Boolean).join(", ");
+
+  /* Строки «ключ: теги». Ключ может быть с вариантами «school uniform | школьная форма».
+     «ключ:» без тегов собирает следующие строки (длинный список, вставленный блоком).
+     Двоеточие после запятой или < — это часть тегов (<lora:x:0.8>), а не ключ. */
+  function parseMap(text) {
+    const out = [];
+    let key = "", acc = [];
+    const flush = () => { const t = cleanTags(acc.join(", ")); if (key && t) out.push({ key, tags: t }); key = ""; acc = []; };
+    for (const raw of String(text || "").split("\n")) {
+      const line = raw.trim();
+      if (!line) continue;
+      const ci = line.indexOf(":");
+      const si = line.search(/[<,]/);
+      const sep = ci === -1 || (si !== -1 && si < ci) ? -1 : ci;
+      if (sep !== -1) {
+        flush();
+        const k = line.slice(0, sep).trim(), rest = line.slice(sep + 1).trim();
+        if (!k) continue;
+        if (rest) out.push({ key: k, tags: cleanTags(rest) }); else key = k;
+        continue;
+      }
+      if (key) acc.push(line);
+      else out.push({ key: "", tags: cleanTags(line) }); // строка без ключа — базовая
+    }
+    flush();
+    return out;
+  }
+  const isBase = (k) => /^(|base|always|всегда|база)$/i.test(String(k).trim());
+  const isSuffix = (k) => /^(suffix|в конце)$/i.test(String(k).trim());
+
+  function bestVariant(key, text) {
+    let score = 0, len = 0;
+    for (const v of String(key).split("|").map((s) => s.trim()).filter(Boolean)) {
+      const s = mentions(v, text);
+      if (s > score || (s === score && s && v.length > len)) { score = s; len = v.length; }
+    }
+    return { score, len };
+  }
+
+  // Гардероб: базовые строки + ОДИН лучший образ по описанию одежды.
+  function resolveWardrobe(map, outfitText) {
+    const always = [];
+    let best = "", bestScore = 0, bestLen = 0;
+    for (const { key, tags } of parseMap(map)) {
+      if (isBase(key)) { always.push(tags); continue; }
+      if (isSuffix(key)) continue;
+      const { score, len } = bestVariant(key, outfitText);
+      if (score && (score > bestScore || (score === bestScore && len > bestLen))) { best = tags; bestScore = score; bestLen = len; }
+    }
+    return [...always, best].filter(Boolean).join(", ");
+  }
+
+  // Внешность: базовые строки + все совпавшие по тексту кадра или по именам присутствующих.
+  function resolveAppearance(map, text, names) {
+    const keep = [], tail = [];
+    for (const { key, tags } of parseMap(map)) {
+      if (isSuffix(key)) { tail.push(tags); continue; }
+      if (isBase(key)) { keep.push(tags); continue; }
+      const hit = String(key).split("|").map((s) => s.trim()).filter(Boolean)
+        .some((v) => mentions(v, text) || (names || []).some((n) => mentions(v, n)));
+      if (hit) keep.push(tags);
+    }
+    return { tags: keep.join(", "), suffix: tail.join(", ") };
+  }
+
+  /* ── Гигиена тегов ─────────────────────────────────────────────────── */
+  // Делит по запятым, не разрезая «(detailed face, sharp eyes:1.2)».
+  function splitTags(text) {
+    const s = String(text == null ? "" : text), out = [];
+    let cur = "", depth = 0;
+    for (const ch of s) {
+      if ("([{".includes(ch)) depth++;
+      else if (")]}".includes(ch)) depth = Math.max(0, depth - 1);
+      if (ch === "," && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+    }
+    out.push(cur);
+    return out.map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean);
+  }
+  const norm = (s) => String(s).toLowerCase().replace(/_/g, " ").replace(/\s+/g, " ").trim();
+  function bareTag(tag) {
+    let t = String(tag).trim();
+    if (!t || /^<lora:/i.test(t)) return "";
+    for (let i = 0; i < 3; i++) {
+      const m = t.match(/^[([{]([\s\S]*)[)\]}](?:\s*:\s*[0-9.]+)?$/);
+      if (!m) break;
+      t = m[1].trim();
+    }
+    return norm(t.replace(/\s*:\s*[0-9]+(?:\.[0-9]+)?\s*$/, ""));
+  }
+  // Соотношения сторон уже учтены размером кадра; score_N — шум вне Pony.
+  function normalizeTags(text) {
+    return splitTags(text).filter((t) => !/^\d{1,3}\s*:\s*\d{1,3}$/.test(t) && !/^score[ _]\d+(_up)?$/i.test(t)).join(", ");
+  }
+  const QUALITY = new Set(("masterpiece|best quality|amazing quality|great quality|high quality|highest quality|top quality|good quality|" +
+    "very aesthetic|aesthetic|absurdres|highres|hires|high resolution|ultra high res|8k|4k|2k|ultra detailed|ultra-detailed|" +
+    "extremely detailed|highly detailed|hyper detailed|hyper-detailed|hyperdetailed|super detailed|insanely detailed|very detailed|" +
+    "detailed|sharp focus|intricate lineart|clean lines|perfect anatomy|smooth shading|vivid colors|extremely detailed cg|" +
+    "newest|sharp lines|clean lineart").split("|"));
+  function stripQuality(text) { return splitTags(text).filter((t) => !QUALITY.has(bareTag(t))).join(", "); }
+
+  // Сколько людей в кадре по тегам: 1girl+1boy, 2girls, hetero, «two girls»…
+  function subjectCount(text) {
+    const b = " " + String(text).toLowerCase() + " ";
+    let n = 0;
+    if (/\b\d*\s*boys?\b/.test(b)) n++;
+    if (/\b\d*\s*girls?\b/.test(b)) n++;
+    if (/\b(?:hetero|yaoi|yuri|group|threesome)\b/.test(b)) n = Math.max(n, 2);
+    if (/\b(?:multiple|several|two|three|[2-9])\s*(?:girls|boys|people|others)\b/.test(b)) n = Math.max(n, 2);
+    return n;
+  }
+  function dropContradictorySolo(prompt) {
+    if (subjectCount(prompt) < 2) return prompt;
+    return splitTags(prompt).filter((t) => !/^(solo|solo focus)$/.test(bareTag(t))).join(", ");
+  }
+
+  /* Убирает точные повторы и теги, все слова которых уже есть в триггере персонажа
+     (это его «блок личности»). Исключение — в кадре двое разных полов: общая черта
+     («orange hair») может принадлежать обоим. LoRA-токены не трогаются. */
+  function dedupe(prompt, trigger) {
+    const tWords = new Set(), tTags = new Set();
+    splitTags(trigger).forEach((t) => { const n = norm(t); tTags.add(n); words(n).filter((w) => w.length > 2).forEach((w) => tWords.add(w)); });
+    const low = String(prompt).toLowerCase().replace(/<lora:[^>]*>/g, " ");
+    const twoKinds = (/\b\d*\s*girls?\b/.test(low) && /\b\d*\s*boys?\b/.test(low)) || /\b(?:hetero|yaoi|yuri)\b/.test(low);
+    const seen = new Set(), out = [];
+    for (const tag of splitTags(prompt)) {
+      const n = norm(tag);
+      if (seen.has(n)) continue;
+      seen.add(n);
+      if (tWords.size && !twoKinds && !tTags.has(n) && !/^<lora:/i.test(tag) && /^[\x20-\x7e]*$/.test(tag)) {
+        const w = words(n).filter((x) => x.length > 2);
+        if (w.length && w.every((x) => tWords.has(x))) continue;
+      }
+      out.push(tag);
+    }
+    return out.join(", ");
+  }
+
+  const GARMENTS = ["dress", "skirt", "shirt", "blouse", "t-shirt", "hoodie", "sweater", "jacket", "coat", "jeans", "shorts", "pants", "trousers",
+    "uniform", "kimono", "yukata", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
+    "платье", "юбка", "рубашка", "блузка", "футболка", "худи", "свитер", "куртка", "пальто", "джинсы", "шорты", "брюки", "форма",
+    "кимоно", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
+  function garmentWords(text) { return GARMENTS.filter((g) => mentions(g, text)); }
+  // Сцена одевает персонажа иначе, чем записано в трекере/гардеробе → трекер устарел.
+  function wardrobeConflicts(draw, wardrobeTags, outfitText) {
+    const inDraw = garmentWords(draw);
+    if (!inDraw.length) return false;
+    const known = new Set(garmentWords(wardrobeTags + ", " + (outfitText || "")));
+    return !inDraw.some((g) => known.has(g));
+  }
+
+  /* ── Кто в кадре ───────────────────────────────────────────────────── */
+  function ownerKeys(card) {
+    const im = card.image || {};
+    const keys = [card.name].concat(String(im.aliases || "").split(",")).concat(splitTags(im.trigger).slice(0, 1));
+    (im.loras || []).forEach((l) => keys.push(l.name));
+    return keys.map((k) => String(k || "").trim()).filter((k) => k.length >= 3);
+  }
+  /* Персонаж в кадре, если сцена его называет (имя, псевдоним, первый тег триггера,
+     имя LoRA), или если сцена вообще не называет конкретных людей. Отсутствует —
+     только когда в кадре явно назван кто-то другой (тег-имя вида name_surname), а он нет.
+     Так триггер и LoRA одного персонажа не «перекрашивают» другого. */
+  function ownerPresent(card, drawText) {
+    const t = String(drawText || "").replace(/[_\-]/g, " ");
+    if (ownerKeys(card).some((k) => mentions(k.replace(/[_\-]/g, " "), t))) return true;
+    const namesSomeone = /\b[a-z]{3,}_[a-z]{3,}\b/i.test(String(drawText || ""));
+    return !namesSomeone;
+  }
+
+  /* ── compose: из [draw:] и состояния — сцена для перевода и неизменяемые теги ── */
+  function compose(o) {
+    const card = o.card || {}, im = card.image || {}, pim = (o.persona && o.persona.image) || {};
+    const st = o.scene || { chars: {}, present: [] };
+    const key = Object.keys(st.chars || {}).find((k) => k.toLowerCase() === String(card.name || "").toLowerCase());
+    const ch = key ? st.chars[key] : null;
+    const outfit = ch ? ch.wear.join(", ") : "";
+    let draw = String(o.draw || "").trim();
+    const subVars = (s) => String(s || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, (o.persona && o.persona.name) || "");
+
+    let wardrobe = resolveWardrobe(im.wardrobe, outfit);
+    const stale = wardrobeConflicts(draw, wardrobe, outfit);
+    if (stale) wardrobe = "";
+    const bits = [];
+    if (outfit && !wardrobe && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
+    if (ch && ch.pose && !draw) bits.push(ch.pose);
+    let sceneText = [draw, bits.join(", ")].filter(Boolean).join(", ");
+
+    // Карта внешности персонажа: базовые строки всегда, ключевые — когда сцена их называет.
+    const hay = sceneText.toLowerCase();
+    const look = [], tail = [];
+    for (const { key: k, tags } of parseMap(subVars(im.look))) {
+      if (isSuffix(k)) { tail.push(tags); continue; }
+      if (!isBase(k) && !bestVariant(k, hay).score) continue;
+      const fresh = splitTags(tags).filter((p) => !hay.includes(p.toLowerCase()));
+      if (fresh.length) look.push(fresh.join(", "));
+    }
+
+    // Пользователь в кадре или POV.
+    let userTags = "", userTail = "";
+    if (pim.view === "first") {
+      const second = subjectCount(sceneText) >= 2 || /\bpov (penis|hands|feet)\b/i.test(sceneText + "," + (pim.povTags || ""));
+      userTags = ["pov", second ? "" : "solo", cleanTags(pim.povTags)].filter(Boolean).join(", ");
+    } else if (pim.appearance) {
+      const u = resolveAppearance(subVars(pim.appearance), sceneText, st.present || []);
+      userTags = u.tags; userTail = u.suffix;
+      // Пользователь есть в трекере, а сцена нарисована «соло» — добавить его тег-субъект.
+      const subj = (splitTags(userTags).find((t) => /^\d+(girl|boy)s?$/i.test(t)) || "");
+      if (subj && !new RegExp("\\b" + subj + "\\b", "i").test(sceneText)) sceneText += ", " + subj;
+    }
+
+    // NSFW-модификаторы карточки — только по тексту сцены, никогда по одежде из трекера.
+    const nsfw = resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText);
+    return {
+      scene: [look.join(", "), sceneText, tail.join(", ")].filter(Boolean).join(", "),
+      keep: [wardrobe, userTags, nsfw].filter(Boolean).join(", "),
+      tail: userTail,
+      ownerPresent: ownerPresent(card, draw || sceneText),
+      stale,
+    };
+  }
+
+  /* ── finalise: итоговый промпт и негатив ───────────────────────────── */
+  const POV_NEG = ["extra legs", "extra arms", "disembodied limb", "floating limbs", "headless body", "extra torso"];
+  const POV_SOLO_NEG = ["1boy", "male focus", "multiple boys"];
+
+  function loraTokens(list) {
+    return (list || []).filter((l) => l && l.name && Number(l.weight) !== 0).map((l) => `<lora:${l.name}:${Number(l.weight) || 1}>`).join(" ");
+  }
+  function combine(scene, fixed, mode) {
+    const s = String(scene || "").trim(), f = String(fixed || "").trim();
+    if (!f || mode === "off") return s;
+    if (mode === "replace") return f;
+    if (mode === "prepend") return [f, s].filter(Boolean).join(", ");
+    return [s, f].filter(Boolean).join(", ");
+  }
+  function joinUnique(...lists) {
+    const seen = new Set(), out = [];
+    for (const l of lists) for (const t of splitTags(l)) { const n = norm(t); if (n && !seen.has(n)) { seen.add(n); out.push(t); } }
+    return out.join(", ");
+  }
+
+  /* o: { compiled, composed, card, settings (images), persona, backend }
+     backend: "a1111" — LoRA-токены в промпт; иначе LoRA не поддерживаются. */
+  function finalise(o) {
+    const s = o.settings || {}, im = (o.card && o.card.image) || {}, c = o.composed || {};
+    const pinned = s.promptMode !== "off" && String(s.fixedPrompt || "").trim();
+    let scene = String(o.compiled == null ? c.scene : o.compiled);
+    if (pinned) scene = stripQuality(scene);
+    const present = c.ownerPresent !== false;
+    const trigger = present ? String(im.trigger || "").trim() : "";
+    // Стилевые теги персонажа — только те, о которых просит сцена.
+    const style = splitTags(im.styleTrigger).filter((t) => mentions(bareTag(t), scene)).join(", ");
+    const loras = o.backend === "a1111"
+      ? loraTokens((present ? (im.loras || []) : []).concat(s.loras || []).filter((l, i, a) => a.findIndex((x) => norm(x.name) === norm(l.name)) === i))
+      : "";
+    const body = [c.keep, scene, loras, trigger, style, c.tail].filter(Boolean).join(", ");
+    let p = combine(body, s.fixedPrompt, s.promptMode || "append");
+    if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
+    const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
+
+    const pov = o.persona && o.persona.image && o.persona.image.view === "first";
+    const povNeg = pov ? POV_NEG.concat(subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : []) : [];
+    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, povNeg.join(", "));
+    return { prompt, negative };
+  }
+
+  /* ── Размер кадра ──────────────────────────────────────────────────── */
+  const SDXL = [[1024, 1024], [1152, 896], [896, 1152], [1216, 832], [832, 1216], [1344, 768], [768, 1344], [1536, 640], [640, 1536]];
+  const RATIOS = { "1:1": [1, 1], "4:3": [4, 3], "3:4": [3, 4], "3:2": [3, 2], "2:3": [2, 3], "16:9": [16, 9], "9:16": [9, 16], "21:9": [21, 9], "9:21": [9, 21] };
+  // Сохраняет пропорцию, площадь ~1 Мп, кратно 64, предпочитает обученные SDXL-размеры.
+  function sizeFor(ratio, opts) {
+    const o = opts || {};
+    if (o.mode === "fixed" && /\d+x\d+/.test(o.fixed || "")) { const m = o.fixed.match(/(\d+)x(\d+)/); return [+m[1], +m[2]]; }
+    const r = RATIOS[ratio] || RATIOS["1:1"];
+    const asp = r[0] / r[1], max = o.maxSide || 1216, area = o.area || 1024 * 1024;
+    let w = Math.sqrt(area * asp), h = w / asp;
+    const k = Math.min(1, max / Math.max(w, h)); w *= k; h *= k;
+    const fit = (v) => { let x = Math.max(64, Math.round(v / 64) * 64); while (x > max && x > 64) x -= 64; return x; };
+    const fw = fit(w), fh = fit(h);
+    const err = (a, b) => Math.abs(Math.log(a / b / asp));
+    let best = null, be = Infinity;
+    for (const b of SDXL) {
+      if (Math.max(b[0], b[1]) > max) continue;
+      if (b[0] * b[1] < area * 0.85 || b[0] * b[1] > area * 1.15) continue;
+      const e = err(b[0], b[1]);
+      if (e < be) { be = e; best = b; }
+    }
+    return best && be <= err(fw, fh) + 0.002 ? best.slice() : [fw, fh];
+  }
+  const PERCHANCE_RES = ["512x512", "512x768", "768x512", "768x768"];
+  function perchanceResolution(ratio) {
+    const r = RATIOS[ratio] || RATIOS["1:1"];
+    if (r[0] === r[1]) return "768x768";
+    return r[0] > r[1] ? "768x512" : "512x768";
+  }
+  const OPENAI_SIZES = [[1024, 1024], [1536, 1024], [1024, 1536], [1792, 1024], [1024, 1792]];
+  function openaiSize(ratio) {
+    const r = RATIOS[ratio] || RATIOS["1:1"], t = Math.log(r[0] / r[1]);
+    return OPENAI_SIZES.reduce((a, b) => (Math.abs(Math.log(b[0] / b[1]) - t) < Math.abs(Math.log(a[0] / a[1]) - t) ? b : a));
+  }
+
+  /* ── Директивы [draw: …] в ответе модели ───────────────────────────── */
+  const DRAW_RE = /\[draw:\s*([^\]]+)\]/gi;
+  function parseDraws(text) {
+    const draws = [];
+    const clean = String(text || "").replace(DRAW_RE, (_, body) => {
+      let prompt = body.trim(), ratio = "1:1";
+      const m = prompt.match(/,?\s*(\d{1,2}:\d{1,2})\s*$/);
+      if (m && RATIOS[m[1]]) { ratio = m[1]; prompt = prompt.slice(0, m.index).trim(); }
+      if (prompt) draws.push({ prompt, ratio });
+      return "";
+    });
+    return { text: clean.replace(/\n{3,}/g, "\n\n").trim(), draws };
+  }
+  function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
+
+  /* Инструкция модели, когда она может «нарисовать» момент сама. */
+  function drawInstruction(o) {
+    const opts = o || {};
+    const tags = opts.format !== "description";
+    const pinned = !!opts.qualityPinned;
+    const lines = [
+      "Ты можешь показать собеседнику картинку. Для этого напиши ОДНУ директиву отдельной строкой: [draw: <prompt>]",
+      tags
+        ? "- <prompt> — только то, что видит камера в этот момент, списком английских тегов в стиле danbooru через запятую (например: 1girl, long orange hair, white blouse, sitting at a table, library, soft lighting, close-up). Без предложений."
+        : "- <prompt> — только то, что видит камера в этот момент, одним-двумя простыми английскими предложениями.",
+      pinned ? "- Не пиши теги качества (masterpiece, best quality, absurdres, 8k) и веса вида (x:1.3) — приложение добавит их само." : "- Начни с короткого постоянного блока качества (masterpiece, best quality).",
+      "- Порядок: персонажи в кадре и их внешность → действие, поза, выражение, одежда, место → свет и ракурс.",
+      opts.pov
+        ? "- Вид от первого лица: камера — глаза собеседника, его самого в кадре нет. Начни с pov, его лицо и одежду не описывай; видимые части тела — только тегами pov hands / pov feet и т. п. Если в кадре один человек — это solo."
+        : "- Рисуй всех, кто физически в сцене. Если собеседник рядом — он тоже в кадре: теги на обоих (1girl, 1boy) и у каждого своё действие. solo — только когда в кадре один человек. Каждый названный человек: имя + пол + возраст + 1–2 приметы (например, ichigo_kurosaki, male, young man, short orange hair).",
+      "- Покажи действие, а не только позу, и сохрани градус сцены: ничего откровеннее и ничего целомудреннее, чем происходит. Обычный момент остаётся обычным.",
+      "- Промпт всегда на английском; нелатинские имена — в латинской транскрипции.",
+      "- В конце можно указать пропорции: [draw: <prompt>, 16:9]. Варианты: 16:9, 9:16, 4:3, 3:4, 1:1 (по умолчанию).",
+      "- Не больше одной директивы за ответ, и только когда картинка действительно уместна или о ней просят.",
+    ];
+    return lines.join("\n");
+  }
+
+  /* Правила перевода сцены в промпт (для compile.js). */
+  function rewriteRules(o) {
+    const opts = o || {};
+    const q = opts.qualityPinned
+      ? "Do NOT write quality tags (masterpiece, best quality, absurdres, 8k) or weighted tags — the app pins its own."
+      : "Keep quality tags the scene already has; if none, add a short consistent set (masterpiece, best quality).";
+    const base = opts.format === "description"
+      ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). Output ONLY one to three English sentences, no lists, no quotes, no markdown.\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
+      : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
+    const rules = [
+      "Keep every concrete detail: pose, action, expression, exactly the garments described, place, time, framing.",
+      "Keep the amount of clothing exactly as described. Never add nudity or sexual content the scene did not state; if the scene is sexual, name the act plainly with standard tags, never soften it.",
+      q,
+      "Translate anything not in English; romanise non-Latin names.",
+      opts.format === "description" ? "60 words or fewer." : "50 tags or fewer.",
+    ];
+    let txt = base + "\nRULES:\n" + rules.map((r, i) => `${i + 1}. ${r}`).join("\n");
+    if (opts.pov) txt += "\nFIRST-PERSON VIEW: the camera is the viewer's eyes. Start with pov; never describe the viewer; only one person in frame unless the scene shows the viewer's hands etc.";
+    if (opts.identity) txt += "\nCHARACTER (keep this look constant; tags listed as injected later must NOT be repeated):\n" + opts.identity;
+    return txt;
+  }
+
+  function needsRewrite(s) { return /[Ѐ-ԯ぀-ヿ㐀-鿿가-힯]/.test(String(s || "")); }
+
+  PRP.imgCompose = {
+    words, wordFormMatch, mentions, parseMap, resolveWardrobe, resolveAppearance,
+    splitTags, bareTag, normalizeTags, stripQuality, subjectCount, dropContradictorySolo, dedupe,
+    wardrobeConflicts, ownerPresent, compose, finalise, loraTokens, sizeFor, perchanceResolution, openaiSize,
+    parseDraws, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
+  };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompose;
+})(typeof window !== "undefined" ? window : globalThis);

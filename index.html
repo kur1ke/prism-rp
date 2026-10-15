@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prism RP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app" class="app">
+  <aside class="rail" id="rail" aria-label="Навигация"></aside>
+  <main class="stage" id="stage"></main>
+  <aside class="drawer" id="drawer" aria-label="Панель сцены"></aside>
+  <div class="scrim" id="scrim" hidden></div>
+  <div id="pop-root"></div>
+  <div id="modal-root"></div>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <input type="file" id="file-card" accept=".png,.json,image/png,application/json" multiple hidden>
+  <input type="file" id="file-backup" accept=".json,application/json" hidden>
+  <input type="file" id="file-avatar" accept="image/*" hidden>
+</div>
+
+<script src="js/core/util.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/prism/scene.js"></script>
+<script src="js/prism/experience.js"></script>
+<script src="js/prism/assembler.js"></script>
+<script src="js/cards/ccard.js"></script>
+<script src="js/providers/openai.js"></script>
+<script src="js/providers/perchance.js"></script>
+<script src="js/chat/tree.js"></script>
+<script src="js/images/compose.js"></script>
+<script src="js/images/backends.js"></script>
+<script src="js/images/compile.js"></script>
+<script src="js/ui/render.js"></script>
+<script src="js/ui/views.js"></script>
+<script src="js/ui/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<!-- Prism RP — загрузчик. Вставляется в HTML-панель генератора Perchance один раз. -->
+<!-- Само приложение подгружается с https://kur1ke.github.io/prism-rp/dist/web/ — обновления приходят без правки генератора. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<div id="prism-boot" style="font: 15px system-ui, sans-serif; padding: 32px; color: #8d86a6; background: #15131d; min-height: 100vh; box-sizing: border-box">Загружаю Prism RP…</div>
+<script>
+(function () {
+  var base = "https://kur1ke.github.io/prism-rp/dist/web/";
+  var s = document.createElement('script');
+  // Метка времени с точностью до минуты: браузер не держит старую версию дольше минуты.
+  s.src = base + 'prism-app.js?t=' + Math.floor(Date.now() / 60000);
+  s.onerror = function () {
+    var b = document.getElementById('prism-boot');
+    if (b) b.textContent = 'Не удалось загрузить Prism RP с GitHub Pages. Проверьте интернет и перезагрузите страницу.';
+  };
+  document.head.appendChild(s);
+})();
+</script>
