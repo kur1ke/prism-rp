@@ -44,11 +44,12 @@
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
     if (isObj(prism.image)) d.image = clone(prism.image);
 
-    // Указания автора: только импортированные и выключенные.
-    const sys = str(data.system_prompt), post = str(data.post_history_instructions);
-    const dis = isObj(prism.disabledDirectives) ? prism.disabledDirectives : {};
-    d.directives.system = CM.importedDirective(sys.trim() ? sys : str(dis.system));
-    d.directives.postHistory = CM.importedDirective(post.trim() ? post : str(dis.postHistory));
+    // Указания автора: только из стандартных полей, импортированные и выключенные.
+    // Пустое стандартное поле = указания нет. Расширения (в т. ч. prism_rp.disabledDirectives) указаниями не становятся.
+    d.directives.system = CM.importedDirective(str(data.system_prompt));
+    d.directives.postHistory = CM.importedDirective(str(data.post_history_instructions));
+    const dis = isObj(prism.disabledDirectives) ? clone(prism.disabledDirectives) : null;
+    if (dis) notes.push(note("info", "prism-disabled-directives", "Выключенные указания из прошлого экспорта Prism (extensions.prism_rp.disabledDirectives) сохранены в исходнике и не восстанавливаются."));
 
     // Расширения других приложений: хранятся, не выполняются.
     const otherExt = Object.keys(ext).filter((k) => k !== "prism_rp");
@@ -60,7 +61,7 @@
     if (un.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${un.join(", ")}.`));
     d.source = {
       format: detection.format, version: detection.version, sourceType: detection.sourceType, adapter: "cc-" + detection.format.slice(2),
-      importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: {},
+      importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: dis ? { disabledDirectives: dis } : {},
     };
     return { draft: d, notes };
   }

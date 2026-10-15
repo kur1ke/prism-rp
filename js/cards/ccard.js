@@ -134,7 +134,8 @@
        раздельные поля Prism едут в extensions.prism_rp.fields (для обратного импорта в Prism).
      • В system_prompt / post_history_instructions попадают только ВКЛЮЧЁННЫЕ указания.
        Выключенные (например, непроверенные импортированные) хранятся в
-       extensions.prism_rp.disabledDirectives и при импорте снова приходят выключенными.
+       extensions.prism_rp.disabledDirectives — только для сохранности: при импорте это поле
+       хранится в source.preserved и указанием не становится.
      • Для карточек, импортированных из V2/V3, неизвестные поля data исходника сохраняются.
        Исходники других форматов (V1, URV) в экспорт не переносятся. */
   function toSpec(card, ver) {
