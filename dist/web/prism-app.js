@@ -4,7 +4,7 @@
   ["https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap"].forEach(function (h) { var l = d.createElement("link"); l.rel = "stylesheet"; l.href = h; d.head.appendChild(l); });
   var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* Prism: переполнение, отбор опыта, непривязанные записи */\n.err-block { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--danger); border-radius: var(--r-m); padding: 10px 12px; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: 14px; }\n.err-block svg { width: 18px; height: 18px; color: var(--danger); flex: none; margin-top: 2px; }\n.exp-debug summary { cursor: pointer; font-weight: 600; font-size: 14px; }\n.exp-debug table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }\n.exp-debug th, .exp-debug td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }\n.exp-debug th { color: var(--muted); font-weight: 500; }\n.exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }\n.exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }\n.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }\n.legacy-block .memo { cursor: default; }\n"; d.head.appendChild(st);
   var boot = d.getElementById("prism-boot"); if (boot) boot.remove();
-  var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n</div>";
+  var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
 })();
@@ -155,6 +155,84 @@
   };
 
   PRP.store = api;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/core/settings.js */
+/* Prism RP — настройки: значения по умолчанию и чистые вычисления над ними.
+   Не читает DOM, хранилище и сеть: на вход — объект настроек, на выход — значения.
+   Сохранение настроек делает приложение (app.js) через хранилище. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const DEFAULTS = {
+    activeProvider: "perchance",
+    providers: [],
+    samplerPreset: "balanced",
+    sampler: { temperature: 0.9, top_p: 0.95, min_p: 0.05, top_k: 0, repetition_penalty: 1.05, max_tokens: 700 },
+    contextTokens: 8192,
+    autoContext: true,
+    singleSystem: false,
+    sceneProtocol: true,
+    noPostHistory: false,
+    expLimit: 8,
+    theme: "dusk",
+    proseSize: 17,
+    persona: { name: "Пользователь", description: "" },
+    images: {
+      enabled: true, backend: "perchance", url: "", key: "", model: "", vae: "", sampler: "", scheduler: "",
+      steps: 28, cfg: 5.5, seed: "", sizeMode: "auto", fixedSize: "1024x1024", maxSide: 1216,
+      hires: false, hiresScale: 1.5, hiresUpscaler: "R-ESRGAN 4x+ Anime6B", hiresDenoise: 0.4, hiresSteps: 0,
+      fixedPrompt: "", promptMode: "append", negative: "", format: "tags", translate: true,
+      modelDraws: true, autoDraw: true, extra: "",
+    },
+  };
+
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+
+  // Сохранённые настройки поверх значений по умолчанию (вложенные группы — тоже поверх).
+  // perchanceImages: доступна ли генерация картинок Perchance (для первого запуска вне Perchance).
+  function merge(saved, opts) {
+    const s = Object.assign(clone(DEFAULTS), saved || {});
+    s.sampler = Object.assign({}, DEFAULTS.sampler, s.sampler || {});
+    s.persona = Object.assign({}, DEFAULTS.persona, s.persona || {});
+    s.images = Object.assign({}, DEFAULTS.images, s.images || {});
+    if (!saved && opts && opts.perchanceImages === false) s.images.backend = "a1111";
+    return s;
+  }
+
+  function persona(s) { return (s && s.persona) || DEFAULTS.persona; }
+
+  // Список текстовых моделей: бесплатная Perchance (если доступна) + свои API.
+  function providerList(s, perchanceAvailable) {
+    const list = [];
+    if (perchanceAvailable) list.push({ id: "perchance", name: "Perchance", kind: "perchance", label: "Perchance" });
+    for (const p of s.providers) list.push(Object.assign({ kind: "openai", label: p.model ? `${p.name} · ${p.model}` : p.name }, p));
+    return list;
+  }
+  function activeProvider(s, list) {
+    return list.find((p) => p.id === s.activeProvider) || list[0] || null;
+  }
+  // Объём контекста: для Perchance — из метаданных плагина, если включено; иначе из настроек.
+  // perchanceMeta — объект или функция (вызывается, только если метаданные нужны).
+  function contextTokens(s, provider, perchanceMeta) {
+    if (s.autoContext && provider && provider.kind === "perchance") {
+      const m = typeof perchanceMeta === "function" ? perchanceMeta() : perchanceMeta;
+      if (m && m.idealMaxContextTokens) return m.idealMaxContextTokens;
+    }
+    return s.contextTokens || 8192;
+  }
+  function imagesOn(s, perchanceImagesAvailable) {
+    const ic = s.images;
+    return ic.enabled && (ic.backend !== "perchance" || perchanceImagesAvailable);
+  }
+  function qualityPinned(s) {
+    const ic = s.images;
+    return ic.promptMode !== "off" && !!String(ic.fixedPrompt || "").trim();
+  }
+
+  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/prism/scene.js */
@@ -1331,309 +1409,6 @@
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.ccard;
 })(typeof window !== "undefined" ? window : globalThis);
 
-/* js/providers/openai.js */
-/* Prism RP — текстовый провайдер, OpenAI-совместимый /chat/completions.
-   Покрывает облачные API (DeepSeek, OpenRouter и др.) и локальные серверы
-   (LM Studio, Ollama, llama.cpp, KoboldCpp). Стриминг SSE, повторы только для
-   временных сбоев и только пока ничего не получено, честная диагностика CORS. */
-(function (root) {
-  "use strict";
-  const PRP = (root.PRP = root.PRP || {});
-
-  const PRESETS = [
-    { id: "lmstudio", name: "LM Studio", baseUrl: "http://127.0.0.1:1234/v1", local: true, extendedSamplers: true },
-    { id: "ollama", name: "Ollama", baseUrl: "http://127.0.0.1:11434/v1", local: true, extendedSamplers: true },
-    { id: "llamacpp", name: "llama.cpp server", baseUrl: "http://127.0.0.1:8080/v1", local: true, extendedSamplers: true },
-    { id: "koboldcpp", name: "KoboldCpp", baseUrl: "http://127.0.0.1:5001/v1", local: true, extendedSamplers: true },
-    { id: "openrouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", local: false, extendedSamplers: true },
-    { id: "deepseek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", local: false, extendedSamplers: false },
-    { id: "custom", name: "Другой OpenAI-совместимый", baseUrl: "", local: false, extendedSamplers: false },
-  ];
-
-  function base(p) {
-    return String(p.baseUrl || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
-  }
-
-  function isLocalUrl(url) {
-    try {
-      const h = new URL(url).hostname;
-      return /^(localhost|127\.|0\.0\.0\.0|\[?::1\]?$|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || h.endsWith(".local");
-    } catch (e) { return false; }
-  }
-
-  function headers(p) {
-    const h = { "Content-Type": "application/json" };
-    if (p.apiKey) h.Authorization = "Bearer " + p.apiKey;
-    if (/openrouter\.ai/.test(p.baseUrl || "")) { h["HTTP-Referer"] = "http://localhost"; h["X-Title"] = "Prism RP"; }
-    return h;
-  }
-
-  /* ── SSE ────────────────────────────────────────────────────────────── */
-  function createSSEParser(onData) {
-    let buf = "";
-    return {
-      push(chunk) {
-        buf += chunk;
-        let nl;
-        while ((nl = buf.search(/\r?\n/)) >= 0) {
-          const line = buf.slice(0, nl);
-          buf = buf.slice(nl + (buf[nl] === "\r" ? 2 : 1));
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-          if (payload === "[DONE]") { onData(null, true); continue; }
-          try { onData(JSON.parse(payload), false); } catch (e) { /* неполная строка или мусор — пропускаем */ }
-        }
-      },
-      flush() { if (buf.trim()) this.push("\n"); },
-    };
-  }
-
-  function deltaOf(json) {
-    const ch = json && json.choices && json.choices[0];
-    if (!ch) return { text: "", reasoning: "", finish: null };
-    const d = ch.delta || ch.message || {};
-    return {
-      text: typeof d.content === "string" ? d.content : typeof ch.text === "string" ? ch.text : "",
-      reasoning: d.reasoning_content || d.reasoning || "",
-      finish: ch.finish_reason || null,
-    };
-  }
-
-  /* ── Ошибки ─────────────────────────────────────────────────────────── */
-  class ProviderError extends Error {
-    constructor(message, extra) { super(message); Object.assign(this, extra || {}); }
-  }
-
-  async function diagnoseNetwork(p) {
-    const url = base(p);
-    if (!isLocalUrl(url)) return "Сервер недоступен: проверьте адрес, интернет и ключ.";
-    try {
-      await fetch(url + "/models", { mode: "no-cors" });
-      return "Локальный сервер отвечает, но браузер блокирует запрос (CORS). Включите CORS в настройках сервера " +
-        "(LM Studio: Developer → Settings → Enable CORS; Ollama: переменная OLLAMA_ORIGINS=*).";
-    } catch (e) {
-      return "Локальный сервер по адресу " + url + " не отвечает: он не запущен или порт другой.";
-    }
-  }
-
-  async function httpError(res) {
-    let text = "";
-    try { text = await res.text(); } catch (e) {}
-    let msg = text;
-    try { const j = JSON.parse(text); msg = (j.error && (j.error.message || j.error)) || j.message || text; } catch (e) {}
-    return new ProviderError(`Сервер ответил ${res.status}: ${String(msg).slice(0, 400) || res.statusText}`, { status: res.status });
-  }
-
-  const sleep = (ms, signal) => new Promise((ok, fail) => {
-    const t = setTimeout(ok, ms);
-    if (signal) signal.addEventListener("abort", () => { clearTimeout(t); fail(new DOMException("Aborted", "AbortError")); }, { once: true });
-  });
-
-  /* ── API ────────────────────────────────────────────────────────────── */
-  async function listModels(p) {
-    let res;
-    try { res = await fetch(base(p) + "/models", { headers: headers(p) }); }
-    catch (e) { throw new ProviderError(await diagnoseNetwork(p)); }
-    if (!res.ok) throw await httpError(res);
-    const j = await res.json();
-    return (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean);
-  }
-
-  function body(p, messages, params) {
-    const b = { model: p.model || undefined, messages, stream: true };
-    const s = params || {};
-    const put = (k, v) => { if (v !== undefined && v !== null && v !== "" && !Number.isNaN(v)) b[k] = v; };
-    put("temperature", s.temperature);
-    put("top_p", s.top_p);
-    put("max_tokens", s.max_tokens);
-    put("frequency_penalty", s.frequency_penalty || undefined);
-    put("presence_penalty", s.presence_penalty || undefined);
-    if (s.stop && s.stop.length) b.stop = s.stop;
-    if (p.extendedSamplers) {
-      put("min_p", s.min_p || undefined);
-      put("top_k", s.top_k || undefined);
-      put("repetition_penalty", s.repetition_penalty && s.repetition_penalty !== 1 ? s.repetition_penalty : undefined);
-    }
-    return b;
-  }
-
-  // onDelta({text, reasoning}) вызывается на каждый кусок; возвращает полный результат.
-  async function chat(p, messages, params, opts) {
-    const o = opts || {};
-    const signal = o.signal;
-    const maxAttempts = o.maxAttempts || 3;
-    let received = false;
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return await once();
-      } catch (e) {
-        if (e.name === "AbortError" || (signal && signal.aborted)) throw e;
-        const transient = e.network || [502, 503, 504].includes(e.status);
-        if (!transient || received || attempt >= maxAttempts) {
-          if (e.network) throw new ProviderError(await diagnoseNetwork(p), { network: true });
-          throw e;
-        }
-        const capped = Math.min(8000, 800 * Math.pow(2, attempt - 1));
-        await sleep(capped * (0.5 + Math.random() * 0.5), signal);
-      }
-    }
-
-    async function once() {
-      let res;
-      try {
-        res = await fetch(base(p) + "/chat/completions", {
-          method: "POST", headers: headers(p), body: JSON.stringify(body(p, messages, params)), signal,
-        });
-      } catch (e) {
-        if (e.name === "AbortError") throw e;
-        throw new ProviderError(String(e.message || e), { network: true });
-      }
-      if (!res.ok) throw await httpError(res);
-      const out = { text: "", reasoning: "", finish: null };
-      const ctype = res.headers.get("content-type") || "";
-      if (!res.body || ctype.includes("application/json")) {
-        const d = deltaOf(await res.json());
-        Object.assign(out, d);
-        received = true;
-        if (o.onDelta) o.onDelta({ text: d.text, reasoning: d.reasoning });
-        return out;
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      const parser = createSSEParser((json, done) => {
-        if (done || !json) return;
-        const d = deltaOf(json);
-        if (d.text || d.reasoning) {
-          received = true;
-          out.text += d.text; out.reasoning += d.reasoning;
-          if (o.onDelta) o.onDelta({ text: d.text, reasoning: d.reasoning });
-        }
-        if (d.finish) out.finish = d.finish;
-      });
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        parser.push(dec.decode(value, { stream: true }));
-      }
-      parser.flush();
-      return out;
-    }
-  }
-
-  // Модели, пишущие рассуждение прямо в текст: <think>…</think>.
-  function splitThink(text) {
-    const s = String(text || "");
-    const m = s.match(/^\s*<think>([\s\S]*?)(<\/think>|$)/i);
-    if (!m) return { text: s, reasoning: "" };
-    return { reasoning: m[1].trim(), text: m[2] ? s.slice(m[0].length).replace(/^\s+/, "") : "" };
-  }
-
-  PRP.openai = { PRESETS, listModels, chat, createSSEParser, deltaOf, splitThink, isLocalUrl, ProviderError };
-  if (typeof module !== "undefined" && module.exports) module.exports = PRP.openai;
-})(typeof window !== "undefined" ? window : globalThis);
-
-/* js/providers/perchance.js */
-/* Prism RP — текстовый провайдер Perchance (ai-text-plugin).
-   Плагин принимает не список сообщений, а инструкцию и начало ответа, поэтому
-   адаптер разворачивает собранный Prism-контекст в стенограмму и просит
-   продолжить её репликой персонажа. Инструкция передаётся ФУНКЦИЕЙ, чтобы
-   Perchance не раскрывал [ ] и { } в тексте карточек и сообщений.
-   Вне Perchance провайдер просто недоступен — ядро от него не зависит. */
-(function (root) {
-  "use strict";
-  const PRP = (root.PRP = root.PRP || {});
-
-  function plugin() {
-    if (typeof root.ai === "function") return root.ai;
-    if (root.root && typeof root.root.ai === "function") return root.root.ai;
-    return null;
-  }
-
-  function available() { return !!plugin(); }
-
-  function meta() {
-    const ai = plugin();
-    if (!ai) return null;
-    try { return ai({ getMetaObject: true }); } catch (e) { return null; }
-  }
-
-  // messages из сборщика → { instruction, startWith, stop }
-  function toPrompt(messages, names) {
-    const char = names.char || "Персонаж";
-    const user = names.user || "Пользователь";
-    const sys = [], post = [], lines = [];
-    let seenChat = false;
-    for (const m of messages) {
-      if (m.role === "system") (seenChat ? post : sys).push(m.content);
-      else {
-        seenChat = true;
-        lines.push(`${m.role === "user" ? user : char}: ${m.content}`);
-      }
-    }
-    const instruction = [
-      sys.join("\n\n"),
-      "### Переписка до этого момента",
-      lines.join("\n\n") || "(пока пусто)",
-      post.join("\n\n"),
-      `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
-    ].filter(Boolean).join("\n\n");
-    return {
-      instruction,
-      startWith: `${char}:`,
-      stop: [`\n${user}:`, `\n\n${user}:`],
-    };
-  }
-
-  // Тот же контракт, что у PRP.openai.chat: onDelta({text}), signal, возвращает {text, reasoning}
-  // opts.continueFrom — продолжить уже начатый ответ: он уходит в startWith.
-  function chat(names, messages, opts) {
-    const o = opts || {};
-    const ai = plugin();
-    if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
-    const p = toPrompt(messages, names);
-    if (o.continueFrom) p.startWith = `${names.char || "Персонаж"}: ${o.continueFrom}`;
-    let started = false, text = "";
-    const handle = ai({
-      instruction: () => p.instruction,
-      startWith: () => p.startWith,
-      stopSequences: () => p.stop,
-      hideStartWith: true,
-      onChunk: (data) => {
-        if (data.isFromStartWith) return;
-        let chunk = data.textChunk || "";
-        if (!started) { chunk = chunk.replace(/^\s+/, ""); if (chunk) started = true; }
-        if (!chunk) return;
-        text += chunk;
-        if (o.onDelta) o.onDelta({ text: chunk, reasoning: "" });
-      },
-    });
-    if (o.signal) o.signal.addEventListener("abort", () => { try { handle.stop(); } catch (e) {} }, { once: true });
-    return Promise.resolve(handle).then((res) => {
-      let out = (res && res.generatedText != null ? String(res.generatedText) : text).replace(/^\s+/, "");
-      // Модель иногда продолжает стенограмму — отрезаем чужие реплики.
-      out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
-      if (o.signal && o.signal.aborted) {
-        const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = out; throw e;
-      }
-      return { text: out.trim(), reasoning: "", finish: "stop" };
-    });
-  }
-
-  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-
-  // Простой вызов без стриминга: служебные задачи (перевод промпта картинки).
-  async function simple(instruction) {
-    const ai = plugin();
-    if (!ai) throw new Error("ai-text-plugin недоступен");
-    const res = await ai({ instruction: () => instruction });
-    return res && res.generatedText != null ? String(res.generatedText) : String(res || "");
-  }
-
-  PRP.perchance = { available, meta, chat, toPrompt, simple };
-  if (typeof module !== "undefined" && module.exports) module.exports = PRP.perchance;
-})(typeof window !== "undefined" ? window : globalThis);
-
 /* js/chat/tree.js */
 /* Prism RP — дерево сообщений. Каждое сообщение знает родителя;
    у ответа модели есть свайпы (варианты), активный свайп выбирает ветку текста.
@@ -2338,6 +2113,340 @@
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompile;
 })(typeof window !== "undefined" ? window : globalThis);
 
+/* js/providers/openai.js */
+/* Prism RP — текстовый провайдер, OpenAI-совместимый /chat/completions.
+   Покрывает облачные API (DeepSeek, OpenRouter и др.) и локальные серверы
+   (LM Studio, Ollama, llama.cpp, KoboldCpp). Стриминг SSE, повторы только для
+   временных сбоев и только пока ничего не получено, честная диагностика CORS. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const PRESETS = [
+    { id: "lmstudio", name: "LM Studio", baseUrl: "http://127.0.0.1:1234/v1", local: true, extendedSamplers: true },
+    { id: "ollama", name: "Ollama", baseUrl: "http://127.0.0.1:11434/v1", local: true, extendedSamplers: true },
+    { id: "llamacpp", name: "llama.cpp server", baseUrl: "http://127.0.0.1:8080/v1", local: true, extendedSamplers: true },
+    { id: "koboldcpp", name: "KoboldCpp", baseUrl: "http://127.0.0.1:5001/v1", local: true, extendedSamplers: true },
+    { id: "openrouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", local: false, extendedSamplers: true },
+    { id: "deepseek", name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1", local: false, extendedSamplers: false },
+    { id: "custom", name: "Другой OpenAI-совместимый", baseUrl: "", local: false, extendedSamplers: false },
+  ];
+
+  function base(p) {
+    return String(p.baseUrl || "").trim().replace(/\/+$/, "").replace(/\/chat\/completions$/, "");
+  }
+
+  function isLocalUrl(url) {
+    try {
+      const h = new URL(url).hostname;
+      return /^(localhost|127\.|0\.0\.0\.0|\[?::1\]?$|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h) || h.endsWith(".local");
+    } catch (e) { return false; }
+  }
+
+  function headers(p) {
+    const h = { "Content-Type": "application/json" };
+    if (p.apiKey) h.Authorization = "Bearer " + p.apiKey;
+    if (/openrouter\.ai/.test(p.baseUrl || "")) { h["HTTP-Referer"] = "http://localhost"; h["X-Title"] = "Prism RP"; }
+    return h;
+  }
+
+  /* ── SSE ────────────────────────────────────────────────────────────── */
+  function createSSEParser(onData) {
+    let buf = "";
+    return {
+      push(chunk) {
+        buf += chunk;
+        let nl;
+        while ((nl = buf.search(/\r?\n/)) >= 0) {
+          const line = buf.slice(0, nl);
+          buf = buf.slice(nl + (buf[nl] === "\r" ? 2 : 1));
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          if (payload === "[DONE]") { onData(null, true); continue; }
+          try { onData(JSON.parse(payload), false); } catch (e) { /* неполная строка или мусор — пропускаем */ }
+        }
+      },
+      flush() { if (buf.trim()) this.push("\n"); },
+    };
+  }
+
+  function deltaOf(json) {
+    const ch = json && json.choices && json.choices[0];
+    if (!ch) return { text: "", reasoning: "", finish: null };
+    const d = ch.delta || ch.message || {};
+    return {
+      text: typeof d.content === "string" ? d.content : typeof ch.text === "string" ? ch.text : "",
+      reasoning: d.reasoning_content || d.reasoning || "",
+      finish: ch.finish_reason || null,
+    };
+  }
+
+  /* ── Ошибки ─────────────────────────────────────────────────────────── */
+  class ProviderError extends Error {
+    constructor(message, extra) { super(message); Object.assign(this, extra || {}); }
+  }
+
+  async function diagnoseNetwork(p) {
+    const url = base(p);
+    if (!isLocalUrl(url)) return "Сервер недоступен: проверьте адрес, интернет и ключ.";
+    try {
+      await fetch(url + "/models", { mode: "no-cors" });
+      return "Локальный сервер отвечает, но браузер блокирует запрос (CORS). Включите CORS в настройках сервера " +
+        "(LM Studio: Developer → Settings → Enable CORS; Ollama: переменная OLLAMA_ORIGINS=*).";
+    } catch (e) {
+      return "Локальный сервер по адресу " + url + " не отвечает: он не запущен или порт другой.";
+    }
+  }
+
+  async function httpError(res) {
+    let text = "";
+    try { text = await res.text(); } catch (e) {}
+    let msg = text;
+    try { const j = JSON.parse(text); msg = (j.error && (j.error.message || j.error)) || j.message || text; } catch (e) {}
+    return new ProviderError(`Сервер ответил ${res.status}: ${String(msg).slice(0, 400) || res.statusText}`, { status: res.status });
+  }
+
+  const sleep = (ms, signal) => new Promise((ok, fail) => {
+    const t = setTimeout(ok, ms);
+    if (signal) signal.addEventListener("abort", () => { clearTimeout(t); fail(new DOMException("Aborted", "AbortError")); }, { once: true });
+  });
+
+  /* ── API ────────────────────────────────────────────────────────────── */
+  async function listModels(p) {
+    let res;
+    try { res = await fetch(base(p) + "/models", { headers: headers(p) }); }
+    catch (e) { throw new ProviderError(await diagnoseNetwork(p)); }
+    if (!res.ok) throw await httpError(res);
+    const j = await res.json();
+    return (j.data || j.models || []).map((m) => m.id || m.name).filter(Boolean);
+  }
+
+  function body(p, messages, params) {
+    const b = { model: p.model || undefined, messages, stream: true };
+    const s = params || {};
+    const put = (k, v) => { if (v !== undefined && v !== null && v !== "" && !Number.isNaN(v)) b[k] = v; };
+    put("temperature", s.temperature);
+    put("top_p", s.top_p);
+    put("max_tokens", s.max_tokens);
+    put("frequency_penalty", s.frequency_penalty || undefined);
+    put("presence_penalty", s.presence_penalty || undefined);
+    if (s.stop && s.stop.length) b.stop = s.stop;
+    if (p.extendedSamplers) {
+      put("min_p", s.min_p || undefined);
+      put("top_k", s.top_k || undefined);
+      put("repetition_penalty", s.repetition_penalty && s.repetition_penalty !== 1 ? s.repetition_penalty : undefined);
+    }
+    return b;
+  }
+
+  // onDelta({text, reasoning}) вызывается на каждый кусок; возвращает полный результат.
+  async function chat(p, messages, params, opts) {
+    const o = opts || {};
+    const signal = o.signal;
+    const maxAttempts = o.maxAttempts || 3;
+    let received = false;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await once();
+      } catch (e) {
+        if (e.name === "AbortError" || (signal && signal.aborted)) throw e;
+        const transient = e.network || [502, 503, 504].includes(e.status);
+        if (!transient || received || attempt >= maxAttempts) {
+          if (e.network) throw new ProviderError(await diagnoseNetwork(p), { network: true });
+          throw e;
+        }
+        const capped = Math.min(8000, 800 * Math.pow(2, attempt - 1));
+        await sleep(capped * (0.5 + Math.random() * 0.5), signal);
+      }
+    }
+
+    async function once() {
+      let res;
+      try {
+        res = await fetch(base(p) + "/chat/completions", {
+          method: "POST", headers: headers(p), body: JSON.stringify(body(p, messages, params)), signal,
+        });
+      } catch (e) {
+        if (e.name === "AbortError") throw e;
+        throw new ProviderError(String(e.message || e), { network: true });
+      }
+      if (!res.ok) throw await httpError(res);
+      const out = { text: "", reasoning: "", finish: null };
+      const ctype = res.headers.get("content-type") || "";
+      if (!res.body || ctype.includes("application/json")) {
+        const d = deltaOf(await res.json());
+        Object.assign(out, d);
+        received = true;
+        if (o.onDelta) o.onDelta({ text: d.text, reasoning: d.reasoning });
+        return out;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      const parser = createSSEParser((json, done) => {
+        if (done || !json) return;
+        const d = deltaOf(json);
+        if (d.text || d.reasoning) {
+          received = true;
+          out.text += d.text; out.reasoning += d.reasoning;
+          if (o.onDelta) o.onDelta({ text: d.text, reasoning: d.reasoning });
+        }
+        if (d.finish) out.finish = d.finish;
+      });
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        parser.push(dec.decode(value, { stream: true }));
+      }
+      parser.flush();
+      return out;
+    }
+  }
+
+  // Модели, пишущие рассуждение прямо в текст: <think>…</think>.
+  function splitThink(text) {
+    const s = String(text || "");
+    const m = s.match(/^\s*<think>([\s\S]*?)(<\/think>|$)/i);
+    if (!m) return { text: s, reasoning: "" };
+    return { reasoning: m[1].trim(), text: m[2] ? s.slice(m[0].length).replace(/^\s+/, "") : "" };
+  }
+
+  PRP.openai = { PRESETS, listModels, chat, createSSEParser, deltaOf, splitThink, isLocalUrl, ProviderError };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.openai;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/providers/perchance.js */
+/* Prism RP — текстовый провайдер Perchance (ai-text-plugin).
+   Плагин принимает не список сообщений, а инструкцию и начало ответа, поэтому
+   адаптер разворачивает собранный Prism-контекст в стенограмму и просит
+   продолжить её репликой персонажа. Инструкция передаётся ФУНКЦИЕЙ, чтобы
+   Perchance не раскрывал [ ] и { } в тексте карточек и сообщений.
+   Вне Perchance провайдер просто недоступен — ядро от него не зависит. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  function plugin() {
+    if (typeof root.ai === "function") return root.ai;
+    if (root.root && typeof root.root.ai === "function") return root.root.ai;
+    return null;
+  }
+
+  function available() { return !!plugin(); }
+
+  function meta() {
+    const ai = plugin();
+    if (!ai) return null;
+    try { return ai({ getMetaObject: true }); } catch (e) { return null; }
+  }
+
+  // messages из сборщика → { instruction, startWith, stop }
+  function toPrompt(messages, names) {
+    const char = names.char || "Персонаж";
+    const user = names.user || "Пользователь";
+    const sys = [], post = [], lines = [];
+    let seenChat = false;
+    for (const m of messages) {
+      if (m.role === "system") (seenChat ? post : sys).push(m.content);
+      else {
+        seenChat = true;
+        lines.push(`${m.role === "user" ? user : char}: ${m.content}`);
+      }
+    }
+    const instruction = [
+      sys.join("\n\n"),
+      "### Переписка до этого момента",
+      lines.join("\n\n") || "(пока пусто)",
+      post.join("\n\n"),
+      `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
+    ].filter(Boolean).join("\n\n");
+    return {
+      instruction,
+      startWith: `${char}:`,
+      stop: [`\n${user}:`, `\n\n${user}:`],
+    };
+  }
+
+  // Тот же контракт, что у PRP.openai.chat: onDelta({text}), signal, возвращает {text, reasoning}
+  // opts.continueFrom — продолжить уже начатый ответ: он уходит в startWith.
+  function chat(names, messages, opts) {
+    const o = opts || {};
+    const ai = plugin();
+    if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
+    const p = toPrompt(messages, names);
+    if (o.continueFrom) p.startWith = `${names.char || "Персонаж"}: ${o.continueFrom}`;
+    let started = false, text = "";
+    const handle = ai({
+      instruction: () => p.instruction,
+      startWith: () => p.startWith,
+      stopSequences: () => p.stop,
+      hideStartWith: true,
+      onChunk: (data) => {
+        if (data.isFromStartWith) return;
+        let chunk = data.textChunk || "";
+        if (!started) { chunk = chunk.replace(/^\s+/, ""); if (chunk) started = true; }
+        if (!chunk) return;
+        text += chunk;
+        if (o.onDelta) o.onDelta({ text: chunk, reasoning: "" });
+      },
+    });
+    if (o.signal) o.signal.addEventListener("abort", () => { try { handle.stop(); } catch (e) {} }, { once: true });
+    return Promise.resolve(handle).then((res) => {
+      let out = (res && res.generatedText != null ? String(res.generatedText) : text).replace(/^\s+/, "");
+      // Модель иногда продолжает стенограмму — отрезаем чужие реплики.
+      out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
+      if (o.signal && o.signal.aborted) {
+        const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = out; throw e;
+      }
+      return { text: out.trim(), reasoning: "", finish: "stop" };
+    });
+  }
+
+  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+  // Простой вызов без стриминга: служебные задачи (перевод промпта картинки).
+  async function simple(instruction) {
+    const ai = plugin();
+    if (!ai) throw new Error("ai-text-plugin недоступен");
+    const res = await ai({ instruction: () => instruction });
+    return res && res.generatedText != null ? String(res.generatedText) : String(res || "");
+  }
+
+  PRP.perchance = { available, meta, chat, toPrompt, simple };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.perchance;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/providers/router.js */
+/* Prism RP — выбор транспорта текстовой модели.
+   Единая точка вызова для генерации, картинок и ассистента: по виду провайдера
+   отправляет готовые сообщения в Perchance (ai-text-plugin) или в OpenAI-совместимый API.
+   Ничего не знает о сцене, опыте, карточках и дереве чата — только о транспорте. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const PC = PRP.perchance, OA = PRP.openai;
+
+  /* prov — элемент settings.providerList; messages — [{role, content}].
+     opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom }
+     → { text, reasoning } (контракт PRP.openai.chat / PRP.perchance.chat) */
+  function chat(prov, messages, opts) {
+    const o = opts || {};
+    return prov.kind === "perchance"
+      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null })
+      : OA.chat(prov, messages, o.sampler, { signal: o.signal, onDelta: o.onDelta });
+  }
+
+  // Короткий служебный вызов без стриминга (перевод сцены в промпт картинки).
+  async function simple(prov, instruction) {
+    if (!prov) throw new Error("нет текстовой модели");
+    if (prov.kind === "perchance") return PC.simple(instruction);
+    const r = await OA.chat(prov, [{ role: "user", content: instruction }], { temperature: 0.3, max_tokens: 400 }, {});
+    return OA.splitThink(r.text).text;
+  }
+
+  PRP.llm = { chat, simple };
+})(typeof window !== "undefined" ? window : globalThis);
+
 /* js/ui/render.js */
 /* Prism RP — вспомогательные функции отображения (без побочных эффектов). */
 (function (root) {
@@ -2508,13 +2617,81 @@
   PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
 })(typeof window !== "undefined" ? window : globalThis);
 
-/* js/ui/views.js */
-/* Prism RP — представления. Чистые функции: состояние (m) → HTML.
-   Действия пользователя размечены data-act и обрабатываются в app.js. */
+/* js/ui/files.js */
+/* Prism RP — файловый ввод-вывод браузера: скачать, прочитать, нарисовать PNG портрета, буфер обмена.
+   Платформенный адаптер для сервисов и контроллеров; правил приложения не содержит. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const R = PRP.render;
+
+  function download(name, data, type) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: type || "application/octet-stream" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name.replace(/[\\/:*?"<>|]+/g, "_");
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  function readFile(file, as) {
+    return new Promise((ok, fail) => {
+      const r = new FileReader();
+      r.onload = () => ok(r.result);
+      r.onerror = () => fail(r.error);
+      if (as === "text") r.readAsText(file);
+      else if (as === "dataurl") r.readAsDataURL(file);
+      else r.readAsArrayBuffer(file);
+    });
+  }
+
+  // PNG-байты портрета для экспорта карточки: исходный PNG, перерисованная картинка или заглушка с инициалом.
+  function avatarPngBytes(cd) {
+    return new Promise((ok, fail) => {
+      const draw = (img) => {
+        const cv = document.createElement("canvas");
+        cv.width = img ? img.naturalWidth : 600; cv.height = img ? img.naturalHeight : 800;
+        const g = cv.getContext("2d");
+        if (img) g.drawImage(img, 0, 0);
+        else {
+          const h = R.hue(cd.name);
+          const gr = g.createLinearGradient(0, 0, 600, 800);
+          gr.addColorStop(0, `hsl(${h} 55% 52%)`); gr.addColorStop(1, `hsl(${(h + 80) % 360} 45% 22%)`);
+          g.fillStyle = gr; g.fillRect(0, 0, 600, 800);
+          g.fillStyle = "rgba(255,255,255,.88)"; g.font = "bold 300px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+          g.fillText((cd.name || "?").charAt(0).toUpperCase(), 300, 420);
+        }
+        cv.toBlob(async (b) => ok(new Uint8Array(await b.arrayBuffer())), "image/png");
+      };
+      if (cd.avatar && cd.avatar.startsWith("data:image/png")) fetch(cd.avatar).then((r) => r.arrayBuffer()).then((b) => ok(new Uint8Array(b)), fail);
+      else if (cd.avatar) { const img = new Image(); img.onload = () => draw(img); img.onerror = () => draw(null); img.src = cd.avatar; }
+      else draw(null);
+    });
+  }
+
+  // Копирование в буфер; при запрете Clipboard API — через временное поле.
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } finally { ta.remove(); }
+    }
+  }
+
+  PRP.files = { download, readFile, avatarPngBytes, copyText };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/views/kit.js */
+/* Prism RP — общие части представлений: пресеты, темы, повторяющиеся куски разметки.
+   Представления — чистые функции «модель (m) → HTML»; действия размечены data-act
+   и обрабатываются контроллерами (js/ui/controllers). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render;
   const { esc, icon } = R;
 
   const SAMPLER_PRESETS = [
@@ -2528,6 +2705,26 @@
     { id: "paper", name: "Бумага", c: ["#efe8dc", "#f8f3ea", "#7a4d9e", "#c98a2a"] },
   ];
   const WEATHER = ["ясно", "облачно", "пасмурно", "дождь", "ливень", "снег", "туман", "гроза", "жара", "мороз", "ветрено"];
+
+  function loraRows(act, list) {
+    return `<div class="lora-rows">${list.map((l, i) => `<div class="row lora-row"><input class="input" data-${act}-name="${i}" list="dl-loras" value="${esc(l.name)}" placeholder="имя LoRA" style="flex:3">
+      <input class="input" type="number" step="0.05" data-${act}-w="${i}" value="${esc(String(l.weight))}" style="flex:1;max-width:90px">
+      <button class="icon-btn" data-act="${act}-del" data-i="${i}" title="Убрать">${icon("x")}</button></div>`).join("")}
+      <button class="btn btn-sm" data-act="${act}-add">${icon("plus")}LoRA</button></div>`;
+  }
+
+  PRP.viewKit = { SAMPLER_PRESETS, THEMES, WEATHER, loraRows };
+  Object.assign((PRP.views = PRP.views || {}), { SAMPLER_PRESETS, THEMES });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/views/home.js */
+/* Prism RP — левая навигация и главный экран (галерея персонажей). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const { esc, icon } = R;
+  const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
 
   /* ── Навигация слева ──────────────────────────────────────────────── */
   function rail(m) {
@@ -2607,6 +2804,18 @@
       ${q && !cards.length ? `<p class="empty-note">Никого не нашлось по запросу «${esc(m.homeQuery)}».</p>` : ""}
     </div></div>`;
   }
+
+  Object.assign((PRP.views = PRP.views || {}), { rail, home });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/views/chat.js */
+/* Prism RP — экран чата: шапка, лента (сцена и переписка), картинки в сообщениях, поле ввода, поповеры чата. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const { esc, icon } = R;
+  const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
 
   /* ── Чат ──────────────────────────────────────────────────────────── */
   function chat(m) {
@@ -2829,6 +3038,18 @@
       <button class="pop-item" data-act="delete-chat" style="color:var(--danger)">${icon("trash")}Удалить чат</button>`;
   }
 
+  Object.assign((PRP.views = PRP.views || {}), { chat, chatHead, feed, composer, modelPop, chatMenu, imageInfo });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/views/drawer.js */
+/* Prism RP — выдвижная панель: сцена, опыт, Prism (что ушло в модель). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const { esc, icon } = R;
+  const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
+
   /* ── Выдвижная панель ─────────────────────────────────────────────── */
   function drawer(m) {
     const tabs = [["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["prism", "Prism", "prism"]];
@@ -2965,6 +3186,18 @@
         <div class="code">${p.messages.map((x) => `<span class="role">${esc(x.role)}</span>\n${esc(x.content)}`).join("\n\n")}</div></div>`;
   }
 
+  Object.assign((PRP.views = PRP.views || {}), { drawer });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/views/settings.js */
+/* Prism RP — окно настроек: модели, генерация, изображения, персона, вид, данные. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const { esc, icon } = R;
+  const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
+
   /* ── Настройки ────────────────────────────────────────────────────── */
   function settingsModal(m, section) {
     const nav = [["models", "Модели", "cpu"], ["gen", "Генерация", "sliders"], ["images", "Изображения", "image"], ["persona", "Вы", "user"], ["look", "Внешний вид", "palette"], ["data", "Данные", "data"]];
@@ -3067,13 +3300,6 @@
       ${chk("autoDraw", "Рисовать сразу", "Иначе под сообщением появится кнопка «Нарисовать».")}`;
   }
 
-  function loraRows(act, list) {
-    return `<div class="lora-rows">${list.map((l, i) => `<div class="row lora-row"><input class="input" data-${act}-name="${i}" list="dl-loras" value="${esc(l.name)}" placeholder="имя LoRA" style="flex:3">
-      <input class="input" type="number" step="0.05" data-${act}-w="${i}" value="${esc(String(l.weight))}" style="flex:1;max-width:90px">
-      <button class="icon-btn" data-act="${act}-del" data-i="${i}" title="Убрать">${icon("x")}</button></div>`).join("")}
-      <button class="btn btn-sm" data-act="${act}-add">${icon("plus")}LoRA</button></div>`;
-  }
-
   function providerForm(p) {
     return `<div class="panel" style="margin-top:16px"><div class="block-title">${esc(p.name)}</div>
       <div class="field"><label>Название</label><input id="prov-name" value="${esc(p.name)}"></div>
@@ -3088,75 +3314,17 @@
   }
 
 
-  /* ── Ассистент: разговор с моделью вне игры ───────────────────────── */
-  function assist(m) {
-    const a = m.assist;
-    const AS = PRP.assist;
-    const cd = m.assistCard, ch = m.assistChat;
-    const ctxLabel = cd ? `${esc(cd.name)}${ch ? " + чат" : ""}` : "Без персонажа";
-    const head = `<header class="chat-head assist-head">
-      <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
-      <div class="assist-mark">${icon("assist")}</div>
-      <div class="head-who"><div class="head-name">Ассистент</div><span class="head-scene">${esc(a.messages.length ? a.title : "Разговор с моделью вне игры")}</span></div>
-      <div class="head-tools">
-        <button class="pill" data-act="assist-ctx" title="Что ассистент видит: карточку персонажа и выдержку из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
-        <button class="icon-btn" data-act="assist-list" title="Все разговоры">${icon("clock")}</button>
-        <button class="icon-btn" data-act="assist-new" title="Новый разговор">${icon("plus")}</button>
-        ${a.messages.length ? `<button class="icon-btn" data-act="assist-del" title="Удалить разговор">${icon("trash")}</button>` : ""}
-      </div></header>`;
-    const empty = !a.messages.length ? `<div class="assist-empty">
-        <div class="assist-hero">${icon("assist")}</div>
-        <h2>О чём поговорим?</h2>
-        <p>Здесь модель — ваш помощник, а не персонаж. Спросите совета по карточке, сцене или настройкам. ${cd ? `Ассистент видит карточку ${esc(cd.name)}${ch ? " и выдержку из выбранного чата" : ""}.` : "Подключите персонажа кнопкой вверху — тогда ассистент увидит его карточку и, по желанию, чат."}</p>
-        <div class="starters">${AS.starters(!!cd, !!ch).map((x) => `<button class="starter" data-act="assist-starter" data-q="${esc(x.q)}">${esc(x.t)}</button>`).join("")}</div>
-      </div>` : "";
-    const feed = a.messages.map((msg, i) => {
-      const live = m.gen && m.gen.assist && m.gen.msgId === msg.id;
-      const last = i === a.messages.length - 1;
-      const text = live ? m.gen.raw : msg.text;
-      const th = OA.splitThink(text || "");
-      const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
-      const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
-        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
-      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${msg.id}">
-        ${body}
-        ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
-        ${live ? "" : `<div class="tools">
-          <button class="tool" data-act="assist-copy" data-id="${msg.id}">${icon("copy")}Скопировать</button>
-          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${msg.id}">${icon("regen")}Другой ответ</button>` : ""}
-          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${msg.id}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
-          <button class="tool" data-act="assist-msg-del" data-id="${msg.id}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
-      </article>`;
-    }).join("");
-    const p = m.provider;
-    const composer = `<div class="composer-wrap"><div class="composer">
-      <textarea id="input" rows="1" placeholder="Спросите ассистента…" aria-label="Сообщение ассистенту"></textarea>
-      <div class="composer-bar">
-        <button class="pill" data-act="model-pop" title="Модель">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}</span></button>
-        <span class="spacer"></span>
-        ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>` : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
-      </div></div></div>`;
-    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div>${composer}</section>`;
-  }
+  Object.assign((PRP.views = PRP.views || {}), { settingsModal });
+})(typeof window !== "undefined" ? window : globalThis);
 
-  function assistCtxPop(m) {
-    const cd = m.assistCard;
-    const chats = cd ? m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 12) : [];
-    return `<div class="pop-title">Персонаж для разговора</div>
-      <button class="pop-item ${!cd ? "on" : ""}" data-act="assist-pick-card" data-id="">${icon("x")}<span>Без персонажа</span></button>
-      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${c.id}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
-      ${cd ? `<div class="pop-sep"></div><div class="pop-title">Показать ассистенту чат</div>
-        <button class="pop-item ${!m.assistChat ? "on" : ""}" data-act="assist-pick-chat" data-id="">${icon("x")}<span>Не показывать</span></button>
-        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${c.id}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
-  }
-
-  function assistListPop(m) {
-    const list = (m.assistList || []).slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    return `<div class="pop-title">Разговоры с ассистентом</div>
-      <button class="pop-item" data-act="assist-new">${icon("plus")}<span>Новый разговор</span></button>
-      ${list.length ? `<div class="pop-sep"></div>` : ""}
-      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${a.id}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
-  }
+/* js/ui/views/card-editor.js */
+/* Prism RP — редактор персонажа (окно с разделами по Character Card V2/V3). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const { esc, icon } = R;
+  const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
 
   /* ── Редактор персонажа ───────────────────────────────────────────── */
   // Поля и их порядок — как в Character Card V2/V3 и SillyTavern. Рядом с подписью
@@ -3231,44 +3399,1676 @@
       <nav class="modal-nav">${nav.map(([id, n, ic]) => `<button class="rail-item ${section === id ? "active" : ""}" data-act="card-section" data-section="${id}">${icon(ic)}${n}</button>`).join("")}</nav>
       <div class="modal-body">${body}</div></div></div>`;
   }
+  Object.assign((PRP.views = PRP.views || {}), { cardModal });
+})(typeof window !== "undefined" ? window : globalThis);
 
-  PRP.views = { rail, home, chat, chatHead, feed, composer, drawer, modelPop, chatMenu, assist, assistCtxPop, assistListPop, settingsModal, cardModal, imageInfo, SAMPLER_PRESETS, THEMES };
+/* js/ui/views/assist.js */
+/* Prism RP — экран ассистента (разговор с моделью вне игры) и его поповеры. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const { esc, icon } = R;
+  const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
+
+  /* ── Ассистент: разговор с моделью вне игры ───────────────────────── */
+  function assist(m) {
+    const a = m.assist;
+    const AS = PRP.assist;
+    const cd = m.assistCard, ch = m.assistChat;
+    const ctxLabel = cd ? `${esc(cd.name)}${ch ? " + чат" : ""}` : "Без персонажа";
+    const head = `<header class="chat-head assist-head">
+      <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
+      <div class="assist-mark">${icon("assist")}</div>
+      <div class="head-who"><div class="head-name">Ассистент</div><span class="head-scene">${esc(a.messages.length ? a.title : "Разговор с моделью вне игры")}</span></div>
+      <div class="head-tools">
+        <button class="pill" data-act="assist-ctx" title="Что ассистент видит: карточку персонажа и выдержку из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
+        <button class="icon-btn" data-act="assist-list" title="Все разговоры">${icon("clock")}</button>
+        <button class="icon-btn" data-act="assist-new" title="Новый разговор">${icon("plus")}</button>
+        ${a.messages.length ? `<button class="icon-btn" data-act="assist-del" title="Удалить разговор">${icon("trash")}</button>` : ""}
+      </div></header>`;
+    const empty = !a.messages.length ? `<div class="assist-empty">
+        <div class="assist-hero">${icon("assist")}</div>
+        <h2>О чём поговорим?</h2>
+        <p>Здесь модель — ваш помощник, а не персонаж. Спросите совета по карточке, сцене или настройкам. ${cd ? `Ассистент видит карточку ${esc(cd.name)}${ch ? " и выдержку из выбранного чата" : ""}.` : "Подключите персонажа кнопкой вверху — тогда ассистент увидит его карточку и, по желанию, чат."}</p>
+        <div class="starters">${AS.starters(!!cd, !!ch).map((x) => `<button class="starter" data-act="assist-starter" data-q="${esc(x.q)}">${esc(x.t)}</button>`).join("")}</div>
+      </div>` : "";
+    const feed = a.messages.map((msg, i) => {
+      const live = m.gen && m.gen.assist && m.gen.msgId === msg.id;
+      const last = i === a.messages.length - 1;
+      const text = live ? m.gen.raw : msg.text;
+      const th = OA.splitThink(text || "");
+      const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
+      const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
+        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
+      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${msg.id}">
+        ${body}
+        ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
+        ${live ? "" : `<div class="tools">
+          <button class="tool" data-act="assist-copy" data-id="${msg.id}">${icon("copy")}Скопировать</button>
+          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${msg.id}">${icon("regen")}Другой ответ</button>` : ""}
+          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${msg.id}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
+          <button class="tool" data-act="assist-msg-del" data-id="${msg.id}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
+      </article>`;
+    }).join("");
+    const p = m.provider;
+    const composer = `<div class="composer-wrap"><div class="composer">
+      <textarea id="input" rows="1" placeholder="Спросите ассистента…" aria-label="Сообщение ассистенту"></textarea>
+      <div class="composer-bar">
+        <button class="pill" data-act="model-pop" title="Модель">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}</span></button>
+        <span class="spacer"></span>
+        ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>` : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
+      </div></div></div>`;
+    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div>${composer}</section>`;
+  }
+
+  function assistCtxPop(m) {
+    const cd = m.assistCard;
+    const chats = cd ? m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 12) : [];
+    return `<div class="pop-title">Персонаж для разговора</div>
+      <button class="pop-item ${!cd ? "on" : ""}" data-act="assist-pick-card" data-id="">${icon("x")}<span>Без персонажа</span></button>
+      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${c.id}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
+      ${cd ? `<div class="pop-sep"></div><div class="pop-title">Показать ассистенту чат</div>
+        <button class="pop-item ${!m.assistChat ? "on" : ""}" data-act="assist-pick-chat" data-id="">${icon("x")}<span>Не показывать</span></button>
+        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${c.id}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
+  }
+
+  function assistListPop(m) {
+    const list = (m.assistList || []).slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    return `<div class="pop-title">Разговоры с ассистентом</div>
+      <button class="pop-item" data-act="assist-new">${icon("plus")}<span>Новый разговор</span></button>
+      ${list.length ? `<div class="pop-sep"></div>` : ""}
+      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${a.id}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
+  }
+
+  Object.assign((PRP.views = PRP.views || {}), { assist, assistCtxPop, assistListPop });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/chat/service.js */
+/* Prism RP — сервис чата (прикладной уровень).
+   Жизненный цикл чата и его сообщений: загрузка, создание с приветствием, правка,
+   варианты, удаление ветки и чата, ручные изменения сцены, сохранение.
+   Алгоритмы дерева — в chat/tree.js, свёртка сцены — в prism/scene.js; здесь только
+   их применение к текущему чату и сохранение через хранилище.
+   Зависимости передаются в create(ctx): состояние сессии S, хранилище DB, геттеры. DOM не трогает. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util, TR = PRP.tree, SC = PRP.scene;
+
+  function create(ctx) {
+    const { S, DB } = ctx;
+
+    /* ── Путь и сцена активной ветки ───────────────────────────────────── */
+    function path() {
+      const c = ctx.chat();
+      return c ? TR.path(TR.index(S.messages), c.leafId) : [];
+    }
+    function sceneState(p) {
+      const c = ctx.chat();
+      return SC.fold(c ? c.sceneInit : "", (p || path()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
+    }
+    // Путь в виде, который понимают модули Prism: [{id, swipeIdx}].
+    function pathCtx(p) { return (p || path()).map((m) => ({ id: m.id, swipeIdx: m.swipeIdx || 0 })); }
+
+    /* ── Сохранение ────────────────────────────────────────────────────── */
+    async function putMsg(m) {
+      await DB.put("messages", m);
+      const i = S.messages.findIndex((x) => x.id === m.id);
+      if (i >= 0) S.messages[i] = m; else S.messages.push(m);
+    }
+    async function putChat(c) {
+      await DB.put("chats", c);
+      const i = S.chats.findIndex((x) => x.id === c.id);
+      if (i >= 0) S.chats[i] = c; else S.chats.push(c);
+    }
+    // Обновить превью чата по последнему сообщению активной ветки и сохранить.
+    async function touch() {
+      const c = ctx.chat();
+      if (!c) return;
+      const last = path().slice(-1)[0];
+      const t = last ? TR.activeSwipe(last).text : "";
+      c.preview = (last && last.role === "user" ? "Вы: " : "") + t.replace(/\s+/g, " ").slice(0, 90);
+      await putChat(c);
+    }
+    function newMsg(role, parentId, text) {
+      const now = Date.now();
+      return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null, role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
+    }
+
+    /* ── Жизненный цикл ────────────────────────────────────────────────── */
+    function loadMessages(chatId) { return DB.byIndex("messages", "chatId", chatId); }
+
+    // Новый чат; для режима «Сцена» — с приветствиями карточки как вариантами первого ответа.
+    // Делает чат текущим (S.chatId, S.cardId, S.messages) и возвращает его id.
+    async function createChat(mode, cardId) {
+      const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
+      if (!cd) return null;
+      const c = { id: U.uid("chat"), cardId: cd.id, mode, title: mode === "messenger" ? "Переписка" : "Сцена", sceneInit: "", leafId: null, createdAt: Date.now() };
+      S.chatId = c.id; S.cardId = cd.id; S.messages = [];
+      if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
+        const vars = { char: cd.name, user: ctx.persona().name };
+        const m = newMsg("assistant", null, "");
+        m.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
+          const parsed = SC.parse(U.macros(g, vars));
+          return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };
+        });
+        await putMsg(m);
+        c.leafId = m.id;
+        c.preview = m.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
+      }
+      await putChat(c);
+      return c.id;
+    }
+    function latestForCard(cardId) {
+      return S.chats.filter((c) => c.cardId === cardId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
+    }
+    // Удалить чат целиком: сообщения, картинки и опыт этого мира. Состояние сбрасывается на «нет чата».
+    async function deleteChat(c) {
+      const ms = await DB.byIndex("messages", "chatId", c.id);
+      await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
+      await DB.delMany("messages", ms.map((m) => m.id));
+      await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
+      await DB.del("chats", c.id);
+      S.chats = S.chats.filter((x) => x.id !== c.id);
+      S.chatId = null; S.messages = [];
+    }
+
+    /* ── Правки ветки ──────────────────────────────────────────────────── */
+    // Удалить сообщение и всех его потомков; активной становится последняя оставшаяся ветка.
+    async function deleteFrom(msgId) {
+      const m = S.messages.find((x) => x.id === msgId);
+      if (!m) return false;
+      const ids = [msgId].concat(TR.descendants(S.messages, msgId));
+      const imgIds = [];
+      S.messages.filter((x) => ids.includes(x.id)).forEach((x) => x.swipes.forEach((sw) => (sw.images || []).forEach((im) => imgIds.push(im.id))));
+      await DB.delMany("images", imgIds);
+      await DB.delMany("messages", ids);
+      S.messages = S.messages.filter((x) => !ids.includes(x.id));
+      const c = ctx.chat();
+      const lastRoot = TR.children(S.messages, null).slice(-1)[0];
+      c.leafId = m.parentId ? TR.latestLeaf(S.messages, m.parentId) : lastRoot ? TR.latestLeaf(S.messages, lastRoot.id) : null;
+      await touch();
+      return true;
+    }
+    async function saveEdit(msgId, text) {
+      const m = S.messages.find((x) => x.id === msgId);
+      if (!m) return false;
+      const sw = TR.activeSwipe(m);
+      const parsed = SC.parse(text);
+      sw.text = m.role === "assistant" ? parsed.text : text.trim();
+      if (m.role === "assistant") sw.sceneOps = parsed.ops;
+      await putMsg(m);
+      await touch();
+      return true;
+    }
+    /* Листать варианты ответа. → "regen", если надо сгенерировать новый вариант
+       (листание вправо за последний вариант последнего ответа); true — переключено; false — ничего. */
+    async function swipe(msgId, dir) {
+      const m = S.messages.find((x) => x.id === msgId);
+      if (!m) return false;
+      const next = (m.swipeIdx || 0) + dir;
+      if (next < 0) return false;
+      const isLast = path().slice(-1)[0] === m;
+      if (next >= m.swipes.length) return m.role === "assistant" && isLast ? "regen" : false;
+      m.swipeIdx = next;
+      await putMsg(m);
+      await touch();
+      return true;
+    }
+    // Добавить пользовательский ответ в ветку: становится новым концом.
+    async function addUserMessage(text) {
+      const c = ctx.chat();
+      const m = newMsg("user", c.leafId, text);
+      await putMsg(m);
+      c.leafId = m.id;
+      await touch();
+      return m;
+    }
+
+    /* ── Сцена из форм ─────────────────────────────────────────────────── */
+    function op(subject, key, value) {
+      return { subject: subject || undefined, key, value, raw: `${subject ? subject + "." : ""}${key}=${value}`, manual: true };
+    }
+    // Ручные изменения сцены пишутся в последнее сообщение ветки (или в начальную сцену пустого чата).
+    async function applySceneOps(ops) {
+      if (!ops.length) return false;
+      const c = ctx.chat();
+      const leaf = path().slice(-1)[0];
+      if (leaf) {
+        const sw = TR.activeSwipe(leaf);
+        sw.sceneOps = (sw.sceneOps || []).concat(ops);
+        await putMsg(leaf);
+      } else {
+        c.sceneInit = [c.sceneInit, ops.map((o) => o.raw).join("; ")].filter(Boolean).join("; ");
+        await putChat(c);
+      }
+      return true;
+    }
+
+    /* ── Прочее ────────────────────────────────────────────────────────── */
+    function exportText() {
+      const c = ctx.chat(), cd = ctx.card();
+      const lines = path().map((m) => `${m.role === "user" ? ctx.persona().name : cd.name}: ${TR.activeSwipe(m).text}`);
+      return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
+    }
+
+    return { path, sceneState, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText };
+  }
+
+  PRP.chatService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/prism/experience-service.js */
+/* Prism RP — сервис опыта (прикладной уровень).
+   Загрузка опыта персонажа, однократная миграция старых записей, черновики,
+   сохранение, удаление и ручная привязка к чату.
+   Правила видимости, отбора и миграции — чистые функции prism/experience.js;
+   здесь только их применение к текущему чату и работа с хранилищем. DOM не трогает. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util, EX = PRP.experience, SC = PRP.scene;
+
+  function create(ctx) {
+    const { S, DB } = ctx;
+    const chat = () => ctx.svc.chat;
+
+    // Все записи персонажа (по владельцу); видимость в чате и ветке решает EX.visibility.
+    function loadForCard(cardId) { return DB.byIndex("experience", "owner", cardId); }
+
+    // Миграция: привязка к чату без догадок (EX.migrate). Идемпотентна; пишет только изменённые записи.
+    async function migrate() {
+      const all = await DB.all("experience");
+      const need = all.filter((r) => !r.chatId && !(r.source && r.source.chatId) && r.source && (r.source.messageIds || []).length);
+      const msgChat = new Map();
+      for (const r of need) for (const id of r.source.messageIds) {
+        if (msgChat.has(id)) continue;
+        const msg = await DB.get("messages", id);
+        msgChat.set(id, msg ? msg.chatId : null);
+      }
+      const res = EX.migrate(all, { messageChat: (id) => (msgChat.has(id) ? msgChat.get(id) : null) });
+      const changed = res.records.filter((r) => res.changed.includes(r.id));
+      if (changed.length) await DB.putMany("experience", changed);
+      S.legacyExperience = res.legacy;
+      return res;
+    }
+
+    // Что показывать во вкладке «Опыт»: видимое в этой ветке, скрытое в других ветках, непривязанное.
+    function view(p) {
+      const vctx = { chatId: S.chatId, path: chat().pathCtx(p) };
+      const inChat = S.experience.filter((r) => r.chatId === S.chatId && !r.legacyUnscoped);
+      const visible = inChat.filter((r) => EX.visibility(r, vctx).visible);
+      return { visible, hiddenInChat: inChat.length - visible.length, legacy: S.experience.filter((r) => EX.scopeOf(r) === "legacy") };
+    }
+    function legacyCount() { return S.experience.filter((r) => EX.scopeOf(r) === "legacy").length; }
+
+    // Пустой черновик ручной записи (на весь чат).
+    function blankDraft() { return Object.assign(EX.blank(S.cardId, S.chatId), { about: ["user"] }); }
+    // Черновик из сообщения: привязка к сообщению и его варианту, время сцены на тот момент.
+    function draftFromMessage(msgId) {
+      const p = chat().path();
+      const idx = p.findIndex((m) => m.id === msgId);
+      const st = chat().sceneState(p.slice(0, idx + 1));
+      const d = EX.blank(S.cardId, S.chatId);
+      d.about = ["user"];
+      const msg = p[idx];
+      d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 }, sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
+      return d;
+    }
+
+    // Сохранить черновик. → строка ошибки для пользователя или null.
+    async function save(d) {
+      d.event = d.event.trim();
+      if (!d.event) return "Опишите, что произошло.";
+      if (!d.id) d.id = U.uid("x");
+      d.owner = S.cardId;
+      // Новая запись всегда принадлежит текущему чату; непривязанные старые не трогаем.
+      if (!d.chatId && !d.legacyUnscoped) { d.chatId = S.chatId; d.source = Object.assign({ messageIds: [] }, d.source, { chatId: S.chatId }); }
+      await DB.put("experience", d);
+      const i = S.experience.findIndex((x) => x.id === d.id);
+      if (i >= 0) S.experience[i] = d; else S.experience.push(d);
+      return null;
+    }
+    async function remove(id) {
+      await DB.del("experience", id);
+      S.experience = S.experience.filter((x) => x.id !== id);
+    }
+    // Ручная привязка непривязанной записи к текущему чату (EX.assignToChat).
+    async function assign(id) {
+      const r = S.experience.find((x) => x.id === id);
+      if (!r) return false;
+      const nr = EX.assignToChat(r, S.chatId);
+      await DB.put("experience", nr);
+      S.experience = S.experience.map((x) => (x.id === nr.id ? nr : x));
+      S.legacyExperience = Math.max(0, (S.legacyExperience || 1) - 1);
+      return true;
+    }
+    function find(id) { return S.experience.find((x) => x.id === id); }
+
+    return { loadForCard, migrate, view, legacyCount, blankDraft, draftFromMessage, save, remove, assign, find };
+  }
+
+  PRP.experienceService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/prism/service.js */
+/* Prism RP — сборка Prism для текущего чата (прикладной уровень).
+   Связывает активную ветку, сцену, опыт и настройки с чистым сборщиком (prism/assembler.js):
+   отбор опыта (EX.rank) → сборка контекста (AS.build) → отчёт для вкладки Prism.
+   Хранилище, сеть и DOM не трогает. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings;
+
+  function create(ctx) {
+    const { S } = ctx;
+    const chat = () => ctx.svc.chat;
+
+    // path — ветка до точки ответа; extraPost — дополнительное указание в конце (например, «продолжи»).
+    function build(path, extraPost) {
+      const c = ctx.chat(), cd = ctx.card();
+      const s = S.settings;
+      if (ST.imagesOn(s, ctx.env.perchanceImages()) && s.images.modelDraws) {
+        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first" });
+        extraPost = [di, extraPost].filter(Boolean).join("\n\n");
+      }
+      const st = chat().sceneState(path);
+      const history = path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })).filter((h) => h.text);
+      const recent = history.slice(-4).map((h) => h.text).join("\n");
+      const ex = EX.rank(S.experience, {
+        chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
+        text: recent, names: [cd.name, ctx.persona().name].concat(st.present), limit: s.expLimit,
+      });
+      const built = AS.build({
+        mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
+        sceneState: st, experiences: ex.ranked, history, extraPost,
+        contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
+        singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
+      });
+      built.report.expDebug = ex.debug;
+      built.report.experienceVisible = ex.visibleCount;
+      built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
+      return built;
+    }
+
+    // Предпросмотр для следующего хода (вкладка Prism, счётчик контекста).
+    function refresh() {
+      if (!ctx.chat() || !ctx.card()) { S.lastPrism = null; return; }
+      S.lastPrism = Object.assign({ at: Date.now(), preview: true }, build(chat().path()));
+    }
+
+    return { build, refresh };
+  }
+
+  PRP.prismService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/images/service.js */
+/* Prism RP — картинки в чате (прикладной уровень).
+   Порядок: промпт из сцены (compose) → перевод текстовой моделью (compile, через PRP.llm)
+   → финальная сборка (finalise) → бэкенд (backends) → сохранение картинки.
+   Также: загрузка картинок чата, восстановление прерванного рисования, списки с сервера A1111.
+   Перерисовка — через порт ctx.ui. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm;
+
+  function create(ctx) {
+    const { S, DB, ui } = ctx;
+    const chat = () => ctx.svc.chat;
+
+    function textGen(instruction) { return LLM.simple(ctx.provider(), instruction); }
+
+    // Подсказка переводчику: кто это и какие теги уже добавятся сами.
+    function identityFor(cd) {
+      const im = cd.image || {};
+      const bits = ["name: " + cd.name];
+      if (im.trigger) bits.push("already injected later (do NOT repeat these tags): " + im.trigger);
+      const base = IC.parseMap(im.look).filter((e) => /^(|base|always)$/i.test(e.key)).map((e) => e.tags).join(", ");
+      if (base) bits.push("look: " + base);
+      return bits.join("\n");
+    }
+
+    // Картинки чата в память; рисование, прерванное закрытием страницы, не должно висеть «в работе».
+    async function loadForChat(chatId) {
+      S.imgUrls = {};
+      (await DB.byIndex("images", "chatId", chatId)).forEach((x) => (S.imgUrls[x.id] = x.dataUrl));
+      for (const msg of S.messages) for (const sw of msg.swipes) for (const im of sw.images || []) {
+        if (im.status === "pending" && !S.drawing.has(im.id)) { im.status = "error"; im.error = "Рисование прервано. Попробуйте ещё раз."; }
+      }
+    }
+
+    // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
+    async function draw(msg, sw, d, reuse, opts) {
+      const o = opts || {};
+      const cfg = S.settings.images, cd = ctx.card();
+      if (!cfg.enabled) { ui.toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
+      if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
+      if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
+      const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1" };
+      Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
+      delete entry.error;
+      if (!reuse) (sw.images = sw.images || []).push(entry);
+      S.drawing.add(entry.id);
+      const repaint = () => { if (ctx.chat() && ctx.chat().id === msg.chatId) ui.renderFeed(); };
+      await chat().putMsg(msg);
+      repaint();
+      try {
+        const path = chat().path();
+        const upto = path.indexOf(msg) >= 0 ? path.slice(0, path.indexOf(msg) + 1) : path;
+        const st = chat().sceneState(upto);
+        const pers = ctx.persona();
+        const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers });
+        if (cfg.translate && IC.needsRewrite(composed.scene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
+        const comp = await ICP.compile(composed.scene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: identityFor(cd) }, textGen);
+        const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
+        entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
+        repaint();
+        const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
+        const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
+        await DB.put("images", { id: entry.id, chatId: msg.chatId, msgId: msg.id, dataUrl: res.dataUrl });
+        S.imgUrls[entry.id] = res.dataUrl;
+        const dims = res.info && res.info.width ? [res.info.width, res.info.height]
+          : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
+        Object.assign(entry, { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? composed.scene : "" });
+        if (dims) { entry.w = dims[0]; entry.h = dims[1]; }
+        delete entry.stage;
+      } catch (e) {
+        entry.status = "error";
+        entry.error = e.message || String(e);
+        delete entry.stage;
+      }
+      S.drawing.delete(entry.id);
+      await chat().putMsg(msg);
+      repaint();
+    }
+
+    // Нарисовать момент из сообщения: директива [draw:] модели или сам текст ответа.
+    function drawFromMessage(msgId) {
+      const msg = S.messages.find((x) => x.id === msgId);
+      const sw = TR.activeSwipe(msg);
+      const d = (sw.draws && sw.draws[0]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1" };
+      return draw(msg, sw, d);
+    }
+
+    // Картинка по координатам из разметки: сообщение, номер варианта, id картинки.
+    function find(mid, swIdx, imgId) {
+      const msg = S.messages.find((x) => x.id === mid);
+      if (!msg) return {};
+      const sw = msg.swipes[+swIdx];
+      const im = sw && (sw.images || []).find((x) => x.id === imgId);
+      return { msg, sw, im };
+    }
+    async function remove(msg, sw, im) {
+      sw.images = sw.images.filter((x) => x !== im);
+      await DB.del("images", im.id); delete S.imgUrls[im.id];
+      await chat().putMsg(msg);
+    }
+    async function pinSeed(seed) {
+      const cd = ctx.card(); cd.image = Object.assign({}, cd.image, { seed: String(seed) });
+      await DB.put("cards", cd);
+      return cd;
+    }
+
+    // Списки с сервера A1111/Forge: модели, VAE, сэмплеры, апскейлеры, LoRA (+ планировщики, если есть).
+    async function fetchLists() {
+      const cfg = S.settings.images, out = { at: Date.now() };
+      for (const w of ["models", "vaes", "samplers", "upscalers", "loras"]) out[w] = await IB.a1111List(cfg, w);
+      try { out.schedulers = await IB.a1111List(cfg, "schedulers"); } catch (e) { out.schedulers = []; }
+      S.imgLists = out; await DB.setSetting("imgLists", out);
+      if (!cfg.model && out.models[0]) cfg.model = out.models[0];
+      return out;
+    }
+
+    return { textGen, loadForChat, draw, drawFromMessage, find, remove, pinSeed, fetchLists };
+  }
+
+  PRP.imageService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/generation/service.js */
+/* Prism RP — генерация ответа персонажа (прикладной уровень).
+   Порядок хода: предварительная сборка Prism и проверка бюджета (до любых изменений дерева)
+   → узел или вариант ответа → вызов модели через PRP.llm → разбор ответа ([scene:], [draw:],
+   рассуждение) → сохранение → автокартинка.
+   Режимы: "new" — новый ответ, "regen" — новый вариант, "continue" — дописать текущий вариант.
+   Перерисовка — через порт ctx.ui (сервис не трогает DOM сам). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const TR = PRP.tree, SC = PRP.scene, OA = PRP.openai, IC = PRP.imgCompose, ST = PRP.settings, LLM = PRP.llm;
+
+  const CONTINUE = "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново.";
+
+  function create(ctx) {
+    const { S, ui } = ctx;
+    const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images;
+
+    async function generate(msgId, mode) {
+      if (S.gen) return;
+      const c = ctx.chat(), cd = ctx.card();
+      const prov = ctx.provider();
+      if (!c || !cd) return;
+      if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return; }
+      mode = mode || (msgId ? "regen" : "new");
+
+      // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
+      // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
+      let path = chat().path();
+      if (mode === "regen") path = path.slice(0, path.findIndex((m) => m.id === msgId));
+      const extraPost = mode === "continue" ? CONTINUE : "";
+      const built = prism().build(path, extraPost);
+      S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
+      if (built.report.overflow) {
+        ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+        if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
+        ui.renderFeed();
+        return;
+      }
+
+      let target, prefix = "";
+      if (mode === "regen") {
+        target = S.messages.find((m) => m.id === msgId);
+        target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
+        target.swipeIdx = target.swipes.length - 1;
+      } else if (mode === "continue") {
+        target = S.messages.find((m) => m.id === msgId);
+        prefix = TR.activeSwipe(target).text;
+      } else {
+        target = chat().newMsg("assistant", c.leafId, "");
+        c.leafId = target.id;
+        await chat().putChat(c);
+      }
+      await chat().putMsg(target);
+
+      const sw = TR.activeSwipe(target);
+      const ctrl = new AbortController();
+      S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
+      ui.renderFeed();
+      if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
+      ui.scrollBottom();
+
+      const onDelta = (d) => { S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
+      let raw = "", reasoning = "", error = null;
+      try {
+        const res = await LLM.chat(prov, built.messages, {
+          names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
+          signal: ctrl.signal, onDelta, continueFrom: prefix || null,
+        });
+        raw = res.text; reasoning = res.reasoning;
+      } catch (e) {
+        raw = e.partial != null ? e.partial : S.gen.raw;
+        reasoning = S.gen.reasoning;
+        if (e.name !== "AbortError") error = e.message || String(e);
+      }
+      const th = OA.splitThink(raw || "");
+      const parsed = SC.parse(th.text);
+      const dr = IC.parseDraws(parsed.text);
+      if (mode === "continue") {
+        if (dr.text) sw.text = S.gen.prefix + dr.text;
+        sw.sceneOps = (sw.sceneOps || []).concat(parsed.ops);
+        sw.draws = (sw.draws || []).concat(dr.draws);
+      } else {
+        sw.text = dr.text;
+        sw.sceneOps = parsed.ops;
+        sw.draws = dr.draws;
+      }
+      sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
+      if (error) sw.error = error; else delete sw.error;
+      S.gen = null;
+      await chat().putMsg(target);
+      await chat().touch();
+      prism().refresh();
+      ui.renderFeed();
+      ui.renderRail();
+      if (S.drawerOpen) ui.renderDrawer();
+      ui.scrollBottom();
+      if (!error && dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(target, sw, dr.draws[0]);
+    }
+
+    function stop() { if (S.gen) S.gen.ctrl.abort(); }
+
+    return { generate, stop };
+  }
+
+  PRP.generationService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/service.js */
+/* Prism RP — карточки персонажей (прикладной уровень).
+   Импорт файлов (JSON/PNG) → разбор формата (cards/ccard.js) → сохранение; сохранение
+   черновика редактора; удаление с каскадом; экспорт JSON/PNG.
+   Смысл форматов (V1/V2/V3, PNG-чанки) — только в ccard.js. Файловый ввод-вывод — PRP.files. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util, CC = PRP.ccard;
+
+  function create(ctx) {
+    const { S, DB } = ctx;
+    const F = () => ctx.files;
+
+    // Черновик для редактора: копия карточки или новая пустая.
+    function draft(cd) { return U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })); }
+
+    /* Импорт файлов по одному; ошибка одного файла не мешает остальным.
+       → { last: последняя добавленная карточка | null, errors: [{file, message}] } */
+    async function importFiles(files) {
+      let last = null;
+      const errors = [];
+      for (const file of files) {
+        try {
+          let json, avatar = null;
+          if (/\.json$/i.test(file.name) || file.type === "application/json") json = JSON.parse(await F().readFile(file, "text"));
+          else { json = CC.cardJsonFromPng(new Uint8Array(await F().readFile(file))); avatar = await F().readFile(file, "dataurl"); }
+          const cd = CC.normalize(json);
+          cd.id = U.uid("card");
+          cd.avatar = avatar;
+          await DB.put("cards", cd);
+          S.cards.unshift(cd);
+          last = cd;
+        } catch (e) {
+          errors.push({ file: file.name, message: e.message });
+          if (ctx.ui) ctx.ui.toast(`${file.name}: ${e.message}`, true);
+        }
+      }
+      return { last, errors };
+    }
+
+    // Сохранить черновик редактора. → { error } или { card, isNew }.
+    async function save(d) {
+      d.name = (d.name || "").trim();
+      if (!d.name) return { error: "Дайте персонажу имя." };
+      if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
+      d.altGreetings = (d.altGreetings || []).map((g) => String(g || "").trim()).filter(Boolean);
+      d.updatedAt = Date.now();
+      const isNew = !d.id;
+      if (isNew) { d.id = U.uid("card"); d.createdAt = Date.now(); }
+      await DB.put("cards", d);
+      const i = S.cards.findIndex((x) => x.id === d.id);
+      if (i >= 0) S.cards[i] = d; else S.cards.unshift(d);
+      return { card: d, isNew };
+    }
+
+    // Удалить персонажа вместе со всеми его чатами, сообщениями, картинками и опытом.
+    async function remove(cd) {
+      for (const c of S.chats.filter((x) => x.cardId === cd.id)) {
+        const ms = await DB.byIndex("messages", "chatId", c.id);
+        await DB.delMany("messages", ms.map((m) => m.id));
+        await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
+        await DB.del("chats", c.id);
+      }
+      const xs = await DB.byIndex("experience", "owner", cd.id);
+      await DB.delMany("experience", xs.map((x) => x.id));
+      await DB.del("cards", cd.id);
+      S.cards = S.cards.filter((c) => c.id !== cd.id);
+      S.chats = S.chats.filter((c) => c.cardId !== cd.id);
+      if (S.cardId === cd.id) { S.cardId = null; S.chatId = null; S.messages = []; S.view = "home"; }
+    }
+
+    function exportJson(d) {
+      return { name: `${d.name || "персонаж"}.json`, text: JSON.stringify(CC.toSpec(d, "v3"), null, 2) };
+    }
+    async function exportPng(d) {
+      return { name: `${d.name || "персонаж"}.png`, blob: new Blob([CC.embedInPng(await F().avatarPngBytes(d), d)], { type: "image/png" }) };
+    }
+
+    return { draft, importFiles, save, remove, exportJson, exportPng };
+  }
+
+  PRP.cardService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/assist/service.js */
+/* Prism RP — ассистент (прикладной уровень): разговоры с моделью вне игры.
+   Выбор и сохранение разговоров, контекст из карточки и выдержки чата, генерация через PRP.llm.
+   Смысловые правила (инструкция, сборка контекста) — в assist/assist.js. Перерисовка — через ctx.ui. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util, TR = PRP.tree, SC = PRP.scene, OA = PRP.openai, AST = PRP.assist, LLM = PRP.llm;
+
+  function create(ctx) {
+    const { S, DB, ui } = ctx;
+
+    function loadAll() { return DB.all("assist"); }
+
+    // Выбрать разговор: по id, оставить уже открытый пустой или начать новый (наследуя персонажа).
+    function pick(id, base) {
+      const found = id && S.assistList.find((a) => a.id === id);
+      if (found) S.assist = found;
+      else if (!base && S.assist && !S.assist.messages.length) { /* пустой разговор уже открыт */ }
+      else {
+        const b = base || (S.assist ? { cardId: S.assist.ctx.cardId, chatId: null } : (S.view === "chat" && S.cardId ? { cardId: S.cardId, chatId: null } : {}));
+        S.assist = AST.blank(b);
+      }
+    }
+    async function save() {
+      const a = S.assist;
+      await DB.put("assist", a);
+      if (!S.assistList.includes(a)) S.assistList.push(a);
+    }
+    async function remove(a) {
+      await DB.del("assist", a.id);
+      S.assistList = S.assistList.filter((x) => x !== a);
+      S.assist = null;
+    }
+
+    // Выдержка из ролевого чата для контекста ассистента: реплики активной ветки и строка сцены.
+    async function chatLines(chatId) {
+      const c = S.chats.find((x) => x.id === chatId);
+      if (!c) return { lines: [], scene: "" };
+      const msgs = await DB.byIndex("messages", "chatId", chatId);
+      const path = TR.path(TR.index(msgs), c.leafId);
+      const cd = S.cards.find((x) => x.id === c.cardId);
+      const lines = path.map((m) => ({ name: m.role === "user" ? ctx.persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
+      const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
+      return { lines, scene: SC.summaryLine(st) || "" };
+    }
+
+    async function send(text) {
+      const a = S.assist;
+      if (!a || S.gen) return;
+      if (!a.messages.length) a.title = AST.title(text);
+      a.messages.push({ id: U.uid("am"), role: "user", text, at: Date.now() });
+      await save(); ui.rememberUi();
+      await generate();
+    }
+
+    async function generate() {
+      const a = S.assist;
+      const prov = ctx.provider();
+      if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return; }
+      const cd = a.ctx.cardId ? S.cards.find((c) => c.id === a.ctx.cardId) : null;
+      const chatCtx = a.ctx.chatId ? await chatLines(a.ctx.chatId) : { lines: [], scene: "" };
+      const target = { id: U.uid("am"), role: "assistant", text: "", at: Date.now() };
+      const history = a.messages.map((x) => ({ role: x.role, text: x.text }));
+      a.messages.push(target);
+      const built = AST.build({
+        system: (S.settings.assistSystem || "").trim() || AST.SYSTEM, card: cd, chatLines: chatCtx.lines, sceneLine: chatCtx.scene,
+        userName: ctx.persona().name, history, contextTokens: ctx.contextTokens(), reserveTokens: 1500,
+      });
+      const ctrl = new AbortController();
+      S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", assist: true };
+      ui.renderStage();
+      ui.scrollBottom();
+      const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintAssist(); };
+      let raw = "", reasoning = "", error = null;
+      try {
+        const sp = S.settings.sampler;
+        const res = await LLM.chat(prov, built.messages, {
+          names: { char: "Ассистент", user: ctx.persona().name },
+          sampler: Object.assign({}, sp, { temperature: Math.min(sp.temperature || 0.7, 0.8), max_tokens: Math.max(sp.max_tokens || 0, 1500) }),
+          signal: ctrl.signal, onDelta,
+        });
+        raw = res.text; reasoning = res.reasoning;
+      } catch (e) {
+        raw = e.partial != null ? e.partial : (S.gen ? S.gen.raw : "");
+        reasoning = S.gen ? S.gen.reasoning : "";
+        if (e.name !== "AbortError") error = e.message || String(e);
+      }
+      const th = OA.splitThink(raw || "");
+      target.text = th.text.trim();
+      target.reasoning = [reasoning, th.reasoning].filter(Boolean).join("\n").trim();
+      if (error) target.error = error;
+      S.gen = null;
+      if (!target.text && !error) a.messages.pop();
+      await save(); ui.rememberUi();
+      if (S.view === "assist") { ui.renderStage(); ui.scrollBottom(); }
+    }
+
+    // Убрать сообщение и всё после него. → удалённые сообщения или null.
+    async function cutFrom(id) {
+      const a = S.assist;
+      const i = a.messages.findIndex((x) => x.id === id);
+      if (i < 0) return null;
+      const removed = a.messages.splice(i);
+      await save(); ui.rememberUi();
+      return removed;
+    }
+
+    return { loadAll, pick, save, remove, chatLines, send, generate, cutFrom };
+  }
+
+  PRP.assistService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/shell.js */
+/* Prism RP — оболочка интерфейса: модель представления, отрисовка областей экрана,
+   поповеры, поиск по чату, потоковая отрисовка ответа, уведомления.
+   Это «порт интерфейса» (ctx.ui), через который сервисы просят перерисовку, не трогая DOM сами.
+   Разметку строят представления (js/ui/views/*), здесь — только куда и когда её вставить. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const SC = PRP.scene, OA = PRP.openai, IB = PRP.imgBackends, IC = PRP.imgCompose, R = PRP.render, V = PRP.views;
+
+  function create(ctx) {
+    const { S } = ctx;
+    const $ = (sel, el) => (el || document).querySelector(sel);
+    const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
+    const narrow = () => window.innerWidth < 1280;
+    const svc = () => ctx.svc;
+
+    /* ── Уведомления ───────────────────────────────────────────────────── */
+    let toastTimer = null;
+    function toast(text, isErr) {
+      const el = $("#toast");
+      el.innerHTML = R.icon(isErr ? "alert" : "check") + `<span>${R.esc(text)}</span>`;
+      el.className = "toast" + (isErr ? " err" : "");
+      el.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => (el.hidden = true), isErr ? 8000 : 2800);
+    }
+
+    /* ── Модель представления ──────────────────────────────────────────── */
+    function vm() {
+      const path = svc().chat.path();
+      return {
+        S, view: S.view, cards: S.cards, chats: S.chats, card: ctx.card(), chat: ctx.chat(), persona: ctx.persona(), path,
+        scene: ctx.chat() ? svc().chat.sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
+        provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
+        exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
+        drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
+        stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
+        imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
+        origin: location.origin && location.origin !== "null" ? location.origin : "*",
+        assist: S.assist, assistList: S.assistList,
+        assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
+        assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
+      };
+    }
+
+    /* ── Отрисовка областей ────────────────────────────────────────────── */
+    function applyLook() {
+      document.documentElement.setAttribute("data-theme", S.settings.theme || "dusk");
+      document.documentElement.style.setProperty("--prose-fs", (S.settings.proseSize || 17) + "px");
+    }
+    function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 240) + "px"; }
+    function renderRail() { $("#rail").innerHTML = V.rail(vm()); }
+    function renderStage() {
+      const app = $("#app");
+      const m = vm();
+      const input = $("#input");
+      const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
+      const feedEl = $("#feed");
+      const scroll = feedEl ? feedEl.scrollTop : null;
+      if (S.view === "assist" && S.assist) {
+        $("#stage").innerHTML = V.assist(m);
+        app.classList.remove("messenger");
+        if (keep) {
+          const i = $("#input"); i.value = keep.v; autoGrow(i);
+          if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+        }
+        if (scroll != null && $("#feed")) $("#feed").scrollTop = scroll;
+      } else if (S.view === "chat" && m.chat && m.card) {
+        $("#stage").innerHTML = V.chat(m);
+        app.classList.toggle("messenger", m.chat.mode === "messenger");
+        if (keep) {
+          const i = $("#input"); i.value = keep.v; autoGrow(i);
+          if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+        }
+        if (scroll != null) $("#feed").scrollTop = scroll;
+        if (S.find) applyFind(false);
+      } else {
+        app.classList.remove("messenger");
+        $("#stage").innerHTML = V.home(m);
+      }
+      app.classList.toggle("generating", !!S.gen);
+    }
+    function renderFeed() {
+      if (S.view === "assist") return renderStage();
+      const inner = $("#feed-inner");
+      if (!inner) return renderStage();
+      inner.innerHTML = V.feed(vm());
+      const head = $(".chat-head");
+      if (head) head.outerHTML = V.chatHead(vm());
+      const comp = $(".composer-wrap");
+      if (comp) {
+        const i = $("#input");
+        const keep = i ? i.value : "";
+        const focused = document.activeElement === i;
+        comp.outerHTML = V.composer(vm());
+        const ni = $("#input"); ni.value = keep; autoGrow(ni);
+        if (focused) ni.focus();
+      }
+      $("#app").classList.toggle("generating", !!S.gen);
+      if (S.find) applyFind(false);
+    }
+    function renderHead() { const head = $(".chat-head"); if (head) head.outerHTML = V.chatHead(vm()); }
+    function renderDrawer() {
+      const d = $("#drawer");
+      d.classList.toggle("open", S.drawerOpen && S.view === "chat");
+      $("#app").classList.toggle("drawer-open", S.drawerOpen && S.view === "chat");
+      const body = $("#drawer-body");
+      const scroll = body ? body.scrollTop : 0;
+      d.innerHTML = S.drawerOpen && S.view === "chat" ? V.drawer(vm()) : "";
+      const nb = $("#drawer-body");
+      if (nb) nb.scrollTop = scroll;
+      syncScrim();
+    }
+    function renderModal() {
+      const rootEl = $("#modal-root");
+      if (!S.modal) { rootEl.innerHTML = ""; return; }
+      const m = vm();
+      const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
+      if (S.modal.kind === "image") {
+        const im = S.modal.im, url = S.imgUrls[im.id];
+        rootEl.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${url}" alt="">
+        <figcaption><span>${R.esc(im.draw || "")}</span><span class="lb-tools">
+          <button class="btn btn-sm" data-act="img-modal-regen">${R.icon("regen")}Заново</button>
+          <button class="btn btn-sm" data-act="img-dl" data-mid="${S.modal.mid}" data-sw="${S.modal.sw}" data-img="${im.id}">${R.icon("download")}Скачать</button>
+          <button class="icon-btn" data-act="modal-close" title="Закрыть">${R.icon("x")}</button></span></figcaption></figure></div>`;
+        return;
+      }
+      rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section) : V.cardModal(m, S.modal.draft, S.modal.section);
+      if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
+      S.modal.keepScroll = false;
+    }
+    function renderAll() { applyLook(); renderRail(); renderStage(); renderDrawer(); renderModal(); }
+    function scrollBottom() { const el = $("#feed"); if (el) requestAnimationFrame(() => (el.scrollTop = el.scrollHeight)); }
+    function syncScrim() {
+      const railOpen = $("#rail").classList.contains("open");
+      const drawerOverlay = S.drawerOpen && S.view === "chat" && narrow();
+      $("#scrim").hidden = !(railOpen || drawerOverlay);
+    }
+    function openSettings(section) {
+      closePop();
+      S.modal = { kind: "settings", section: section || (S.modal && S.modal.kind === "settings" ? S.modal.section : "models") };
+      renderModal();
+    }
+    // После смены настроек: пересобрать Prism и перерисовать то, что от них зависит.
+    function refreshAfterSettings() {
+      svc().prism.refresh();
+      renderRail();
+      if (S.view === "chat") renderFeed(); else renderStage();
+      S.modal && (S.modal.keepScroll = true);
+      renderModal();
+    }
+
+    /* ── Поповеры ──────────────────────────────────────────────────────── */
+    function openPop(html, anchor) {
+      const rootEl = $("#pop-root");
+      rootEl.innerHTML = `<div class="pop" role="menu">${html}</div>`;
+      const pop = rootEl.firstChild;
+      const r = anchor.getBoundingClientRect();
+      const h = pop.offsetHeight, w = pop.offsetWidth;
+      let top = r.bottom + 6;
+      if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+      let left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+      if (r.left + w < window.innerWidth - 8 && anchor.closest(".composer")) left = Math.max(8, r.left);
+      pop.style.top = top + "px";
+      pop.style.left = left + "px";
+      S.pop = anchor;
+    }
+    function closePop() { $("#pop-root").innerHTML = ""; S.pop = null; }
+
+    /* ── Поиск по чату ─────────────────────────────────────────────────── */
+    function applyFind(jump) {
+      const feedEl = $("#feed-inner");
+      const q = (S.find.q || "").trim().toLowerCase();
+      const countEl = $("#find-count");
+      if (!feedEl) return;
+      if (!q) { if (countEl) countEl.textContent = ""; return; }
+      const marks = [];
+      $$(".prose, .bub", feedEl).forEach((rootEl) => {
+        const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        for (const node of nodes) {
+          const low = node.nodeValue.toLowerCase();
+          let i = low.indexOf(q);
+          if (i < 0) continue;
+          const frag = document.createDocumentFragment();
+          let pos = 0;
+          while (i >= 0) {
+            frag.appendChild(document.createTextNode(node.nodeValue.slice(pos, i)));
+            const mk = document.createElement("mark");
+            mk.textContent = node.nodeValue.slice(i, i + q.length);
+            frag.appendChild(mk); marks.push(mk);
+            pos = i + q.length;
+            i = low.indexOf(q, pos);
+          }
+          frag.appendChild(document.createTextNode(node.nodeValue.slice(pos)));
+          node.parentNode.replaceChild(frag, node);
+        }
+      });
+      S.find.total = marks.length;
+      if (S.find.idx >= marks.length) S.find.idx = 0;
+      if (countEl) countEl.textContent = marks.length ? `${S.find.idx + 1} из ${marks.length}` : "нет";
+      const cur = marks[S.find.idx];
+      if (cur) { cur.classList.add("cur"); if (jump) cur.scrollIntoView({ block: "center", behavior: "smooth" }); }
+    }
+    function runFind(jump) { $("#feed-inner").innerHTML = V.feed(vm()); applyFind(jump); }
+
+    /* ── Потоковая отрисовка ответа ────────────────────────────────────── */
+    let paintQueued = false;
+    function paintStreaming() {
+      if (paintQueued) return;
+      paintQueued = true;
+      requestAnimationFrame(() => {
+        paintQueued = false;
+        if (!S.gen) return;
+        const el = document.getElementById("text-" + S.gen.msgId);
+        if (!el) return;
+        const txt = IC.stripDrawsForDisplay(SC.stripForDisplay(OA.splitThink(S.gen.raw).text));
+        if (ctx.chat().mode === "messenger") {
+          el.innerHTML = R.bubbles(txt).map((p) => `<div class="bub">${R.esc(p)}</div>`).join("") + `<div class="bub typing"><i></i><i></i><i></i></div>`;
+        } else el.innerHTML = R.rpText(S.gen.prefix + txt);
+        const box = $("#feed");
+        if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
+      });
+    }
+    let assistPaintQueued = false;
+    function paintAssist() {
+      if (assistPaintQueued) return;
+      assistPaintQueued = true;
+      requestAnimationFrame(() => {
+        assistPaintQueued = false;
+        if (!S.gen || !S.gen.assist) return;
+        const el = document.getElementById("text-" + S.gen.msgId);
+        if (!el) return;
+        el.innerHTML = R.md(OA.splitThink(S.gen.raw).text);
+        const box = $("#feed");
+        if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
+      });
+    }
+
+    // Запомнить, что открыто, чтобы после перезагрузки вернуться туда же.
+    function rememberUi() {
+      ctx.DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen, view: S.view, assistId: S.view === "assist" && S.assist && S.assist.messages.length ? S.assist.id : null });
+    }
+
+    return {
+      $, $$, narrow, toast, vm, applyLook, autoGrow,
+      renderRail, renderStage, renderFeed, renderHead, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
+      openSettings, refreshAfterSettings, openPop, closePop, applyFind, runFind, paintStreaming, paintAssist, rememberUi,
+    };
+  }
+
+  PRP.shell = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/controllers/chat.js */
+/* Prism RP — контроллер чата: отправка, генерация, варианты, правка, удаление, режим, поиск, меню чата.
+   Обработчики тонкие: прочитать ввод → вызвать сервис → перерисовать. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const V = PRP.views;
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.chat = function (ctx) {
+    const { S, ui, svc, nav } = ctx;
+    const { $ } = ui;
+
+    async function sendUser() {
+      const input = $("#input");
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text || S.gen) return;
+      if (S.view === "assist") { input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
+      input.value = "";
+      ui.autoGrow(input);
+      await svc.chat.addUserMessage(text);
+      ui.renderFeed();
+      ui.scrollBottom();
+      await svc.gen.generate();
+    }
+    async function afterBranchChange() {
+      svc.prism.refresh();
+      ui.renderFeed();
+      if (S.drawerOpen) ui.renderDrawer();
+    }
+
+    const actions = {
+      send: sendUser,
+      stop: () => svc.gen.stop(),
+      regen: (t) => svc.gen.generate(t.dataset.id, "regen"),
+      continue: (t) => svc.gen.generate(t.dataset.id, "continue"),
+      swipe: async (t) => {
+        if (S.gen) return;
+        const r = await svc.chat.swipe(t.dataset.id, +t.dataset.dir);
+        if (r === "regen") return svc.gen.generate(t.dataset.id, "regen");
+        if (r) await afterBranchChange();
+      },
+      edit: (t) => { S.editingMsg = t.dataset.id; ui.renderFeed(); const e = document.getElementById("edit-" + t.dataset.id); if (e) { e.focus(); e.style.height = Math.min(e.scrollHeight + 4, 520) + "px"; } },
+      "save-edit": async (t) => {
+        if (!S.messages.find((x) => x.id === t.dataset.id)) return;
+        S.editingMsg = null;
+        await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
+        await afterBranchChange();
+      },
+      "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },
+      delete: async (t) => {
+        if (S.gen) return;
+        if (!S.messages.find((x) => x.id === t.dataset.id) || !confirm("Удалить это сообщение и всё, что идёт после него в этой ветке?")) return;
+        await svc.chat.deleteFrom(t.dataset.id);
+        svc.prism.refresh();
+        ui.renderFeed();
+        ui.renderRail();
+        if (S.drawerOpen) ui.renderDrawer();
+      },
+      mode: async (t) => { const c = ctx.chat(); if (c.mode === t.dataset.mode) return; c.mode = t.dataset.mode; await svc.chat.putChat(c); svc.prism.refresh(); ui.renderStage(); ui.renderRail(); ui.scrollBottom(); },
+      find: () => { S.find = S.find ? null : { q: "", idx: 0 }; ui.renderStage(); const f = $("#find-q"); if (f) f.focus(); },
+      "find-close": () => { S.find = null; ui.renderStage(); },
+      "find-next": () => { if (!S.find.total) return; S.find.idx = (S.find.idx + 1) % S.find.total; ui.runFind(true); },
+      "find-prev": () => { if (!S.find.total) return; S.find.idx = (S.find.idx - 1 + S.find.total) % S.find.total; ui.runFind(true); },
+      "chat-menu": (t) => ui.openPop(V.chatMenu(ui.vm()), t),
+      "model-pop": (t) => ui.openPop(V.modelPop(ui.vm()), t),
+      "new-chat": (t) => { ui.closePop(); nav.newChat(t.dataset.mode); },
+      "rename-chat": async () => {
+        ui.closePop();
+        const c = ctx.chat();
+        const name = prompt("Название чата", c.title || "");
+        if (name == null) return;
+        c.title = name.trim() || c.title; await svc.chat.putChat(c); ui.renderStage(); ui.renderRail();
+      },
+      "export-chat": () => { ui.closePop(); const e = svc.chat.exportText(); ctx.files.download(e.name, e.text, "text/plain;charset=utf-8"); },
+      "delete-chat": async () => {
+        ui.closePop();
+        const c = ctx.chat();
+        if (!c || !confirm("Удалить этот чат? Вместе с ним удалится опыт персонажа, накопленный в этом мире.")) return;
+        await svc.chat.deleteChat(c);
+        nav.goHome();
+      },
+    };
+
+    function input(t) {
+      if (t.id === "input") ui.autoGrow(t);
+      if (t.id === "find-q") { S.find.q = t.value; S.find.idx = 0; ui.runFind(true); }
+    }
+    function key(e, t) {
+      if (t.id === "input" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendUser(); return true; }
+      if (t.id === "find-q" && e.key === "Enter") { e.preventDefault(); (e.shiftKey ? actions["find-prev"] : actions["find-next"])(); return true; }
+      return false;
+    }
+    // Ctrl+F в чате — открыть поиск или перейти в его поле.
+    function shortcut(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f" && S.view === "chat") { e.preventDefault(); if (!S.find) actions.find(); else { const f = $("#find-q"); if (f) f.focus(); } return true; }
+      return false;
+    }
+
+    return { actions, input, key, shortcut };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/controllers/drawer.js */
+/* Prism RP — контроллер выдвижной панели: сцена (ручные правки), опыт (форма записи), Prism (предпросмотр). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const SC = PRP.scene, U = PRP.util;
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.drawer = function (ctx) {
+    const { S, ui, svc } = ctx;
+    const { $ } = ui;
+    const op = (...a) => svc.chat.op(...a);
+
+    // Ручные изменения сцены → в ветку; затем Prism, панель и шапка.
+    async function applySceneOps(ops) {
+      if (!(await svc.chat.applySceneOps(ops))) return;
+      svc.prism.refresh();
+      ui.renderDrawer();
+      ui.renderHead();
+    }
+
+    // Форма записи опыта → черновик (S.expDraft).
+    function collectExp() {
+      const d = S.expDraft;
+      if (!d || !$("#x-event")) return d;
+      d.event = $("#x-event").value;
+      d.interpretation = $("#x-interp").value;
+      d.consequences = $("#x-cons").value;
+      d.status = $("#x-status").value;
+      const aboutUser = $("#x-about-user").checked;
+      d.about = (d.about || []).filter((a) => a !== "user");
+      if (aboutUser) d.about.unshift("user");
+      return d;
+    }
+
+    const actions = {
+      drawer: () => { S.drawerOpen = !S.drawerOpen; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
+      "drawer-close": () => { S.drawerOpen = false; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
+      tab: (t) => { collectExp(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
+      "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
+      "prism-preview": () => { svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
+      // Сцена
+      "sc-time-set": () => {
+        const d = $("#sc-date").value.trim(), tm = $("#sc-time").value.trim();
+        if (d && !/^\d{1,2}\.\d{1,2}(\.\d{2,4})?$/.test(d)) { ui.toast("Дата в виде 14.05 или 14.05.2026", true); return; }
+        const v = [d, tm].filter(Boolean).join(" ");
+        if (v) applySceneOps([op(null, "time", v)]);
+      },
+      "sc-shift": (t) => applySceneOps([op(null, "time", t.dataset.v)]),
+      "sc-leave": (t) => applySceneOps([op(null, "leave", t.dataset.name)]),
+      "sc-enter": (t) => applySceneOps([op(null, "enter", t.dataset.name)]),
+      "sc-remove": (t) => applySceneOps([op(t.dataset.name, "remove", t.dataset.item)]),
+      "scene-init-save": async () => { const c = ctx.chat(); c.sceneInit = $("#scene-init").value.trim(); await svc.chat.putChat(c); svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); ui.toast("Начальная сцена сохранена."); },
+      // Опыт
+      "to-exp": (t) => {
+        S.expDraft = svc.exp.draftFromMessage(t.dataset.id);
+        S.tab = "memory";
+        S.drawerOpen = true;
+        ui.renderDrawer();
+        ui.renderFeed();
+        setTimeout(() => { const e = $("#x-event"); if (e) e.focus(); }, 280);
+      },
+      "exp-new": () => { S.expDraft = svc.exp.blankDraft(); ui.renderDrawer(); },
+      "exp-edit": (t) => { S.expDraft = U.clone(svc.exp.find(t.dataset.id)); ui.renderDrawer(); },
+      "exp-cancel": () => { S.expDraft = null; ui.renderDrawer(); },
+      "exp-save": async () => {
+        const err = await svc.exp.save(collectExp());
+        if (err) { ui.toast(err, true); return; }
+        S.expDraft = null;
+        svc.prism.refresh();
+        ui.renderDrawer();
+        ui.toast("Событие сохранено в опыт.");
+      },
+      "exp-del": async () => {
+        if (!confirm("Удалить это событие из опыта?")) return;
+        await svc.exp.remove(S.expDraft.id);
+        S.expDraft = null; svc.prism.refresh(); ui.renderDrawer();
+      },
+      "exp-assign": async (t) => {
+        if (!svc.exp.find(t.dataset.id) || !confirm("Привязать эту запись к текущему чату? Она станет частью этого мира и будет видна во всех его ветках.")) return;
+        await svc.exp.assign(t.dataset.id);
+        svc.prism.refresh(); ui.renderDrawer();
+        ui.toast("Запись привязана к этому чату.");
+      },
+      "x-val": (t) => { collectExp().valence = +t.dataset.v; ui.renderDrawer(); },
+      "x-weight": (t) => { collectExp().weight = +t.dataset.v; ui.renderDrawer(); },
+      "x-domain-del": (t) => { const d = collectExp(); d.domains = d.domains.filter((x) => x !== t.dataset.v); ui.renderDrawer(); },
+    };
+
+    function change(t) {
+      if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return true; }
+      if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return true; }
+      if (t.dataset.scRel) { applySceneOps([op(t.dataset.scRel, "relset", t.value + " поправлено вручную")]); return true; }
+      return false;
+    }
+    function input(t) {
+      if (t.dataset.scRel) { const o = $("#rel-out"); if (o) o.textContent = `${SC.relWord(+t.value)} (${+t.value > 0 ? "+" : ""}${t.value})`; }
+    }
+    function key(e, t) {
+      if (e.key === "Enter" && t.classList && t.classList.contains("chip-add")) {
+        e.preventDefault();
+        const v = t.value.trim();
+        if (!v) return true;
+        if (t.dataset.scAdd) applySceneOps([op(t.dataset.scAdd, "add", v)]);
+        else if (t.id === "sc-enter-new") applySceneOps([op(null, "enter", v)]);
+        else if (t.id === "x-domain-add") { const d = collectExp(); v.split(",").map((s) => s.trim()).filter(Boolean).forEach((x) => { if (!d.domains.includes(x)) d.domains.push(x); }); ui.renderDrawer(); setTimeout(() => { const n = $("#x-domain-add"); if (n) n.focus(); }, 0); }
+        return true;
+      }
+      if (e.key === "Enter" && t.tagName === "INPUT" && (t.dataset.scTop || t.dataset.scField)) { t.blur(); return true; }
+      return false;
+    }
+
+    return { actions, change, input, key };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/controllers/cards.js */
+/* Prism RP — контроллер карточек: импорт, редактор персонажа (форма → черновик), сохранение, экспорт, удаление. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.cards = function (ctx) {
+    const { S, ui, svc, nav } = ctx;
+    const { $, $$ } = ui;
+
+    function openCardEditor(cd) {
+      S.modal = { kind: "card", section: "main", draft: svc.cards.draft(cd) };
+      ui.renderModal();
+      setTimeout(() => { const n = $("#cf-name"); if (n && !S.modal.draft.name) n.focus(); }, 30);
+    }
+    // Поля открытого раздела редактора → черновик (S.modal.draft).
+    function collectCard() {
+      const d = S.modal.draft;
+      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
+      $$("[data-cf]").forEach((el) => {
+        const id = el.dataset.cf;
+        if (map[id]) d[map[id]] = el.value;
+        else if (id === "cf-tags") d.tags = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+      });
+      if ($("[data-alt]") || S.modal.section === "greet") {
+        d.altGreetings = (d.altGreetings || []).slice();
+        $$("[data-alt]").forEach((el) => { d.altGreetings[+el.dataset.alt] = el.value; });
+      }
+      if ($("[data-ci]") || $("[data-card-lora-name]")) {
+        d.image = Object.assign({}, d.image);
+        $$("[data-ci]").forEach((el) => { d.image[el.dataset.ci] = el.value; });
+        d.image.loras = $$("[data-card-lora-name]").map((el) => {
+          const w = $(`[data-card-lora-w="${el.dataset.cardLoraName}"]`);
+          return { name: el.value.trim(), weight: w && w.value !== "" ? Number(w.value) : 1 };
+        });
+      }
+      $$("[data-lore]").forEach((el) => {
+        const e = d.lore[+el.dataset.lore];
+        if (!e) return;
+        const k = el.dataset.k;
+        if (k === "keys" || k === "secondary_keys") e[k] = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+        else if (k === "content" || k === "comment" || k === "position") e[k] = el.value;
+        else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
+        else e[k] = el.checked;
+      });
+      return d;
+    }
+    const keepScroll = () => { S.modal.keepScroll = true; ui.renderModal(); };
+
+    const actions = {
+      import: () => $("#file-card").click(),
+      "new-card": () => openCardEditor(null),
+      "open-card": (t) => nav.openCard(t.dataset.id),
+      "edit-card": (t) => { ui.closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : ctx.card()); },
+      "card-section": (t) => { collectCard(); S.modal.section = t.dataset.section; ui.renderModal(); },
+      "card-save": async () => {
+        const r = await svc.cards.save(collectCard());
+        if (r.error) { ui.toast(r.error, true); S.modal.section = "main"; ui.renderModal(); return; }
+        S.modal = null;
+        ui.renderAll();
+        ui.toast(r.isNew ? `${r.card.name} создан(а). Нажмите на портрет, чтобы начать.` : "Изменения сохранены.");
+      },
+      "avatar-pick": () => { collectCard(); $("#file-avatar").click(); },
+      "lore-add": () => { const d = collectCard(); d.lore = (d.lore || []).concat([{ keys: [], secondary_keys: [], selective: false, content: "", comment: "", enabled: true, constant: false, case_sensitive: false, position: "after_char", insertion_order: (d.lore || []).length * 10 }]); keepScroll(); },
+      "lore-del": (t) => { const d = collectCard(); d.lore.splice(+t.dataset.i, 1); keepScroll(); },
+      "alt-add": () => { const d = collectCard(); d.altGreetings = (d.altGreetings || []).concat([""]); keepScroll(); setTimeout(() => { const el = $(`[data-alt="${d.altGreetings.length - 1}"]`); if (el) el.focus(); }, 30); },
+      "alt-del": (t) => { const d = collectCard(); d.altGreetings.splice(+t.dataset.i, 1); keepScroll(); },
+      "card-lora-add": () => { const d = collectCard(); d.image = d.image || {}; d.image.loras = (d.image.loras || []).concat([{ name: "", weight: 0.8 }]); keepScroll(); },
+      "card-lora-del": (t) => { const d = collectCard(); d.image.loras.splice(+t.dataset.i, 1); keepScroll(); },
+      "card-json": () => { const e = svc.cards.exportJson(collectCard()); ctx.files.download(e.name, e.text, "application/json"); },
+      "card-png": async () => { const e = await svc.cards.exportPng(collectCard()); ctx.files.download(e.name, e.blob); },
+      "card-del": async () => {
+        const cd = S.modal.draft;
+        if (!confirm(`Удалить «${cd.name}» вместе со всеми чатами и опытом? Это нельзя отменить.`)) return;
+        await svc.cards.remove(cd);
+        S.modal = null;
+        ui.renderAll();
+        ui.toast(`${cd.name} удалён(а).`);
+      },
+    };
+
+    async function change(t) {
+      if (t.id === "file-card") {
+        const r = await svc.cards.importFiles([...t.files]);
+        if (r.last) { S.view = "home"; ui.renderAll(); ui.toast(`Добавлен(а): ${r.last.name}`); }
+        t.value = "";
+        return true;
+      }
+      if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await ctx.files.readFile(t.files[0], "dataurl"); t.value = ""; ui.renderModal(); return true; }
+      if (t.dataset.lore !== undefined && t.dataset.k === "selective" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
+      return false;
+    }
+
+    return { actions, change };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/controllers/settings.js */
+/* Prism RP — контроллер настроек: модели и провайдеры, генерация, изображения, персона, вид, бэкап. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util, OA = PRP.openai, V = PRP.views;
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.settings = function (ctx) {
+    const { S, ui, svc, nav, DB } = ctx;
+    const { $, $$ } = ui;
+    const save = () => ctx.saveSettings();
+
+    function editingProvider() { return S.settings.providers.find((p) => p.id === S.editProviderId); }
+    function readProviderForm(p) {
+      if (!$("#prov-name")) return;
+      p.name = $("#prov-name").value.trim() || "API";
+      p.baseUrl = $("#prov-url").value.trim();
+      p.apiKey = $("#prov-key").value.trim();
+      p.model = $("#prov-model").value.trim();
+      p.extendedSamplers = $("#prov-ext").checked;
+    }
+    function collectImgForm() {
+      const c = S.settings.images;
+      $$("[data-imgcfg]").forEach((el) => {
+        const k = el.dataset.imgcfg;
+        c[k] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value.trim();
+      });
+      delete c.loras; // LoRA живут только в карточках персонажей
+    }
+
+    const actions = {
+      settings: (t) => ui.openSettings(t.dataset.section),
+      "cycle-theme": async () => {
+        const ids = V.THEMES.map((t) => t.id);
+        S.settings.theme = ids[(ids.indexOf(S.settings.theme) + 1) % ids.length];
+        ui.applyLook(); await save();
+        ui.toast("Тема: " + V.THEMES.find((t) => t.id === S.settings.theme).name);
+      },
+      theme: async (t) => { S.settings.theme = t.dataset.id; ui.applyLook(); await save(); S.modal.keepScroll = true; ui.renderModal(); },
+      "pick-provider": async (t) => {
+        if (t.closest("[data-act=prov-edit]")) return;
+        S.settings.activeProvider = t.dataset.id; await save(); ui.closePop(); ui.refreshAfterSettings();
+      },
+      "pick-model": async (t) => {
+        const p = S.settings.providers.find((x) => x.id === ctx.provider().id);
+        p.model = t.dataset.model; await save(); ui.closePop(); ui.refreshAfterSettings();
+      },
+      "pick-preset": async (t) => {
+        S.settings.samplerPreset = t.dataset.id;
+        const pr = V.SAMPLER_PRESETS.find((x) => x.id === t.dataset.id);
+        if (pr) Object.assign(S.settings.sampler, pr.v);
+        await save(); ui.closePop(); ui.refreshAfterSettings();
+      },
+      // Провайдеры
+      "prov-add": async (t) => {
+        const pr = OA.PRESETS.find((x) => x.id === t.dataset.preset);
+        const p = { id: U.uid("prov"), presetId: pr.id, name: pr.id === "custom" ? "Мой API" : pr.name, baseUrl: pr.baseUrl, apiKey: "", model: "", extendedSamplers: pr.extendedSamplers };
+        S.settings.providers.push(p);
+        S.settings.activeProvider = p.id;
+        S.editProviderId = p.id;
+        await save(); ui.refreshAfterSettings();
+        setTimeout(() => { const el = $(pr.baseUrl ? (pr.local ? "#prov-model" : "#prov-key") : "#prov-url"); if (el) el.focus(); }, 30);
+      },
+      "prov-edit": (t, e) => { e.stopPropagation(); S.editProviderId = t.dataset.id; S.modal.keepScroll = true; ui.renderModal(); },
+      "prov-close": () => { const p = editingProvider(); if (p) readProviderForm(p); save(); S.editProviderId = null; ui.refreshAfterSettings(); },
+      "prov-save": async () => { readProviderForm(editingProvider()); await save(); ui.refreshAfterSettings(); ui.toast("Сохранено."); },
+      "prov-del": async () => {
+        const p = editingProvider();
+        if (!confirm(`Удалить «${p.name}»?`)) return;
+        S.settings.providers = S.settings.providers.filter((x) => x !== p);
+        if (S.settings.activeProvider === p.id) S.settings.activeProvider = (ctx.providers()[0] || {}).id || "";
+        S.editProviderId = null;
+        await save(); ui.refreshAfterSettings();
+      },
+      "prov-models": async () => {
+        const p = editingProvider(); readProviderForm(p);
+        try { p.models = await OA.listModels(p); if (!p.model && p.models[0]) p.model = p.models[0]; await save(); ui.refreshAfterSettings(); ui.toast(`Найдено моделей: ${p.models.length}`); }
+        catch (err) { ui.toast(err.message, true); }
+      },
+      "persona-save": async () => {
+        S.settings.persona = { name: $("#p-name").value.trim() || "Пользователь", description: $("#p-desc").value,
+          image: { view: $("#p-view").value, appearance: $("#p-appearance").value, povTags: $("#p-povtags").value.trim() } };
+        await save(); ui.refreshAfterSettings(); ui.toast("Сохранено.");
+      },
+      // Изображения
+      "img-backend": (t) => {
+        // Сначала перерисовать (синхронно), потом сохранить: иначе ввод в новое поле во время сохранения теряется.
+        collectImgForm(); S.settings.images.backend = t.dataset.id; S.modal.keepScroll = true; ui.renderModal(); save();
+      },
+      "img-lists": async () => {
+        collectImgForm(); await save();
+        try {
+          const out = await svc.images.fetchLists();
+          await save();
+          ui.toast(`Сервер на связи: моделей ${out.models.length}, LoRA ${out.loras.length}.`);
+        } catch (e) { ui.toast(e.message, true); }
+        S.modal.keepScroll = true; ui.renderModal();
+      },
+      // Данные
+      backup: async () => ctx.files.download(`prism-rp-бэкап-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(await DB.exportAll()), "application/json"),
+      restore: () => $("#file-backup").click(),
+    };
+
+    async function change(t) {
+      if (t.id === "file-backup" && t.files[0]) {
+        const data = JSON.parse(await ctx.files.readFile(t.files[0], "text"));
+        const replace = confirm("Заменить текущие данные бэкапом?\n\nОК — заменить, Отмена — добавить к существующим.");
+        await DB.importAll(data, replace);
+        t.value = "";
+        S.modal = null; S.view = "home";
+        await nav.loadAll(); ui.renderAll();
+        ui.toast("Бэкап загружен.");
+        return true;
+      }
+      if (t.dataset.imgcfg !== undefined) { collectImgForm(); await save(); return true; }
+      if (t.dataset.imgCheck) { collectImgForm(); S.settings.images[t.dataset.imgCheck] = t.checked; ui.refreshAfterSettings(); await save(); return true; }
+      if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; ui.refreshAfterSettings(); await save(); return true; }
+      if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await save(); ui.refreshAfterSettings(); return true; }
+      if (t.dataset.setText) { S.settings[t.dataset.setText] = t.value; await save(); return true; }
+      if (t.dataset.setNum) { S.settings[t.dataset.setNum] = +t.value; await save(); ui.refreshAfterSettings(); return true; }
+      if (t.dataset.setRange) { S.settings[t.dataset.setRange] = +t.value; ui.applyLook(); await save(); return true; }
+      if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; await save(); ui.refreshAfterSettings(); if (S.drawerOpen) ui.renderDrawer(); return true; }
+      return false;
+    }
+    function input(t) {
+      if (t.dataset.setRange) { const o = $("#fs-out"); if (o) o.textContent = t.value; document.documentElement.style.setProperty("--prose-fs", t.value + "px"); }
+    }
+
+    return { actions, change, input };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/controllers/images.js */
+/* Prism RP — контроллер картинок в чате: нарисовать, перерисовать, закрепить seed, скачать, удалить, просмотр. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const V = PRP.views;
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.images = function (ctx) {
+    const { S, ui, svc } = ctx;
+    const findImg = (t) => svc.images.find(t.dataset.mid, t.dataset.sw, t.dataset.img);
+    const newSeed = () => Math.floor(Math.random() * 1e9);
+
+    const actions = {
+      draw: (t) => svc.images.drawFromMessage(t.dataset.id),
+      "img-regen": (t) => { const { msg, sw, im } = findImg(t); if (im) svc.images.draw(msg, sw, null, im, { seed: newSeed() }); },
+      "img-pin": async (t) => {
+        const { im } = findImg(t);
+        if (!im || im.seed == null) { ui.toast("У этой картинки нет seed.", true); return; }
+        const cd = await svc.images.pinSeed(im.seed);
+        ui.toast(`Seed ${im.seed} закреплён за ${cd.name}.`);
+      },
+      "img-info": (t) => { const { im } = findImg(t); if (im) ui.openPop(V.imageInfo(im), t); },
+      "img-dl": (t) => {
+        const { im } = findImg(t);
+        const url = im && S.imgUrls[im.id];
+        if (url) fetch(url).then((r) => r.blob()).then((b) => ctx.files.download(`${ctx.card().name} ${im.seed != null ? im.seed : im.id}.png`, b));
+      },
+      "img-del": async (t) => {
+        const { msg, sw, im } = findImg(t);
+        if (!im) return;
+        await svc.images.remove(msg, sw, im);
+        ui.renderFeed();
+      },
+      "img-view": (t) => { const { im } = findImg(t); if (im) { S.modal = { kind: "image", im, mid: t.dataset.mid, sw: t.dataset.sw }; ui.renderModal(); } },
+      "img-modal-regen": () => {
+        const { mid, sw, im } = S.modal;
+        const msg = S.messages.find((x) => x.id === mid);
+        S.modal = null; ui.renderModal();
+        svc.images.draw(msg, msg.swipes[+sw], null, im, { seed: newSeed() });
+      },
+    };
+
+    return { actions };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/controllers/assist.js */
+/* Prism RP — контроллер ассистента: разговоры, контекст (персонаж и чат), копирование, другой ответ, правка. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const V = PRP.views;
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.assist = function (ctx) {
+    const { S, ui, svc, nav } = ctx;
+    const { $ } = ui;
+    const saveConv = async () => { await svc.assist.save(); ui.rememberUi(); };
+    const copy = async (text) => { await ctx.files.copyText(text); ui.toast("Скопировано."); };
+
+    const actions = {
+      assist: () => nav.openAssist(S.assist && S.assist.messages.length ? S.assist.id : null),
+      "assist-new": () => { ui.closePop(); if (S.assist && !S.assist.messages.length) { $("#input") && $("#input").focus(); return; } nav.openAssist(null, S.assist ? { cardId: S.assist.ctx.cardId, chatId: S.assist.ctx.chatId } : null); },
+      "assist-open": (t) => { ui.closePop(); nav.openAssist(t.dataset.id); },
+      "assist-list": (t) => ui.openPop(V.assistListPop(ui.vm()), t),
+      "assist-ctx": (t) => ui.openPop(V.assistCtxPop(ui.vm()), t),
+      "assist-pick-card": async (t) => {
+        const a = S.assist; a.ctx.cardId = t.dataset.id || null; a.ctx.chatId = null;
+        if (a.messages.length) await saveConv();
+        ui.renderStage();
+        const anchor = $("[data-act=assist-ctx]");
+        if (a.ctx.cardId && anchor) ui.openPop(V.assistCtxPop(ui.vm()), anchor); else ui.closePop();
+      },
+      "assist-pick-chat": async (t) => {
+        const a = S.assist; a.ctx.chatId = t.dataset.id || null;
+        if (a.messages.length) await saveConv();
+        ui.closePop(); ui.renderStage();
+      },
+      "assist-about-chat": () => { ui.closePop(); nav.openAssist(null, { cardId: S.cardId, chatId: S.chatId }); },
+      "assist-starter": (t) => { if (S.gen) return; svc.assist.send(t.dataset.q); },
+      "assist-copy": (t) => { const m = S.assist.messages.find((x) => x.id === t.dataset.id); if (m) copy(m.text); },
+      "copy-code": (t) => { const c = t.parentElement.querySelector("code"); if (c) copy(c.textContent); },
+      "assist-regen": async (t) => { if (S.gen) return; await svc.assist.cutFrom(t.dataset.id); await svc.assist.generate(); },
+      "assist-edit": async (t) => {
+        if (S.gen) return;
+        const removed = await svc.assist.cutFrom(t.dataset.id);
+        ui.renderStage();
+        const i = $("#input"); if (i && removed) { i.value = removed[0].text; ui.autoGrow(i); i.focus(); }
+      },
+      "assist-msg-del": async (t) => { if (S.gen) return; await svc.assist.cutFrom(t.dataset.id); ui.renderStage(); },
+      "assist-del": async () => {
+        const a = S.assist;
+        if (!a || S.gen || !confirm(`Удалить разговор «${a.title}»?`)) return;
+        await svc.assist.remove(a);
+        nav.openAssist(null);
+        ui.toast("Разговор удалён.");
+      },
+    };
+
+    return { actions };
+  };
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/ui/app.js */
-/* Prism RP — приложение: состояние, действия, генерация, события.
-   Платформонезависимо: на Perchance добавляется провайдер ai-text-plugin,
-   везде доступны OpenAI-совместимые API. Данные — в IndexedDB текущего сайта,
-   переезд между платформами — через бэкап JSON. */
+/* Prism RP — корень приложения (composition root).
+   Здесь: состояние сессии, сборка контекста зависимостей, навигация, загрузка,
+   разбор событий DOM по контроллерам, запуск. Правил предметной области здесь нет:
+     события  → контроллеры (js/ui/controllers/*) — тонкие обработчики
+              → сервисы (chat, generation, prism, experience, cards, images, assist)
+              → чистые модули (prism/*, chat/tree, cards/ccard, images/*, assist/assist)
+              → хранилище (core/store) и транспорт моделей (providers/*)
+     перерисовка — через порт интерфейса (js/ui/shell.js).
+   Платформонезависимо: на Perchance добавляется провайдер ai-text-plugin, везде доступны
+   OpenAI-совместимые API. Данные — в IndexedDB текущего сайта, переезд — через бэкап JSON. */
 (function () {
   "use strict";
-  const { util: U, store: DB, scene: SC, experience: EX, assembler: AS, ccard: CC, openai: OA, perchance: PC, tree: TR, render: R, views: V, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST } = window.PRP;
-  const $ = (sel, el) => (el || document).querySelector(sel);
-  const $$ = (sel, el) => Array.from((el || document).querySelectorAll(sel));
+  const PRP = window.PRP;
+  const { util: U, store: DB, settings: ST, perchance: PC, imgBackends: IB, imgCompile: ICP } = PRP;
 
-  const DEFAULTS = {
-    activeProvider: "perchance",
-    providers: [],
-    samplerPreset: "balanced",
-    sampler: { temperature: 0.9, top_p: 0.95, min_p: 0.05, top_k: 0, repetition_penalty: 1.05, max_tokens: 700 },
-    contextTokens: 8192,
-    autoContext: true,
-    singleSystem: false,
-    sceneProtocol: true,
-    noPostHistory: false,
-    expLimit: 8,
-    theme: "dusk",
-    proseSize: 17,
-    persona: { name: "Пользователь", description: "" },
-    images: {
-      enabled: true, backend: "perchance", url: "", key: "", model: "", vae: "", sampler: "", scheduler: "",
-      steps: 28, cfg: 5.5, seed: "", sizeMode: "auto", fixedSize: "1024x1024", maxSide: 1216,
-      hires: false, hiresScale: 1.5, hiresUpscaler: "R-ESRGAN 4x+ Anime6B", hiresDenoise: 0.4, hiresSteps: 0,
-      fixedPrompt: "", promptMode: "append", negative: "", format: "tags", translate: true,
-      modelDraws: true, autoDraw: true, extra: "",
-    },
-  };
-
+  /* ── Состояние сессии ────────────────────────────────────────────────
+     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), assistList.
+     Навигация: view, cardId, chatId, assist (открытый разговор).
+     Генерация (временное): gen, drawing (id картинок в работе).
+     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, expDraft.
+     Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111), legacyExperience. */
   const S = {
     settings: null, cards: [], chats: [],
     view: "home", cardId: null, chatId: null, messages: [], experience: [],
@@ -3279,1295 +5079,147 @@
     assist: null, assistList: [],
   };
 
-  /* ── Мелочи ─────────────────────────────────────────────────────────── */
-  let toastTimer = null;
-  function toast(text, isErr) {
-    const el = $("#toast");
-    el.innerHTML = R.icon(isErr ? "alert" : "check") + `<span>${R.esc(text)}</span>`;
-    el.className = "toast" + (isErr ? " err" : "");
-    el.hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (el.hidden = true), isErr ? 8000 : 2800);
-  }
-  function download(name, data, type) {
-    const blob = data instanceof Blob ? data : new Blob([data], { type: type || "application/octet-stream" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name.replace(/[\\/:*?"<>|]+/g, "_");
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  }
-  function readFile(file, as) {
-    return new Promise((ok, fail) => {
-      const r = new FileReader();
-      r.onload = () => ok(r.result);
-      r.onerror = () => fail(r.error);
-      if (as === "text") r.readAsText(file);
-      else if (as === "dataurl") r.readAsDataURL(file);
-      else r.readAsArrayBuffer(file);
-    });
-  }
-  const card = () => S.cards.find((c) => c.id === S.cardId) || null;
-  const chat = () => S.chats.find((c) => c.id === S.chatId) || null;
-  const persona = () => S.settings.persona || DEFAULTS.persona;
-  const narrow = () => window.innerWidth < 1280;
+  /* ── Контекст зависимостей ───────────────────────────────────────────
+     Передаётся явно в сервисы и контроллеры. Сервисы не трогают DOM: перерисовку
+     просят через ctx.ui; контроллеры читают DOM и вызывают сервисы. */
+  const ctx = {
+    S, DB,
+    files: PRP.files,
+    env: { perchanceImages: () => IB.available("perchance") },
+    card: () => S.cards.find((c) => c.id === S.cardId) || null,
+    chat: () => S.chats.find((c) => c.id === S.chatId) || null,
+    persona: () => ST.persona(S.settings),
+    providers: () => ST.providerList(S.settings, PC.available()),
+    provider: () => ST.activeProvider(S.settings, ctx.providers()),
+    contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
+    saveSettings: () => DB.setSetting("app", S.settings),
+    svc: {},
+    nav: {},
+  };
+  ctx.ui = PRP.shell.create(ctx);
+  ctx.svc.chat = PRP.chatService.create(ctx);
+  ctx.svc.exp = PRP.experienceService.create(ctx);
+  ctx.svc.prism = PRP.prismService.create(ctx);
+  ctx.svc.images = PRP.imageService.create(ctx);
+  ctx.svc.gen = PRP.generationService.create(ctx);
+  ctx.svc.cards = PRP.cardService.create(ctx);
+  ctx.svc.assist = PRP.assistService.create(ctx);
+  const { ui, svc } = ctx;
+  const { $ } = ui;
 
-  /* ── Провайдер ──────────────────────────────────────────────────────── */
-  function providerList() {
-    const list = [];
-    if (PC.available()) list.push({ id: "perchance", name: "Perchance", kind: "perchance", label: "Perchance" });
-    for (const p of S.settings.providers) list.push(Object.assign({ kind: "openai", label: p.model ? `${p.name} · ${p.model}` : p.name }, p));
-    return list;
-  }
-  function activeProvider() {
-    const list = providerList();
-    return list.find((p) => p.id === S.settings.activeProvider) || list[0] || null;
-  }
-  function contextTokens() {
-    const p = activeProvider();
-    if (S.settings.autoContext && p && p.kind === "perchance") {
-      const m = PC.meta();
-      if (m && m.idealMaxContextTokens) return m.idealMaxContextTokens;
-    }
-    return S.settings.contextTokens || 8192;
-  }
-
-  /* ── Опыт: канон чата и ветки ───────────────────────────────────────── */
-  function pathCtx(path) { return (path || activePath()).map((m) => ({ id: m.id, swipeIdx: m.swipeIdx || 0 })); }
-  // Что показывать во вкладке «Опыт»: видимое в этой ветке, скрытое в других ветках, непривязанное.
-  function expView(path) {
-    const ctx = { chatId: S.chatId, path: pathCtx(path) };
-    const inChat = S.experience.filter((r) => r.chatId === S.chatId && !r.legacyUnscoped);
-    const visible = inChat.filter((r) => EX.visibility(r, ctx).visible);
-    return { visible, hiddenInChat: inChat.length - visible.length, legacy: S.experience.filter((r) => EX.scopeOf(r) === "legacy") };
-  }
-  // Однократная (и повторяемая без вреда) миграция старых записей: привязка к чату без догадок.
-  async function migrateExperience() {
-    const all = await DB.all("experience");
-    const need = all.filter((r) => !r.chatId && !(r.source && r.source.chatId) && r.source && (r.source.messageIds || []).length);
-    const msgChat = new Map();
-    for (const r of need) for (const id of r.source.messageIds) {
-      if (msgChat.has(id)) continue;
-      const msg = await DB.get("messages", id);
-      msgChat.set(id, msg ? msg.chatId : null);
-    }
-    const res = EX.migrate(all, { messageChat: (id) => (msgChat.has(id) ? msgChat.get(id) : null) });
-    const changed = res.records.filter((r) => res.changed.includes(r.id));
-    if (changed.length) await DB.putMany("experience", changed);
-    S.legacyExperience = res.legacy;
-    return res;
-  }
-
-  /* ── Модель представления ───────────────────────────────────────────── */
-  function activePath() {
-    const c = chat();
-    return c ? TR.path(TR.index(S.messages), c.leafId) : [];
-  }
-  function sceneState(path) {
-    const c = chat();
-    return SC.fold(c ? c.sceneInit : "", (path || activePath()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
-  }
-  function vm() {
-    const path = activePath();
-    return {
-      S, view: S.view, cards: S.cards, chats: S.chats, card: card(), chat: chat(), persona: persona(), path,
-      scene: chat() ? sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
-      provider: activeProvider(), providers: providerList(), settings: S.settings,
-      exps: S.experience, expView: expView(path), expDraft: S.expDraft, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
-      drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
-      stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
-      imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
-      origin: location.origin && location.origin !== "null" ? location.origin : "*",
-      assist: S.assist, assistList: S.assistList,
-      assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
-      assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
-    };
-  }
-
-  /* ── Отрисовка ──────────────────────────────────────────────────────── */
-  function applyLook() {
-    document.documentElement.setAttribute("data-theme", S.settings.theme || "dusk");
-    document.documentElement.style.setProperty("--prose-fs", (S.settings.proseSize || 17) + "px");
-  }
-  function renderRail() { $("#rail").innerHTML = V.rail(vm()); }
-  function renderStage() {
-    const app = $("#app");
-    const m = vm();
-    const input = $("#input");
-    const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
-    const feedEl = $("#feed");
-    const scroll = feedEl ? feedEl.scrollTop : null;
-    if (S.view === "assist" && S.assist) {
-      $("#stage").innerHTML = V.assist(m);
-      app.classList.remove("messenger");
-      if (keep) {
-        const i = $("#input"); i.value = keep.v; autoGrow(i);
-        if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
-      }
-      if (scroll != null && $("#feed")) $("#feed").scrollTop = scroll;
-    } else if (S.view === "chat" && m.chat && m.card) {
-      $("#stage").innerHTML = V.chat(m);
-      app.classList.toggle("messenger", m.chat.mode === "messenger");
-      if (keep) {
-        const i = $("#input"); i.value = keep.v; autoGrow(i);
-        if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
-      }
-      if (scroll != null) $("#feed").scrollTop = scroll;
-      if (S.find) applyFind(false);
-    } else {
-      app.classList.remove("messenger");
-      $("#stage").innerHTML = V.home(m);
-    }
-    app.classList.toggle("generating", !!S.gen);
-  }
-  function renderFeed() {
-    if (S.view === "assist") return renderStage();
-    const inner = $("#feed-inner");
-    if (!inner) return renderStage();
-    inner.innerHTML = V.feed(vm());
-    const head = $(".chat-head");
-    if (head) head.outerHTML = V.chatHead(vm());
-    const comp = $(".composer-wrap");
-    if (comp) {
-      const i = $("#input");
-      const keep = i ? i.value : "";
-      const focused = document.activeElement === i;
-      comp.outerHTML = V.composer(vm());
-      const ni = $("#input"); ni.value = keep; autoGrow(ni);
-      if (focused) ni.focus();
-    }
-    $("#app").classList.toggle("generating", !!S.gen);
-    if (S.find) applyFind(false);
-  }
-  function renderDrawer() {
-    const d = $("#drawer");
-    d.classList.toggle("open", S.drawerOpen && S.view === "chat");
-    $("#app").classList.toggle("drawer-open", S.drawerOpen && S.view === "chat");
-    const body = $("#drawer-body");
-    const scroll = body ? body.scrollTop : 0;
-    d.innerHTML = S.drawerOpen && S.view === "chat" ? V.drawer(vm()) : "";
-    const nb = $("#drawer-body");
-    if (nb) nb.scrollTop = scroll;
-    syncScrim();
-  }
-  function renderModal() {
-    const root = $("#modal-root");
-    if (!S.modal) { root.innerHTML = ""; return; }
-    const m = vm();
-    const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
-    if (S.modal.kind === "image") {
-      const im = S.modal.im, url = S.imgUrls[im.id];
-      root.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${url}" alt="">
-        <figcaption><span>${R.esc(im.draw || "")}</span><span class="lb-tools">
-          <button class="btn btn-sm" data-act="img-modal-regen">${R.icon("regen")}Заново</button>
-          <button class="btn btn-sm" data-act="img-dl" data-mid="${S.modal.mid}" data-sw="${S.modal.sw}" data-img="${im.id}">${R.icon("download")}Скачать</button>
-          <button class="icon-btn" data-act="modal-close" title="Закрыть">${R.icon("x")}</button></span></figcaption></figure></div>`;
-      return;
-    }
-    root.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section) : V.cardModal(m, S.modal.draft, S.modal.section);
-    if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
-    S.modal.keepScroll = false;
-  }
-  function renderAll() { applyLook(); renderRail(); renderStage(); renderDrawer(); renderModal(); }
-  function scrollBottom() { const el = $("#feed"); if (el) requestAnimationFrame(() => (el.scrollTop = el.scrollHeight)); }
-  function syncScrim() {
-    const railOpen = $("#rail").classList.contains("open");
-    const drawerOverlay = S.drawerOpen && S.view === "chat" && narrow();
-    $("#scrim").hidden = !(railOpen || drawerOverlay);
-  }
-
-  /* ── Загрузка ───────────────────────────────────────────────────────── */
-  async function saveSettings() { await DB.setSetting("app", S.settings); }
+  /* ── Загрузка ─────────────────────────────────────────────────────── */
   async function loadAll() {
     const saved = await DB.getSetting("app", null);
-    S.settings = Object.assign(U.clone(DEFAULTS), saved || {});
-    S.settings.sampler = Object.assign({}, DEFAULTS.sampler, S.settings.sampler || {});
-    S.settings.persona = Object.assign({}, DEFAULTS.persona, S.settings.persona || {});
-    S.settings.images = Object.assign({}, DEFAULTS.images, S.settings.images || {});
-    if (!saved && !IB.available("perchance")) S.settings.images.backend = "a1111";
+    S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
     S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
-    S.assistList = await DB.all("assist");
-    await migrateExperience();
-    const ui = (await DB.getSetting("ui", {})) || {};
-    S.drawerOpen = !!ui.drawerOpen && !narrow();
-    if (ui.chatId && S.chats.some((c) => c.id === ui.chatId)) await openChat(ui.chatId, true);
-    else if (ui.view === "assist") openAssist(ui.assistId, null, true);
-  }
-  function rememberUi() {
-    DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen, view: S.view, assistId: S.view === "assist" && S.assist && S.assist.messages.length ? S.assist.id : null });
+    S.assistList = await svc.assist.loadAll();
+    await svc.exp.migrate();
+    const saveUi = (await DB.getSetting("ui", {})) || {};
+    S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
+    if (saveUi.chatId && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
+    else if (saveUi.view === "assist") openAssist(saveUi.assistId, null, true);
   }
 
+  /* ── Навигация ───────────────────────────────────────────────────── */
   async function openChat(chatId, quiet) {
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
     S.chatId = chatId;
     S.cardId = c.cardId;
     S.view = "chat";
-    S.messages = await DB.byIndex("messages", "chatId", chatId);
-    S.experience = await DB.byIndex("experience", "owner", c.cardId);
-    S.imgUrls = {};
-    (await DB.byIndex("images", "chatId", chatId)).forEach((x) => (S.imgUrls[x.id] = x.dataUrl));
-    // Рисование, прерванное закрытием страницы, не должно висеть «в работе».
-    for (const msg of S.messages) for (const sw of msg.swipes) for (const im of sw.images || []) {
-      if (im.status === "pending" && !S.drawing.has(im.id)) { im.status = "error"; im.error = "Рисование прервано. Попробуйте ещё раз."; }
-    }
+    S.messages = await svc.chat.loadMessages(chatId);
+    S.experience = await svc.exp.loadForCard(c.cardId);
+    await svc.images.loadForChat(chatId);
     S.editingMsg = null; S.expDraft = null; S.find = null;
-    refreshPrism();
-    rememberUi();
-    if (!quiet) { renderAll(); scrollBottom(); }
+    svc.prism.refresh();
+    ui.rememberUi();
+    if (!quiet) { ui.renderAll(); ui.scrollBottom(); }
     $("#rail").classList.remove("open");
-    syncScrim();
+    ui.syncScrim();
   }
   function goHome() {
     S.view = "home";
     S.find = null;
-    rememberUi();
+    ui.rememberUi();
     $("#rail").classList.remove("open");
-    renderAll();
+    ui.renderAll();
   }
-
-  /* ── Сообщения ──────────────────────────────────────────────────────── */
-  async function putMsg(m) {
-    await DB.put("messages", m);
-    const i = S.messages.findIndex((x) => x.id === m.id);
-    if (i >= 0) S.messages[i] = m; else S.messages.push(m);
-  }
-  async function putChat(c) {
-    await DB.put("chats", c);
-    const i = S.chats.findIndex((x) => x.id === c.id);
-    if (i >= 0) S.chats[i] = c; else S.chats.push(c);
-  }
-  async function touchChat() {
-    const c = chat();
-    if (!c) return;
-    const last = activePath().slice(-1)[0];
-    const t = last ? TR.activeSwipe(last).text : "";
-    c.preview = (last && last.role === "user" ? "Вы: " : "") + t.replace(/\s+/g, " ").slice(0, 90);
-    await putChat(c);
-  }
-  function newMsg(role, parentId, text) {
-    const now = Date.now();
-    return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null, role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
-  }
-
   async function newChat(mode, cardId) {
-    const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
-    if (!cd) return;
-    const c = { id: U.uid("chat"), cardId: cd.id, mode, title: mode === "messenger" ? "Переписка" : "Сцена", sceneInit: "", leafId: null, createdAt: Date.now() };
-    S.chatId = c.id; S.cardId = cd.id; S.messages = [];
-    if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
-      const vars = { char: cd.name, user: persona().name };
-      const m = newMsg("assistant", null, "");
-      m.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
-        const parsed = SC.parse(U.macros(g, vars));
-        return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };
-      });
-      await putMsg(m);
-      c.leafId = m.id;
-      c.preview = m.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
-    }
-    await putChat(c);
-    await openChat(c.id);
+    const id = await svc.chat.createChat(mode, cardId);
+    if (id) await openChat(id);
   }
-
   async function openCard(cardId) {
-    const chats = S.chats.filter((c) => c.cardId === cardId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    if (chats[0]) return openChat(chats[0].id);
+    const latest = svc.chat.latestForCard(cardId);
+    if (latest) return openChat(latest.id);
     return newChat("rp", cardId);
   }
-
-  async function sendUser() {
-    const input = $("#input");
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text || S.gen) return;
-    if (S.view === "assist") { input.value = ""; autoGrow(input); return assistSend(text); }
-    const c = chat();
-    input.value = "";
-    autoGrow(input);
-    const m = newMsg("user", c.leafId, text);
-    await putMsg(m);
-    c.leafId = m.id;
-    await touchChat();
-    renderFeed();
-    scrollBottom();
-    await generate();
-  }
-
-  function imagesOn() {
-    const ic = S.settings.images;
-    return ic.enabled && (ic.backend !== "perchance" || IB.available("perchance"));
-  }
-  function qualityPinned() {
-    const ic = S.settings.images;
-    return ic.promptMode !== "off" && !!String(ic.fixedPrompt || "").trim();
-  }
-  function buildPrism(path, extraPost) {
-    const c = chat(), cd = card();
-    if (imagesOn() && S.settings.images.modelDraws) {
-      const di = IC.drawInstruction({ format: S.settings.images.format, qualityPinned: qualityPinned(), pov: (persona().image || {}).view === "first" });
-      extraPost = [di, extraPost].filter(Boolean).join("\n\n");
-    }
-    const st = sceneState(path);
-    const history = path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })).filter((h) => h.text);
-    const recent = history.slice(-4).map((h) => h.text).join("\n");
-    const ex = EX.rank(S.experience, {
-      chatId: c.id, path: pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
-      text: recent, names: [cd.name, persona().name].concat(st.present), limit: S.settings.expLimit,
-    });
-    const built = AS.build({
-      mode: c.mode, card: cd, userName: persona().name, userDesc: persona().description,
-      sceneState: st, experiences: ex.ranked, history, extraPost,
-      contextTokens: contextTokens(), reserveTokens: S.settings.sampler.max_tokens || 700,
-      singleSystem: S.settings.singleSystem, sceneProtocol: S.settings.sceneProtocol, noPostHistory: !!S.settings.noPostHistory,
-    });
-    built.report.expDebug = ex.debug;
-    built.report.experienceVisible = ex.visibleCount;
-    built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
-    return built;
-  }
-  function refreshPrism() {
-    if (!chat() || !card()) { S.lastPrism = null; return; }
-    S.lastPrism = Object.assign({ at: Date.now(), preview: true }, buildPrism(activePath()));
-  }
-
-  // mode: "new" | "regen" (новый свайп) | "continue" (дописать текущий свайп)
-  async function generate(msgId, mode) {
-    if (S.gen) return;
-    const c = chat(), cd = card();
-    const prov = activeProvider();
-    if (!c || !cd) return;
-    if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
-    mode = mode || (msgId ? "regen" : "new");
-
-    // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
-    // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
-    let path = activePath();
-    if (mode === "regen") path = path.slice(0, path.findIndex((m) => m.id === msgId));
-    const extraPost = mode === "continue" ? "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново." : "";
-    const built = buildPrism(path, extraPost);
-    S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
-    if (built.report.overflow) {
-      toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
-      if (S.drawerOpen) { S.tab = "prism"; renderDrawer(); }
-      renderFeed();
-      return;
-    }
-
-    let target, prefix = "";
-    if (mode === "regen") {
-      target = S.messages.find((m) => m.id === msgId);
-      target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
-      target.swipeIdx = target.swipes.length - 1;
-    } else if (mode === "continue") {
-      target = S.messages.find((m) => m.id === msgId);
-      prefix = TR.activeSwipe(target).text;
-    } else {
-      target = newMsg("assistant", c.leafId, "");
-      c.leafId = target.id;
-      await putChat(c);
-    }
-    await putMsg(target);
-
-    const sw = TR.activeSwipe(target);
-    const ctrl = new AbortController();
-    S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
-    renderFeed();
-    if (S.drawerOpen && S.tab === "prism") renderDrawer();
-    scrollBottom();
-
-    const onDelta = (d) => { S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; paintStreaming(); };
-    let raw = "", reasoning = "", error = null;
-    try {
-      const res = prov.kind === "perchance"
-        ? await PC.chat({ char: cd.name, user: persona().name }, built.messages, { signal: ctrl.signal, onDelta, continueFrom: prefix || null })
-        : await OA.chat(prov, built.messages, S.settings.sampler, { signal: ctrl.signal, onDelta });
-      raw = res.text; reasoning = res.reasoning;
-    } catch (e) {
-      raw = e.partial != null ? e.partial : S.gen.raw;
-      reasoning = S.gen.reasoning;
-      if (e.name !== "AbortError") error = e.message || String(e);
-    }
-    const th = OA.splitThink(raw || "");
-    const parsed = SC.parse(th.text);
-    const dr = IC.parseDraws(parsed.text);
-    if (mode === "continue") {
-      if (dr.text) sw.text = S.gen.prefix + dr.text;
-      sw.sceneOps = (sw.sceneOps || []).concat(parsed.ops);
-      sw.draws = (sw.draws || []).concat(dr.draws);
-    } else {
-      sw.text = dr.text;
-      sw.sceneOps = parsed.ops;
-      sw.draws = dr.draws;
-    }
-    sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
-    if (error) sw.error = error; else delete sw.error;
-    S.gen = null;
-    await putMsg(target);
-    await touchChat();
-    refreshPrism();
-    renderFeed();
-    renderRail();
-    if (S.drawerOpen) renderDrawer();
-    scrollBottom();
-    if (!error && dr.draws.length && imagesOn() && S.settings.images.autoDraw) drawImage(target, sw, dr.draws[0]);
-  }
-
-  /* ── Картинки ───────────────────────────────────────────────────────── */
-  async function textGen(instruction) {
-    const prov = activeProvider();
-    if (!prov) throw new Error("нет текстовой модели");
-    if (prov.kind === "perchance") return PC.simple(instruction);
-    const r = await OA.chat(prov, [{ role: "user", content: instruction }], { temperature: 0.3, max_tokens: 400 }, {});
-    return OA.splitThink(r.text).text;
-  }
-  function identityFor(cd) {
-    const im = cd.image || {};
-    const bits = ["name: " + cd.name];
-    if (im.trigger) bits.push("already injected later (do NOT repeat these tags): " + im.trigger);
-    const base = IC.parseMap(im.look).filter((e) => /^(|base|always)$/i.test(e.key)).map((e) => e.tags).join(", ");
-    if (base) bits.push("look: " + base);
-    return bits.join("\n");
-  }
-
-  async function drawImage(msg, sw, draw, reuse, opts) {
-    const o = opts || {};
-    const cfg = S.settings.images, cd = card();
-    if (!cfg.enabled) { toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
-    if (cfg.backend === "perchance" && !IB.available("perchance")) { toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); openSettings("images"); return; }
-    if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { toast("Укажите адрес сервера изображений.", true); openSettings("images"); return; }
-    const entry = reuse || { id: U.uid("img"), draw: draw.prompt, ratio: draw.ratio || "1:1" };
-    Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
-    delete entry.error;
-    if (!reuse) (sw.images = sw.images || []).push(entry);
-    S.drawing.add(entry.id);
-    const repaint = () => { if (chat() && chat().id === msg.chatId) renderFeed(); };
-    await putMsg(msg);
-    repaint();
-    try {
-      const path = activePath();
-      const upto = path.indexOf(msg) >= 0 ? path.slice(0, path.indexOf(msg) + 1) : path;
-      const st = sceneState(upto);
-      const pers = persona();
-      const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers });
-      if (cfg.translate && IC.needsRewrite(composed.scene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-      const comp = await ICP.compile(composed.scene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: qualityPinned(), identity: identityFor(cd) }, textGen);
-      const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
-      entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
-      repaint();
-      const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
-      const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
-      await DB.put("images", { id: entry.id, chatId: msg.chatId, msgId: msg.id, dataUrl: res.dataUrl });
-      S.imgUrls[entry.id] = res.dataUrl;
-      const dims = res.info && res.info.width ? [res.info.width, res.info.height]
-        : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
-      Object.assign(entry, { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? composed.scene : "" });
-      if (dims) { entry.w = dims[0]; entry.h = dims[1]; }
-      delete entry.stage;
-    } catch (e) {
-      entry.status = "error";
-      entry.error = e.message || String(e);
-      delete entry.stage;
-    }
-    S.drawing.delete(entry.id);
-    await putMsg(msg);
-    repaint();
-  }
-
-  function findImg(t) {
-    const msg = S.messages.find((x) => x.id === t.dataset.mid);
-    if (!msg) return {};
-    const sw = msg.swipes[+t.dataset.sw];
-    const im = sw && (sw.images || []).find((x) => x.id === t.dataset.img);
-    return { msg, sw, im };
-  }
-
-  function drawFromMessage(msgId) {
-    const msg = S.messages.find((x) => x.id === msgId);
-    const sw = TR.activeSwipe(msg);
-    const d = (sw.draws && sw.draws[0]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1" };
-    return drawImage(msg, sw, d);
-  }
-
-  let paintQueued = false;
-  function paintStreaming() {
-    if (paintQueued) return;
-    paintQueued = true;
-    requestAnimationFrame(() => {
-      paintQueued = false;
-      if (!S.gen) return;
-      const el = document.getElementById("text-" + S.gen.msgId);
-      if (!el) return;
-      const txt = IC.stripDrawsForDisplay(SC.stripForDisplay(OA.splitThink(S.gen.raw).text));
-      if (chat().mode === "messenger") {
-        el.innerHTML = R.bubbles(txt).map((p) => `<div class="bub">${R.esc(p)}</div>`).join("") + `<div class="bub typing"><i></i><i></i><i></i></div>`;
-      } else el.innerHTML = R.rpText(S.gen.prefix + txt);
-      const box = $("#feed");
-      if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
-    });
-  }
-
-  async function swipe(msgId, dir) {
-    const m = S.messages.find((x) => x.id === msgId);
-    if (!m || S.gen) return;
-    const next = (m.swipeIdx || 0) + dir;
-    if (next < 0) return;
-    const isLast = activePath().slice(-1)[0] === m;
-    if (next >= m.swipes.length) { if (m.role === "assistant" && isLast) return generate(m.id, "regen"); return; }
-    m.swipeIdx = next;
-    await putMsg(m);
-    await touchChat();
-    refreshPrism();
-    renderFeed();
-    if (S.drawerOpen) renderDrawer();
-  }
-
-  async function deleteFrom(msgId) {
-    if (S.gen) return;
-    const m = S.messages.find((x) => x.id === msgId);
-    if (!m || !confirm("Удалить это сообщение и всё, что идёт после него в этой ветке?")) return;
-    const ids = [msgId].concat(TR.descendants(S.messages, msgId));
-    const imgIds = [];
-    S.messages.filter((x) => ids.includes(x.id)).forEach((x) => x.swipes.forEach((sw) => (sw.images || []).forEach((im) => imgIds.push(im.id))));
-    await DB.delMany("images", imgIds);
-    await DB.delMany("messages", ids);
-    S.messages = S.messages.filter((x) => !ids.includes(x.id));
-    const c = chat();
-    const lastRoot = TR.children(S.messages, null).slice(-1)[0];
-    c.leafId = m.parentId ? TR.latestLeaf(S.messages, m.parentId) : lastRoot ? TR.latestLeaf(S.messages, lastRoot.id) : null;
-    await touchChat();
-    refreshPrism();
-    renderFeed();
-    renderRail();
-    if (S.drawerOpen) renderDrawer();
-  }
-
-  async function saveEdit(msgId, text) {
-    const m = S.messages.find((x) => x.id === msgId);
-    if (!m) return;
-    const sw = TR.activeSwipe(m);
-    const parsed = SC.parse(text);
-    sw.text = m.role === "assistant" ? parsed.text : text.trim();
-    if (m.role === "assistant") sw.sceneOps = parsed.ops;
-    S.editingMsg = null;
-    await putMsg(m);
-    await touchChat();
-    refreshPrism();
-    renderFeed();
-    if (S.drawerOpen) renderDrawer();
-  }
-
-  /* ── Сцена из форм ──────────────────────────────────────────────────── */
-  function op(subject, key, value) {
-    return { subject: subject || undefined, key, value, raw: `${subject ? subject + "." : ""}${key}=${value}`, manual: true };
-  }
-  async function applySceneOps(ops) {
-    if (!ops.length) return;
-    const c = chat();
-    const leaf = activePath().slice(-1)[0];
-    if (leaf) {
-      const sw = TR.activeSwipe(leaf);
-      sw.sceneOps = (sw.sceneOps || []).concat(ops);
-      await putMsg(leaf);
-    } else {
-      c.sceneInit = [c.sceneInit, ops.map((o) => o.raw).join("; ")].filter(Boolean).join("; ");
-      await putChat(c);
-    }
-    refreshPrism();
-    renderDrawer();
-    const head = $(".chat-head");
-    if (head) head.outerHTML = V.chatHead(vm());
-  }
-
-  /* ── Опыт ───────────────────────────────────────────────────────────── */
-  function collectExp() {
-    const d = S.expDraft;
-    if (!d || !$("#x-event")) return d;
-    d.event = $("#x-event").value;
-    d.interpretation = $("#x-interp").value;
-    d.consequences = $("#x-cons").value;
-    d.status = $("#x-status").value;
-    const aboutUser = $("#x-about-user").checked;
-    d.about = (d.about || []).filter((a) => a !== "user");
-    if (aboutUser) d.about.unshift("user");
-    return d;
-  }
-  function expFromMessage(msgId) {
-    const path = activePath();
-    const idx = path.findIndex((m) => m.id === msgId);
-    const st = sceneState(path.slice(0, idx + 1));
-    const d = EX.blank(S.cardId, S.chatId);
-    d.about = ["user"];
-    const msg = path[idx];
-    d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 }, sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
-    S.expDraft = d;
-    S.tab = "memory";
-    S.drawerOpen = true;
-    renderDrawer();
-    renderFeed();
-    setTimeout(() => { const e = $("#x-event"); if (e) e.focus(); }, 280);
-  }
-  async function saveExp() {
-    const d = collectExp();
-    d.event = d.event.trim();
-    if (!d.event) { toast("Опишите, что произошло.", true); return; }
-    if (!d.id) d.id = U.uid("x");
-    d.owner = S.cardId;
-    // Новая запись всегда принадлежит текущему чату; непривязанные старые не трогаем.
-    if (!d.chatId && !d.legacyUnscoped) { d.chatId = S.chatId; d.source = Object.assign({ messageIds: [] }, d.source, { chatId: S.chatId }); }
-    await DB.put("experience", d);
-    const i = S.experience.findIndex((x) => x.id === d.id);
-    if (i >= 0) S.experience[i] = d; else S.experience.push(d);
-    S.expDraft = null;
-    refreshPrism();
-    renderDrawer();
-    toast("Событие сохранено в опыт.");
-  }
-
-
-  /* ── Ассистент: разговор с моделью вне игры ─────────────────────────── */
-  function openAssist(id, ctx, quiet) {
-    if (S.gen) { toast("Дождитесь окончания ответа или остановите его.", true); return; }
-    const found = id && S.assistList.find((a) => a.id === id);
-    if (found) S.assist = found;
-    else if (!ctx && S.assist && !S.assist.messages.length) { /* пустой разговор уже открыт */ }
-    else {
-      // Новый разговор наследует персонажа из текущего контекста.
-      const base = ctx || (S.assist ? { cardId: S.assist.ctx.cardId, chatId: null } : (S.view === "chat" && S.cardId ? { cardId: S.cardId, chatId: null } : {}));
-      S.assist = AST.blank(base);
-    }
+  function openAssist(id, base, quiet) {
+    if (S.gen) { ui.toast("Дождитесь окончания ответа или остановите его.", true); return; }
+    svc.assist.pick(id, base);
     S.view = "assist";
     S.find = null;
-    S.drawerOpen = S.drawerOpen && !narrow();
-    rememberUi();
+    S.drawerOpen = S.drawerOpen && !ui.narrow();
+    ui.rememberUi();
     $("#rail").classList.remove("open");
-    if (!quiet) { renderAll(); scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !narrow()) i.focus(); }, 30); }
+    if (!quiet) { ui.renderAll(); ui.scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !ui.narrow()) i.focus(); }, 30); }
   }
-  async function saveAssist() {
-    const a = S.assist;
-    await DB.put("assist", a);
-    if (!S.assistList.includes(a)) S.assistList.push(a);
-    rememberUi();
-  }
-  async function assistChatLines(chatId) {
-    const c = S.chats.find((x) => x.id === chatId);
-    if (!c) return { lines: [], scene: "" };
-    const msgs = await DB.byIndex("messages", "chatId", chatId);
-    const path = TR.path(TR.index(msgs), c.leafId);
-    const cd = S.cards.find((x) => x.id === c.cardId);
-    const lines = path.map((m) => ({ name: m.role === "user" ? persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
-    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
-    return { lines, scene: SC.summaryLine(st) || "" };
-  }
-  async function assistSend(text) {
-    const a = S.assist;
-    if (!a || S.gen) return;
-    if (!a.messages.length) a.title = AST.title(text);
-    a.messages.push({ id: U.uid("am"), role: "user", text, at: Date.now() });
-    await saveAssist();
-    await assistGenerate();
-  }
-  async function assistGenerate() {
-    const a = S.assist;
-    const prov = activeProvider();
-    if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
-    const cd = a.ctx.cardId ? S.cards.find((c) => c.id === a.ctx.cardId) : null;
-    const chatCtx = a.ctx.chatId ? await assistChatLines(a.ctx.chatId) : { lines: [], scene: "" };
-    const target = { id: U.uid("am"), role: "assistant", text: "", at: Date.now() };
-    const history = a.messages.map((x) => ({ role: x.role, text: x.text }));
-    a.messages.push(target);
-    const built = AST.build({
-      system: (S.settings.assistSystem || "").trim() || AST.SYSTEM, card: cd, chatLines: chatCtx.lines, sceneLine: chatCtx.scene,
-      userName: persona().name, history, contextTokens: contextTokens(), reserveTokens: 1500,
-    });
-    const ctrl = new AbortController();
-    S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", assist: true };
-    renderStage();
-    scrollBottom();
-    const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; paintAssist(); };
-    let raw = "", reasoning = "", error = null;
-    try {
-      const sp = S.settings.sampler;
-      const res = prov.kind === "perchance"
-        ? await PC.chat({ char: "Ассистент", user: persona().name }, built.messages, { signal: ctrl.signal, onDelta })
-        : await OA.chat(prov, built.messages, Object.assign({}, sp, { temperature: Math.min(sp.temperature || 0.7, 0.8), max_tokens: Math.max(sp.max_tokens || 0, 1500) }), { signal: ctrl.signal, onDelta });
-      raw = res.text; reasoning = res.reasoning;
-    } catch (e) {
-      raw = e.partial != null ? e.partial : (S.gen ? S.gen.raw : "");
-      reasoning = S.gen ? S.gen.reasoning : "";
-      if (e.name !== "AbortError") error = e.message || String(e);
-    }
-    const th = OA.splitThink(raw || "");
-    target.text = th.text.trim();
-    target.reasoning = [reasoning, th.reasoning].filter(Boolean).join("\n").trim();
-    if (error) target.error = error;
-    S.gen = null;
-    if (!target.text && !error) a.messages.pop();
-    await saveAssist();
-    if (S.view === "assist") { renderStage(); scrollBottom(); }
-  }
-  let assistPaintQueued = false;
-  function paintAssist() {
-    if (assistPaintQueued) return;
-    assistPaintQueued = true;
-    requestAnimationFrame(() => {
-      assistPaintQueued = false;
-      if (!S.gen || !S.gen.assist) return;
-      const el = document.getElementById("text-" + S.gen.msgId);
-      if (!el) return;
-      el.innerHTML = R.md(OA.splitThink(S.gen.raw).text);
-      const box = $("#feed");
-      if (box && box.scrollHeight - box.scrollTop - box.clientHeight < 200) box.scrollTop = box.scrollHeight;
-    });
-  }
-  async function copyText(text) {
-    try { await navigator.clipboard.writeText(text); }
-    catch (e) {
-      const ta = document.createElement("textarea");
-      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
-      document.body.appendChild(ta); ta.select();
-      try { document.execCommand("copy"); } finally { ta.remove(); }
-    }
-    toast("Скопировано.");
-  }
-  async function assistCutFrom(id) {
-    const a = S.assist;
-    const i = a.messages.findIndex((x) => x.id === id);
-    if (i < 0) return null;
-    const removed = a.messages.splice(i);
-    await saveAssist();
-    return removed;
-  }
+  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist });
 
-  /* ── Персонажи ──────────────────────────────────────────────────────── */
-  function openCardEditor(cd) {
-    S.modal = { kind: "card", section: "main", draft: U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })) };
-    renderModal();
-    setTimeout(() => { const n = $("#cf-name"); if (n && !S.modal.draft.name) n.focus(); }, 30);
-  }
-  function collectCard() {
-    const d = S.modal.draft;
-    const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
-    $$("[data-cf]").forEach((el) => {
-      const id = el.dataset.cf;
-      if (map[id]) d[map[id]] = el.value;
-      else if (id === "cf-tags") d.tags = el.value.split(",").map((s) => s.trim()).filter(Boolean);
-    });
-    if ($("[data-alt]") || S.modal.section === "greet") {
-      d.altGreetings = (d.altGreetings || []).slice();
-      $$("[data-alt]").forEach((el) => { d.altGreetings[+el.dataset.alt] = el.value; });
-    }
-    if ($("[data-ci]") || $("[data-card-lora-name]")) {
-      d.image = Object.assign({}, d.image);
-      $$("[data-ci]").forEach((el) => { d.image[el.dataset.ci] = el.value; });
-      d.image.loras = $$("[data-card-lora-name]").map((el) => {
-        const w = $(`[data-card-lora-w="${el.dataset.cardLoraName}"]`);
-        return { name: el.value.trim(), weight: w && w.value !== "" ? Number(w.value) : 1 };
-      });
-    }
-    $$("[data-lore]").forEach((el) => {
-      const e = d.lore[+el.dataset.lore];
-      if (!e) return;
-      const k = el.dataset.k;
-      if (k === "keys" || k === "secondary_keys") e[k] = el.value.split(",").map((s) => s.trim()).filter(Boolean);
-      else if (k === "content" || k === "comment" || k === "position") e[k] = el.value;
-      else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
-      else e[k] = el.checked;
-    });
-    return d;
-  }
-  async function saveCard() {
-    const d = collectCard();
-    d.name = (d.name || "").trim();
-    if (!d.name) { toast("Дайте персонажу имя.", true); S.modal.section = "main"; renderModal(); return; }
-    if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
-    d.altGreetings = (d.altGreetings || []).map((g) => String(g || "").trim()).filter(Boolean);
-    d.updatedAt = Date.now();
-    const isNew = !d.id;
-    if (isNew) { d.id = U.uid("card"); d.createdAt = Date.now(); }
-    await DB.put("cards", d);
-    const i = S.cards.findIndex((x) => x.id === d.id);
-    if (i >= 0) S.cards[i] = d; else S.cards.unshift(d);
-    S.modal = null;
-    renderAll();
-    toast(isNew ? `${d.name} создан(а). Нажмите на портрет, чтобы начать.` : "Изменения сохранены.");
-  }
-  async function importCards(files) {
-    let last = null;
-    for (const file of files) {
-      try {
-        let json, avatar = null;
-        if (/\.json$/i.test(file.name) || file.type === "application/json") json = JSON.parse(await readFile(file, "text"));
-        else { json = CC.cardJsonFromPng(new Uint8Array(await readFile(file))); avatar = await readFile(file, "dataurl"); }
-        const cd = CC.normalize(json);
-        cd.id = U.uid("card");
-        cd.avatar = avatar;
-        await DB.put("cards", cd);
-        S.cards.unshift(cd);
-        last = cd;
-      } catch (e) {
-        toast(`${file.name}: ${e.message}`, true);
-      }
-    }
-    if (last) { S.view = "home"; renderAll(); toast(`Добавлен(а): ${last.name}`); }
-  }
-  function avatarPngBytes(cd) {
-    return new Promise((ok, fail) => {
-      const draw = (img) => {
-        const cv = document.createElement("canvas");
-        cv.width = img ? img.naturalWidth : 600; cv.height = img ? img.naturalHeight : 800;
-        const g = cv.getContext("2d");
-        if (img) g.drawImage(img, 0, 0);
-        else {
-          const h = R.hue(cd.name);
-          const gr = g.createLinearGradient(0, 0, 600, 800);
-          gr.addColorStop(0, `hsl(${h} 55% 52%)`); gr.addColorStop(1, `hsl(${(h + 80) % 360} 45% 22%)`);
-          g.fillStyle = gr; g.fillRect(0, 0, 600, 800);
-          g.fillStyle = "rgba(255,255,255,.88)"; g.font = "bold 300px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
-          g.fillText((cd.name || "?").charAt(0).toUpperCase(), 300, 420);
-        }
-        cv.toBlob(async (b) => ok(new Uint8Array(await b.arrayBuffer())), "image/png");
-      };
-      if (cd.avatar && cd.avatar.startsWith("data:image/png")) fetch(cd.avatar).then((r) => r.arrayBuffer()).then((b) => ok(new Uint8Array(b)), fail);
-      else if (cd.avatar) { const img = new Image(); img.onload = () => draw(img); img.onerror = () => draw(null); img.src = cd.avatar; }
-      else draw(null);
-    });
-  }
-  async function deleteCard(cd) {
-    if (!confirm(`Удалить «${cd.name}» вместе со всеми чатами и опытом? Это нельзя отменить.`)) return;
-    for (const c of S.chats.filter((x) => x.cardId === cd.id)) {
-      const ms = await DB.byIndex("messages", "chatId", c.id);
-      await DB.delMany("messages", ms.map((m) => m.id));
-      await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
-      await DB.del("chats", c.id);
-    }
-    const xs = await DB.byIndex("experience", "owner", cd.id);
-    await DB.delMany("experience", xs.map((x) => x.id));
-    await DB.del("cards", cd.id);
-    S.cards = S.cards.filter((c) => c.id !== cd.id);
-    S.chats = S.chats.filter((c) => c.cardId !== cd.id);
-    if (S.cardId === cd.id) { S.cardId = null; S.chatId = null; S.messages = []; S.view = "home"; }
-    S.modal = null;
-    renderAll();
-    toast(`${cd.name} удалён(а).`);
-  }
-  async function deleteChat() {
-    const c = chat();
-    if (!c || !confirm("Удалить этот чат? Вместе с ним удалится опыт персонажа, накопленный в этом мире.")) return;
-    const ms = await DB.byIndex("messages", "chatId", c.id);
-    await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
-    await DB.delMany("messages", ms.map((m) => m.id));
-    await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
-    await DB.del("chats", c.id);
-    S.chats = S.chats.filter((x) => x.id !== c.id);
-    S.chatId = null; S.messages = [];
-    goHome();
-  }
-  function exportChatText() {
-    const c = chat(), cd = card();
-    const lines = activePath().map((m) => `${m.role === "user" ? persona().name : cd.name}: ${TR.activeSwipe(m).text}`);
-    download(`${cd.name} — ${c.title || "чат"}.txt`, lines.join("\n\n"), "text/plain;charset=utf-8");
-  }
-
-  /* ── Настройки ──────────────────────────────────────────────────────── */
-  function openSettings(section) {
-    closePop();
-    S.modal = { kind: "settings", section: section || (S.modal && S.modal.kind === "settings" ? S.modal.section : "models") };
-    renderModal();
-  }
-  function editingProvider() { return S.settings.providers.find((p) => p.id === S.editProviderId); }
-  function readProviderForm(p) {
-    if (!$("#prov-name")) return;
-    p.name = $("#prov-name").value.trim() || "API";
-    p.baseUrl = $("#prov-url").value.trim();
-    p.apiKey = $("#prov-key").value.trim();
-    p.model = $("#prov-model").value.trim();
-    p.extendedSamplers = $("#prov-ext").checked;
-  }
-  function collectImgForm() {
-    const c = S.settings.images;
-    $$("[data-imgcfg]").forEach((el) => {
-      const k = el.dataset.imgcfg;
-      c[k] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value.trim();
-    });
-    delete c.loras; // LoRA живут только в карточках персонажей
-  }
-
-  function refreshAfterSettings() {
-    refreshPrism();
-    renderRail();
-    if (S.view === "chat") renderFeed(); else renderStage();
-    S.modal && (S.modal.keepScroll = true);
-    renderModal();
-  }
-
-  /* ── Поповеры ───────────────────────────────────────────────────────── */
-  function openPop(html, anchor) {
-    const root = $("#pop-root");
-    root.innerHTML = `<div class="pop" role="menu">${html}</div>`;
-    const pop = root.firstChild;
-    const r = anchor.getBoundingClientRect();
-    const h = pop.offsetHeight, w = pop.offsetWidth;
-    let top = r.bottom + 6;
-    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
-    let left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
-    if (r.left + w < window.innerWidth - 8 && anchor.closest(".composer")) left = Math.max(8, r.left);
-    pop.style.top = top + "px";
-    pop.style.left = left + "px";
-    S.pop = anchor;
-  }
-  function closePop() { $("#pop-root").innerHTML = ""; S.pop = null; }
-
-  /* ── Поиск по чату ──────────────────────────────────────────────────── */
-  function applyFind(jump) {
-    const feedEl = $("#feed-inner");
-    const q = (S.find.q || "").trim().toLowerCase();
-    const countEl = $("#find-count");
-    if (!feedEl) return;
-    if (!q) { if (countEl) countEl.textContent = ""; return; }
-    const marks = [];
-    $$(".prose, .bub", feedEl).forEach((root) => {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      const nodes = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      for (const node of nodes) {
-        const low = node.nodeValue.toLowerCase();
-        let i = low.indexOf(q);
-        if (i < 0) continue;
-        const frag = document.createDocumentFragment();
-        let pos = 0;
-        while (i >= 0) {
-          frag.appendChild(document.createTextNode(node.nodeValue.slice(pos, i)));
-          const mk = document.createElement("mark");
-          mk.textContent = node.nodeValue.slice(i, i + q.length);
-          frag.appendChild(mk); marks.push(mk);
-          pos = i + q.length;
-          i = low.indexOf(q, pos);
-        }
-        frag.appendChild(document.createTextNode(node.nodeValue.slice(pos)));
-        node.parentNode.replaceChild(frag, node);
-      }
-    });
-    S.find.total = marks.length;
-    if (S.find.idx >= marks.length) S.find.idx = 0;
-    if (countEl) countEl.textContent = marks.length ? `${S.find.idx + 1} из ${marks.length}` : "нет";
-    const cur = marks[S.find.idx];
-    if (cur) { cur.classList.add("cur"); if (jump) cur.scrollIntoView({ block: "center", behavior: "smooth" }); }
-  }
-  function runFind(jump) { $("#feed-inner").innerHTML = V.feed(vm()); applyFind(jump); }
-
-  /* ── События ────────────────────────────────────────────────────────── */
-  function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 240) + "px"; }
-
-  const ACTS = {
+  /* ── Контроллеры и разбор событий ─────────────────────────────────── */
+  const C = PRP.controllers;
+  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist].map((make) => make(ctx));
+  const ACTS = Object.assign({
     home: goHome,
-    import: () => $("#file-card").click(),
-    "new-card": () => openCardEditor(null),
-    "open-card": (t) => openCard(t.dataset.id),
     "open-chat": (t) => openChat(t.dataset.id),
-    settings: (t) => openSettings(t.dataset.section),
-    rail: () => { $("#rail").classList.toggle("open"); syncScrim(); },
-    "cycle-theme": async () => {
-      const ids = V.THEMES.map((t) => t.id);
-      S.settings.theme = ids[(ids.indexOf(S.settings.theme) + 1) % ids.length];
-      applyLook(); await saveSettings();
-      toast("Тема: " + V.THEMES.find((t) => t.id === S.settings.theme).name);
-    },
-    mode: async (t) => { const c = chat(); if (c.mode === t.dataset.mode) return; c.mode = t.dataset.mode; await putChat(c); refreshPrism(); renderStage(); renderRail(); scrollBottom(); },
-    find: () => { S.find = S.find ? null : { q: "", idx: 0 }; renderStage(); const f = $("#find-q"); if (f) f.focus(); },
-    "find-close": () => { S.find = null; renderStage(); },
-    "find-next": () => { if (!S.find.total) return; S.find.idx = (S.find.idx + 1) % S.find.total; runFind(true); },
-    "find-prev": () => { if (!S.find.total) return; S.find.idx = (S.find.idx - 1 + S.find.total) % S.find.total; runFind(true); },
-    drawer: () => { S.drawerOpen = !S.drawerOpen; rememberUi(); renderDrawer(); renderFeed(); },
-    "drawer-close": () => { S.drawerOpen = false; rememberUi(); renderDrawer(); renderFeed(); },
-    tab: (t) => { collectExp(); S.tab = t.dataset.tab; if (S.tab === "prism") refreshPrism(); renderDrawer(); },
-    "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; refreshPrism(); renderDrawer(); renderFeed(); },
-    "chat-menu": (t) => openPop(V.chatMenu(vm()), t),
-    "model-pop": (t) => openPop(V.modelPop(vm()), t),
-    assist: () => openAssist(S.assist && S.assist.messages.length ? S.assist.id : null),
-    "assist-new": () => { closePop(); if (S.assist && !S.assist.messages.length) { $("#input") && $("#input").focus(); return; } openAssist(null, S.assist ? { cardId: S.assist.ctx.cardId, chatId: S.assist.ctx.chatId } : null); },
-    "assist-open": (t) => { closePop(); openAssist(t.dataset.id); },
-    "assist-list": (t) => openPop(V.assistListPop(vm()), t),
-    "assist-ctx": (t) => openPop(V.assistCtxPop(vm()), t),
-    "assist-pick-card": async (t) => {
-      const a = S.assist; a.ctx.cardId = t.dataset.id || null; a.ctx.chatId = null;
-      if (a.messages.length) await saveAssist();
-      renderStage();
-      const anchor = $("[data-act=assist-ctx]");
-      if (a.ctx.cardId && anchor) openPop(V.assistCtxPop(vm()), anchor); else closePop();
-    },
-    "assist-pick-chat": async (t) => {
-      const a = S.assist; a.ctx.chatId = t.dataset.id || null;
-      if (a.messages.length) await saveAssist();
-      closePop(); renderStage();
-    },
-    "assist-about-chat": () => { closePop(); openAssist(null, { cardId: S.cardId, chatId: S.chatId }); },
-    "assist-starter": (t) => { if (S.gen) return; assistSend(t.dataset.q); },
-    "assist-copy": (t) => { const m = S.assist.messages.find((x) => x.id === t.dataset.id); if (m) copyText(m.text); },
-    "copy-code": (t) => { const c = t.parentElement.querySelector("code"); if (c) copyText(c.textContent); },
-    "assist-regen": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); await assistGenerate(); },
-    "assist-edit": async (t) => {
-      if (S.gen) return;
-      const removed = await assistCutFrom(t.dataset.id);
-      renderStage();
-      const i = $("#input"); if (i && removed) { i.value = removed[0].text; autoGrow(i); i.focus(); }
-    },
-    "assist-msg-del": async (t) => { if (S.gen) return; await assistCutFrom(t.dataset.id); renderStage(); },
-    "assist-del": async () => {
-      const a = S.assist;
-      if (!a || S.gen || !confirm(`Удалить разговор «${a.title}»?`)) return;
-      await DB.del("assist", a.id);
-      S.assistList = S.assistList.filter((x) => x !== a);
-      S.assist = null;
-      openAssist(null);
-      toast("Разговор удалён.");
-    },
-    "new-chat": (t) => { closePop(); newChat(t.dataset.mode); },
-    "edit-card": (t) => { closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : card()); },
-    "rename-chat": async () => {
-      closePop();
-      const c = chat();
-      const name = prompt("Название чата", c.title || "");
-      if (name == null) return;
-      c.title = name.trim() || c.title; await putChat(c); renderStage(); renderRail();
-    },
-    "export-chat": () => { closePop(); exportChatText(); },
-    "delete-chat": () => { closePop(); deleteChat(); },
-    send: sendUser,
-    stop: () => S.gen && S.gen.ctrl.abort(),
-    swipe: (t) => swipe(t.dataset.id, +t.dataset.dir),
-    regen: (t) => generate(t.dataset.id, "regen"),
-    continue: (t) => generate(t.dataset.id, "continue"),
-    edit: (t) => { S.editingMsg = t.dataset.id; renderFeed(); const e = document.getElementById("edit-" + t.dataset.id); if (e) { e.focus(); e.style.height = Math.min(e.scrollHeight + 4, 520) + "px"; } },
-    "save-edit": (t) => saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value),
-    "cancel-edit": () => { S.editingMsg = null; renderFeed(); },
-    delete: (t) => deleteFrom(t.dataset.id),
-    "to-exp": (t) => expFromMessage(t.dataset.id),
-    draw: (t) => drawFromMessage(t.dataset.id),
-    "img-regen": (t) => { const { msg, sw, im } = findImg(t); if (im) drawImage(msg, sw, null, im, { seed: Math.floor(Math.random() * 1e9) }); },
-    "img-pin": async (t) => {
-      const { im } = findImg(t);
-      if (!im || im.seed == null) { toast("У этой картинки нет seed.", true); return; }
-      const cd = card(); cd.image = Object.assign({}, cd.image, { seed: String(im.seed) });
-      await DB.put("cards", cd); toast(`Seed ${im.seed} закреплён за ${cd.name}.`);
-    },
-    "img-info": (t) => { const { im } = findImg(t); if (im) openPop(V.imageInfo(im), t); },
-    "img-dl": (t) => {
-      const { im } = findImg(t);
-      const url = im && S.imgUrls[im.id];
-      if (url) fetch(url).then((r) => r.blob()).then((b) => download(`${card().name} ${im.seed != null ? im.seed : im.id}.png`, b));
-    },
-    "img-del": async (t) => {
-      const { msg, sw, im } = findImg(t);
-      if (!im) return;
-      sw.images = sw.images.filter((x) => x !== im);
-      await DB.del("images", im.id); delete S.imgUrls[im.id];
-      await putMsg(msg); renderFeed();
-    },
-    "img-view": (t) => { const { im } = findImg(t); if (im) { S.modal = { kind: "image", im, mid: t.dataset.mid, sw: t.dataset.sw }; renderModal(); } },
-    "img-backend": (t) => {
-      // Сначала перерисовать (синхронно), потом сохранить: иначе ввод в новое поле во время сохранения теряется.
-      collectImgForm(); S.settings.images.backend = t.dataset.id; S.modal.keepScroll = true; renderModal(); saveSettings();
-    },
-    "img-lists": async () => {
-      collectImgForm(); await saveSettings();
-      const cfg = S.settings.images, out = { at: Date.now() };
-      try {
-        for (const w of ["models", "vaes", "samplers", "upscalers", "loras"]) out[w] = await IB.a1111List(cfg, w);
-        try { out.schedulers = await IB.a1111List(cfg, "schedulers"); } catch (e) { out.schedulers = []; }
-        S.imgLists = out; await DB.setSetting("imgLists", out);
-        if (!cfg.model && out.models[0]) cfg.model = out.models[0];
-        await saveSettings();
-        toast(`Сервер на связи: моделей ${out.models.length}, LoRA ${out.loras.length}.`);
-      } catch (e) { toast(e.message, true); }
-      S.modal.keepScroll = true; renderModal();
-    },
-    "card-lora-add": () => { const d = collectCard(); d.image = d.image || {}; d.image.loras = (d.image.loras || []).concat([{ name: "", weight: 0.8 }]); S.modal.keepScroll = true; renderModal(); },
-    "card-lora-del": (t) => { const d = collectCard(); d.image.loras.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
-    "img-modal-regen": () => { const { mid, sw, im } = S.modal; const msg = S.messages.find((x) => x.id === mid); S.modal = null; renderModal(); drawImage(msg, msg.swipes[+sw], null, im, { seed: Math.floor(Math.random() * 1e9) }); },
-    "pick-provider": async (t) => {
-      if (t.closest("[data-act=prov-edit]")) return;
-      S.settings.activeProvider = t.dataset.id; await saveSettings(); closePop(); refreshAfterSettings();
-    },
-    "pick-model": async (t) => {
-      const p = S.settings.providers.find((x) => x.id === activeProvider().id);
-      p.model = t.dataset.model; await saveSettings(); closePop(); refreshAfterSettings();
-    },
-    "pick-preset": async (t) => {
-      S.settings.samplerPreset = t.dataset.id;
-      const pr = V.SAMPLER_PRESETS.find((x) => x.id === t.dataset.id);
-      if (pr) Object.assign(S.settings.sampler, pr.v);
-      await saveSettings(); closePop(); refreshAfterSettings();
-    },
-    // Сцена
-    "sc-time-set": () => {
-      const d = $("#sc-date").value.trim(), tm = $("#sc-time").value.trim();
-      if (d && !/^\d{1,2}\.\d{1,2}(\.\d{2,4})?$/.test(d)) { toast("Дата в виде 14.05 или 14.05.2026", true); return; }
-      const v = [d, tm].filter(Boolean).join(" ");
-      if (v) applySceneOps([op(null, "time", v)]);
-    },
-    "sc-shift": (t) => applySceneOps([op(null, "time", t.dataset.v)]),
-    "sc-leave": (t) => applySceneOps([op(null, "leave", t.dataset.name)]),
-    "sc-enter": (t) => applySceneOps([op(null, "enter", t.dataset.name)]),
-    "sc-remove": (t) => applySceneOps([op(t.dataset.name, "remove", t.dataset.item)]),
-    "scene-init-save": async () => { const c = chat(); c.sceneInit = $("#scene-init").value.trim(); await putChat(c); refreshPrism(); renderDrawer(); renderFeed(); toast("Начальная сцена сохранена."); },
-    // Опыт
-    "exp-new": () => { S.expDraft = Object.assign(EX.blank(S.cardId, S.chatId), { about: ["user"] }); renderDrawer(); },
-    "exp-assign": async (t) => {
-      const r = S.experience.find((x) => x.id === t.dataset.id);
-      if (!r || !confirm("Привязать эту запись к текущему чату? Она станет частью этого мира и будет видна во всех его ветках.")) return;
-      const nr = EX.assignToChat(r, S.chatId);
-      await DB.put("experience", nr);
-      S.experience = S.experience.map((x) => (x.id === nr.id ? nr : x));
-      S.legacyExperience = Math.max(0, (S.legacyExperience || 1) - 1);
-      refreshPrism(); renderDrawer();
-      toast("Запись привязана к этому чату.");
-    },
-    "exp-edit": (t) => { S.expDraft = U.clone(S.experience.find((x) => x.id === t.dataset.id)); renderDrawer(); },
-    "exp-cancel": () => { S.expDraft = null; renderDrawer(); },
-    "exp-save": saveExp,
-    "exp-del": async () => {
-      if (!confirm("Удалить это событие из опыта?")) return;
-      await DB.del("experience", S.expDraft.id);
-      S.experience = S.experience.filter((x) => x.id !== S.expDraft.id);
-      S.expDraft = null; refreshPrism(); renderDrawer();
-    },
-    "x-val": (t) => { collectExp().valence = +t.dataset.v; renderDrawer(); },
-    "x-weight": (t) => { collectExp().weight = +t.dataset.v; renderDrawer(); },
-    "x-domain-del": (t) => { const d = collectExp(); d.domains = d.domains.filter((x) => x !== t.dataset.v); renderDrawer(); },
-    "prism-preview": () => { refreshPrism(); renderDrawer(); renderFeed(); },
-    // Модалки
-    "modal-bg": (t, e) => { if (e.target === t) { S.modal = null; renderModal(); } },
-    "modal-close": () => { S.modal = null; renderModal(); },
-    "card-section": (t) => { collectCard(); S.modal.section = t.dataset.section; renderModal(); },
-    "card-save": saveCard,
-    "avatar-pick": () => { collectCard(); $("#file-avatar").click(); },
-    "lore-add": () => { const d = collectCard(); d.lore = (d.lore || []).concat([{ keys: [], secondary_keys: [], selective: false, content: "", comment: "", enabled: true, constant: false, case_sensitive: false, position: "after_char", insertion_order: (d.lore || []).length * 10 }]); S.modal.keepScroll = true; renderModal(); },
-    "alt-add": () => { const d = collectCard(); d.altGreetings = (d.altGreetings || []).concat([""]); S.modal.keepScroll = true; renderModal(); setTimeout(() => { const el = $(`[data-alt="${d.altGreetings.length - 1}"]`); if (el) el.focus(); }, 30); },
-    "alt-del": (t) => { const d = collectCard(); d.altGreetings.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
-    "lore-del": (t) => { const d = collectCard(); d.lore.splice(+t.dataset.i, 1); S.modal.keepScroll = true; renderModal(); },
-    "card-json": () => { const d = collectCard(); download(`${d.name || "персонаж"}.json`, JSON.stringify(CC.toSpec(d, "v3"), null, 2), "application/json"); },
-    "card-png": async () => { const d = collectCard(); download(`${d.name || "персонаж"}.png`, new Blob([CC.embedInPng(await avatarPngBytes(d), d)], { type: "image/png" })); },
-    "card-del": () => deleteCard(S.modal.draft),
-    // Провайдеры
-    "prov-add": async (t) => {
-      const pr = OA.PRESETS.find((x) => x.id === t.dataset.preset);
-      const p = { id: U.uid("prov"), presetId: pr.id, name: pr.id === "custom" ? "Мой API" : pr.name, baseUrl: pr.baseUrl, apiKey: "", model: "", extendedSamplers: pr.extendedSamplers };
-      S.settings.providers.push(p);
-      S.settings.activeProvider = p.id;
-      S.editProviderId = p.id;
-      await saveSettings(); refreshAfterSettings();
-      setTimeout(() => { const el = $(pr.baseUrl ? (pr.local ? "#prov-model" : "#prov-key") : "#prov-url"); if (el) el.focus(); }, 30);
-    },
-    "prov-edit": (t, e) => { e.stopPropagation(); S.editProviderId = t.dataset.id; S.modal.keepScroll = true; renderModal(); },
-    "prov-close": () => { const p = editingProvider(); if (p) readProviderForm(p); saveSettings(); S.editProviderId = null; refreshAfterSettings(); },
-    "prov-save": async () => { readProviderForm(editingProvider()); await saveSettings(); refreshAfterSettings(); toast("Сохранено."); },
-    "prov-del": async () => {
-      const p = editingProvider();
-      if (!confirm(`Удалить «${p.name}»?`)) return;
-      S.settings.providers = S.settings.providers.filter((x) => x !== p);
-      if (S.settings.activeProvider === p.id) S.settings.activeProvider = (providerList()[0] || {}).id || "";
-      S.editProviderId = null;
-      await saveSettings(); refreshAfterSettings();
-    },
-    "prov-models": async () => {
-      const p = editingProvider(); readProviderForm(p);
-      try { p.models = await OA.listModels(p); if (!p.model && p.models[0]) p.model = p.models[0]; await saveSettings(); refreshAfterSettings(); toast(`Найдено моделей: ${p.models.length}`); }
-      catch (err) { toast(err.message, true); }
-    },
-    theme: async (t) => { S.settings.theme = t.dataset.id; applyLook(); await saveSettings(); S.modal.keepScroll = true; renderModal(); },
-    "persona-save": async () => {
-      S.settings.persona = { name: $("#p-name").value.trim() || "Пользователь", description: $("#p-desc").value,
-        image: { view: $("#p-view").value, appearance: $("#p-appearance").value, povTags: $("#p-povtags").value.trim() } };
-      await saveSettings(); refreshAfterSettings(); toast("Сохранено.");
-    },
-    backup: async () => download(`prism-rp-бэкап-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(await DB.exportAll()), "application/json"),
-    restore: () => $("#file-backup").click(),
-  };
+    rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
+    "modal-bg": (t, e) => { if (e.target === t) { S.modal = null; ui.renderModal(); } },
+    "modal-close": () => { S.modal = null; ui.renderModal(); },
+  }, ...controllers.map((c) => c.actions));
+  const chatCtl = controllers[0];
 
+  // Поповеры закрываются кликом мимо, кроме кнопок, которые их открывают.
+  const POP_ANCHORS = "[data-act=model-pop],[data-act=chat-menu],[data-act=assist-ctx],[data-act=assist-list]";
   async function onClick(e) {
-    if (S.pop && !e.target.closest(".pop") && !e.target.closest("[data-act=model-pop],[data-act=chat-menu],[data-act=assist-ctx],[data-act=assist-list]")) closePop();
+    if (S.pop && !e.target.closest(".pop") && !e.target.closest(POP_ANCHORS)) ui.closePop();
     const t = e.target.closest("[data-act]");
     if (!t || t.disabled) return;
     const fn = ACTS[t.dataset.act];
     if (!fn) return;
     if (t.dataset.act === "modal-bg" && e.target !== t) return;
-    try { await fn(t, e); } catch (err) { console.error(err); toast(err.message || String(err), true); }
+    try { await fn(t, e); } catch (err) { console.error(err); ui.toast(err.message || String(err), true); }
   }
-
   async function onChange(e) {
     const t = e.target;
     try {
-      if (t.id === "file-card") { await importCards([...t.files]); t.value = ""; return; }
-      if (t.id === "file-backup" && t.files[0]) {
-        const data = JSON.parse(await readFile(t.files[0], "text"));
-        const replace = confirm("Заменить текущие данные бэкапом?\n\nОК — заменить, Отмена — добавить к существующим.");
-        await DB.importAll(data, replace);
-        t.value = "";
-        S.modal = null; S.view = "home";
-        await loadAll(); renderAll();
-        toast("Бэкап загружен.");
-        return;
-      }
-      if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await readFile(t.files[0], "dataurl"); t.value = ""; renderModal(); return; }
-      if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return; }
-      if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return; }
-      if (t.dataset.scRel) { applySceneOps([op(t.dataset.scRel, "relset", t.value + " поправлено вручную")]); return; }
-      if (t.dataset.lore !== undefined && t.dataset.k === "selective" && S.modal && S.modal.kind === "card") { collectCard(); S.modal.keepScroll = true; renderModal(); return; }
-      if (t.dataset.imgcfg !== undefined) { collectImgForm(); await saveSettings(); return; }
-      if (t.dataset.imgCheck) { collectImgForm(); S.settings.images[t.dataset.imgCheck] = t.checked; refreshAfterSettings(); await saveSettings(); return; }
-      if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; refreshAfterSettings(); await saveSettings(); return; }
-      if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await saveSettings(); refreshAfterSettings(); return; }
-      if (t.dataset.setText) { S.settings[t.dataset.setText] = t.value; await saveSettings(); return; }
-      if (t.dataset.setNum) { S.settings[t.dataset.setNum] = +t.value; await saveSettings(); refreshAfterSettings(); return; }
-      if (t.dataset.setRange) { S.settings[t.dataset.setRange] = +t.value; applyLook(); await saveSettings(); return; }
-      if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; await saveSettings(); refreshAfterSettings(); if (S.drawerOpen) renderDrawer(); return; }
-    } catch (err) { console.error(err); toast(err.message || String(err), true); }
+      for (const c of controllers) if (c.change && (await c.change(t))) return;
+    } catch (err) { console.error(err); ui.toast(err.message || String(err), true); }
   }
-
   function onInput(e) {
     const t = e.target;
-    if (t.id === "input") autoGrow(t);
     if (t.id === "home-q") {
       S.homeQuery = t.value;
       const pos = t.selectionStart;
-      renderStage();
+      ui.renderStage();
       const n = $("#home-q"); n.focus(); n.setSelectionRange(pos, pos);
     }
-    if (t.id === "find-q") { S.find.q = t.value; S.find.idx = 0; runFind(true); }
-    if (t.dataset.scRel) { const o = $("#rel-out"); if (o) o.textContent = `${SC.relWord(+t.value)} (${+t.value > 0 ? "+" : ""}${t.value})`; }
-    if (t.dataset.setRange) { const o = $("#fs-out"); if (o) o.textContent = t.value; document.documentElement.style.setProperty("--prose-fs", t.value + "px"); }
+    for (const c of controllers) if (c.input) c.input(t);
   }
-
   function onKey(e) {
     const t = e.target;
-    if (t.id === "input" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendUser(); return; }
-    if (t.id === "find-q" && e.key === "Enter") { e.preventDefault(); (e.shiftKey ? ACTS["find-prev"] : ACTS["find-next"])(); return; }
-    if (e.key === "Enter" && t.classList && t.classList.contains("chip-add")) {
-      e.preventDefault();
-      const v = t.value.trim();
-      if (!v) return;
-      if (t.dataset.scAdd) applySceneOps([op(t.dataset.scAdd, "add", v)]);
-      else if (t.id === "sc-enter-new") applySceneOps([op(null, "enter", v)]);
-      else if (t.id === "x-domain-add") { const d = collectExp(); v.split(",").map((s) => s.trim()).filter(Boolean).forEach((x) => { if (!d.domains.includes(x)) d.domains.push(x); }); renderDrawer(); setTimeout(() => { const n = $("#x-domain-add"); if (n) n.focus(); }, 0); }
-      return;
-    }
-    if (e.key === "Enter" && t.tagName === "INPUT" && (t.dataset.scTop || t.dataset.scField)) { t.blur(); return; }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f" && S.view === "chat") { e.preventDefault(); if (!S.find) ACTS.find(); else { const f = $("#find-q"); if (f) f.focus(); } return; }
+    for (const c of controllers) if (c.key && c.key(e, t)) return;
+    if (chatCtl.shortcut(e)) return;
     if (e.key === "Escape") {
-      if (S.pop) return closePop();
-      if (S.modal) { S.modal = null; return renderModal(); }
-      if (S.editingMsg) { S.editingMsg = null; return renderFeed(); }
+      if (S.pop) return ui.closePop();
+      if (S.modal) { S.modal = null; return ui.renderModal(); }
+      if (S.editingMsg) { S.editingMsg = null; return ui.renderFeed(); }
       if (S.find) return ACTS["find-close"]();
-      if (S.drawerOpen && narrow()) return ACTS["drawer-close"]();
+      if (S.drawerOpen && ui.narrow()) return ACTS["drawer-close"]();
     }
     if ((e.key === "Enter" || e.key === " ") && t.getAttribute && t.getAttribute("role") === "button" && t.dataset.act) { e.preventDefault(); t.click(); }
   }
-
   function bind() {
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
@@ -4575,28 +5227,28 @@
     document.addEventListener("keydown", onKey);
     $("#scrim").addEventListener("click", () => {
       $("#rail").classList.remove("open");
-      if (S.drawerOpen && narrow()) { S.drawerOpen = false; renderDrawer(); renderFeed(); }
-      syncScrim();
+      if (S.drawerOpen && ui.narrow()) { S.drawerOpen = false; ui.renderDrawer(); ui.renderFeed(); }
+      ui.syncScrim();
     });
-    window.addEventListener("resize", () => { syncScrim(); if (S.pop) closePop(); });
+    window.addEventListener("resize", () => { ui.syncScrim(); if (S.pop) ui.closePop(); });
   }
 
   async function init() {
     bind();
     try {
       await loadAll();
-      if (!providerList().some((p) => p.id === S.settings.activeProvider)) S.settings.activeProvider = (providerList()[0] || {}).id || "";
-      renderAll();
-      scrollBottom();
+      if (!ctx.providers().some((p) => p.id === S.settings.activeProvider)) S.settings.activeProvider = (ctx.providers()[0] || {}).id || "";
+      ui.renderAll();
+      ui.scrollBottom();
     } catch (e) {
       console.error(e);
-      S.settings = S.settings || U.clone(DEFAULTS);
-      renderAll();
-      toast("Не удалось открыть хранилище браузера: " + e.message, true);
+      S.settings = S.settings || U.clone(ST.DEFAULTS);
+      ui.renderAll();
+      ui.toast("Не удалось открыть хранилище браузера: " + e.message, true);
     }
   }
 
-  window.PRP.app = { S, generate, refreshPrism };
+  PRP.app = { S, ctx, generate: (...a) => svc.gen.generate(...a), refreshPrism: () => svc.prism.refresh() };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();

@@ -170,32 +170,19 @@
 ## Разработка
 
 ```
-node tests/run.js                 # 76 юнит-тестов чистых модулей
+node tests/run.js                 # 80 юнит-тестов чистых модулей
 node build.js                     # сборка dist/perchance и dist/standalone
 python3 tests/e2e.py <папка>      # 103 сквозные проверки (с моком Forge/A1111) в headless Chromium (нужен playwright)
 ```
 
 Исходники — классические скрипты без сборщика. Каждый модуль кладёт себя в `window.PRP`, поэтому один и тот же код работает на Perchance, с `file://` и в Node-тестах.
 
-| Модуль | Назначение | Зависит от платформы |
-| --- | --- | --- |
-| `js/core/util.js` | id, экранирование, макросы `{{char}}/{{user}}`, оценка токенов | нет |
-| `js/core/store.js` | IndexedDB: cards, chats, messages, experience, settings, images, assist; бэкап | нет |
-| `js/prism/scene.js` | протокол дельт, свёртка сцены, описание для модели | нет |
-| `js/prism/experience.js` | записи опыта: канон чата и ветки, миграция, отбор по теме | нет |
-| `js/prism/assembler.js` | Prism-сборщик: слои, подача, бюджет, режимы rp/messenger | нет |
-| `js/cards/ccard.js` | CCv1/v2/v3, чтение и запись PNG-чанков | нет |
-| `js/chat/tree.js` | дерево сообщений и ветки | нет |
-| `js/assist/assist.js` | ассистент: инструкция, контекст из карточки и чата, подсказки | нет |
-| `js/providers/openai.js` | OpenAI-совместимый стриминг, повторы, диагностика CORS | нет |
-| `js/providers/perchance.js` | адаптер ai-text-plugin | **да**, только Perchance |
-| `js/images/compose.js` | промпт изображения: гардероб, внешность, POV, присутствие, чистка тегов, размеры, `[draw:]` | нет |
-| `js/images/compile.js` | перевод сцены в промпт текстовой моделью, кэш | нет |
-| `js/images/backends.js` | Perchance `image()`, Forge/A1111, OpenAI-совместимые | Perchance — только на Perchance |
-| `js/ui/render.js` | иконки, портреты-заглушки, разметка прозы | нет |
-| `js/ui/views.js` | все экраны как чистые функции «состояние → HTML» | нет |
-| `js/ui/app.js` | состояние, действия, генерация, события | нет |
-| `css/app.css` | дизайн-система и три темы | нет |
+Устройство модулей, направление зависимостей и владение — в [ARCHITECTURE.md](ARCHITECTURE.md). Коротко:
+
+- **чистые модули предметной области:** `prism/*`, `chat/tree`, `cards/ccard`, `assist/assist`, `images/compose`, `images/compile`, `core/settings`;
+- **прикладные сервисы:** `*/service.js`, `prism/experience-service.js`;
+- **адаптеры:** `core/store`, `providers/*`, `images/backends`, `ui/files`;
+- **интерфейс:** `ui/views/*` (разметка), `ui/shell.js` (отрисовка), `ui/controllers/*` (события), `ui/app.js` (корень).
 
 Привязка к Perchance — один файл-адаптер плюс одна строка импорта в Lists. Всё остальное переезжает без изменений.
 

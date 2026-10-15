@@ -14,8 +14,9 @@ require(J("images/compose.js"));
 require(J("images/backends.js"));
 require(J("images/compile.js"));
 require(J("assist/assist.js"));
+require(J("core/settings.js"));
 require(J("ui/render.js"));
-const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN } = globalThis.PRP;
+const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG } = globalThis.PRP;
 
 let passed = 0, failed = 0;
 function t(name, fn) {
@@ -640,6 +641,42 @@ t("markdown: экранирование, списки, код, жирный", ()
   assert.ok(h.includes("<h3>Заголовок</h3>") && h.includes("<strong>жирно</strong>") && h.includes("<em>курсив</em>") && h.includes("<code>код</code>"));
   assert.ok(h.includes("<ul><li>раз</li><li>два</li></ul>") && h.includes("<ol><li>один</li></ol>"));
   assert.ok(h.includes("&lt;script&gt;x&lt;/script&gt;") && !h.includes("<script>") && h.includes("&lt;b&gt;не тег&lt;/b&gt;"));
+});
+
+/* ── Настройки (core/settings.js, вынесено из app.js без изменения поведения) ── */
+t("настройки: сохранённые поверх значений по умолчанию, вложенные группы тоже", () => {
+  const s = STG.merge({ theme: "paper", sampler: { temperature: 1.2 }, images: { backend: "a1111" }, persona: { name: "Кира" } }, { perchanceImages: true });
+  assert.strictEqual(s.theme, "paper");
+  assert.strictEqual(s.sampler.temperature, 1.2); assert.strictEqual(s.sampler.max_tokens, 700);
+  assert.strictEqual(s.images.backend, "a1111"); assert.strictEqual(s.images.steps, 28);
+  assert.strictEqual(s.persona.name, "Кира"); assert.strictEqual(s.persona.description, "");
+  assert.strictEqual(s.noPostHistory, false);
+  s.sampler.temperature = 0; assert.strictEqual(STG.DEFAULTS.sampler.temperature, 0.9, "умолчания не мутируются");
+});
+t("настройки: первый запуск вне Perchance — картинки через A1111; с сохранёнными — как сохранено", () => {
+  assert.strictEqual(STG.merge(null, { perchanceImages: false }).images.backend, "a1111");
+  assert.strictEqual(STG.merge(null, { perchanceImages: true }).images.backend, "perchance");
+  assert.strictEqual(STG.merge({ images: {} }, { perchanceImages: false }).images.backend, "perchance");
+});
+t("настройки: список моделей, активная, объём контекста", () => {
+  const s = STG.merge({ providers: [{ id: "p1", name: "API", model: "m" }], activeProvider: "p1", contextTokens: 4096 });
+  const withP = STG.providerList(s, true), noP = STG.providerList(s, false);
+  assert.deepStrictEqual(withP.map((p) => p.id), ["perchance", "p1"]);
+  assert.strictEqual(withP[1].label, "API · m"); assert.strictEqual(withP[1].kind, "openai");
+  assert.strictEqual(STG.activeProvider(s, noP).id, "p1");
+  assert.strictEqual(STG.activeProvider(Object.assign({}, s, { activeProvider: "нет" }), noP).id, "p1", "неизвестная → первая");
+  assert.strictEqual(STG.contextTokens(s, withP[1], null), 4096);
+  let called = 0;
+  assert.strictEqual(STG.contextTokens(s, withP[1], () => { called++; return { idealMaxContextTokens: 9 }; }), 4096);
+  assert.strictEqual(called, 0, "метаданные Perchance не запрашиваются для API");
+  assert.strictEqual(STG.contextTokens(s, withP[0], () => ({ idealMaxContextTokens: 6000 })), 6000);
+  assert.strictEqual(STG.contextTokens(Object.assign({}, s, { autoContext: false }), withP[0], () => ({ idealMaxContextTokens: 6000 })), 4096);
+});
+t("настройки: картинки включены и закреплённый блок качества", () => {
+  const s = STG.merge({ images: { backend: "perchance", fixedPrompt: " masterpiece " } });
+  assert.strictEqual(STG.imagesOn(s, false), false); assert.strictEqual(STG.imagesOn(s, true), true);
+  assert.strictEqual(STG.qualityPinned(s), true);
+  s.images.promptMode = "off"; assert.strictEqual(STG.qualityPinned(s), false);
 });
 
 console.log(`\n${passed} пройдено, ${failed} с ошибками`);
