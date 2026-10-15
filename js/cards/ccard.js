@@ -136,6 +136,12 @@
        Выключенные (например, непроверенные импортированные) хранятся в
        extensions.prism_rp.disabledDirectives — только для сохранности: при импорте это поле
        хранится в source.preserved и указанием не становится.
+       Порядок для disabledDirectives (детерминированный):
+         1) берётся сохранённое source.preserved.disabledDirectives (как было в файле);
+         2) поверх — текущие выключенные непустые указания карточки (текущее побеждает по тому же ключу);
+         3) включённые указания идут только в system_prompt / post_history_instructions;
+            сохранённое значение по тому же ключу при этом остаётся в расширении как есть
+            (это лишь хранение: при импорте и во время игры оно не читается).
      • Для карточек, импортированных из V2/V3, неизвестные поля data исходника сохраняются.
        Исходники других форматов (V1, URV) в экспорт не переносятся. */
   function toSpec(card, ver) {
@@ -193,7 +199,8 @@
     const im = card.image && Object.keys(card.image).length ? card.image : null;
     if (im) pr.image = JSON.parse(JSON.stringify(im));
     if (card.appearance || card.background) pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
-    const dis = {};
+    const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
+    const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};
     if (CM.hasDisabledText(card, "system")) dis.system = card.directives.system.text;
     if (CM.hasDisabledText(card, "postHistory")) dis.postHistory = card.directives.postHistory.text;
     if (Object.keys(dis).length) pr.disabledDirectives = dis;

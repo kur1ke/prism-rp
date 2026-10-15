@@ -906,34 +906,55 @@ t("FA unit: ассистент видит только включённые ук
   assert.ok(AST.cardText(c).includes("SYS-IMPORTED"));
 });
 
-t("FA review fix A–E: prism_rp.disabledDirectives — только сохранность, не указание", () => {
+t("FA review fix: prism_rp.disabledDirectives — только сохранность, переживает круги импорта/экспорта", () => {
   for (const spec of ["chara_card_v2", "chara_card_v3"]) {
+    const ver = spec === "chara_card_v3" ? "v3" : "v2";
     const card = { spec, data: { name: "Х", description: "d", first_mes: "hi", system_prompt: "", post_history_instructions: "",
-      extensions: { prism_rp: { disabledDirectives: { system: "HIDDEN-SYS", postHistory: "HIDDEN-POST" } } } } };
+      extensions: { prism_rp: { disabledDirectives: { system: "OLD-SYS", postHistory: "OLD-POST" } } } } };
+    // 1: импорт — только в source.preserved
     const r = imp(card);
     assert.ok(r.ok);
-    // A, B
     assert.strictEqual(r.draft.directives.system.text, ""); assert.strictEqual(r.draft.directives.postHistory.text, "");
-    assert.strictEqual(r.draft.source.preserved.disabledDirectives.system, "HIDDEN-SYS");
-    assert.strictEqual(r.draft.source.preserved.disabledDirectives.postHistory, "HIDDEN-POST");
+    assert.deepStrictEqual(r.draft.source.preserved.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
     assert.ok(!r.issues.some((x) => x.code === "directive-system" || x.code === "directive-postHistory"));
-    // C: даже при включённых (пустых) указаниях текст расширения не уходит в модель
-    r.draft.directives.system.enabled = true; r.draft.directives.postHistory.enabled = true;
-    const o = outbound(r.draft);
-    assert.ok(!o.includes("HIDDEN-SYS") && !o.includes("HIDDEN-POST"));
-    assert.ok(!AST.cardText(r.draft).includes("HIDDEN"));
+    // 2: рантайм не видит, даже если пустые указания включены
+    const on = JSON.parse(JSON.stringify(r.draft));
+    on.directives.system.enabled = true; on.directives.postHistory.enabled = true;
+    assert.ok(!outbound(on).includes("OLD-") && !AST.cardText(on).includes("OLD-"));
+    // 3: первый повторный экспорт сохраняет в расширении, стандартные поля пусты
+    const ex1 = C.toSpec(r.draft, ver);
+    assert.strictEqual(ex1.data.system_prompt, ""); assert.strictEqual(ex1.data.post_history_instructions, "");
+    assert.deepStrictEqual(ex1.data.extensions.prism_rp.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
+    // 4: второй импорт — снова не указание
+    const r2 = imp(ex1);
+    assert.strictEqual(r2.draft.directives.system.text, ""); assert.strictEqual(r2.draft.directives.postHistory.text, "");
+    assert.ok(!outbound(r2.draft).includes("OLD-"));
+    // 5: второй экспорт — всё ещё сохранено
+    const ex2 = C.toSpec(r2.draft, ver);
+    assert.deepStrictEqual(ex2.data.extensions.prism_rp.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
+    assert.strictEqual(ex2.data.system_prompt, "");
+    // 6: текущее выключенное указание побеждает устаревшее сохранённое по тому же ключу
+    const nw = JSON.parse(JSON.stringify(r2.draft));
+    nw.directives.system = CM.directive("NEW-SYS", "authored"); nw.directives.system.enabled = false;
+    const ex3 = C.toSpec(nw, ver);
+    assert.strictEqual(ex3.data.system_prompt, "");
+    assert.deepStrictEqual(ex3.data.extensions.prism_rp.disabledDirectives, { system: "NEW-SYS", postHistory: "OLD-POST" });
+    // C: включённое указание — только в system_prompt; сохранённое по тому же ключу остаётся хранением
+    nw.directives.system.enabled = true;
+    const ex4 = C.toSpec(nw, ver);
+    assert.strictEqual(ex4.data.system_prompt, "NEW-SYS");
+    assert.deepStrictEqual(ex4.data.extensions.prism_rp.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
+    const r4 = imp(ex4).draft;
+    assert.strictEqual(r4.directives.system.text, "NEW-SYS"); assert.strictEqual(r4.directives.system.enabled, false, "из system_prompt — импортированное, выключено");
+    assert.strictEqual(r4.directives.postHistory.text, "");
   }
-  // D: выключенное каноническое указание экспортируется в prism_rp.disabledDirectives
+  // экспорт выключенного канонического указания и повторный импорт без восстановления
   const c = imp(V2FULL).draft;
   const out = C.toSpec(c, "v2");
-  assert.strictEqual(out.data.extensions.prism_rp.disabledDirectives.system, "SYS-IMPORTED");
-  assert.strictEqual(out.data.system_prompt, "");
-  // E: повторный импорт не восстанавливает его как указание
+  assert.strictEqual(out.data.extensions.prism_rp.disabledDirectives.system, "SYS-IMPORTED"); assert.strictEqual(out.data.system_prompt, "");
   const back = imp(out).draft;
-  assert.strictEqual(back.directives.system.text, ""); assert.strictEqual(back.directives.system.origin, "authored");
-  assert.ok(!outbound(back).includes("SYS-IMPORTED"));
-  // повторный экспорт не теряет и не выдаёт его за указание
-  assert.strictEqual(C.toSpec(back, "v2").data.system_prompt, "");
+  assert.strictEqual(back.directives.system.text, ""); assert.ok(!outbound(back).includes("SYS-IMPORTED"));
+  assert.strictEqual(C.toSpec(back, "v2").data.extensions.prism_rp.disabledDirectives.system, "SYS-IMPORTED");
 });
 
 console.log(`\n${passed} пройдено, ${failed} с ошибками`);
