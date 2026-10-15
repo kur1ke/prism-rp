@@ -131,6 +131,7 @@
         ${r.legacyUnscoped ? `<dt>Без привязки</dt><dd>${r.legacyUnscoped} — в контекст не идут</dd>` : ""}
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
+        ${r.scenarioState && r.scenarioState !== "none" ? `<dt>Сценарий</dt><dd>${{ included: "в контексте — исходные обстоятельства, до первого ответа на вашу реплику", "past-first-turn": "больше не подаётся: первый ответ на вашу реплику уже прозвучал", budget: "не поместился" }[r.scenarioState]}</dd>` : ""}
         ${r.postHistoryDisabled ? `<dt>После истории</dt><dd>указания автора выключены в настройках</dd>` : ""}
         ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "") + (t.detail && t.layer === "card.description" ? ` (${esc(t.detail)})` : "")).join(", ")}</dd>` : ""}
         </dl></div>

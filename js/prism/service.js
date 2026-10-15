@@ -5,14 +5,16 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings;
+  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario;
 
   function create(ctx) {
     const { S } = ctx;
     const chat = () => ctx.svc.chat;
 
-    // path — ветка до точки ответа; extraPost — дополнительное указание в конце (например, «продолжи»).
-    function build(path, extraPost) {
+    /* path — ветка, которая уходит в модель как история; extraPost — дополнительное указание в конце
+       (например, «продолжи» или «начни сцену»). scenario — решение prism/scenario.js для этой генерации;
+       без него — как для нового ответа после path (так же собирается предпросмотр следующего хода). */
+    function build(path, extraPost, scenario) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
       if (ST.imagesOn(s, ctx.env.perchanceImages()) && s.images.modelDraws) {
@@ -31,6 +33,7 @@
         sceneState: st, experiences: ex.ranked, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
+        includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
       });
       built.report.expDebug = ex.debug;
       built.report.experienceVisible = ex.visibleCount;

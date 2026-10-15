@@ -584,6 +584,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .dir-badge { font-size: 11.5px; border-radius: 5px; padding: 0 6px; border: 1px solid var(--line-soft); color: var(--muted); font-weight: 500; }
 .dir-badge.imported { color: var(--warn); border-color: var(--warn); }
 
+/* ── Пустая сцена: начало ────────────────────────────────────────────── */
+.opening-start { max-width: 520px; margin: 48px auto 0; text-align: center; padding: 0 16px; }
+.opening-start .lead { color: var(--text-2); font-size: 15px; margin: 0 0 10px; }
+.opening-start .btn { margin: 8px 0 14px; }
+
 </style>
 </head>
 <body>
@@ -2189,6 +2194,62 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/prism/scenario.js */
+/* Prism RP — жизненный цикл сценария карточки (чистый модуль).
+
+   Сценарий (card.scenario) — исходные обстоятельства мира: где и с чего начинается история.
+   Это не постоянная часть карточки и не сцена: в сцену он не переносится и не разбирается.
+
+   Правило — граница первого ответа на реплику пользователя:
+     сценарий подаётся в генерацию, пока она отвечает не дальше первой реплики пользователя
+     в своей ветке. Формально: берётся ветка ДО генерируемого ответа («предшествующий путь»);
+     если она кончается репликой пользователя, эта реплика — та, на которую отвечают, и она
+     не считается; сценарий подаётся, если в остальной части нет ни одной реплики пользователя.
+
+   Предшествующий путь по режимам генерации:
+     opening  (модель начинает сцену)     → []
+     new      (новый ответ; и предпросмотр) → вся активная ветка
+     regen    (другой вариант ответа)      → ветка до перегенерируемого сообщения (без него)
+     continue (дописать ответ)             → ветка до дописываемого сообщения (без него)
+
+   Всё выводится из ветки при каждом вызове: никакого флага «сценарий израсходован» нет,
+   поэтому переключение веток и вариантов само восстанавливает или убирает сценарий. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  // Ветка до генерируемого ответа. path — [{id, role, …}] от корня; targetId — для regen/continue.
+  function precedingPath(path, mode, targetId) {
+    const p = path || [];
+    if (mode === "opening") return [];
+    if (mode === "regen" || mode === "continue") {
+      const i = p.findIndex((m) => m.id === targetId);
+      return i >= 0 ? p.slice(0, i) : p.slice();
+    }
+    return p.slice(); // new и предпросмотр следующего хода
+  }
+
+  // Отвечает ли генерация после этой ветки не дальше первой реплики пользователя.
+  function includedAfter(preceding) {
+    const p = preceding || [];
+    const answered = p.length && p[p.length - 1].role === "user" ? p.slice(0, -1) : p;
+    return !answered.some((m) => m.role === "user");
+  }
+
+  /* Решение для одной генерации. → { included, preceding, reason }
+     reason: "origin" — ещё до первой реплики пользователя или ответ на неё; "past-first-turn" — позже. */
+  function forGeneration(path, opts) {
+    const o = opts || {};
+    const preceding = precedingPath(path, o.mode || "new", o.targetId);
+    const included = includedAfter(preceding);
+    return { included, preceding, reason: included ? "origin" : "past-first-turn" };
+  }
+
+  PRP.scenario = { precedingPath, includedAfter, forGeneration };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.scenario;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/prism/assembler.js */
 /* Prism RP — сборщик контекста.
    Prism не хранится: на каждом ходе он собирается из Card + Scene + релевантного
@@ -2215,6 +2276,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры речи {{char}} (стиль, не сюжет)",
+      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
       author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
       authorPost: "Указания автора карточки (после истории)",
     },
@@ -2231,6 +2293,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
+      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
       author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
       authorPost: "Указания автора карточки (после истории)",
     },
@@ -2267,12 +2330,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
        experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
-       sceneProtocol, extraPost, noPostHistory
+       sceneProtocol, extraPost, noPostHistory,
+       includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да)
      }
 
      Итоговый порядок (обычный транспорт):
        system: РАМКА → УКАЗАНИЯ АВТОРА (system_prompt) → лорбук «до персонажа» → КАРТОЧКА
-               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → СЦЕНА
+               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → НАЧАЛО ИСТОРИИ (сценарий, пока действует) → СЦЕНА
        user/assistant: ИСТОРИЯ
        system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → протокол сцены и рисования
      При singleSystem всё служебное идёт одним system в начале, затем строго user/assistant.
@@ -2285,7 +2349,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
@@ -2304,7 +2368,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       appearance: m(card.appearance || "").trim(),
       personality: m(card.personality || "").trim(),
       background: m(card.background || "").trim(),
-      scenario: m(card.scenario || "").trim(),
+      // Сценарий — исходные обстоятельства; подаётся только до границы первого ответа (prism/scenario.js).
+      scenario: o.includeScenario ? m(card.scenario || "").trim() : "",
       examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
@@ -2320,7 +2385,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
       const cardBody = [st.description, st.appearance ? "Внешность: " + st.appearance : "", st.personality ? "Личность: " + st.personality : "",
-        st.background ? "Прошлое: " + st.background : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+        st.background ? "Прошлое: " + st.background : ""].filter(Boolean).join("\n\n");
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
       const kept = keptOlder.concat(history.slice(history.length - st.minH));
@@ -2334,6 +2399,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           section(m(T.persona), st.persona),
           section(m(T.lore), loreText("after")),
           section(m(T.memory), EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)))),
+          section(m(T.origin), st.scenario),
           scene,
         ].filter(Boolean),
         post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
@@ -2447,10 +2513,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         examples: !!st.examples,
         postHistory: !!st.postHistory,
         postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
+        // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "past-first-turn"
+        // (граница первого ответа пройдена), "budget" (не поместился).
+        scenarioIncluded: !!st.scenario,
+        scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
-          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : ""),
+          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : "") + tokLayer(section(m(T.origin), st.scenario)),
           memory: tokLayer(st.exps.length ? section(m(T.memory), EXP.format(st.exps)) : ""),
           scene: tok(scene),
           lore: tokLayer(st.lore.length ? st.lore.map((e) => m(e.content)).join("\n\n") : ""),
@@ -4051,11 +4121,26 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   function feed(m) {
     if (!m.path.length) {
-      return `<div class="empty-note">${m.chat.mode === "messenger"
-        ? `Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?»`
-        : `Опишите, с чего начинается сцена, или задайте место и время в панели сцены.`}</div>`;
+      if (m.chat.mode === "messenger") return `<div class="empty-note">Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?»</div>`;
+      return m.gen && m.gen.opening ? openingLive(m) : openingStart(m);
     }
     return m.chat.mode === "messenger" ? messengerFeed(m) : rpFeed(m);
+  }
+
+  // Пустая сцена без первого сообщения: модель начинает только по кнопке, писать первым можно всегда.
+  function openingStart(m) {
+    const scen = String(m.card.scenario || "").trim();
+    return `<div class="opening-start">
+      <p class="lead">Сцена пока пуста — у ${esc(m.card.name)} нет готового первого сообщения.</p>
+      ${scen ? `<p class="hint">Начальные обстоятельства из карточки учитываются до первого ответа на вашу реплику.</p>` : ""}
+      <button class="btn btn-primary" data-act="opening">${icon("book")}Пусть ${esc(m.card.name)} начнёт</button>
+      <p class="hint">Или напишите первым — поле ввода внизу. Место и время можно задать в панели сцены.</p></div>`;
+  }
+  // Начало сцены в процессе: временный пузырь, в дереве сообщений его нет.
+  function openingLive(m) {
+    return `<article class="turn assistant last opening-live">${R.avatar(m.card, 40)}<div style="min-width:0">
+      <div class="turn-head"><span class="turn-name">${esc(m.card.name)}</span><span class="turn-time">начинает сцену…</span></div>
+      <div class="prose cursor" id="text-${m.gen.msgId}">${R.rpText(liveText(m))}</div></div></article>`;
   }
 
   function swipeNav(msg, isLast) {
@@ -4366,6 +4451,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ${r.legacyUnscoped ? `<dt>Без привязки</dt><dd>${r.legacyUnscoped} — в контекст не идут</dd>` : ""}
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
+        ${r.scenarioState && r.scenarioState !== "none" ? `<dt>Сценарий</dt><dd>${{ included: "в контексте — исходные обстоятельства, до первого ответа на вашу реплику", "past-first-turn": "больше не подаётся: первый ответ на вашу реплику уже прозвучал", budget: "не поместился" }[r.scenarioState]}</dd>` : ""}
         ${r.postHistoryDisabled ? `<dt>После истории</dt><dd>указания автора выключены в настройках</dd>` : ""}
         ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "") + (t.detail && t.layer === "card.description" ? ` (${esc(t.detail)})` : "")).join(", ")}</dd>` : ""}
         </dl></div>
@@ -4847,8 +4933,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     /* ── Жизненный цикл ────────────────────────────────────────────────── */
     function loadMessages(chatId) { return DB.byIndex("messages", "chatId", chatId); }
 
-    // Новый чат; для режима «Сцена» — с приветствиями карточки как вариантами первого ответа.
-    // Делает чат текущим (S.chatId, S.cardId, S.messages) и возвращает его id.
+    /* Новый чат. Режим «Сцена»: первое сообщение карточки и альтернативные приветствия — авторское
+       начало, варианты одного корневого сообщения (без вызова модели; [scene:] разбирается как обычно).
+       Без первого сообщения чат создаётся пустым: ни заглушек, ни пустых узлов, leafId = null —
+       начать может пользователь или, по явному действию, модель (generation/service, режим opening).
+       Сценарий карточки в сцену не переносится. Делает чат текущим и возвращает его id. */
     async function createChat(mode, cardId) {
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
@@ -4857,6 +4946,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
         const vars = { char: cd.name, user: ctx.persona().name };
         const m = newMsg("assistant", null, "");
+        m.opening = "authored";
         m.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
           const parsed = SC.parse(U.macros(g, vars));
           return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };
@@ -5070,14 +5160,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings;
+  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario;
 
   function create(ctx) {
     const { S } = ctx;
     const chat = () => ctx.svc.chat;
 
-    // path — ветка до точки ответа; extraPost — дополнительное указание в конце (например, «продолжи»).
-    function build(path, extraPost) {
+    /* path — ветка, которая уходит в модель как история; extraPost — дополнительное указание в конце
+       (например, «продолжи» или «начни сцену»). scenario — решение prism/scenario.js для этой генерации;
+       без него — как для нового ответа после path (так же собирается предпросмотр следующего хода). */
+    function build(path, extraPost, scenario) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
       if (ST.imagesOn(s, ctx.env.perchanceImages()) && s.images.modelDraws) {
@@ -5096,6 +5188,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         sceneState: st, experiences: ex.ranked, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
+        includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
       });
       built.report.expDebug = ex.debug;
       built.report.experienceVisible = ex.visibleCount;
@@ -5246,14 +5339,22 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
    Порядок хода: предварительная сборка Prism и проверка бюджета (до любых изменений дерева)
    → узел или вариант ответа → вызов модели через PRP.llm → разбор ответа ([scene:], [draw:],
    рассуждение) → сохранение → автокартинка.
-   Режимы: "new" — новый ответ, "regen" — новый вариант, "continue" — дописать текущий вариант.
+   Режимы: "new" — новый ответ, "regen" — новый вариант, "continue" — дописать текущий вариант,
+   "opening" — модель начинает сцену в пустом чате (см. opening ниже: дерево меняется только
+   после успешного ответа).
+   Сценарий карточки подаётся по правилу prism/scenario.js (граница первого ответа).
    Перерисовка — через порт ctx.ui (сервис не трогает DOM сам). */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, SC = PRP.scene, OA = PRP.openai, IC = PRP.imgCompose, ST = PRP.settings, LLM = PRP.llm;
+  const TR = PRP.tree, SC = PRP.scene, OA = PRP.openai, IC = PRP.imgCompose, ST = PRP.settings, LLM = PRP.llm, SCN = PRP.scenario;
 
   const CONTINUE = "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново.";
+  // Временное указание для начала сцены моделью. В историю не попадает; учитывается в бюджете как часть протокола.
+  const OPENING = "Начни сцену: напиши первое сообщение {{char}}. Открой её естественно, вводя только то, что следует из карточки, " +
+    "начальных обстоятельств и текущей сцены; обстоятельства — отправная точка, а не сценарий, который нужно разыграть. " +
+    "Не пиши действий, мыслей, реплик и решений {{user}} и оставь {{user}} место ответить.";
+  const OPENING_ID = "opening"; // id временного пузыря начала сцены в ленте (в дереве такого узла нет)
 
   function create(ctx) {
     const { S, ui } = ctx;
@@ -5266,20 +5367,20 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!c || !cd) return;
       if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return; }
       mode = mode || (msgId ? "regen" : "new");
+      const full = chat().path();
+      // Пустой чат: отвечать не на что — это начало сцены.
+      if (mode === "opening" || (mode === "new" && !full.length)) return opening(prov);
 
       // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
       // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
-      let path = chat().path();
-      if (mode === "regen") path = path.slice(0, path.findIndex((m) => m.id === msgId));
-      const extraPost = mode === "continue" ? CONTINUE : "";
-      const built = prism().build(path, extraPost);
-      S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
-      if (built.report.overflow) {
-        ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
-        if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
-        ui.renderFeed();
-        return;
-      }
+      let path = full;
+      if (mode === "regen") path = full.slice(0, full.findIndex((m) => m.id === msgId));
+      const target0 = msgId ? S.messages.find((m) => m.id === msgId) : null;
+      // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
+      const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
+      const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }));
+      if (preflightFailed(built, prov)) return;
 
       let target, prefix = "";
       if (mode === "regen") {
@@ -5341,9 +5442,78 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!error && dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(target, sw, dr.draws[0]);
     }
 
+    // Записать сборку для вкладки Prism; при переполнении — сообщить и вернуть true (запрос не уходит).
+    function preflightFailed(built, prov) {
+      S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
+      if (!built.report.overflow) return false;
+      ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+      if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
+      ui.renderFeed();
+      return true;
+    }
+
+    /* Начало сцены моделью (пустой чат, по явному действию пользователя).
+       Транзакция: сборка Prism → проверка бюджета → вызов модели (поток — только во временном
+       состоянии S.gen, в дереве узла нет) → разбор → ОДНА запись корневого сообщения → leafId → сохранение.
+       Переполнение, ошибка, отмена или пустой ответ не меняют ни дерево, ни leafId: чат остаётся пустым,
+       можно повторить. Фальшивой реплики пользователя нет: указание OPENING — временное, вне истории.
+       → { ok, reason? } */
+    async function opening(prov) {
+      const c = ctx.chat(), cd = ctx.card();
+      if (chat().path().length) return { ok: false, reason: "not-empty" };
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }));
+      if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
+
+      const ctrl = new AbortController();
+      const chatId = c.id;
+      S.gen = { ctrl, msgId: OPENING_ID, opening: true, raw: "", reasoning: "", prefix: "" };
+      ui.renderFeed();
+      if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
+      ui.scrollBottom();
+
+      const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
+      let res = null, error = null;
+      try {
+        res = await LLM.chat(prov, built.messages, { names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler, signal: ctrl.signal, onDelta });
+      } catch (e) {
+        if (e.name !== "AbortError") error = e.message || String(e);
+      }
+      const aborted = ctrl.signal.aborted;
+      S.gen = null;
+      let th = null, parsed = null, dr = null;
+      if (!aborted && !error) {
+        th = OA.splitThink((res && res.text) || "");
+        parsed = SC.parse(th.text);
+        dr = IC.parseDraws(parsed.text);
+        if (!dr.text.trim()) error = "модель вернула пустой ответ";
+      }
+      if (aborted || error || S.chatId !== chatId) {
+        if (error) ui.toast(`Не удалось начать сцену: ${error}. Можно попробовать ещё раз.`, true);
+        prism().refresh();
+        ui.renderFeed();
+        if (S.drawerOpen) ui.renderDrawer();
+        return { ok: false, reason: aborted ? "aborted" : error ? "error" : "chat-changed" };
+      }
+
+      const m = chat().newMsg("assistant", null, "");
+      m.opening = "generated";
+      m.swipes = [{ text: dr.text, sceneOps: parsed.ops, draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      await chat().putMsg(m);
+      c.leafId = m.id;
+      await chat().touch();
+      prism().refresh();
+      ui.renderFeed();
+      ui.renderRail();
+      if (S.drawerOpen) ui.renderDrawer();
+      ui.scrollBottom();
+      const sw = m.swipes[0];
+      if (dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(m, sw, dr.draws[0]);
+      return { ok: true, msgId: m.id };
+    }
+
     function stop() { if (S.gen) S.gen.ctrl.abort(); }
 
-    return { generate, stop };
+    return { generate, stop, OPENING };
   }
 
   PRP.generationService = { create };
@@ -5869,6 +6039,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const actions = {
       send: sendUser,
       stop: () => svc.gen.stop(),
+      // Модель начинает сцену — только по этой кнопке, никогда сама при открытии чата.
+      opening: () => { if (!S.gen) return svc.gen.generate(null, "opening"); },
       regen: (t) => svc.gen.generate(t.dataset.id, "regen"),
       continue: (t) => svc.gen.generate(t.dataset.id, "continue"),
       swipe: async (t) => {

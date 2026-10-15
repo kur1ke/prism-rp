@@ -23,6 +23,7 @@
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры речи {{char}} (стиль, не сюжет)",
+      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
       author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
       authorPost: "Указания автора карточки (после истории)",
     },
@@ -39,6 +40,7 @@
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
+      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
       author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
       authorPost: "Указания автора карточки (после истории)",
     },
@@ -75,12 +77,13 @@
        mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
        experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
-       sceneProtocol, extraPost, noPostHistory
+       sceneProtocol, extraPost, noPostHistory,
+       includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да)
      }
 
      Итоговый порядок (обычный транспорт):
        system: РАМКА → УКАЗАНИЯ АВТОРА (system_prompt) → лорбук «до персонажа» → КАРТОЧКА
-               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → СЦЕНА
+               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → НАЧАЛО ИСТОРИИ (сценарий, пока действует) → СЦЕНА
        user/assistant: ИСТОРИЯ
        system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → протокол сцены и рисования
      При singleSystem всё служебное идёт одним system в начале, затем строго user/assistant.
@@ -93,7 +96,7 @@
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
@@ -112,7 +115,8 @@
       appearance: m(card.appearance || "").trim(),
       personality: m(card.personality || "").trim(),
       background: m(card.background || "").trim(),
-      scenario: m(card.scenario || "").trim(),
+      // Сценарий — исходные обстоятельства; подаётся только до границы первого ответа (prism/scenario.js).
+      scenario: o.includeScenario ? m(card.scenario || "").trim() : "",
       examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
@@ -128,7 +132,7 @@
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
       const cardBody = [st.description, st.appearance ? "Внешность: " + st.appearance : "", st.personality ? "Личность: " + st.personality : "",
-        st.background ? "Прошлое: " + st.background : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+        st.background ? "Прошлое: " + st.background : ""].filter(Boolean).join("\n\n");
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
       const kept = keptOlder.concat(history.slice(history.length - st.minH));
@@ -142,6 +146,7 @@
           section(m(T.persona), st.persona),
           section(m(T.lore), loreText("after")),
           section(m(T.memory), EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)))),
+          section(m(T.origin), st.scenario),
           scene,
         ].filter(Boolean),
         post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
@@ -255,10 +260,14 @@
         examples: !!st.examples,
         postHistory: !!st.postHistory,
         postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
+        // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "past-first-turn"
+        // (граница первого ответа пройдена), "budget" (не поместился).
+        scenarioIncluded: !!st.scenario,
+        scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
-          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : ""),
+          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : "") + tokLayer(section(m(T.origin), st.scenario)),
           memory: tokLayer(st.exps.length ? section(m(T.memory), EXP.format(st.exps)) : ""),
           scene: tok(scene),
           lore: tokLayer(st.lore.length ? st.lore.map((e) => m(e.content)).join("\n\n") : ""),
