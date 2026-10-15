@@ -50,11 +50,26 @@
 
   function feed(m) {
     if (!m.path.length) {
-      return `<div class="empty-note">${m.chat.mode === "messenger"
-        ? `Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?»`
-        : `Опишите, с чего начинается сцена, или задайте место и время в панели сцены.`}</div>`;
+      if (m.chat.mode === "messenger") return `<div class="empty-note">Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?»</div>`;
+      return m.gen && m.gen.opening ? openingLive(m) : openingStart(m);
     }
     return m.chat.mode === "messenger" ? messengerFeed(m) : rpFeed(m);
+  }
+
+  // Пустая сцена без первого сообщения: модель начинает только по кнопке, писать первым можно всегда.
+  function openingStart(m) {
+    const scen = String(m.card.scenario || "").trim();
+    return `<div class="opening-start">
+      <p class="lead">Сцена пока пуста — у ${esc(m.card.name)} нет готового первого сообщения.</p>
+      ${scen ? `<p class="hint">Начальные обстоятельства из карточки учитываются до первого ответа на вашу реплику.</p>` : ""}
+      <button class="btn btn-primary" data-act="opening">${icon("book")}Пусть ${esc(m.card.name)} начнёт</button>
+      <p class="hint">Или напишите первым — поле ввода внизу. Место и время можно задать в панели сцены.</p></div>`;
+  }
+  // Начало сцены в процессе: временный пузырь, в дереве сообщений его нет.
+  function openingLive(m) {
+    return `<article class="turn assistant last opening-live">${R.avatar(m.card, 40)}<div style="min-width:0">
+      <div class="turn-head"><span class="turn-name">${esc(m.card.name)}</span><span class="turn-time">начинает сцену…</span></div>
+      <div class="prose cursor" id="text-${m.gen.msgId}">${R.rpText(liveText(m))}</div></div></article>`;
   }
 
   function swipeNav(msg, isLast) {

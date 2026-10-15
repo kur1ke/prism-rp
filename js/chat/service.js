@@ -52,8 +52,11 @@
     /* ── Жизненный цикл ────────────────────────────────────────────────── */
     function loadMessages(chatId) { return DB.byIndex("messages", "chatId", chatId); }
 
-    // Новый чат; для режима «Сцена» — с приветствиями карточки как вариантами первого ответа.
-    // Делает чат текущим (S.chatId, S.cardId, S.messages) и возвращает его id.
+    /* Новый чат. Режим «Сцена»: первое сообщение карточки и альтернативные приветствия — авторское
+       начало, варианты одного корневого сообщения (без вызова модели; [scene:] разбирается как обычно).
+       Без первого сообщения чат создаётся пустым: ни заглушек, ни пустых узлов, leafId = null —
+       начать может пользователь или, по явному действию, модель (generation/service, режим opening).
+       Сценарий карточки в сцену не переносится. Делает чат текущим и возвращает его id. */
     async function createChat(mode, cardId) {
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
@@ -62,6 +65,7 @@
       if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
         const vars = { char: cd.name, user: ctx.persona().name };
         const m = newMsg("assistant", null, "");
+        m.opening = "authored";
         m.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
           const parsed = SC.parse(U.macros(g, vars));
           return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };

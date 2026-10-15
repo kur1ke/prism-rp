@@ -32,6 +32,8 @@
     const actions = {
       send: sendUser,
       stop: () => svc.gen.stop(),
+      // Модель начинает сцену — только по этой кнопке, никогда сама при открытии чата.
+      opening: () => { if (!S.gen) return svc.gen.generate(null, "opening"); },
       regen: (t) => svc.gen.generate(t.dataset.id, "regen"),
       continue: (t) => svc.gen.generate(t.dataset.id, "continue"),
       swipe: async (t) => {

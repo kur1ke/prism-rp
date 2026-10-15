@@ -12,17 +12,17 @@
   const TEMPLATES = {
     rp: {
       frame:
-        "Ты ведёшь ролевую игру за {{char}}. Собеседник играет {{user}}.\n" +
-        "Решай, как {{char}} поступит именно сейчас, исходя из сцены, характера и памяти. " +
-        "Черты характера влияют на то, как {{char}} воспринимает происходящее, но не предписывают поступков. " +
-        "Воспоминания — свидетельства прошлого: {{char}} может поступить вопреки им, но не забывает их без причины. " +
-        "Не пиши реплики, мысли и действия за {{user}}.",
-      card: "Склонности и характер {{char}} (влияют на восприятие, не диктуют поступки)",
-      memory: "Что {{char}} помнит (свидетельства прошлого; {{char}} может действовать вопреки им, но не забывает их)",
+        "Ты играешь за {{char}}. {{user}} управляет только собой.\n" +
+        "Реагируй естественно, исходя из текущей сцены, характера {{char}} и релевантного прошлого опыта. " +
+        "Характер и прошлый опыт влияют на решения, но не являются жёстким сценарием.\n" +
+        "Не пиши мысли, действия или реплики за {{user}}.",
+      card: "Характер {{char}}",
+      memory: "Релевантный прошлый опыт {{char}}",
       scene: "Сейчас (факты)",
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры речи {{char}} (стиль, не сюжет)",
+      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
       author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
       authorPost: "Указания автора карточки (после истории)",
     },
@@ -33,12 +33,13 @@
         "Можно отправить несколько сообщений подряд — разделяй их пустой строкой. " +
         "Черты характера влияют на восприятие, но не предписывают поступков; воспоминания — свидетельства прошлого, а не инструкции. " +
         "Не пиши за {{user}}.",
-      card: "Склонности и характер {{char}} (влияют на восприятие, не диктуют поступки)",
-      memory: "Что {{char}} помнит (свидетельства прошлого; {{char}} может действовать вопреки им, но не забывает их)",
+      card: "Характер {{char}}",
+      memory: "Релевантный прошлый опыт {{char}}",
       scene: "Жизнь {{char}} сейчас, вне переписки (видит только {{char}}; рассказывает о ней, только если сам(а) захочет)",
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
+      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
       author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
       authorPost: "Указания автора карточки (после истории)",
     },
@@ -75,12 +76,15 @@
        mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
        experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
-       sceneProtocol, extraPost, noPostHistory
+       sceneProtocol, extraPost, noPostHistory,
+       includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
+       allowSyntheticUser — можно ли при singleSystem подставить служебную реплику пользователя «[Начало]»
+         (по умолчанию да, как раньше; для начала сцены — нет, см. report.needsUserFirst)
      }
 
      Итоговый порядок (обычный транспорт):
        system: РАМКА → УКАЗАНИЯ АВТОРА (system_prompt) → лорбук «до персонажа» → КАРТОЧКА
-               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → СЦЕНА
+               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → НАЧАЛО ИСТОРИИ (сценарий, пока действует) → СЦЕНА
        user/assistant: ИСТОРИЯ
        system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → протокол сцены и рисования
      При singleSystem всё служебное идёт одним system в начале, затем строго user/assistant.
@@ -93,7 +97,7 @@
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true, allowSyntheticUser: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
@@ -112,7 +116,8 @@
       appearance: m(card.appearance || "").trim(),
       personality: m(card.personality || "").trim(),
       background: m(card.background || "").trim(),
-      scenario: m(card.scenario || "").trim(),
+      // Сценарий — исходные обстоятельства; подаётся только до границы первого ответа (prism/scenario.js).
+      scenario: o.includeScenario ? m(card.scenario || "").trim() : "",
       examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
@@ -128,7 +133,7 @@
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
       const cardBody = [st.description, st.appearance ? "Внешность: " + st.appearance : "", st.personality ? "Личность: " + st.personality : "",
-        st.background ? "Прошлое: " + st.background : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+        st.background ? "Прошлое: " + st.background : ""].filter(Boolean).join("\n\n");
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
       const kept = keptOlder.concat(history.slice(history.length - st.minH));
@@ -142,6 +147,7 @@
           section(m(T.persona), st.persona),
           section(m(T.lore), loreText("after")),
           section(m(T.memory), EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)))),
+          section(m(T.origin), st.scenario),
           scene,
         ].filter(Boolean),
         post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
@@ -152,15 +158,22 @@
       const p = parts();
       const msgs = p.history.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
       if (o.singleSystem) {
-        // Строгие Jinja-шаблоны: одно system в начале, затем строго user/assistant.
+        /* Строгие Jinja-шаблоны (Mistral, Gemma и подобные): одно system в начале, затем строго
+           user/assistant, начиная с user — иначе шаблон бросает «Conversation roles must alternate
+           user/assistant/…». Поэтому, если история начинается с ответа персонажа (приветствие),
+           в обычном разговоре подставляется служебная реплика «[Начало]». Для начала сцены это
+           запрещено (allowSyntheticUser: false): реплика не подставляется, а needsUserFirst
+           сообщает, что строгому шаблону не хватит первого хода пользователя. */
         const merged = [];
         for (const x of msgs) {
           const last = merged[merged.length - 1];
           if (last && last.role === x.role) last.content += "\n\n" + x.content;
           else merged.push(Object.assign({}, x));
         }
-        if (!merged.length || merged[0].role !== "user") merged.unshift({ role: "user", content: "[Начало]" });
-        return { p, messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
+        const userFirst = merged.length && merged[0].role === "user";
+        if (!userFirst && o.allowSyntheticUser) merged.unshift({ role: "user", content: "[Начало]" });
+        return { p, synthetic: !userFirst && o.allowSyntheticUser, needsUserFirst: !userFirst && !o.allowSyntheticUser,
+          messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
       }
       const out = [{ role: "system", content: p.head.join("\n\n") }].concat(msgs);
       if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
@@ -232,7 +245,7 @@
       overflow = !fits();
     }
 
-    const { p, messages } = render();
+    const { p, messages, synthetic, needsUserFirst } = render();
     const used = cost(messages);
     const keptHistory = p.history;
     const tokLayer = (x) => tok(x) + (x ? 2 : 0);
@@ -255,10 +268,17 @@
         examples: !!st.examples,
         postHistory: !!st.postHistory,
         postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
+        // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "past-first-turn"
+        // (граница первого ответа пройдена), "budget" (не поместился).
+        scenarioIncluded: !!st.scenario,
+        // singleSystem: подставлена служебная реплика «[Начало]» / её нельзя было подставить, а шаблону нужен ход пользователя.
+        syntheticUser: !!synthetic,
+        needsUserFirst: !!needsUserFirst,
+        scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
-          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : ""),
+          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : "") + tokLayer(section(m(T.origin), st.scenario)),
           memory: tokLayer(st.exps.length ? section(m(T.memory), EXP.format(st.exps)) : ""),
           scene: tok(scene),
           lore: tokLayer(st.lore.length ? st.lore.map((e) => m(e.content)).join("\n\n") : ""),
