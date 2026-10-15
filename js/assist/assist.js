@@ -30,6 +30,10 @@
   }
 
 
+  function activeDirective(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? d.text : "";
+  }
   // Карточка → компактный текст для контекста ассистента.
   function cardText(card) {
     if (!card) return "";
@@ -41,13 +45,16 @@
     return [
       `Имя: ${card.name}`,
       f("Описание (description)", card.description),
+      f("Внешность", card.appearance),
       f("Личность (personality)", card.personality),
+      f("Прошлое", card.background),
       f("Сценарий (scenario)", card.scenario),
       f("Первое сообщение (first_mes)", card.firstMes),
       alts.length ? `Альтернативные приветствия: ${alts.length}` : "",
       f("Примеры диалогов (mes_example)", card.mesExample),
-      f("Системный промпт карточки", card.systemPrompt),
-      f("Инструкции после истории", card.postHistory),
+      // Только включённые указания автора; выключенные (например, непроверенные импортированные) сюда не попадают.
+      f("Указания автора (включены)", activeDirective(card, "system")),
+      f("Указания автора после истории (включены)", activeDirective(card, "postHistory")),
       lore ? `Лорбук:\n${lore}` : "",
       im.trigger || im.wardrobe || im.look ? f("Изображения — триггер", im.trigger) + (im.look ? `\nВнешность для картинок:\n${im.look}` : "") + (im.wardrobe ? `\nГардероб:\n${im.wardrobe}` : "") : "",
     ].filter(Boolean).join("\n\n");

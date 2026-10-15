@@ -125,7 +125,9 @@
           <button class="icon-btn" data-act="modal-close" title="Закрыть">${R.icon("x")}</button></span></figcaption></figure></div>`;
         return;
       }
-      rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section) : V.cardModal(m, S.modal.draft, S.modal.section);
+      rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section)
+        : S.modal.kind === "import" ? V.importReview(m, S.modal)
+        : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       S.modal.keepScroll = false;
     }

@@ -2,7 +2,7 @@
 (function () {
   var d = document;
   ["https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap"].forEach(function (h) { var l = d.createElement("link"); l.rel = "stylesheet"; l.href = h; d.head.appendChild(l); });
-  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* Prism: переполнение, отбор опыта, непривязанные записи */\n.err-block { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--danger); border-radius: var(--r-m); padding: 10px 12px; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: 14px; }\n.err-block svg { width: 18px; height: 18px; color: var(--danger); flex: none; margin-top: 2px; }\n.exp-debug summary { cursor: pointer; font-weight: 600; font-size: 14px; }\n.exp-debug table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }\n.exp-debug th, .exp-debug td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }\n.exp-debug th { color: var(--muted); font-weight: 500; }\n.exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }\n.exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }\n.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }\n.legacy-block .memo { cursor: default; }\n"; d.head.appendChild(st);
+  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* Prism: переполнение, отбор опыта, непривязанные записи */\n.err-block { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--danger); border-radius: var(--r-m); padding: 10px 12px; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: 14px; }\n.err-block svg { width: 18px; height: 18px; color: var(--danger); flex: none; margin-top: 2px; }\n.exp-debug summary { cursor: pointer; font-weight: 600; font-size: 14px; }\n.exp-debug table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }\n.exp-debug th, .exp-debug td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }\n.exp-debug th { color: var(--muted); font-weight: 500; }\n.exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }\n.exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }\n.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }\n.legacy-block .memo { cursor: default; }\n\n/* ── Проверка импорта карточек ───────────────────────────────────────── */\n.imp-modal { width: min(720px, 100%); }\n.imp-item { border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); padding: 14px 16px; margin-bottom: 12px; }\n.imp-item.bad { border-color: var(--danger); }\n.imp-item h3 { display: flex; align-items: center; gap: 6px; }\n.imp-item h3 svg { width: 16px; height: 16px; flex: none; color: var(--danger); }\n.imp-fields { list-style: none; padding: 0; margin: 4px 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; font-size: 13.5px; color: var(--muted); }\n.imp-fields li.on { color: var(--text); }\n.imp-dir, .imp-note { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; font-size: 13.5px; }\n.imp-dir { border-left-color: var(--warn); }\n.imp-note.warn { border-left-color: var(--warn); }\n.imp-item details summary { cursor: pointer; color: var(--text-2); font-size: 13px; margin-top: 4px; }\n.imp-item .code { max-height: 220px; margin: 6px 0 0; }\n.imp-issues { padding-left: 18px; margin: 10px 0 0; font-size: 13.5px; }\n.imp-issues li { margin: 3px 0; }\n.imp-issues li.error b { color: var(--danger); }\n.imp-issues li.warning b { color: var(--warn); }\n.imp-issues li.info { color: var(--muted); }\n.dir-badge { font-size: 11.5px; border-radius: 5px; padding: 0 6px; border: 1px solid var(--line-soft); color: var(--muted); font-weight: 500; }\n.dir-badge.imported { color: var(--warn); border-color: var(--warn); }\n"; d.head.appendChild(st);
   var boot = d.getElementById("prism-boot"); if (boot) boot.remove();
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
@@ -233,6 +233,787 @@
 
   PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/model.js */
+/* Prism RP — каноническая модель карточки персонажа (CardDraft / сохранённая карточка).
+   Один формат для всех источников (CC V1/V2/V3, URV v2, созданные в редакторе).
+   Смысл полей разведён:
+     • личность (постоянная основа): description, appearance, personality, background;
+     • начало мира: scenario; авторское начало: firstMes, altGreetings;
+     • манера: mesExample; справочные сведения: lore (не указания);
+     • указания автора: directives.system / directives.postHistory — отдельный уровень власти,
+       у каждого явный флаг enabled; импортированные приходят выключенными;
+     • метаданные: creator, creatorNotes, tags, version; картинки: image;
+     • source — исходник и сведения импорта, ТОЛЬКО хранение: во время работы не читается.
+   Чистый модуль: без DOM, хранилища и сети. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const SCHEMA = 2;
+
+  // Указание автора. Созданное в редакторе включено (отправляется, если в нём есть текст);
+  // импортированное — выключено и не проверено, пока пользователь не включит его сам.
+  function directive(text, origin) {
+    const o = origin === "imported" ? "imported" : "authored";
+    return { text: String(text || ""), origin: o, enabled: o === "authored", reviewed: o === "authored" };
+  }
+  function importedDirective(text) {
+    return String(text || "").trim() ? directive(text, "imported") : directive("", "authored");
+  }
+
+  function blank() {
+    const now = Date.now();
+    return {
+      id: null, schema: SCHEMA,
+      name: "",
+      description: "", appearance: "", personality: "", background: "",
+      scenario: "",
+      firstMes: "", altGreetings: [],
+      mesExample: "",
+      lore: [],
+      directives: { system: directive("", "authored"), postHistory: directive("", "authored") },
+      creator: "", creatorNotes: "", tags: [], version: "",
+      image: undefined,
+      avatar: null,
+      source: null,
+      createdAt: now, updatedAt: now,
+    };
+  }
+
+  // Текст указания, который реально уходит в модель: только включённое и непустое.
+  // Никаких запасных путей: source, extensions и прочее хранимое сюда не попадает.
+  function activeText(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? String(d.text) : "";
+  }
+  // Есть ли у указания текст, который сейчас выключен (для отчёта и предупреждений).
+  function hasDisabledText(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return !!(d && !d.enabled && String(d.text || "").trim());
+  }
+
+  /* Приведение карточки, сохранённой в 0.5.0 и раньше (поля systemPrompt / postHistory / raw / spec).
+     Старые указания были видны в редакторе и уходили в модель — поэтому они становятся
+     авторскими включёнными, поведение не меняется. Исходник переезжает в source. */
+  function upgradeStored(card) {
+    if (!card || card.schema === SCHEMA) return card;
+    const c = Object.assign(blank(), card);
+    c.schema = SCHEMA;
+    c.appearance = card.appearance || "";
+    c.background = card.background || "";
+    c.altGreetings = Array.isArray(card.altGreetings) ? card.altGreetings : [];
+    c.lore = Array.isArray(card.lore) ? card.lore : [];
+    c.tags = Array.isArray(card.tags) ? card.tags : [];
+    c.directives = card.directives || {
+      system: directive(card.systemPrompt || "", "authored"),
+      postHistory: directive(card.postHistory || "", "authored"),
+    };
+    if (!card.source && card.raw) c.source = { format: card.spec === "chara_card_v3" ? "ccv3" : card.spec === "chara_card_v2" ? "ccv2" : "ccv1", version: "", sourceType: "json", raw: card.raw, importedAt: card.createdAt || null, unmapped: [], compiled: [], preserved: {} };
+    delete c.systemPrompt; delete c.postHistory; delete c.raw; delete c.spec;
+    return c;
+  }
+
+  // Поля, по которым видно, что в карточке есть содержание (не только имя).
+  const CONTENT_FIELDS = ["description", "appearance", "personality", "background", "scenario", "firstMes", "mesExample"];
+  function hasContent(card) {
+    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim());
+  }
+
+  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/ccard.js */
+/* Prism RP — файл карточки Character Card: чтение карточки из PNG (tEXt/iTXt «chara» и «ccv3»)
+   и экспорт канонической карточки обратно в JSON / PNG (V2 и V3).
+   Разбор форматов при импорте — в cards/formats/* (определение формата и адаптеры). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  /* ── base64 ⇄ UTF-8 ─────────────────────────────────────────────────── */
+  function b64ToUtf8(b64) {
+    const bin = atob(String(b64).replace(/\s+/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  function utf8ToB64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  /* ── PNG ────────────────────────────────────────────────────────────── */
+  const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
+  let CRC_TABLE = null;
+  function crc32(bytes) {
+    if (!CRC_TABLE) {
+      CRC_TABLE = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        CRC_TABLE[n] = c >>> 0;
+      }
+    }
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function readChunks(u8) {
+    for (let i = 0; i < 8; i++) if (u8[i] !== SIG[i]) throw new Error("Файл не является PNG");
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const chunks = [];
+    let p = 8;
+    while (p + 8 <= u8.length) {
+      const len = dv.getUint32(p);
+      const type = String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
+      const data = u8.subarray(p + 8, p + 8 + len);
+      chunks.push({ type, data });
+      p += 12 + len;
+      if (type === "IEND") break;
+    }
+    return chunks;
+  }
+
+  function latin1(bytes) {
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return s;
+  }
+
+  function textChunks(chunks) {
+    const out = {};
+    for (const c of chunks) {
+      if (c.type === "tEXt") {
+        const z = c.data.indexOf(0);
+        if (z > 0) out[latin1(c.data.subarray(0, z)).toLowerCase()] = latin1(c.data.subarray(z + 1));
+      } else if (c.type === "iTXt") {
+        const z = c.data.indexOf(0);
+        if (z <= 0) continue;
+        const key = latin1(c.data.subarray(0, z)).toLowerCase();
+        const comp = c.data[z + 1];
+        if (comp) continue; // сжатый iTXt в карточках не встречается
+        let q = z + 3;
+        q = c.data.indexOf(0, q) + 1; // language
+        q = c.data.indexOf(0, q) + 1; // translated keyword
+        out[key] = new TextDecoder("utf-8").decode(c.data.subarray(q));
+      }
+    }
+    return out;
+  }
+
+  function cardJsonFromPng(u8) {
+    const t = textChunks(readChunks(u8));
+    const raw = t.ccv3 || t.chara;
+    if (!raw) throw new Error("В PNG нет данных карточки (chara/ccv3)");
+    const txt = /^\s*\{/.test(raw) ? raw : b64ToUtf8(raw);
+    return JSON.parse(txt);
+  }
+
+  function makeChunk(type, data) {
+    const out = new Uint8Array(12 + data.length);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+    return out;
+  }
+
+  function textChunk(key, value) {
+    const k = new TextEncoder().encode(key);
+    const v = new TextEncoder().encode(value); // value — base64, т. е. ASCII
+    const data = new Uint8Array(k.length + 1 + v.length);
+    data.set(k, 0); data[k.length] = 0; data.set(v, k.length + 1);
+    return makeChunk("tEXt", data);
+  }
+
+  // Встраивает карточку в PNG: убирает старые chara/ccv3, пишет V2 и V3 перед IEND.
+  function embedInPng(u8, card) {
+    const chunks = readChunks(u8);
+    const parts = [new Uint8Array(SIG)];
+    for (const c of chunks) {
+      if (c.type === "tEXt" || c.type === "iTXt") {
+        const z = c.data.indexOf(0);
+        const key = z > 0 ? latin1(c.data.subarray(0, z)).toLowerCase() : "";
+        if (key === "chara" || key === "ccv3") continue;
+      }
+      if (c.type === "IEND") {
+        parts.push(textChunk("chara", utf8ToB64(JSON.stringify(toSpec(card, "v2")))));
+        parts.push(textChunk("ccv3", utf8ToB64(JSON.stringify(toSpec(card, "v3")))));
+      }
+      parts.push(makeChunk(c.type, c.data));
+    }
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    const out = new Uint8Array(total);
+    let o = 0;
+    for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  }
+
+  /* ── Экспорт ────────────────────────────────────────────────────────────
+     Каноническая карточка Prism (cards/model.js) → Character Card V2/V3.
+     • Внешность и прошлое, которых нет в стандарте, складываются в description абзацами;
+       раздельные поля Prism едут в extensions.prism_rp.fields (для обратного импорта в Prism).
+     • В system_prompt / post_history_instructions попадают только ВКЛЮЧЁННЫЕ указания.
+       Выключенные (например, непроверенные импортированные) хранятся в
+       extensions.prism_rp.disabledDirectives и при импорте снова приходят выключенными.
+     • Для карточек, импортированных из V2/V3, неизвестные поля data исходника сохраняются.
+       Исходники других форматов (V1, URV) в экспорт не переносятся. */
+  function toSpec(card, ver) {
+    const CM = PRP.cardModel;
+    const v3 = ver === "v3";
+    const src = card.source && (card.source.format === "ccv2" || card.source.format === "ccv3") && card.source.raw && card.source.raw.data;
+    const base = src ? JSON.parse(JSON.stringify(src)) : {};
+    const oldBook = base.character_book || {};
+    const description = [card.description, card.appearance ? "Внешность:\n" + card.appearance : "", card.background ? "Прошлое:\n" + card.background : ""]
+      .map((x) => String(x || "").trim()).filter(Boolean).join("\n\n");
+    const data = Object.assign(base, {
+      name: card.name,
+      description,
+      personality: card.personality || "",
+      scenario: card.scenario || "",
+      first_mes: card.firstMes || "",
+      mes_example: card.mesExample || "",
+      creator_notes: card.creatorNotes || "",
+      system_prompt: CM.activeText(card, "system"),
+      post_history_instructions: CM.activeText(card, "postHistory"),
+      alternate_greetings: card.altGreetings || [],
+      tags: card.tags || [],
+      creator: card.creator || "",
+      character_version: card.version || "",
+      extensions: base.extensions || {},
+    });
+    if (card.lore && card.lore.length) {
+      data.character_book = Object.assign({}, oldBook, {
+        extensions: oldBook.extensions || {},
+        entries: card.lore.map((e, i) => {
+          const raw = e.raw && typeof e.raw === "object" && (card.source && /^ccv/.test(card.source.format)) ? JSON.parse(JSON.stringify(e.raw)) : {};
+          return Object.assign(raw, {
+            keys: e.keys || [],
+            secondary_keys: e.secondary_keys || [],
+            selective: !!e.selective,
+            content: e.content || "",
+            extensions: raw.extensions || {},
+            enabled: e.enabled !== false,
+            insertion_order: e.insertion_order != null ? Number(e.insertion_order) || 0 : i,
+            case_sensitive: !!e.case_sensitive,
+            constant: !!e.constant,
+            position: e.position === "before_char" ? "before_char" : "after_char",
+            name: e.comment || "",
+            comment: e.comment || "",
+            id: i,
+            ...(v3 ? { use_regex: !!raw.use_regex } : {}),
+          });
+        }),
+      });
+    } else delete data.character_book;
+    // Пространство Prism в extensions: картинки, раздельные поля, выключенные указания.
+    const ext = Object.assign({}, data.extensions);
+    const pr = Object.assign({}, ext.prism_rp);
+    delete pr.image; delete pr.fields; delete pr.disabledDirectives;
+    const im = card.image && Object.keys(card.image).length ? card.image : null;
+    if (im) pr.image = JSON.parse(JSON.stringify(im));
+    if (card.appearance || card.background) pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    const dis = {};
+    if (CM.hasDisabledText(card, "system")) dis.system = card.directives.system.text;
+    if (CM.hasDisabledText(card, "postHistory")) dis.postHistory = card.directives.postHistory.text;
+    if (Object.keys(dis).length) pr.disabledDirectives = dis;
+    if (Object.keys(pr).length) ext.prism_rp = pr; else delete ext.prism_rp;
+    data.extensions = ext;
+    if (v3) {
+      data.group_only_greetings = data.group_only_greetings || [];
+      data.nickname = data.nickname || undefined;
+      return { spec: "chara_card_v3", spec_version: "3.0", data };
+    }
+    delete data.assets; delete data.group_only_greetings; delete data.nickname;
+    return { spec: "chara_card_v2", spec_version: "2.0", data };
+  }
+
+  PRP.ccard = { toSpec, cardJsonFromPng, embedInPng, crc32, b64ToUtf8, utf8ToB64 };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.ccard;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/formats/common.js */
+/* Prism RP — общее для адаптеров форматов карточек: реестр адаптеров и мелкие помощники.
+   Адаптер — чистая функция (json, detection) → { draft, notes } в каноническую модель (cards/model.js).
+   Особенности каждого формата живут только в своём файле cards/formats/<формат>.js. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const adapters = {};
+  function register(format, fn) { adapters[format] = fn; }
+
+  const clone = (o) => (o == null ? o : JSON.parse(JSON.stringify(o)));
+  const str = (v) => (typeof v === "string" ? v : v == null ? "" : typeof v === "number" ? String(v) : "");
+  const strList = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => str(x).trim()).filter(Boolean);
+  const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+
+  // Ключи объекта, которые адаптер не разобрал: путь вида "data.profile.age".
+  function unmapped(obj, known, prefix) {
+    if (!isObj(obj)) return [];
+    return Object.keys(obj).filter((k) => !known.includes(k)).map((k) => (prefix ? prefix + "." : "") + k);
+  }
+
+  // Запись лорбука в каноническом виде. raw — исходная запись (для экспорта и происхождения).
+  function loreEntry(e, i, extra) {
+    const x = isObj(e) ? e : { content: str(e) };
+    return Object.assign({
+      keys: strList(x.keys != null ? x.keys : x.key),
+      secondary_keys: strList(x.secondary_keys),
+      selective: !!x.selective,
+      content: str(x.content != null ? x.content : x.text),
+      enabled: x.enabled !== false && x.disable !== true,
+      constant: !!x.constant,
+      case_sensitive: !!x.case_sensitive,
+      insertion_order: x.insertion_order != null ? Number(x.insertion_order) || 0 : x.priority != null ? Number(x.priority) || 0 : x.order != null ? Number(x.order) || 0 : i,
+      position: x.position === "before_char" ? "before_char" : "after_char",
+      comment: str(x.comment || x.name || x.title),
+      raw: clone(x),
+    }, extra || {});
+  }
+
+  // Заметка адаптера: уровень (error | warning | info), код и текст для экрана проверки.
+  const note = (level, code, message, extra) => Object.assign({ level, code, message }, extra || {});
+
+  PRP.cardFormats = Object.assign(PRP.cardFormats || {}, { adapters, register, helpers: { clone, str, strList, isObj, unmapped, loreEntry, note } });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/formats/detect.js */
+/* Prism RP — определение формата карточки по содержимому (не по имени файла).
+   → { format: "ccv1" | "ccv2" | "ccv3" | "urv2" | "unknown", version, confidence: "high" | "medium" | "none",
+       sourceType: "json" | "png", reason } */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const { isObj } = PRP.cardFormats.helpers;
+
+  const V1_CONTENT = ["description", "personality", "scenario", "first_mes", "mes_example", "char_persona", "world_scenario", "char_greeting", "example_dialogue"];
+
+  function detect(json, sourceType) {
+    const base = { sourceType: sourceType || "json" };
+    const out = (format, version, confidence, reason) => Object.assign({ format, version, confidence, reason }, base);
+    if (!isObj(json)) return out("unknown", "", "none", Array.isArray(json) ? "в файле массив, а не карточка" : "в файле не объект JSON");
+
+    // URV v2: type + version + data.
+    if (json.type === "urv-char") {
+      if (json.version === 2 && isObj(json.data)) return out("urv2", "2", "high", "type: urv-char, version: 2");
+      return out("unknown", String(json.version || ""), "none", `URV-карточка версии ${json.version == null ? "?" : json.version} не поддерживается (нужна версия 2 с полем data)`);
+    }
+
+    // Character Card V2 / V3: spec + data.
+    if (json.spec === "chara_card_v3" || json.spec === "chara_card_v2") {
+      const v3 = json.spec === "chara_card_v3";
+      if (!isObj(json.data)) return out("unknown", "", "none", `указан spec ${json.spec}, но нет объекта data`);
+      return out(v3 ? "ccv3" : "ccv2", String(json.spec_version || (v3 ? "3.0" : "2.0")), "high", `spec: ${json.spec}`);
+    }
+    if (json.spec) return out("unknown", "", "none", `неизвестный spec: ${String(json.spec).slice(0, 40)}`);
+
+    // Character Card V1 (TavernAI / Pygmalion): поля в корне — имя и хотя бы одно поле содержания.
+    const hasName = typeof json.name === "string" || typeof json.char_name === "string";
+    if (hasName && V1_CONTENT.some((k) => typeof json[k] === "string")) return out("ccv1", "1", "medium", "поля V1 в корне (имя и описание/приветствие)");
+
+    const keys = Object.keys(json).slice(0, 8).join(", ");
+    return out("unknown", "", "none", keys ? `не похоже ни на один известный формат (ключи: ${keys})` : "пустой объект");
+  }
+
+  // Адаптация по результату определения. Неизвестный формат не адаптируется никогда.
+  function adapt(json, detection) {
+    const fn = PRP.cardFormats.adapters[detection.format];
+    if (!fn) return null;
+    return fn(json, detection);
+  }
+
+  PRP.cardFormats.detect = detect;
+  PRP.cardFormats.adapt = adapt;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/formats/cc-v1.js */
+/* Prism RP — адаптер Character Card V1: поля в корне (TavernAI: name, description, personality,
+   scenario, first_mes, mes_example; Pygmalion: char_name, char_persona, world_scenario,
+   char_greeting, example_dialogue). Неразобранные ключи корня хранятся в исходнике. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats, CM = PRP.cardModel;
+  const { clone, str, strList, unmapped, note } = F.helpers;
+
+  const KNOWN = ["name", "char_name", "description", "char_persona", "personality", "scenario", "world_scenario", "first_mes", "char_greeting",
+    "mes_example", "example_dialogue", "creator_notes", "tags", "creator", "character_version", "metadata"];
+
+  F.register("ccv1", (json, detection) => {
+    const notes = [];
+    const d = CM.blank();
+    const pick = (a, b) => (str(json[a]).trim() ? str(json[a]) : str(json[b]));
+    d.name = pick("name", "char_name").trim();
+    d.description = pick("description", "char_persona");
+    d.personality = str(json.personality);
+    d.scenario = pick("scenario", "world_scenario");
+    d.firstMes = pick("first_mes", "char_greeting");
+    d.mesExample = pick("mes_example", "example_dialogue");
+    d.creatorNotes = str(json.creator_notes);
+    d.tags = strList(json.tags);
+    d.creator = str(json.creator);
+    d.version = str(json.character_version);
+    if (json.char_name || json.char_persona || json.char_greeting) notes.push(note("info", "pygmalion", "Поля в стиле Pygmalion (char_name, char_persona, …) разобраны как V1."));
+    const un = unmapped(json, KNOWN, "");
+    if (un.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${un.join(", ")}.`));
+    d.source = { format: "ccv1", version: detection.version, sourceType: detection.sourceType, adapter: "cc-v1", importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: {} };
+    return { draft: d, notes };
+  });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/formats/cc-v2.js */
+/* Prism RP — адаптер Character Card V2 (spec: chara_card_v2). Разбор поля data используется и для V3.
+   system_prompt и post_history_instructions становятся импортированными указаниями — выключенными.
+   Расширения (extensions) хранятся в исходнике; из них читается только наше prism_rp
+   (настройки картинок и раздельные поля Prism), ничего из расширений не становится указанием. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats, CM = PRP.cardModel;
+  const { clone, str, strList, isObj, unmapped, loreEntry, note } = F.helpers;
+
+  const KNOWN = ["name", "description", "personality", "scenario", "first_mes", "mes_example", "creator_notes", "system_prompt", "post_history_instructions",
+    "alternate_greetings", "tags", "creator", "character_version", "character_book", "extensions"];
+
+  // data (V2/V3) → черновик; notes дополняются. known — разобранные ключи (V3 добавляет свои).
+  function mapData(data, detection, json, known) {
+    const notes = [];
+    const d = CM.blank();
+    const ext = isObj(data.extensions) ? data.extensions : {};
+    const prism = isObj(ext.prism_rp) ? ext.prism_rp : {};
+    d.name = str(data.name).trim();
+    // Раздельные поля Prism (наш экспорт складывает внешность и прошлое в description для других приложений).
+    // Поля берутся раздельно, только если description не правили после экспорта (совпадает со сборкой из них).
+    const pf = isObj(prism.fields) ? prism.fields : null;
+    const composed = pf && [pf.description, pf.appearance ? "Внешность:\n" + pf.appearance : "", pf.background ? "Прошлое:\n" + pf.background : ""]
+      .map((x) => str(x).trim()).filter(Boolean).join("\n\n");
+    if (pf && composed === str(data.description).trim()) {
+      d.description = str(pf.description);
+      d.appearance = str(pf.appearance);
+      d.background = str(pf.background);
+    } else {
+      d.description = str(data.description);
+      if (pf) notes.push(note("info", "prism-fields-stale", "Описание менялось после экспорта из Prism: взято целиком из description."));
+    }
+    d.personality = str(data.personality);
+    d.scenario = str(data.scenario);
+    d.firstMes = str(data.first_mes);
+    d.altGreetings = strList(data.alternate_greetings);
+    d.mesExample = str(data.mes_example);
+    d.creatorNotes = str(data.creator_notes);
+    d.tags = strList(data.tags);
+    d.creator = str(data.creator);
+    d.version = str(data.character_version);
+    const book = isObj(data.character_book) ? data.character_book : null;
+    d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
+    if (isObj(prism.image)) d.image = clone(prism.image);
+
+    // Указания автора: только импортированные и выключенные.
+    const sys = str(data.system_prompt), post = str(data.post_history_instructions);
+    const dis = isObj(prism.disabledDirectives) ? prism.disabledDirectives : {};
+    d.directives.system = CM.importedDirective(sys.trim() ? sys : str(dis.system));
+    d.directives.postHistory = CM.importedDirective(post.trim() ? post : str(dis.postHistory));
+
+    // Расширения других приложений: хранятся, не выполняются.
+    const otherExt = Object.keys(ext).filter((k) => k !== "prism_rp");
+    if (otherExt.includes("depth_prompt")) notes.push(note("warning", "ext-depth-prompt", "Заметка персонажа SillyTavern (extensions.depth_prompt) сохранена, но не используется: это указание, а не часть характера."));
+    if (otherExt.length) notes.push(note("info", "ext-preserved", `Расширения других приложений сохранены без изменений: ${otherExt.join(", ")}.`));
+    if (isObj(prism.image)) notes.push(note("info", "prism-image", "Настройки картинок Prism (триггер, LoRA, гардероб) перенесены из карточки."));
+
+    const un = unmapped(data, known, "data");
+    if (un.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${un.join(", ")}.`));
+    d.source = {
+      format: detection.format, version: detection.version, sourceType: detection.sourceType, adapter: "cc-" + detection.format.slice(2),
+      importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: {},
+    };
+    return { draft: d, notes };
+  }
+
+  F.register("ccv2", (json, detection) => mapData(json.data, detection, json, KNOWN));
+  F.ccData = { mapData, KNOWN };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/formats/cc-v3.js */
+/* Prism RP — адаптер Character Card V3 (spec: chara_card_v3). Поля data как у V2,
+   плюс поля V3, которых нет в модели Prism: они хранятся в исходнике и показываются на проверке. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats;
+  const { note } = F.helpers;
+
+  const V3_ONLY = ["nickname", "group_only_greetings", "assets", "creator_notes_multilingual", "source", "creation_date", "modification_date"];
+
+  F.register("ccv3", (json, detection) => {
+    const res = F.ccData.mapData(json.data, detection, json, F.ccData.KNOWN.concat(V3_ONLY));
+    const present = V3_ONLY.filter((k) => json.data[k] != null && !(Array.isArray(json.data[k]) && !json.data[k].length));
+    if (present.length) {
+      res.notes.push(note("info", "v3-preserved", `Поля V3 сохранены, но пока не используются: ${present.join(", ")}.`));
+      res.draft.source.unmapped = res.draft.source.unmapped.concat(present.map((k) => "data." + k));
+    }
+    return res;
+  });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/formats/urv-v2.js */
+/* Prism RP — адаптер URV v2 (type: "urv-char", version: 2).
+   Профиль раскладывается по полям Prism. Заметка (systemNote) и напоминание (reminderMessage)
+   становятся импортированными указаниями — выключенными. Собранный data.systemPrompt, повторяющий
+   разложенные поля, только хранится и показывается на проверке: он не включается никогда.
+   userOverride и неизвестные поля хранятся и показываются, но во время работы не используются. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats, CM = PRP.cardModel;
+  const { clone, str, isObj, unmapped, loreEntry, note } = F.helpers;
+
+  const DATA_KNOWN = ["id", "name", "description", "profile", "firstMessage", "reminderMessage", "userOverride", "lorebook", "exampleDialogue", "systemPrompt",
+    "imageTrigger", "outfitTags", "imageStyleTrigger", "nsfwTags", "imageLoras"];
+  const PROFILE_KNOWN = ["name", "age", "gender", "appearance", "personality", "background", "scenario", "systemNote"];
+
+  const text = (v) => (typeof v === "string" ? v : isObj(v) ? str(v.text != null ? v.text : v.content != null ? v.content : v.message) : str(v));
+  const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  // Пример диалога URV → блок формата mes_example. → строка или null, если форма не распознана.
+  function exampleBlock(ex) {
+    const line = (who, t) => (String(t || "").trim() ? `${who}: ${String(t).trim()}` : "");
+    if (typeof ex === "string") return ex.trim() ? "<START>\n" + ex.trim() : "";
+    if (Array.isArray(ex)) {
+      if (ex.every((x) => typeof x === "string")) return ["<START>", line("{{user}}", ex[0]), line("{{char}}", ex[1])].concat(ex.slice(2).map((t, i) => line(i % 2 ? "{{char}}" : "{{user}}", t))).filter(Boolean).join("\n");
+      if (ex.every((x) => isObj(x) && x.role)) return ["<START>"].concat(ex.map((x) => line(/^(user|human)$/i.test(x.role) ? "{{user}}" : "{{char}}", text(x)))).filter(Boolean).join("\n");
+      return null;
+    }
+    if (isObj(ex)) {
+      const u = ex.user != null ? ex.user : ex.input != null ? ex.input : ex.question;
+      const c = ex.char != null ? ex.char : ex.character != null ? ex.character : ex.assistant != null ? ex.assistant : ex.output != null ? ex.output : ex.answer;
+      if (u != null || c != null) return ["<START>", line("{{user}}", text(u)), line("{{char}}", text(c))].filter(Boolean).join("\n");
+      if (ex.text != null || ex.content != null) return "<START>\n" + text(ex).trim();
+    }
+    return null;
+  }
+
+  // Лорбук URV: объект-карта или массив. Ключ карты — ключевое слово, если запись своих ключей не задаёт
+  // и ключ не похож на служебный id.
+  function loreFromUrv(lb, notes) {
+    const out = [];
+    const looksLikeId = (k) => /^\d+$/.test(k) || /^[0-9a-f-]{16,}$/i.test(k) || /^(entry|lore)[-_]?\d+$/i.test(k);
+    if (Array.isArray(lb)) lb.forEach((e, i) => out.push(loreEntry(e, i, { source: "urv.lorebook" })));
+    else if (isObj(lb)) Object.keys(lb).forEach((k, i) => {
+      const v = lb[k];
+      const e = loreEntry(typeof v === "string" ? { content: v } : v, i, { source: "urv.lorebook", sourceKey: k });
+      if (!e.keys.length && !looksLikeId(k)) e.keys = [k];
+      if (!e.comment) e.comment = looksLikeId(k) ? "" : k;
+      out.push(e);
+    });
+    else if (lb != null) notes.push(note("warning", "lore-shape", "Лорбук в незнакомом виде: сохранён в исходнике, но не разобран."));
+    const empty = out.filter((e) => !e.content.trim()).length;
+    if (empty) notes.push(note("warning", "lore-empty", `Записей лорбука без текста: ${empty}. Они перенесены, но в модель не попадут.`));
+    return out;
+  }
+
+  // Карта «название → теги» в строки формата Prism «название: теги».
+  function mapLines(v) {
+    if (typeof v === "string") return v;
+    if (Array.isArray(v) && v.every((x) => typeof x === "string")) return v.join("\n");
+    if (isObj(v) && Object.values(v).every((x) => typeof x === "string" || (Array.isArray(x) && x.every((y) => typeof y === "string")))) {
+      return Object.keys(v).map((k) => `${k}: ${Array.isArray(v[k]) ? v[k].join(", ") : v[k]}`).join("\n");
+    }
+    return null;
+  }
+  function loras(v) {
+    const list = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,\n]/) : null;
+    if (!list) return null;
+    const out = [];
+    for (const x of list) {
+      if (isObj(x) && str(x.name).trim()) out.push({ name: str(x.name).trim(), weight: x.weight != null ? Number(x.weight) || 1 : 1 });
+      else if (typeof x === "string" && x.trim()) {
+        const m = x.trim().match(/^<?(?:lora:)?([^:>]+)(?::([\d.]+))?>?$/i);
+        if (!m) return null;
+        out.push({ name: m[1].trim(), weight: m[2] ? Number(m[2]) : 1 });
+      } else if (x != null && !(typeof x === "string")) return null;
+    }
+    return out;
+  }
+
+  /* Собранный systemPrompt: повторяет ли он разложенные поля?
+     Берутся начала (до 60 символов) непустых полей длиной от 20 символов и ищутся в тексте промпта. */
+  function compiledCheck(prompt, fields) {
+    const p = norm(prompt);
+    const probes = Object.keys(fields).filter((k) => norm(fields[k]).length >= 20);
+    const hits = probes.filter((k) => p.includes(norm(fields[k]).slice(0, 60)));
+    const compiled = hits.length >= 2 || (hits.length === 1 && probes.length === 1);
+    return { compiled, hits, probes };
+  }
+
+  F.register("urv2", (json, detection) => {
+    const notes = [];
+    const data = json.data, prof = isObj(data.profile) ? data.profile : {};
+    const d = CM.blank();
+    d.name = (str(prof.name).trim() || str(data.name).trim());
+    const facts = [prof.age != null && str(prof.age).trim() ? `Возраст: ${str(prof.age).trim()}` : "", prof.gender != null && str(prof.gender).trim() ? `Пол: ${str(prof.gender).trim()}` : ""].filter(Boolean).join(" · ");
+    d.description = [facts, str(data.description).trim()].filter(Boolean).join("\n\n");
+    if (facts) notes.push(note("info", "profile-facts", "Возраст и пол из профиля добавлены в начало описания."));
+    d.appearance = str(prof.appearance);
+    d.personality = str(prof.personality);
+    d.background = str(prof.background);
+    d.scenario = str(prof.scenario);
+
+    // Первые сообщения: первое — основное, остальные — альтернативные приветствия.
+    const fm = Array.isArray(data.firstMessage) ? data.firstMessage : data.firstMessage != null ? [data.firstMessage] : [];
+    const greetings = fm.map(text).map((s) => s.trim()).filter(Boolean);
+    d.firstMes = greetings[0] || "";
+    d.altGreetings = greetings.slice(1);
+    if (greetings.length > 1) notes.push(note("warning", "multi-first", `Первых сообщений: ${greetings.length}. Первое стало основным, остальные — альтернативными приветствиями.`));
+
+    // Примеры диалогов.
+    const exs = Array.isArray(data.exampleDialogue) ? data.exampleDialogue : data.exampleDialogue != null ? [data.exampleDialogue] : [];
+    const blocks = exs.map(exampleBlock);
+    const bad = blocks.filter((b) => b === null).length;
+    d.mesExample = blocks.filter(Boolean).join("\n");
+    if (bad) notes.push(note("warning", "examples-shape", `Примеров диалога в незнакомом виде: ${bad}. Они сохранены в исходнике, но не перенесены.`));
+
+    d.lore = loreFromUrv(data.lorebook, notes);
+
+    // Указания: заметка и напоминание — импортированные, выключенные.
+    d.directives.system = CM.importedDirective(str(prof.systemNote));
+    d.directives.postHistory = CM.importedDirective(str(data.reminderMessage));
+
+    const source = {
+      format: "urv2", version: "2", sourceType: detection.sourceType, adapter: "urv-v2", importedAt: Date.now(), raw: clone(json),
+      unmapped: [], compiled: [], preserved: {},
+    };
+
+    // Собранный systemPrompt.
+    const sp = str(data.systemPrompt);
+    if (sp.trim()) {
+      const chk = compiledCheck(sp, { appearance: d.appearance, personality: d.personality, background: d.background, scenario: d.scenario, systemNote: str(prof.systemNote) });
+      if (chk.compiled) {
+        source.compiled.push({ field: "data.systemPrompt", text: sp, matched: chk.hits });
+        notes.push(note("warning", "compiled-prompt", "Собранный промпт источника (data.systemPrompt) сохранён, но не включён: те же поля импортированы по отдельности."));
+      } else if (!d.directives.system.text.trim()) {
+        d.directives.system = CM.importedDirective(sp);
+        notes.push(note("warning", "system-prompt-candidate", "data.systemPrompt не похож на собранный дубль полей: предложен как указание автора, выключен."));
+      } else {
+        source.preserved.systemPrompt = sp;
+        notes.push(note("warning", "system-prompt-preserved", "data.systemPrompt сохранён, но не включён: место указания занято заметкой профиля (systemNote)."));
+      }
+    }
+
+    // userOverride: хранится и показывается, во время работы не используется.
+    if (data.userOverride != null && (typeof data.userOverride !== "string" || data.userOverride.trim())) {
+      source.preserved.userOverride = clone(data.userOverride);
+      notes.push(note("warning", "user-override", "userOverride (переопределение собеседника из URV) сохранён, но не применяется."));
+    }
+    if (data.id != null) source.preserved.id = clone(data.id);
+
+    // Картинки: переносится только то, что отображается однозначно.
+    const im = {};
+    const keep = (k, why) => { source.preserved[k] = clone(data[k]); notes.push(note("warning", "image-preserved", `${k} сохранён, но не перенесён: ${why}.`)); };
+    if (str(data.imageTrigger).trim()) im.trigger = str(data.imageTrigger).trim();
+    if (str(data.imageStyleTrigger).trim()) im.styleTrigger = str(data.imageStyleTrigger).trim();
+    if (data.outfitTags != null) { const v = mapLines(data.outfitTags); if (v == null) keep("outfitTags", "незнакомый вид"); else if (v.trim()) im.wardrobe = v; }
+    if (data.nsfwTags != null) { const v = mapLines(data.nsfwTags); if (v == null) keep("nsfwTags", "незнакомый вид"); else if (v.trim()) im.nsfw = v; }
+    if (data.imageLoras != null) { const v = loras(data.imageLoras); if (v) im.loras = v; else keep("imageLoras", "незнакомый вид"); }
+    if (Object.keys(im).length) { d.image = im; notes.push(note("info", "image-mapped", "Настройки картинок перенесены: " + Object.keys(im).join(", ") + ".")); }
+
+    source.unmapped = unmapped(data, DATA_KNOWN, "data").concat(unmapped(prof, PROFILE_KNOWN, "data.profile"));
+    if (source.unmapped.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${source.unmapped.join(", ")}.`));
+    d.source = source;
+    return { draft: d, notes };
+  });
+
+  F.urv = { compiledCheck, exampleBlock };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/validate.js */
+/* Prism RP — проверка черновика карточки перед сохранением.
+   Уровни: error — сохранить нельзя; warning — можно после проверки; info — сведения о переносе.
+   Чистый модуль. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const CM = PRP.cardModel;
+
+  const note = (level, code, message) => ({ level, code, message });
+
+  function validate(d) {
+    const out = [];
+    if (!d) return [note("error", "no-draft", "Карточку не удалось разобрать.")];
+    if (!String(d.name || "").trim()) out.push(note("error", "no-name", "У персонажа нет имени: поле имени в файле пустое или отсутствует."));
+    if (!CM.hasContent(d)) out.push(note("error", "empty-card", "В карточке нет ни описания, ни личности, ни сценария, ни приветствия — сохранять нечего."));
+    const dir = (which, label) => {
+      const x = d.directives && d.directives[which];
+      if (x && x.origin === "imported" && String(x.text || "").trim()) {
+        out.push(note("warning", "directive-" + which, `${label} из файла сохранено, но выключено. Включите его, только если доверяете тексту.`));
+      }
+    };
+    dir("system", "Указание автора (системное)");
+    dir("postHistory", "Указание автора после истории");
+    const lore = d.lore || [];
+    if (lore.length) out.push(note("info", "lore", `Записей лорбука: ${lore.length}. Это справочные сведения персонажа, не указания.`));
+    return out;
+  }
+
+  const hasErrors = (issues) => issues.some((x) => x.level === "error");
+
+  PRP.cardValidate = { validate, hasErrors };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardValidate;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/cards/import.js */
+/* Prism RP — конвейер импорта карточки (чистый):
+     байты/текст → JSON (или PNG-чанк chara/ccv3) → определение формата → адаптер
+     → канонический черновик → проверка.
+   Ничего не сохраняет: результат показывается на экране проверки, сохранение — только после подтверждения.
+   Неизвестный или битый файл даёт ошибку, а не пустую карточку. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const CC = PRP.ccard, F = PRP.cardFormats, VAL = PRP.cardValidate;
+
+  const err = (code, message) => ({ level: "error", code, message });
+
+  /* → { ok, fileName, detection, draft | null, issues: [{level, code, message}] } */
+  function fromObject(json, sourceType, fileName) {
+    const detection = F.detect(json, sourceType);
+    if (detection.format === "unknown") {
+      return { ok: false, fileName, detection, draft: null, issues: [err("unknown-format", "Формат не распознан: " + detection.reason + ".")] };
+    }
+    let res;
+    try { res = F.adapt(json, detection); }
+    catch (e) { return { ok: false, fileName, detection, draft: null, issues: [err("malformed", "Карточку не удалось разобрать: " + (e.message || e) + ".")] }; }
+    const issues = res.notes.concat(VAL.validate(res.draft));
+    // Ошибки — первыми, затем предупреждения, затем сведения.
+    const rank = { error: 0, warning: 1, info: 2 };
+    issues.sort((a, b) => rank[a.level] - rank[b.level]);
+    return { ok: !VAL.hasErrors(issues), fileName, detection, draft: res.draft, issues };
+  }
+
+  function fromJsonText(text, fileName) {
+    let json;
+    try { json = JSON.parse(text); }
+    catch (e) { return { ok: false, fileName, detection: { format: "unknown", version: "", confidence: "none", sourceType: "json", reason: "не JSON" }, draft: null, issues: [err("invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
+    return fromObject(json, "json", fileName);
+  }
+
+  function fromPngBytes(u8, fileName) {
+    const det0 = { format: "unknown", version: "", confidence: "none", sourceType: "png", reason: "" };
+    let json;
+    try { json = CC.cardJsonFromPng(u8); }
+    catch (e) { return { ok: false, fileName, detection: Object.assign(det0, { reason: e.message }), draft: null, issues: [err("png", e.message)] }; }
+    return fromObject(json, "png", fileName);
+  }
+
+  PRP.cardImport = { fromObject, fromJsonText, fromPngBytes };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardImport;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/prism/scene.js */
@@ -849,6 +1630,13 @@
       .sort((a, b) => (a.insertion_order || 0) - (b.insertion_order || 0));
   }
 
+  // Текст указания автора, который можно отправить: только включённое и непустое (cards/model.js).
+  // Никаких запасных путей к исходнику карточки, расширениям или старым полям.
+  function directiveText(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? String(d.text) : "";
+  }
+
   function section(title, body) {
     body = String(body || "").trim();
     return body ? `### ${title}\n${body}` : "";
@@ -873,7 +1661,7 @@
      Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
      Если не помещается, уступают по порядку:
        1 старая история → 2 примеры речи → 3 лорбук → 4 менее релевантный опыт
-       → 5 указания после истории → 6 персона, сценарий, указания автора, хвост описания
+       → 5 указания после истории → 6 персона, сценарий, указания автора, прошлое, внешность, хвост описания
        (по абзацам, затем по предложениям) → 7 самый релевантный опыт → 8 история до последнего сообщения.
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -892,15 +1680,17 @@
 
     // Изменяемое состояние сборки: что сейчас входит.
     const st = {
-      authorSys: m(card.systemPrompt || "").trim(),
+      authorSys: m(directiveText(card, "system")).trim(),
       description: m(card.description || "").trim(),
+      appearance: m(card.appearance || "").trim(),
       personality: m(card.personality || "").trim(),
+      background: m(card.background || "").trim(),
       scenario: m(card.scenario || "").trim(),
       examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
       exps: (o.experiences || []).slice(),
-      postHistory: o.noPostHistory ? "" : m(card.postHistory || "").trim(),
+      postHistory: o.noPostHistory ? "" : m(directiveText(card, "postHistory")).trim(),
       keepOld: null, // сколько старых сообщений (сверх minHistory) оставить; null — все
       minH: Math.min(o.minHistory, history.length),
     };
@@ -910,7 +1700,8 @@
 
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
-      const cardBody = [st.description, st.personality ? "Личность: " + st.personality : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+      const cardBody = [st.description, st.appearance ? "Внешность: " + st.appearance : "", st.personality ? "Личность: " + st.personality : "",
+        st.background ? "Прошлое: " + st.background : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
       const kept = keptOlder.concat(history.slice(history.length - st.minH));
@@ -984,6 +1775,8 @@
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
       function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
+      function background() { if (!st.background) return false; st.background = ""; note("card.background", "прошлое"); return true; },
+      function appearance() { if (!st.appearance) return false; st.appearance = ""; note("card.appearance", "внешность"); return true; },
       function descriptionTail() {
         const d = st.description;
         if (!d) return false;
@@ -1034,7 +1827,7 @@
         loreDropped: loreAll.length - loreKept,
         examples: !!st.examples,
         postHistory: !!st.postHistory,
-        postHistoryDisabled: !!o.noPostHistory && !!(card.postHistory || "").trim(),
+        postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
@@ -1086,6 +1879,10 @@
   }
 
 
+  function activeDirective(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? d.text : "";
+  }
   // Карточка → компактный текст для контекста ассистента.
   function cardText(card) {
     if (!card) return "";
@@ -1097,13 +1894,16 @@
     return [
       `Имя: ${card.name}`,
       f("Описание (description)", card.description),
+      f("Внешность", card.appearance),
       f("Личность (personality)", card.personality),
+      f("Прошлое", card.background),
       f("Сценарий (scenario)", card.scenario),
       f("Первое сообщение (first_mes)", card.firstMes),
       alts.length ? `Альтернативные приветствия: ${alts.length}` : "",
       f("Примеры диалогов (mes_example)", card.mesExample),
-      f("Системный промпт карточки", card.systemPrompt),
-      f("Инструкции после истории", card.postHistory),
+      // Только включённые указания автора; выключенные (например, непроверенные импортированные) сюда не попадают.
+      f("Указания автора (включены)", activeDirective(card, "system")),
+      f("Указания автора после истории (включены)", activeDirective(card, "postHistory")),
       lore ? `Лорбук:\n${lore}` : "",
       im.trigger || im.wardrobe || im.look ? f("Изображения — триггер", im.trigger) + (im.look ? `\nВнешность для картинок:\n${im.look}` : "") + (im.wardrobe ? `\nГардероб:\n${im.wardrobe}` : "") : "",
     ].filter(Boolean).join("\n\n");
@@ -1165,248 +1965,6 @@
 
   PRP.assist = { SYSTEM, STARTERS, starters, cardText, chatText, build, title, blank };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.assist;
-})(typeof window !== "undefined" ? window : globalThis);
-
-/* js/cards/ccard.js */
-/* Prism RP — карточки персонажей Character Card V1/V2/V3.
-   Импорт из JSON и PNG (tEXt/iTXt «chara» и «ccv3»), экспорт обратно в JSON и PNG.
-   Исходный JSON сохраняется целиком в card.raw, чтобы поля, которые приложение
-   не моделирует (extensions и т. п.), переживали импорт → экспорт без потерь. */
-(function (root) {
-  "use strict";
-  const PRP = (root.PRP = root.PRP || {});
-
-  /* ── base64 ⇄ UTF-8 ─────────────────────────────────────────────────── */
-  function b64ToUtf8(b64) {
-    const bin = atob(String(b64).replace(/\s+/g, ""));
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder("utf-8").decode(bytes);
-  }
-  function utf8ToB64(str) {
-    const bytes = new TextEncoder().encode(str);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    return btoa(bin);
-  }
-
-  /* ── PNG ────────────────────────────────────────────────────────────── */
-  const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
-  let CRC_TABLE = null;
-  function crc32(bytes) {
-    if (!CRC_TABLE) {
-      CRC_TABLE = new Uint32Array(256);
-      for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-        CRC_TABLE[n] = c >>> 0;
-      }
-    }
-    let crc = 0xffffffff;
-    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
-    return (crc ^ 0xffffffff) >>> 0;
-  }
-
-  function readChunks(u8) {
-    for (let i = 0; i < 8; i++) if (u8[i] !== SIG[i]) throw new Error("Файл не является PNG");
-    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-    const chunks = [];
-    let p = 8;
-    while (p + 8 <= u8.length) {
-      const len = dv.getUint32(p);
-      const type = String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
-      const data = u8.subarray(p + 8, p + 8 + len);
-      chunks.push({ type, data });
-      p += 12 + len;
-      if (type === "IEND") break;
-    }
-    return chunks;
-  }
-
-  function latin1(bytes) {
-    let s = "";
-    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-    return s;
-  }
-
-  function textChunks(chunks) {
-    const out = {};
-    for (const c of chunks) {
-      if (c.type === "tEXt") {
-        const z = c.data.indexOf(0);
-        if (z > 0) out[latin1(c.data.subarray(0, z)).toLowerCase()] = latin1(c.data.subarray(z + 1));
-      } else if (c.type === "iTXt") {
-        const z = c.data.indexOf(0);
-        if (z <= 0) continue;
-        const key = latin1(c.data.subarray(0, z)).toLowerCase();
-        const comp = c.data[z + 1];
-        if (comp) continue; // сжатый iTXt в карточках не встречается
-        let q = z + 3;
-        q = c.data.indexOf(0, q) + 1; // language
-        q = c.data.indexOf(0, q) + 1; // translated keyword
-        out[key] = new TextDecoder("utf-8").decode(c.data.subarray(q));
-      }
-    }
-    return out;
-  }
-
-  function cardJsonFromPng(u8) {
-    const t = textChunks(readChunks(u8));
-    const raw = t.ccv3 || t.chara;
-    if (!raw) throw new Error("В PNG нет данных карточки (chara/ccv3)");
-    const txt = /^\s*\{/.test(raw) ? raw : b64ToUtf8(raw);
-    return JSON.parse(txt);
-  }
-
-  function makeChunk(type, data) {
-    const out = new Uint8Array(12 + data.length);
-    const dv = new DataView(out.buffer);
-    dv.setUint32(0, data.length);
-    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
-    out.set(data, 8);
-    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
-    return out;
-  }
-
-  function textChunk(key, value) {
-    const k = new TextEncoder().encode(key);
-    const v = new TextEncoder().encode(value); // value — base64, т. е. ASCII
-    const data = new Uint8Array(k.length + 1 + v.length);
-    data.set(k, 0); data[k.length] = 0; data.set(v, k.length + 1);
-    return makeChunk("tEXt", data);
-  }
-
-  // Встраивает карточку в PNG: убирает старые chara/ccv3, пишет V2 и V3 перед IEND.
-  function embedInPng(u8, card) {
-    const chunks = readChunks(u8);
-    const parts = [new Uint8Array(SIG)];
-    for (const c of chunks) {
-      if (c.type === "tEXt" || c.type === "iTXt") {
-        const z = c.data.indexOf(0);
-        const key = z > 0 ? latin1(c.data.subarray(0, z)).toLowerCase() : "";
-        if (key === "chara" || key === "ccv3") continue;
-      }
-      if (c.type === "IEND") {
-        parts.push(textChunk("chara", utf8ToB64(JSON.stringify(toSpec(card, "v2")))));
-        parts.push(textChunk("ccv3", utf8ToB64(JSON.stringify(toSpec(card, "v3")))));
-      }
-      parts.push(makeChunk(c.type, c.data));
-    }
-    const total = parts.reduce((n, p) => n + p.length, 0);
-    const out = new Uint8Array(total);
-    let o = 0;
-    for (const p of parts) { out.set(p, o); o += p.length; }
-    return out;
-  }
-
-  /* ── Нормализация ───────────────────────────────────────────────────── */
-  function arr(v) { return Array.isArray(v) ? v.slice() : v ? [v] : []; }
-
-  function normalize(json) {
-    const spec = json && json.spec;
-    const d = spec === "chara_card_v2" || spec === "chara_card_v3" ? json.data || {} : json || {};
-    const book = d.character_book || null;
-    return {
-      id: null,
-      name: d.name || d.char_name || "Без имени",
-      description: d.description || "",
-      personality: d.personality || "",
-      scenario: d.scenario || "",
-      firstMes: d.first_mes || "",
-      altGreetings: arr(d.alternate_greetings),
-      mesExample: d.mes_example || "",
-      systemPrompt: d.system_prompt || "",
-      postHistory: d.post_history_instructions || "",
-      creatorNotes: d.creator_notes || "",
-      tags: arr(d.tags),
-      creator: d.creator || "",
-      version: d.character_version || "",
-      lore: book && Array.isArray(book.entries)
-        ? book.entries.map((e, i) => ({
-            keys: arr(e.keys).map(String),
-            secondary_keys: arr(e.secondary_keys).map(String),
-            selective: !!e.selective,
-            content: e.content || "",
-            enabled: e.enabled !== false,
-            constant: !!e.constant,
-            case_sensitive: !!e.case_sensitive,
-            insertion_order: e.insertion_order != null ? e.insertion_order : i,
-            position: e.position === "before_char" ? "before_char" : "after_char",
-            comment: e.comment || e.name || "",
-            raw: e,
-          }))
-        : [],
-      image: (d.extensions && d.extensions.prism_rp && d.extensions.prism_rp.image) ? JSON.parse(JSON.stringify(d.extensions.prism_rp.image)) : undefined,
-      avatar: null,
-      spec: spec || "v1",
-      raw: json,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-  }
-
-  function toSpec(card, ver) {
-    const v3 = ver === "v3";
-    const base = card.raw && card.raw.data ? JSON.parse(JSON.stringify(card.raw.data)) : {};
-    const oldBook = base.character_book || {};
-    const data = Object.assign(base, {
-      name: card.name,
-      description: card.description,
-      personality: card.personality,
-      scenario: card.scenario,
-      first_mes: card.firstMes,
-      mes_example: card.mesExample,
-      creator_notes: card.creatorNotes,
-      system_prompt: card.systemPrompt,
-      post_history_instructions: card.postHistory,
-      alternate_greetings: card.altGreetings || [],
-      tags: card.tags || [],
-      creator: card.creator || "",
-      character_version: card.version || "",
-      extensions: base.extensions || {},
-    });
-    if (card.lore && card.lore.length) {
-      data.character_book = Object.assign({}, oldBook, {
-        extensions: oldBook.extensions || {},
-        entries: card.lore.map((e, i) => {
-          const raw = e.raw && typeof e.raw === "object" ? JSON.parse(JSON.stringify(e.raw)) : {};
-          return Object.assign(raw, {
-            keys: e.keys || [],
-            secondary_keys: e.secondary_keys || [],
-            selective: !!e.selective,
-            content: e.content || "",
-            extensions: raw.extensions || {},
-            enabled: e.enabled !== false,
-            insertion_order: e.insertion_order != null ? Number(e.insertion_order) || 0 : i,
-            case_sensitive: !!e.case_sensitive,
-            constant: !!e.constant,
-            position: e.position === "before_char" ? "before_char" : "after_char",
-            name: e.comment || "",
-            comment: e.comment || "",
-            id: i,
-            ...(v3 ? { use_regex: !!raw.use_regex } : {}),
-          });
-        }),
-      });
-    } else delete data.character_book;
-    // Настройки изображений (триггер, LoRA, гардероб) едут вместе с карточкой
-    // в пространстве extensions — другие приложения его не трогают.
-    const ext = Object.assign({}, data.extensions);
-    const im = card.image && Object.keys(card.image).length ? card.image : null;
-    if (im) ext.prism_rp = Object.assign({}, ext.prism_rp, { image: JSON.parse(JSON.stringify(im)) });
-    else if (ext.prism_rp) { ext.prism_rp = Object.assign({}, ext.prism_rp); delete ext.prism_rp.image; if (!Object.keys(ext.prism_rp).length) delete ext.prism_rp; }
-    data.extensions = ext;
-    if (v3) {
-      data.group_only_greetings = data.group_only_greetings || [];
-      data.nickname = data.nickname || undefined;
-      return { spec: "chara_card_v3", spec_version: "3.0", data };
-    }
-    delete data.assets; delete data.group_only_greetings; delete data.nickname;
-    return { spec: "chara_card_v2", spec_version: "2.0", data };
-  }
-
-  PRP.ccard = { normalize, toSpec, cardJsonFromPng, embedInPng, crc32, b64ToUtf8, utf8ToB64 };
-  if (typeof module !== "undefined" && module.exports) module.exports = PRP.ccard;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/chat/tree.js */
@@ -3156,7 +3714,7 @@
           <div class="mt"><span class="tag">не привязана</span><span style="flex:1"></span><button class="btn btn-sm" data-act="exp-assign" data-id="${r.id}">Привязать к этому чату</button></div></div>`).join("")}</div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.description": "описание" };
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
   const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
@@ -3334,13 +3892,23 @@
     const lab = (label, key) => `${label}${key ? ` <span class="spec-key">${key}</span>` : ""}`;
     const f = (id, label, key, value, rows, help, ph) => `<div class="field"><label for="${id}">${lab(label, key)}</label>${rows
       ? `<textarea id="${id}" rows="${rows}" data-cf="${id}" placeholder="${esc(ph || "")}">${esc(value || "")}</textarea>` : `<input id="${id}" data-cf="${id}" value="${esc(value || "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
+    const dirField = (k, label, key, rows, help) => {
+      const x = (d.directives && d.directives[k]) || { text: "", origin: "authored", enabled: true };
+      const badge = x.origin === "imported" ? `<span class="dir-badge imported">из файла${x.reviewed ? "" : " · не проверено"}</span>` : `<span class="dir-badge">своё</span>`;
+      return `<div class="field"><label for="cf-dir-${k}">${lab(label, key)} ${badge}</label>
+        <textarea id="cf-dir-${k}" rows="${rows}" data-cf-dir="${k}">${esc(x.text || "")}</textarea>
+        <label class="check"><input type="checkbox" data-cf-dir="${k}" ${x.enabled ? "checked" : ""}><span>Включено — отправлять модели</span></label>
+        <span class="help">${help}</span></div>`;
+    };
     let body = "";
     if (section === "main") {
       body = `<div class="card-edit"><div><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div></div>
         <div>${f("cf-name", "Имя", "name", d.name)}
-          ${f("cf-desc", "Описание", "description", d.description, 9, "Внешность, характер, прошлое — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
-          ${f("cf-pers", "Краткое описание личности", "personality", d.personality, 2, "Несколько черт одной строкой.")}
+          ${f("cf-desc", "Описание", "description", d.description, 7, "Кто это — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
+          ${f("cf-app", "Внешность", "", d.appearance, 3, "При экспорте в Character Card добавляется в description абзацем «Внешность».")}
+          ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
+          ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>`;
     } else if (section === "greet") {
@@ -3352,8 +3920,10 @@
         <button class="btn btn-sm" data-act="alt-add">${icon("plus")}Добавить приветствие</button>`;
     } else if (section === "prompts") {
       body = `${f("cf-ex", "Примеры диалогов", "mes_example", d.mesExample, 8, "Как персонаж говорит. Каждый пример начинается с &lt;START&gt;, реплики — {{user}}: и {{char}}:", "<START>\n{{user}}: Привет.\n{{char}}: …")}
-        ${f("cf-sys", "Системный промпт", "system_prompt", d.systemPrompt, 4, "Заменяет общий системный промпт. {{original}} подставит общий. Пусто — используется общий.")}
-        ${f("cf-post", "Инструкции после истории", "post_history_instructions", d.postHistory, 3, "Идут в конец контекста, ближе всего к ответу (jailbreak / UJB в других приложениях).")}`;
+        <div class="block-title" style="margin-top:18px">Указания автора</div>
+        <p class="hint" style="margin-top:0">Отдельный уровень власти: в модель уходят, только когда включены. Указания из импортированного файла приходят выключенными — включите их, если доверяете тексту.</p>
+        ${dirField("system", "Системное указание", "system_prompt", 4, "Идёт отдельным разделом «указания автора» в начале контекста.")}
+        ${dirField("postHistory", "Указание после истории", "post_history_instructions", 3, "Идёт в конец контекста, ближе всего к ответу. Общий выключатель — в настройках.")}`;
     } else if (section === "lore") {
       const posSel = (i, v) => `<select data-lore="${i}" data-k="position"><option value="before_char" ${v === "before_char" ? "selected" : ""}>Перед описанием персонажа</option><option value="after_char" ${v !== "before_char" ? "selected" : ""}>После описания персонажа</option></select>`;
       body = `<p class="lead">${lab("Лорбук персонажа", "character_book")}<br>Сведения о мире подмешиваются в контекст, когда в последних сообщениях звучат ключевые слова.</p>
@@ -3387,6 +3957,7 @@
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
         ${f("cf-notes", "Заметки создателя", "creator_notes", d.creatorNotes, 4, "Для людей, не для модели: как играть, рекомендованные настройки. В контекст не идут.")}
+        ${sourceBlock(d.source)}
         <div class="block-title" style="margin-top:24px">Файл карточки</div><p class="hint">Экспорт в Character Card V2/V3 — открывается в SillyTavern, RisuAI, Chub и других. Поля, которых нет в редакторе, сохраняются как были. Настройки изображений и LoRA едут внутри карточки (extensions.prism_rp).</p>
         <div class="row"><button class="btn" data-act="card-png">${icon("download")}PNG с портретом</button><button class="btn" data-act="card-json">${icon("download")}JSON</button></div>
         ${d.id ? `<div class="block-title" style="margin-top:28px">Удаление</div><p class="hint">Удалит персонажа вместе со всеми чатами и опытом.</p>
@@ -3399,7 +3970,106 @@
       <nav class="modal-nav">${nav.map(([id, n, ic]) => `<button class="rail-item ${section === id ? "active" : ""}" data-act="card-section" data-section="${id}">${icon(ic)}${n}</button>`).join("")}</nav>
       <div class="modal-body">${body}</div></div></div>`;
   }
+  // Откуда карточка: формат исходника и то, что сохранено без использования. Только показ.
+  function sourceBlock(s) {
+    if (!s) return "";
+    const FORMAT = { ccv1: "Character Card V1", ccv2: "Character Card V2", ccv3: "Character Card V3", urv2: "URV v2" };
+    const pres = Object.keys(s.preserved || {}), comp = (s.compiled || []).length, unm = (s.unmapped || []).length;
+    return `<div class="block-title" style="margin-top:24px">Исходник</div>
+      <p class="hint">Импортировано из ${esc(FORMAT[s.format] || s.format || "файла")}${s.sourceType ? ` (${esc(String(s.sourceType).toUpperCase())})` : ""}${s.importedAt ? `, ${esc(new Date(s.importedAt).toLocaleString())}` : ""}.
+      Исходный файл хранится целиком и во время игры не читается.${comp ? " Собранный промпт источника сохранён и не включается." : ""}
+      ${pres.length ? `<br>Сохранено без использования: ${pres.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}
+      ${unm ? `<br>Неизвестные поля: ${s.unmapped.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}</p>`;
+  }
   Object.assign((PRP.views = PRP.views || {}), { cardModal });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/views/import-review.js */
+/* Prism RP — экран проверки импорта карточек.
+   Показывает, что распознано и куда легло, что сохранено без использования, предупреждения и ошибки.
+   Импортированные указания автора показаны отдельно, с флажками «включить» — по умолчанию сняты.
+   Ничего не сохраняется, пока пользователь не нажмёт «Импортировать». */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render;
+  const { esc, icon } = R;
+
+  const FORMAT = { ccv1: "Character Card V1", ccv2: "Character Card V2", ccv3: "Character Card V3", urv2: "URV v2", unknown: "не распознан" };
+  const LEVEL = { error: "Ошибка", warning: "Внимание", info: "Сведения" };
+  const DIR = { system: "Указание автора (системное)", postHistory: "Указание автора после истории" };
+
+  function fieldList(d) {
+    const has = (v) => !!String(v || "").trim();
+    const alts = (d.altGreetings || []).length;
+    const rows = [
+      ["Описание", has(d.description)], ["Внешность", has(d.appearance)], ["Личность", has(d.personality)], ["Прошлое", has(d.background)],
+      ["Сценарий", has(d.scenario)],
+      ["Первое сообщение" + (alts ? ` + ${alts} альтернативн.` : ""), has(d.firstMes)],
+      ["Примеры диалога", has(d.mesExample)],
+      [`Лорбук: ${(d.lore || []).length}`, (d.lore || []).length > 0],
+      ["Настройки картинок", !!(d.image && Object.keys(d.image).length)],
+    ];
+    return `<ul class="imp-fields">${rows.map(([n, ok]) => `<li class="${ok ? "on" : ""}">${ok ? "✓" : "—"} ${esc(n)}</li>`).join("")}</ul>`;
+  }
+
+  function directives(d, i, choice) {
+    const out = [];
+    for (const k of ["system", "postHistory"]) {
+      const x = d.directives && d.directives[k];
+      if (!x || x.origin !== "imported" || !String(x.text || "").trim()) continue;
+      out.push(`<div class="imp-dir">
+        <label class="check"><input type="checkbox" data-imp-dir="${i}" data-k="${k}" ${choice && choice[k] ? "checked" : ""}>
+          <span><b>${DIR[k]}</b> — импортировано, выключено. Включите, только если доверяете тексту.</span></label>
+        <details><summary>Текст (${x.text.length} симв.)</summary><pre class="code">${esc(x.text)}</pre></details></div>`);
+    }
+    return out.length ? `<div class="block-title">Указания автора</div>${out.join("")}` : "";
+  }
+
+  function sourceInfo(d) {
+    const s = d.source || {};
+    const parts = [];
+    for (const c of s.compiled || []) {
+      parts.push(`<div class="imp-note warn"><b>Собранный промпт (${esc(c.field)})</b> — дубль разложенных полей, сохранён и <b>не будет включён</b>.
+        <details><summary>Показать (${c.text.length} симв.)</summary><pre class="code">${esc(c.text)}</pre></details></div>`);
+    }
+    const pres = Object.keys(s.preserved || {});
+    if (pres.length) {
+      parts.push(`<div class="imp-note">Сохранено, но не используется: ${pres.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}
+        <details><summary>Показать</summary><pre class="code">${esc(JSON.stringify(s.preserved, null, 2))}</pre></details></div>`);
+    }
+    if ((s.unmapped || []).length) parts.push(`<div class="imp-note">Неизвестные поля (хранятся в исходнике): ${s.unmapped.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}</div>`);
+    return parts.join("");
+  }
+
+  function item(r, i, choice) {
+    const det = r.detection || {};
+    const fmt = `${FORMAT[det.format] || det.format}${det.sourceType ? ` · ${det.sourceType.toUpperCase()}` : ""}`;
+    const issues = (r.issues || []).filter((x) => r.ok ? x.code !== "directive-system" && x.code !== "directive-postHistory" : true);
+    const list = issues.length ? `<ul class="imp-issues">${issues.map((x) => `<li class="${x.level}"><b>${LEVEL[x.level]}:</b> ${esc(x.message)}</li>`).join("")}</ul>` : "";
+    if (!r.ok) {
+      return `<section class="imp-item bad" data-imp-item="${i}"><h3>${icon("x")} ${esc(r.fileName || "файл")}</h3>
+        <p class="hint">Формат: ${esc(fmt)}. Карточка не будет добавлена.</p>${list}</section>`;
+    }
+    const d = r.draft;
+    return `<section class="imp-item" data-imp-item="${i}"><h3>${esc(d.name)}</h3>
+      <p class="hint">${esc(r.fileName || "")} · формат: ${esc(fmt)}</p>
+      ${fieldList(d)}${directives(d, i, choice)}${sourceInfo(d)}${list}</section>`;
+  }
+
+  function importReview(m, modal) {
+    const items = modal.items || [];
+    const n = items.filter((r) => r.ok).length;
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow imp-modal" role="dialog" aria-modal="true" aria-label="Проверка импорта">
+      <div class="modal-head"><h2>Проверка импорта</h2>
+        <button class="icon-btn" data-act="import-cancel" title="Отмена">${icon("x")}</button></div>
+      <div class="modal-body"><p class="lead">Проверьте, что распознано. Пока вы не нажмёте «Импортировать», ничего не сохраняется.</p>
+        ${items.map((r, i) => item(r, i, (modal.choices || [])[i])).join("")}
+        <div class="modal-foot"><button class="btn" data-act="import-cancel">Отмена</button>
+          <button class="btn btn-primary" data-act="import-confirm" ${n ? "" : "disabled"}>${icon("check")}Импортировать${items.length > 1 ? ` (${n})` : ""}</button></div></div></div></div>`;
+  }
+
+  Object.assign((PRP.views = PRP.views || {}), { importReview });
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/ui/views/assist.js */
@@ -4039,43 +4709,67 @@
 
 /* js/cards/service.js */
 /* Prism RP — карточки персонажей (прикладной уровень).
-   Импорт файлов (JSON/PNG) → разбор формата (cards/ccard.js) → сохранение; сохранение
-   черновика редактора; удаление с каскадом; экспорт JSON/PNG.
-   Смысл форматов (V1/V2/V3, PNG-чанки) — только в ccard.js. Файловый ввод-вывод — PRP.files. */
+   Импорт в два шага: prepareImport читает файлы и прогоняет их через конвейер cards/import.js
+   (формат → адаптер → канонический черновик → проверка) и НИЧЕГО не сохраняет; commitImport
+   сохраняет только подтверждённые на экране проверки черновики. Импортированные указания автора
+   включаются лишь по явному выбору пользователя.
+   Также: сохранение черновика редактора, удаление с каскадом, экспорт JSON/PNG.
+   Смысл форматов — в cards/formats/*, модель — в cards/model.js. Файловый ввод-вывод — PRP.files. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, CC = PRP.ccard;
+  const U = PRP.util, CC = PRP.ccard, CM = PRP.cardModel, IMP = PRP.cardImport;
 
   function create(ctx) {
     const { S, DB } = ctx;
     const F = () => ctx.files;
 
     // Черновик для редактора: копия карточки или новая пустая.
-    function draft(cd) { return U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })); }
+    function draft(cd) { return U.clone(cd ? CM.upgradeStored(cd) : CM.blank()); }
 
-    /* Импорт файлов по одному; ошибка одного файла не мешает остальным.
-       → { last: последняя добавленная карточка | null, errors: [{file, message}] } */
-    async function importFiles(files) {
-      let last = null;
-      const errors = [];
+    /* Шаг 1 импорта: файлы → результаты проверки, без сохранения.
+       → [{ ok, fileName, detection, draft | null, issues, avatar }] */
+    async function prepareImport(files) {
+      const out = [];
       for (const file of files) {
+        let r;
         try {
-          let json, avatar = null;
-          if (/\.json$/i.test(file.name) || file.type === "application/json") json = JSON.parse(await F().readFile(file, "text"));
-          else { json = CC.cardJsonFromPng(new Uint8Array(await F().readFile(file))); avatar = await F().readFile(file, "dataurl"); }
-          const cd = CC.normalize(json);
-          cd.id = U.uid("card");
-          cd.avatar = avatar;
-          await DB.put("cards", cd);
-          S.cards.unshift(cd);
-          last = cd;
+          const isJson = /\.json$/i.test(file.name) || file.type === "application/json";
+          if (isJson) r = IMP.fromJsonText(await F().readFile(file, "text"), file.name);
+          else {
+            r = IMP.fromPngBytes(new Uint8Array(await F().readFile(file)), file.name);
+            if (r.ok) r.avatar = await F().readFile(file, "dataurl");
+          }
         } catch (e) {
-          errors.push({ file: file.name, message: e.message });
-          if (ctx.ui) ctx.ui.toast(`${file.name}: ${e.message}`, true);
+          r = { ok: false, fileName: file.name, detection: { format: "unknown", version: "", sourceType: "", reason: "" }, draft: null, issues: [{ level: "error", code: "read", message: "Файл не удалось прочитать: " + (e.message || e) }] };
         }
+        out.push(r);
       }
-      return { last, errors };
+      return out;
+    }
+
+    /* Шаг 2 импорта: сохранить подтверждённые черновики.
+       choices[i] = { system: bool, postHistory: bool } — явное включение импортированных указаний
+       (по умолчанию выключены). Файлы с ошибками не сохраняются никогда. → [сохранённые карточки] */
+    async function commitImport(items, choices) {
+      const saved = [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (!it || !it.ok || !it.draft) continue;
+        const cd = U.clone(it.draft);
+        const ch = (choices && choices[i]) || {};
+        for (const k of ["system", "postHistory"]) {
+          const dv = cd.directives[k];
+          if (dv.origin === "imported" && ch[k] === true && dv.text.trim()) { dv.enabled = true; dv.reviewed = true; }
+        }
+        cd.id = U.uid("card");
+        cd.avatar = it.avatar || null;
+        cd.createdAt = cd.updatedAt = Date.now();
+        await DB.put("cards", cd);
+        S.cards.unshift(cd);
+        saved.push(cd);
+      }
+      return saved;
     }
 
     // Сохранить черновик редактора. → { error } или { card, isNew }.
@@ -4116,7 +4810,7 @@
       return { name: `${d.name || "персонаж"}.png`, blob: new Blob([CC.embedInPng(await F().avatarPngBytes(d), d)], { type: "image/png" }) };
     }
 
-    return { draft, importFiles, save, remove, exportJson, exportPng };
+    return { draft, prepareImport, commitImport, save, remove, exportJson, exportPng };
   }
 
   PRP.cardService = { create };
@@ -4364,7 +5058,9 @@
           <button class="icon-btn" data-act="modal-close" title="Закрыть">${R.icon("x")}</button></span></figcaption></figure></div>`;
         return;
       }
-      rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section) : V.cardModal(m, S.modal.draft, S.modal.section);
+      rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section)
+        : S.modal.kind === "import" ? V.importReview(m, S.modal)
+        : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       S.modal.keepScroll = false;
     }
@@ -4731,11 +5427,17 @@
     // Поля открытого раздела редактора → черновик (S.modal.draft).
     function collectCard() {
       const d = S.modal.draft;
-      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
+      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-bg": "background", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
       $$("[data-cf]").forEach((el) => {
         const id = el.dataset.cf;
         if (map[id]) d[map[id]] = el.value;
         else if (id === "cf-tags") d.tags = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+      });
+      // Указания автора: текст и явный флаг «включено». Флаг меняет только сам пользователь.
+      $$("[data-cf-dir]").forEach((el) => {
+        const k = el.dataset.cfDir, x = d.directives[k];
+        if (el.type === "checkbox") { x.enabled = el.checked; if (el.checked) x.reviewed = true; }
+        else x.text = el.value;
       });
       if ($("[data-alt]") || S.modal.section === "greet") {
         d.altGreetings = (d.altGreetings || []).slice();
@@ -4764,6 +5466,19 @@
 
     const actions = {
       import: () => $("#file-card").click(),
+      // Проверка импорта: флажки указаний читаются из формы, сохраняются только распознанные файлы.
+      "import-confirm": async () => {
+        const m = S.modal;
+        if (!m || m.kind !== "import") return;
+        const choices = m.items.map(() => ({}));
+        $$("[data-imp-dir]").forEach((el) => { choices[+el.dataset.impDir][el.dataset.k] = el.checked; });
+        const saved = await svc.cards.commitImport(m.items, choices);
+        S.modal = null;
+        S.view = "home";
+        ui.renderAll();
+        if (saved.length) ui.toast(saved.length === 1 ? `Добавлен(а): ${saved[0].name}` : `Добавлено персонажей: ${saved.length}`);
+      },
+      "import-cancel": () => { S.modal = null; ui.renderModal(); },
       "new-card": () => openCardEditor(null),
       "open-card": (t) => nav.openCard(t.dataset.id),
       "edit-card": (t) => { ui.closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : ctx.card()); },
@@ -4796,9 +5511,12 @@
 
     async function change(t) {
       if (t.id === "file-card") {
-        const r = await svc.cards.importFiles([...t.files]);
-        if (r.last) { S.view = "home"; ui.renderAll(); ui.toast(`Добавлен(а): ${r.last.name}`); }
+        const files = [...t.files];
         t.value = "";
+        if (!files.length) return true;
+        const items = await svc.cards.prepareImport(files);
+        S.modal = { kind: "import", items, choices: items.map(() => ({ system: false, postHistory: false })) };
+        ui.renderModal();
         return true;
       }
       if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await ctx.files.readFile(t.files[0], "dataurl"); t.value = ""; ui.renderModal(); return true; }
@@ -5113,7 +5831,7 @@
     S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
-    S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    S.cards = (await DB.all("cards")).map(PRP.cardModel.upgradeStored).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
     await svc.exp.migrate();

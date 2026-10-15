@@ -29,11 +29,22 @@
 <script src="js/core/util.js"></script>
 <script src="js/core/store.js"></script>
 <script src="js/core/settings.js"></script>
+<!-- Карточки: модель → файл карточки (PNG, экспорт) → определение формата и адаптеры → проверка → конвейер импорта.
+     Адаптеры регистрируются в PRP.cardFormats при загрузке, поэтому идут после formats/common.js и до cards/import.js. -->
+<script src="js/cards/model.js"></script>
+<script src="js/cards/ccard.js"></script>
+<script src="js/cards/formats/common.js"></script>
+<script src="js/cards/formats/detect.js"></script>
+<script src="js/cards/formats/cc-v1.js"></script>
+<script src="js/cards/formats/cc-v2.js"></script>
+<script src="js/cards/formats/cc-v3.js"></script>
+<script src="js/cards/formats/urv-v2.js"></script>
+<script src="js/cards/validate.js"></script>
+<script src="js/cards/import.js"></script>
 <script src="js/prism/scene.js"></script>
 <script src="js/prism/experience.js"></script>
 <script src="js/prism/assembler.js"></script>
 <script src="js/assist/assist.js"></script>
-<script src="js/cards/ccard.js"></script>
 <script src="js/chat/tree.js"></script>
 <script src="js/images/compose.js"></script>
 <script src="js/images/backends.js"></script>
@@ -49,6 +60,7 @@
 <script src="js/ui/views/drawer.js"></script>
 <script src="js/ui/views/settings.js"></script>
 <script src="js/ui/views/card-editor.js"></script>
+<script src="js/ui/views/import-review.js"></script>
 <script src="js/ui/views/assist.js"></script>
 <script src="js/chat/service.js"></script>
 <script src="js/prism/experience-service.js"></script>

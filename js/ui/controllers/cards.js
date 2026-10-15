@@ -16,11 +16,17 @@
     // Поля открытого раздела редактора → черновик (S.modal.draft).
     function collectCard() {
       const d = S.modal.draft;
-      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
+      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-bg": "background", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
       $$("[data-cf]").forEach((el) => {
         const id = el.dataset.cf;
         if (map[id]) d[map[id]] = el.value;
         else if (id === "cf-tags") d.tags = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+      });
+      // Указания автора: текст и явный флаг «включено». Флаг меняет только сам пользователь.
+      $$("[data-cf-dir]").forEach((el) => {
+        const k = el.dataset.cfDir, x = d.directives[k];
+        if (el.type === "checkbox") { x.enabled = el.checked; if (el.checked) x.reviewed = true; }
+        else x.text = el.value;
       });
       if ($("[data-alt]") || S.modal.section === "greet") {
         d.altGreetings = (d.altGreetings || []).slice();
@@ -49,6 +55,19 @@
 
     const actions = {
       import: () => $("#file-card").click(),
+      // Проверка импорта: флажки указаний читаются из формы, сохраняются только распознанные файлы.
+      "import-confirm": async () => {
+        const m = S.modal;
+        if (!m || m.kind !== "import") return;
+        const choices = m.items.map(() => ({}));
+        $$("[data-imp-dir]").forEach((el) => { choices[+el.dataset.impDir][el.dataset.k] = el.checked; });
+        const saved = await svc.cards.commitImport(m.items, choices);
+        S.modal = null;
+        S.view = "home";
+        ui.renderAll();
+        if (saved.length) ui.toast(saved.length === 1 ? `Добавлен(а): ${saved[0].name}` : `Добавлено персонажей: ${saved.length}`);
+      },
+      "import-cancel": () => { S.modal = null; ui.renderModal(); },
       "new-card": () => openCardEditor(null),
       "open-card": (t) => nav.openCard(t.dataset.id),
       "edit-card": (t) => { ui.closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : ctx.card()); },
@@ -81,9 +100,12 @@
 
     async function change(t) {
       if (t.id === "file-card") {
-        const r = await svc.cards.importFiles([...t.files]);
-        if (r.last) { S.view = "home"; ui.renderAll(); ui.toast(`Добавлен(а): ${r.last.name}`); }
+        const files = [...t.files];
         t.value = "";
+        if (!files.length) return true;
+        const items = await svc.cards.prepareImport(files);
+        S.modal = { kind: "import", items, choices: items.map(() => ({ system: false, postHistory: false })) };
+        ui.renderModal();
         return true;
       }
       if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await ctx.files.readFile(t.files[0], "dataurl"); t.value = ""; ui.renderModal(); return true; }
