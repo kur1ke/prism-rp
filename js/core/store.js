@@ -4,8 +4,8 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
-  const DB_VERSION = 3;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist"];
+  const DB_VERSION = 4;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses"];
   let dbPromise = null;
 
   function open() {
@@ -23,6 +23,14 @@
         if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" }).createIndex("chatId", "chatId");
         // v3: разговоры с ассистентом (вне ролевой игры), сообщения хранятся внутри разговора.
         if (!db.objectStoreNames.contains("assist")) db.createObjectStore("assist", { keyPath: "id" });
+        // v4: общие паки мира и линзы персонажей (FOUNDATION-W1). Только добавление коллекций — старые данные не трогаются.
+        if (!db.objectStoreNames.contains("worldPacks")) db.createObjectStore("worldPacks", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("worldLenses")) {
+          const l = db.createObjectStore("worldLenses", { keyPath: "id" });
+          // Одна линза на персонажа — ограничение схемы, а не договорённость: вторую запись с тем же cardId база отклонит.
+          l.createIndex("cardId", "cardId", { unique: true });
+          l.createIndex("packId", "packId");
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -66,7 +74,7 @@
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 3, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 4, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },

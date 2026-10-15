@@ -38,6 +38,9 @@
         imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
         origin: location.origin && location.origin !== "null" ? location.origin : "*",
         assist: S.assist, assistList: S.assistList,
+        worldPacks: S.worldPacks, worldLenses: S.worldLenses, worldDraft: S.worldDraft, modal: S.modal,
+        // Превью «Мир персонажа» готовит сервис мира; представление только показывает.
+        lensPreview: S.modal && S.modal.kind === "card" && S.modal.section === "world" && S.modal.lens ? svc().world.preview(S.modal.lens) : null,
         assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
         assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
       };
@@ -74,6 +77,9 @@
         }
         if (scroll != null) $("#feed").scrollTop = scroll;
         if (S.find) applyFind(false);
+      } else if (S.view === "world") {
+        app.classList.remove("messenger");
+        $("#stage").innerHTML = V.worldLibrary(m);
       } else {
         app.classList.remove("messenger");
         $("#stage").innerHTML = V.home(m);

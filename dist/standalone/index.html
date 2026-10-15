@@ -589,6 +589,26 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .opening-start .lead { color: var(--text-2); font-size: 15px; margin: 0 0 10px; }
 .opening-start .btn { margin: 8px 0 14px; }
 
+/* ── Миры: библиотека и линза персонажа ──────────────────────────────── */
+.world-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 22px; align-items: start; }
+.world-list { display: flex; flex-direction: column; gap: 6px; }
+.world-item { text-align: left; border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; color: var(--text); }
+.world-item.on { border-color: var(--accent); background: var(--accent-wash); }
+.world-item b { display: block; font-size: 14px; }
+.world-item small { color: var(--muted); font-size: 12.5px; }
+.world-editor { min-width: 0; }
+.row.wrap { flex-wrap: wrap; }
+.row.wrap > .field { flex: 1 1 180px; min-width: 0; }
+.world-fact.off, .lens-fact.off { opacity: .6; }
+.lens-fact .lf-text { margin-bottom: 6px; }
+.eff-world { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.eff-world li { border-left: 3px solid var(--line); padding: 4px 10px; }
+.eff-world li.ovr { border-left-color: var(--warn); }
+.eff-world li.own { border-left-color: var(--accent); }
+.eff-world li.off { color: var(--muted); }
+.eff-world s { color: var(--muted); margin-left: 6px; }
+@media (max-width: 760px) { .world-layout { grid-template-columns: minmax(0, 1fr); } }
+
 </style>
 </head>
 <body>
@@ -603,6 +623,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   <input type="file" id="file-card" accept=".png,.json,image/png,application/json" multiple hidden>
   <input type="file" id="file-backup" accept=".json,application/json" hidden>
   <input type="file" id="file-avatar" accept="image/*" hidden>
+  <input type="file" id="file-world" accept=".json,application/json" hidden>
 </div>
 
 <!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).
@@ -678,8 +699,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
-  const DB_VERSION = 3;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist"];
+  const DB_VERSION = 4;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses"];
   let dbPromise = null;
 
   function open() {
@@ -697,6 +718,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" }).createIndex("chatId", "chatId");
         // v3: разговоры с ассистентом (вне ролевой игры), сообщения хранятся внутри разговора.
         if (!db.objectStoreNames.contains("assist")) db.createObjectStore("assist", { keyPath: "id" });
+        // v4: общие паки мира и линзы персонажей (FOUNDATION-W1). Только добавление коллекций — старые данные не трогаются.
+        if (!db.objectStoreNames.contains("worldPacks")) db.createObjectStore("worldPacks", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("worldLenses")) {
+          const l = db.createObjectStore("worldLenses", { keyPath: "id" });
+          // Одна линза на персонажа — ограничение схемы, а не договорённость: вторую запись с тем же cardId база отклонит.
+          l.createIndex("cardId", "cardId", { unique: true });
+          l.createIndex("packId", "packId");
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -740,7 +769,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 3, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 4, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
@@ -1635,6 +1664,388 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   PRP.cardImport = { fromObject, fromJsonText, fromPngBytes };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardImport;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/world/model.js */
+/* Prism RP — общий пак мира (Shared World Pack) и факт мира (World Fact). Чистый модуль.
+
+   Пак — переиспользуемое знание о мире или фандоме, общее для многих карточек.
+   Факт мира — декларативное утверждение о мире («Тацуки живёт в Каракуре»). Это НЕ указание модели,
+   НЕ черта характера, НЕ опыт, НЕ сценарий и НЕ состояние сцены.
+   Метаданные (entities, topics, locations, timeline, variant) — для будущего отбора (FOUNDATION-W2).
+   provenance — откуда факт; только сведения для человека, во время работы не исполняется.
+   Режим (сцена / переписка) миру не принадлежит: полей, зависящих от режима, здесь нет.
+   Без DOM, хранилища, сети и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const SCHEMA = 1;
+  const FORMAT = "prismrp-world-pack"; // собственный формат экспорта паков PrismRP
+
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+  const strList = (v) => (Array.isArray(v) ? v.map((x) => str(x).trim()).filter(Boolean) : []);
+  const uid = (p) => p + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+  function provenance(p) {
+    const o = isObj(p) ? p : {};
+    const out = { kind: o.kind === "imported" ? "imported" : "manual" };
+    if (o.sourceFormat) out.sourceFormat = str(o.sourceFormat);
+    if (o.sourceId) out.sourceId = str(o.sourceId);
+    if (o.note) out.note = str(o.note);
+    return out;
+  }
+
+  // Факт мира в каноническом виде. Пустой id получает новый; существующий не меняется никогда.
+  function fact(f, idPrefix) {
+    const o = isObj(f) ? f : {};
+    return {
+      id: str(o.id).trim() || uid(idPrefix || "wf"),
+      text: str(o.text),
+      entities: strList(o.entities),
+      topics: strList(o.topics),
+      locations: strList(o.locations),
+      timeline: str(o.timeline).trim(),
+      variant: str(o.variant).trim(),
+      enabled: o.enabled !== false,
+      provenance: provenance(o.provenance),
+    };
+  }
+
+  function blank(name) {
+    const now = Date.now();
+    return { id: uid("wp"), schema: SCHEMA, name: str(name), description: "", facts: [], source: { kind: "manual" }, createdAt: now, updatedAt: now };
+  }
+
+  // Приведение пака к каноническому виду (без исправления смысловых ошибок: повторы id остаются и видны в проверке).
+  function normalize(p) {
+    const o = isObj(p) ? p : {};
+    return {
+      id: str(o.id).trim(),
+      schema: SCHEMA,
+      name: str(o.name),
+      description: str(o.description),
+      facts: Array.isArray(o.facts) ? o.facts.map((f) => fact(f)) : [],
+      source: isObj(o.source) ? Object.assign({ kind: o.source.kind === "imported" ? "imported" : "manual" },
+        o.source.format ? { format: str(o.source.format) } : {}, o.source.importedAt ? { importedAt: o.source.importedAt } : {}) : { kind: "manual" },
+      createdAt: o.createdAt || Date.now(),
+      updatedAt: o.updatedAt || Date.now(),
+    };
+  }
+
+  const issueOf = (level, code, message) => ({ level, code, message });
+
+  /* Экспорт: канонический JSON пака. Линзы персонажей в экспорт пака не входят. */
+  function exportPack(p) {
+    return { app: "prism-rp", format: FORMAT, schema: SCHEMA, exportedAt: new Date().toISOString(), pack: normalize(p) };
+  }
+
+  /* Импорт: текст → проверенный пак или ошибки. Ничего не сохраняет и ничего не исполняет.
+     Принимается только собственный формат PrismRP; чужие форматы лорбуков не поддерживаются.
+     Новый id пака выдаётся всегда (чтобы не затереть существующий); id фактов сохраняются —
+     на них ссылаются переопределения. → { ok, pack | null, issues } */
+  function importPackText(text) {
+    let json;
+    try { json = JSON.parse(text); }
+    catch (e) { return { ok: false, pack: null, issues: [issueOf("error", "invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
+    if (!isObj(json) || json.app !== "prism-rp" || json.format !== FORMAT) {
+      return { ok: false, pack: null, issues: [issueOf("error", "unknown-format", "Это не пак мира PrismRP (нужны app: \"prism-rp\" и format: \"" + FORMAT + "\").")] };
+    }
+    if (json.schema !== SCHEMA) return { ok: false, pack: null, issues: [issueOf("error", "schema", `Версия пака ${json.schema} не поддерживается.`)] };
+    const raw = json.pack;
+    const V = PRP.worldValidate; // граница проверки — world/validate.js (загружается после модели)
+    const issues = V.validatePack(raw);
+    if (V.hasErrors(issues)) return { ok: false, pack: null, issues };
+    const pack = normalize(raw);
+    const now = Date.now();
+    pack.id = uid("wp");
+    pack.source = { kind: "imported", format: FORMAT, importedAt: now };
+    pack.createdAt = now; pack.updatedAt = now;
+    return { ok: true, pack, issues };
+  }
+
+  PRP.worldModel = { SCHEMA, FORMAT, uid, fact, provenance, blank, normalize, exportPack, importPackText, strList, isObj, str };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldModel;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/world/lens.js */
+/* Prism RP — линза персонажа (Character Lens). Чистый модуль.
+
+   Линза — то, что отличается или важно для одной карточки поверх ОДНОГО общего пака мира:
+     • focusEntities / focusTopics / relevanceHints — на чём сосредоточиться (для отбора в W2);
+     • timelineVariant — какая ветка канона или AU у этого персонажа (метаданные для W2);
+     • disabledFactIds — факты пака, которые для этого персонажа не действуют (явно по id);
+     • overrides — замена конкретного факта пака по его id (targetFactId);
+     • additions — факты мира, нужные только этому персонажу.
+   Линза никогда не меняет сам пак и не содержит его копию. Связь с карточкой — по cardId
+   (одна линза на карточку), с паком — по packId. Без DOM, хранилища, сети и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const WM = PRP.worldModel;
+
+  const SCHEMA = 1;
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+
+  /* Переопределение факта пака. Поля метаданных различают «не задано» и «задано пустым»:
+     отсутствует или null → наследуется у целевого факта; задано (в том числе [] или "") → заменяет,
+     то есть пустой список очищает метаданные. Никаких проверок на «истинность». */
+  function override(o) {
+    const x = isObj(o) ? o : {};
+    const out = { id: str(x.id).trim() || WM.uid("wo"), targetFactId: str(x.targetFactId).trim(), text: str(x.text) };
+    for (const k of ["entities", "topics", "locations"]) if (Array.isArray(x[k])) out[k] = WM.strList(x[k]);
+    for (const k of ["timeline", "variant"]) if (x[k] != null) out[k] = str(x[k]).trim();
+    if (x.note) out.note = str(x.note);
+    return out;
+  }
+
+  function blank(cardId, packId) {
+    const now = Date.now();
+    return {
+      id: WM.uid("wl"), schema: SCHEMA, cardId: str(cardId), packId: str(packId),
+      focusEntities: [], focusTopics: [], relevanceHints: [], timelineVariant: "",
+      disabledFactIds: [], overrides: [], additions: [], createdAt: now, updatedAt: now,
+    };
+  }
+
+  function normalize(l) {
+    const o = isObj(l) ? l : {};
+    return {
+      id: str(o.id).trim(), schema: SCHEMA, cardId: str(o.cardId).trim(), packId: str(o.packId).trim(),
+      focusEntities: WM.strList(o.focusEntities), focusTopics: WM.strList(o.focusTopics), relevanceHints: WM.strList(o.relevanceHints),
+      timelineVariant: str(o.timelineVariant).trim(),
+      disabledFactIds: WM.strList(o.disabledFactIds),
+      overrides: Array.isArray(o.overrides) ? o.overrides.map(override) : [],
+      additions: Array.isArray(o.additions) ? o.additions.map((f) => WM.fact(f, "wa")) : [],
+      createdAt: o.createdAt || Date.now(), updatedAt: o.updatedAt || Date.now(),
+    };
+  }
+
+  PRP.worldLens = { SCHEMA, blank, normalize, override };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldLens;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/world/validate.js */
+/* Prism RP — граница проверки мира (чистый модуль): паки мира и линзы персонажей.
+
+   Уровни: error — сохранять нельзя; warning — можно, но человек должен это видеть.
+   Ошибки (блокируют):
+     • повтор id фактов пака; повтор id добавленных фактов линзы;
+     • несколько переопределений одного targetFactId;
+     • id добавленного факта линзы совпадает с id факта пака (иначе в мире было бы два факта с одним id);
+     • линза ссылается на пак, которого нет (pack-missing; наличие пака проверяет сервис — здесь только вид ошибки);
+     • битые обязательные объекты и id (нет id, не объект, не список);
+     • вторая линза для того же персонажа (одна линза на карточку).
+   Предупреждения:
+     • переопределение ссылается на факт, которого в паке нет;
+     • выключение ссылается на факт, которого в паке нет.
+   Ссылки на несуществующие факты никогда не исправляются угадыванием (ни по тексту, ни по похожему id).
+   Проверка не меняет входные данные. Без DOM, хранилища, сети и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref != null ? { ref: String(ref) } : {});
+  const hasErrors = (issues) => (issues || []).some((x) => x.level === "error");
+  const META_LISTS = ["entities", "topics", "locations"];
+
+  // Список фактов (пака или добавлений линзы): объекты, непустые и неповторяющиеся id.
+  function checkFacts(list, label, dupCode, out) {
+    const seen = new Set();
+    list.forEach((f, i) => {
+      const n = `${label} №${i + 1}`;
+      if (!isObj(f)) { out.push(issue("error", "fact-malformed", `${n} не является объектом.`, i)); return; }
+      const id = str(f.id).trim();
+      if (!id) out.push(issue("error", "fact-no-id", `У факта (${n}) нет id.`, i));
+      else if (seen.has(id)) out.push(issue("error", dupCode, `Повторяется id факта: ${id}.`, id));
+      else seen.add(id);
+      if (f.text != null && typeof f.text !== "string") out.push(issue("error", "fact-text", `Текст факта ${id || n} не строка.`, id || i));
+      else if (!str(f.text).trim()) out.push(issue("warning", "fact-empty", `Факт ${id || n} без текста.`, id || i));
+      for (const k of META_LISTS) if (f[k] != null && !Array.isArray(f[k])) out.push(issue("error", "fact-meta", `Поле ${k} факта ${id || n} должно быть списком.`, id || i));
+      if (f.provenance != null && !isObj(f.provenance)) out.push(issue("error", "fact-provenance", `Источник факта ${id || n} должен быть объектом.`, id || i));
+    });
+    return seen;
+  }
+
+  function validatePack(p) {
+    const out = [];
+    if (!isObj(p)) return [issue("error", "not-object", "Пак мира должен быть объектом.")];
+    if (!str(p.id).trim()) out.push(issue("error", "no-id", "У пака нет id."));
+    if (!str(p.name).trim()) out.push(issue("error", "no-name", "У пака нет названия."));
+    if (p.facts != null && !Array.isArray(p.facts)) { out.push(issue("error", "facts-not-array", "Поле facts должно быть списком.")); return out; }
+    checkFacts(p.facts || [], "Факт", "fact-duplicate-id", out);
+    return out;
+  }
+
+  /* Линза. pack — необязательно: с ним проверяются ссылки на факты (это предупреждения). */
+  function validateLens(l, pack) {
+    const out = [];
+    if (!isObj(l)) return [issue("error", "not-object", "Линза должна быть объектом.")];
+    if (!str(l.id).trim()) out.push(issue("error", "no-id", "У линзы нет id."));
+    if (!str(l.cardId).trim()) out.push(issue("error", "no-card", "Линза не привязана к персонажу."));
+    if (!str(l.packId).trim()) out.push(issue("error", "no-pack", "Линза не привязана к паку мира."));
+    for (const k of ["disabledFactIds", "overrides", "additions", "focusEntities", "focusTopics", "relevanceHints"]) {
+      if (l[k] != null && !Array.isArray(l[k])) out.push(issue("error", "not-array", `Поле ${k} должно быть списком.`, k));
+    }
+    const overrides = Array.isArray(l.overrides) ? l.overrides : [];
+    const targets = new Set(), ovIds = new Set();
+    overrides.forEach((o, i) => {
+      if (!isObj(o)) { out.push(issue("error", "override-malformed", `Переопределение №${i + 1} не является объектом.`, i)); return; }
+      const id = str(o.id).trim();
+      if (!id) out.push(issue("error", "override-no-id", `У переопределения №${i + 1} нет id.`, i));
+      else if (ovIds.has(id)) out.push(issue("error", "override-duplicate-id", `Повторяется id переопределения: ${id}.`, id));
+      else ovIds.add(id);
+      const t = str(o.targetFactId).trim();
+      if (!t) out.push(issue("error", "override-no-target", `У переопределения №${i + 1} нет целевого факта.`, id || i));
+      else if (targets.has(t)) out.push(issue("error", "override-duplicate-target", `Факт ${t} переопределён больше одного раза — неясно, какой вариант действует.`, t));
+      else targets.add(t);
+      for (const k of META_LISTS) if (o[k] != null && !Array.isArray(o[k])) out.push(issue("error", "override-meta", `Поле ${k} переопределения ${id || i + 1} должно быть списком.`, id || i));
+    });
+    const addIds = checkFacts(Array.isArray(l.additions) ? l.additions : [], "Добавленный факт", "addition-duplicate-id", out);
+    if (isObj(pack)) {
+      const ids = new Set((pack.facts || []).filter(isObj).map((f) => str(f.id)));
+      if (str(l.packId) && str(pack.id) && str(l.packId) !== str(pack.id)) out.push(issue("error", "pack-mismatch", "Линза относится к другому паку."));
+      for (const t of targets) if (!ids.has(t)) out.push(issue("warning", "override-target-missing", `Переопределяемого факта ${t} нет в паке; ссылка сохранена и не применяется.`, t));
+      for (const d of Array.isArray(l.disabledFactIds) ? l.disabledFactIds : []) if (!ids.has(str(d))) out.push(issue("warning", "disabled-target-missing", `Выключаемого факта ${d} нет в паке; ссылка сохранена и не применяется.`, d));
+      // id не переименовывается и не подбирается автоматически: пользователь должен сам пересоздать добавленный факт.
+      for (const a of addIds) if (ids.has(a)) out.push(issue("error", "addition-id-collides", `id добавленного факта ${a} совпадает с фактом пака — у факта мира id должен быть единственным. Удалите этот факт персонажа и добавьте заново.`, a));
+    }
+    return out;
+  }
+
+  // Линза ссылается на несуществующий пак: блокирующая ошибка. Существование проверяет вызывающий (world/service),
+  // этот модуль хранилище не читает.
+  const packMissing = (packId) => issue("error", "pack-missing", `Пак мира ${packId || "(не указан)"} не найден: линзу можно привязать только к существующему паку.`, packId || "");
+
+  /* Одна линза на персонажа: lens нельзя сохранить, если у того же cardId уже есть линза с другим id.
+     existing — уже сохранённые линзы этого персонажа (или все). */
+  function validateOneLensPerCard(lens, existing) {
+    const other = (existing || []).find((x) => x && x.cardId === lens.cardId && x.id !== lens.id);
+    return other ? [issue("error", "lens-exists", "У этого персонажа уже есть линза мира: измените её, а не создавайте вторую.", other.id)] : [];
+  }
+
+  PRP.worldValidate = { validatePack, validateLens, validateOneLensPerCard, packMissing, hasErrors };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldValidate;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/world/resolve.js */
+/* Prism RP — разрешение статического мира: пак + линза → действующие факты. Чистый модуль.
+
+   Порядок власти W1: линза (переопределения, добавления, выключения) > общий пак.
+   (Наложение мира на конкретный чат — следующий этап, FOUNDATION-W2; здесь его нет.)
+
+   Порядок (зафиксирован):
+     1. факты пака с enabled: false исключаются;
+     2. факты из disabledFactIds линзы исключаются — выключение сильнее переопределения;
+     3. к оставшимся фактам пака применяются переопределения (по targetFactId);
+     4. добавляются факты линзы.
+   Порядок фактов пака сохраняется, добавления идут после них.
+   Идентичность: факт, полученный переопределением, сохраняет id факта пака (targetFactId);
+   откуда значение — видно по origin: "override" и overrideId. Правка текста переопределения id не меняет.
+   У добавлений линзы — свои постоянные id. Поля метаданных переопределения: не задано или null —
+   наследуется у факта пака; задано (в том числе [] или "") — заменяет.
+   Также:
+     • ссылки на несуществующие факты и повторы id — предупреждения в отчёте; совпадение по тексту
+       не ищется никогда;
+     • при повторе id в паке действует первый факт (детерминированно), остальные — в предупреждениях;
+     • входные пак и линза не изменяются.
+   В результат попадают только канонические поля пака и линзы: исходники карточек, их расширения,
+   опыт, сцена, сценарий и указания автора сюда не читаются. provenance переносится только для показа.
+   Результат — для просмотра (W1). В контекст модели он не подаётся. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const copy = (x) => JSON.parse(JSON.stringify(x));
+  const META = ["entities", "topics", "locations", "timeline", "variant"];
+
+  /* → { facts: [{ id, text, entities, topics, locations, timeline, variant, provenance, origin, overrideId?, note? }],
+         excluded: [{ id, text, reason: "pack-disabled" | "lens-disabled" }],
+         report: { packId, lensId, timelineVariant, packFacts, effective, disabled, packDisabled, overridden, additions, warnings } } */
+  function resolve(pack, lens) {
+    const warnings = [];
+    const warn = (code, message, ref) => warnings.push({ level: "warning", code, message, ref });
+    const p = pack ? copy(pack) : { id: "", facts: [] };
+    const l = lens ? copy(lens) : null;
+    if (l && l.packId && p.id && l.packId !== p.id) warn("pack-mismatch", "Линза относится к другому паку — её изменения не применены.", l.packId);
+    const useLens = l && (!l.packId || !p.id || l.packId === p.id);
+
+    // Факты пака: первый из повторяющихся id действует, остальные — предупреждение.
+    const packFacts = [];
+    const byId = new Map();
+    for (const f of p.facts || []) {
+      if (!f || typeof f !== "object" || !f.id) { warn("fact-malformed", "Факт пака без id пропущен.", ""); continue; }
+      if (byId.has(f.id)) { warn("fact-duplicate-id", `Повторяется id факта ${f.id}: действует первый.`, f.id); continue; }
+      byId.set(f.id, f);
+      packFacts.push(f);
+    }
+
+    const disabledIds = new Set(useLens ? l.disabledFactIds || [] : []);
+    for (const id of disabledIds) if (!byId.has(id)) warn("disabled-target-missing", `Выключаемого факта ${id} нет в паке — ссылка оставлена как есть.`, id);
+    const overrides = new Map();
+    for (const o of useLens ? l.overrides || [] : []) {
+      if (!o || !o.targetFactId) { warn("override-no-target", "Переопределение без целевого факта пропущено.", o && o.id); continue; }
+      if (overrides.has(o.targetFactId)) { warn("override-duplicate-target", `Факт ${o.targetFactId} переопределён повторно: действует первое переопределение.`, o.targetFactId); continue; }
+      if (!byId.has(o.targetFactId)) { warn("override-target-missing", `Переопределяемого факта ${o.targetFactId} нет в паке — ссылка оставлена как есть.`, o.targetFactId); continue; }
+      overrides.set(o.targetFactId, o);
+    }
+
+    const facts = [], excluded = [];
+    const overridden = [], packDisabled = [], disabled = [];
+    for (const f of packFacts) {
+      if (f.enabled === false) { excluded.push({ id: f.id, text: f.text, reason: "pack-disabled" }); packDisabled.push(f.id); continue; }
+      if (disabledIds.has(f.id)) {
+        excluded.push(Object.assign({ id: f.id, text: f.text, reason: "lens-disabled" }, overrides.has(f.id) ? { overrideIgnored: overrides.get(f.id).id } : {}));
+        disabled.push(f.id);
+        continue;
+      }
+      const o = overrides.get(f.id);
+      const base = { id: f.id, text: f.text, entities: f.entities || [], topics: f.topics || [], locations: f.locations || [], timeline: f.timeline || "", variant: f.variant || "", provenance: f.provenance || { kind: "manual" } };
+      if (o) {
+        const eff = Object.assign(base, { text: o.text, origin: "override", targetFactId: f.id, overrideId: o.id, originalText: f.text });
+        for (const k of META) if (o[k] !== undefined && o[k] !== null) eff[k] = o[k]; // [] и "" — явное очищение
+        if (o.note) eff.note = o.note;
+        facts.push(eff);
+        overridden.push({ targetFactId: f.id, overrideId: o.id });
+      } else facts.push(Object.assign(base, { origin: "pack" }));
+    }
+    const seenAdd = new Set();
+    let additions = 0;
+    for (const a of useLens ? l.additions || [] : []) {
+      if (!a || !a.id) { warn("addition-malformed", "Добавленный факт без id пропущен.", ""); continue; }
+      if (seenAdd.has(a.id)) { warn("addition-duplicate-id", `Повторяется id добавленного факта ${a.id}: действует первый.`, a.id); continue; }
+      seenAdd.add(a.id);
+      // Защита от битых сохранённых данных (проверка такое сохранить не даёт): добавление с id факта пака
+      // в мир не попадает, чтобы id действующих фактов оставались единственными; видно в excluded и warnings.
+      if (byId.has(a.id)) {
+        warn("addition-id-collides", `id добавленного факта ${a.id} совпадает с фактом пака: добавление не применено.`, a.id);
+        excluded.push({ id: a.id, text: a.text, reason: "addition-id-collides" });
+        continue;
+      }
+      if (a.enabled === false) { excluded.push({ id: a.id, text: a.text, reason: "lens-addition-disabled" }); continue; }
+      facts.push({ id: a.id, text: a.text, entities: a.entities || [], topics: a.topics || [], locations: a.locations || [], timeline: a.timeline || "", variant: a.variant || "", provenance: a.provenance || { kind: "manual" }, origin: "lens" });
+      additions++;
+    }
+    return {
+      facts, excluded,
+      report: {
+        packId: p.id || "", lensId: useLens ? l.id || "" : "", timelineVariant: useLens ? l.timelineVariant || "" : "",
+        focusEntities: useLens ? l.focusEntities || [] : [], focusTopics: useLens ? l.focusTopics || [] : [], relevanceHints: useLens ? l.relevanceHints || [] : [],
+        packFacts: packFacts.length, effective: facts.length, disabled, packDisabled, overridden, additions, warnings,
+      },
+    };
+  }
+
+  PRP.worldResolve = { resolve };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldResolve;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -3723,6 +4134,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   // Иконки: тонкий штрих 1.6, currentColor.
   const P = {
+    globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5s1.2-6.1 3.5-8.5z"/>',
     home: '<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/>',
@@ -4004,6 +4416,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <nav class="rail-nav">
         <button class="rail-item ${m.view === "home" ? "active" : ""}" data-act="home">${icon("home")}Персонажи</button>
         <button class="rail-item ${m.view === "assist" ? "active" : ""}" data-act="assist" title="Разговор с моделью вне игры: советы, карточки, разбор чата">${icon("assist")}Ассистент</button>
+        <button class="rail-item ${m.view === "world" ? "active" : ""}" data-act="world" title="Общие паки мира для персонажей">${icon("globe")}Миры</button>
         <button class="rail-item" data-act="import">${icon("upload")}Импорт карточки</button>
       </nav>
       <div class="rail-head"><span>Недавние чаты</span></div>
@@ -4620,7 +5033,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // Поля и их порядок — как в Character Card V2/V3 и SillyTavern. Рядом с подписью
   // мелко показан ключ спецификации, чтобы было видно, куда поле попадёт при экспорте.
   function cardModal(m, d, section) {
-    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["prompts", "Промпты", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["meta", "Автор и файл", "download"]];
+    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["prompts", "Промпты", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["world", "Мир", "globe"], ["meta", "Автор и файл", "download"]];
     const lab = (label, key) => `${label}${key ? ` <span class="spec-key">${key}</span>` : ""}`;
     const f = (id, label, key, value, rows, help, ph) => `<div class="field"><label for="${id}">${lab(label, key)}</label>${rows
       ? `<textarea id="${id}" rows="${rows}" data-cf="${id}" placeholder="${esc(ph || "")}">${esc(value || "")}</textarea>` : `<input id="${id}" data-cf="${id}" value="${esc(value || "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
@@ -4672,6 +5085,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           <label class="check"><input type="checkbox" data-lore="${i}" data-k="case_sensitive" ${e.case_sensitive ? "checked" : ""}><span>С учётом регистра</span></label></div>
           <div class="row" style="justify-content:flex-end"><button class="btn btn-sm btn-ghost" data-act="lore-del" data-i="${i}">${icon("trash")}Удалить запись</button></div></div>`).join("") || `<p class="empty-note">Лорбук пуст.</p>`}
         <button class="btn btn-sm" data-act="lore-add">${icon("plus")}Добавить запись</button>`;
+    } else if (section === "world") {
+      body = PRP.views.lensSection(m, d);
     } else if (section === "images") {
       const im = d.image || {};
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
@@ -4803,6 +5218,135 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
 
   Object.assign((PRP.views = PRP.views || {}), { importReview });
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/ui/views/world.js */
+/* Prism RP — экраны мира: библиотека общих паков мира и раздел «Мир» в редакторе персонажа
+   (линза персонажа и превью «Мир персонажа»). Только разметка: правила разрешения — в world/resolve,
+   данные для превью готовит world/service. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render;
+  const { esc, icon } = R;
+
+  const list = (a) => esc((a || []).join(", "));
+  const PROV = (p) => (p && p.kind === "imported" ? `импорт${p.sourceFormat ? " · " + esc(p.sourceFormat) : ""}` : "вручную");
+
+  /* ── Библиотека миров ─────────────────────────────────────────────── */
+  function worldLibrary(m) {
+    const packs = m.worldPacks || [];
+    const d = m.worldDraft;
+    const users = (id) => (m.worldLenses || []).filter((l) => l.packId === id).map((l) => (m.cards.find((c) => c.id === l.cardId) || {}).name).filter(Boolean);
+    return `<div class="home"><div class="home-inner">
+      <div class="home-top"><div><h1>Миры</h1>
+        <p class="sub">Общие паки мира: знания о мире или фандоме, которые разделяют разные персонажи. Что у конкретного персонажа иначе — задаётся в его карточке, в разделе «Мир».</p></div>
+        <div class="home-tools"><button class="btn" data-act="world-import">${icon("upload")}Импорт пака</button>
+          <button class="btn btn-primary" data-act="world-new">${icon("plus")}Новый мир</button></div></div>
+      <div class="world-layout">
+        <div class="world-list">${packs.length ? packs.map((p) => {
+          const u = users(p.id);
+          return `<button class="world-item ${d && d.id === p.id ? "on" : ""}" data-act="world-open" data-id="${p.id}">
+            <b>${esc(p.name || "Без названия")}</b><small>${p.facts.length} ${R.plural(p.facts.length, "факт", "факта", "фактов")}${u.length ? ` · персонажей: ${u.length}` : ""}</small></button>`;
+        }).join("") : `<p class="empty-note">Паков мира пока нет.</p>`}</div>
+        <div class="world-editor">${d ? packEditor(d, users(d.id)) : `<p class="hint">Выберите мир слева или создайте новый. Факт мира — утверждение о мире («Университет находится в Каракуре»), а не указание модели и не черта характера.</p>`}</div>
+      </div></div></div>`;
+  }
+
+  function packEditor(d, users) {
+    return `<div class="field"><label for="wp-name">Название</label><input id="wp-name" data-wp="name" value="${esc(d.name)}"></div>
+      <div class="field"><label for="wp-desc">Описание</label><textarea id="wp-desc" data-wp="description" rows="2">${esc(d.description)}</textarea></div>
+      <div class="block-title" style="margin-top:14px">Факты мира <small>${d.facts.length}</small></div>
+      <p class="hint" style="margin-top:0">Декларативные утверждения о мире. Метки (персонажи, темы, места, хронология, вариант) пригодятся для отбора фактов на следующих этапах.</p>
+      ${d.facts.map((f, i) => `<div class="lore world-fact ${f.enabled === false ? "off" : ""}" data-wf-row="${i}">
+        <div class="field"><label>Факт <span class="spec-key">${esc(f.id)}</span></label><textarea data-wf="${i}" data-k="text" rows="2" placeholder="Тацуки живёт в Каракуре.">${esc(f.text)}</textarea></div>
+        <div class="row wrap">
+          <div class="field"><label>Персонажи, сущности</label><input data-wf="${i}" data-k="entities" value="${list(f.entities)}" placeholder="Тацуки, Орихимэ"></div>
+          <div class="field"><label>Темы</label><input data-wf="${i}" data-k="topics" value="${list(f.topics)}" placeholder="дом, семья"></div>
+          <div class="field"><label>Места</label><input data-wf="${i}" data-k="locations" value="${list(f.locations)}" placeholder="Каракура"></div></div>
+        <div class="row wrap">
+          <div class="field"><label>Хронология</label><input data-wf="${i}" data-k="timeline" value="${esc(f.timeline)}" placeholder="канон"></div>
+          <div class="field"><label>Вариант</label><input data-wf="${i}" data-k="variant" value="${esc(f.variant)}" placeholder="основной"></div></div>
+        <div class="row" style="justify-content:space-between"><label class="check"><input type="checkbox" data-wf="${i}" data-k="enabled" ${f.enabled !== false ? "checked" : ""}><span>Действует</span></label>
+          <span class="hint" style="margin:0">Источник: ${PROV(f.provenance)}</span>
+          <button class="btn btn-sm btn-ghost" data-act="world-fact-del" data-i="${i}">${icon("trash")}Удалить</button></div>
+      </div>`).join("")}
+      <button class="btn btn-sm" data-act="world-fact-add">${icon("plus")}Добавить факт</button>
+      <div class="row" style="margin-top:20px;flex-wrap:wrap">
+        <button class="btn btn-primary" data-act="world-save">${icon("check")}Сохранить мир</button>
+        <button class="btn" data-act="world-export">${icon("download")}Экспорт JSON</button>
+        <span class="spacer"></span>
+        <button class="btn btn-danger" data-act="world-delete">${icon("trash")}Удалить мир</button></div>
+      ${users.length ? `<p class="hint" style="margin-top:8px">Этот мир используют: ${esc(users.join(", "))}. Удалить его можно, только когда ни один персонаж на него не ссылается.</p>` : ""}`;
+  }
+
+  /* ── Раздел «Мир» в редакторе персонажа ───────────────────────────── */
+  function lensSection(m, d) {
+    if (!d.id) return `<p class="lead">Мир персонажа</p><p class="hint">Сначала сохраните персонажа — затем можно привязать его к общему паку мира.</p>`;
+    const packs = m.worldPacks || [];
+    const lens = m.modal && m.modal.lens;
+    const pv = m.lensPreview;
+    const sel = `<div class="field"><label for="lens-pack">Общий пак мира</label><select id="lens-pack" data-lens-pack>
+      <option value="">— без мира —</option>${packs.map((p) => `<option value="${p.id}" ${lens && lens.packId === p.id ? "selected" : ""}>${esc(p.name || "Без названия")}</option>`).join("")}</select>
+      <span class="help">Пак общий для многих персонажей; здесь хранится только то, что у ${esc(d.name || "персонажа")} иначе. Сам пак отсюда не меняется.${packs.length ? "" : " Паков пока нет — создайте их в разделе «Миры»."}</span></div>`;
+    if (!lens || !lens.packId) return `<p class="lead">Мир персонажа</p>${sel}`;
+    if (!pv || !pv.pack) return `<p class="lead">Мир персонажа</p>${sel}<p class="err">${icon("alert")}<span>Пак мира не найден.</span></p>`;
+    const pack = pv.pack;
+    const ovrByTarget = new Map((lens.overrides || []).map((o, i) => [o.targetFactId, { o, i }]));
+    const factIds = new Set(pack.facts.map((f) => f.id));
+    const dangling = (lens.overrides || []).map((o, i) => ({ o, i })).filter((x) => !factIds.has(x.o.targetFactId));
+    const danglingDis = (lens.disabledFactIds || []).filter((id) => !factIds.has(id));
+    return `<p class="lead">Мир персонажа</p>${sel}
+      <div class="row wrap">
+        <div class="field"><label>В фокусе: персонажи, сущности</label><input data-lens="focusEntities" value="${list(lens.focusEntities)}"></div>
+        <div class="field"><label>В фокусе: темы</label><input data-lens="focusTopics" value="${list(lens.focusTopics)}"></div></div>
+      <div class="row wrap">
+        <div class="field"><label>Подсказки о важном</label><input data-lens="relevanceHints" value="${list(lens.relevanceHints)}" placeholder="соседи, университет"></div>
+        <div class="field"><label>Хронология / вариант персонажа</label><input data-lens="timelineVariant" value="${esc(lens.timelineVariant)}" placeholder="university-au"></div></div>
+      <div class="block-title" style="margin-top:14px">Факты пака «${esc(pack.name)}»</div>
+      <p class="hint" style="margin-top:0">Для этого персонажа факт можно выключить или заменить своим текстом. Пак и другие персонажи это не затрагивает.</p>
+      ${pack.facts.map((f) => {
+        const ov = ovrByTarget.get(f.id);
+        const off = (lens.disabledFactIds || []).includes(f.id);
+        return `<div class="lore lens-fact ${off ? "off" : ""}">
+          <div class="lf-text">${esc(f.text) || "<i>без текста</i>"} <span class="spec-key">${esc(f.id)}</span>${f.enabled === false ? ` <span class="tag">выключен в паке</span>` : ""}</div>
+          <div class="row" style="flex-wrap:wrap">
+            <label class="check"><input type="checkbox" data-lens-disable="${esc(f.id)}" ${off ? "checked" : ""}><span>Не действует для персонажа</span></label>
+            ${ov ? "" : `<button class="btn btn-sm" data-act="lens-override-add" data-fid="${esc(f.id)}">${icon("edit")}Заменить для персонажа</button>`}</div>
+          ${ov ? `<div class="field"><label>Для персонажа вместо этого</label><textarea data-lens-ovr="${ov.i}" rows="2">${esc(ov.o.text)}</textarea>
+            <button class="btn btn-sm btn-ghost" data-act="lens-override-del" data-i="${ov.i}">${icon("x")}Убрать замену</button></div>` : ""}
+        </div>`;
+      }).join("") || `<p class="empty-note">В паке нет фактов.</p>`}
+      ${dangling.length || danglingDis.length ? `<div class="block err-block">${icon("alert")}<div><b>Ссылки на факты, которых в паке нет.</b> Они сохранены как есть и не применяются; подходящий факт не подбирается по тексту.
+        <ul>${dangling.map((x) => `<li>Замена факта <span class="spec-key">${esc(x.o.targetFactId)}</span>: «${esc(x.o.text)}» <button class="btn btn-sm btn-ghost" data-act="lens-override-del" data-i="${x.i}">Убрать</button></li>`).join("")}
+        ${danglingDis.map((id) => `<li>Выключение факта <span class="spec-key">${esc(id)}</span> <button class="btn btn-sm btn-ghost" data-act="lens-disabled-del" data-fid="${esc(id)}">Убрать</button></li>`).join("")}</ul></div></div>` : ""}
+      <div class="block-title" style="margin-top:14px">Факты только этого персонажа</div>
+      ${(lens.additions || []).map((f, i) => `<div class="lore">
+        <div class="field"><label>Факт <span class="spec-key">${esc(f.id)}</span></label><textarea data-lens-add="${i}" data-k="text" rows="2" placeholder="Живёт напротив {{user}}.">${esc(f.text)}</textarea></div>
+        <div class="row wrap"><div class="field"><label>Персонажи, сущности</label><input data-lens-add="${i}" data-k="entities" value="${list(f.entities)}"></div>
+          <div class="field"><label>Темы</label><input data-lens-add="${i}" data-k="topics" value="${list(f.topics)}"></div>
+          <div class="field"><label>Места</label><input data-lens-add="${i}" data-k="locations" value="${list(f.locations)}"></div></div>
+        <div class="row" style="justify-content:flex-end"><button class="btn btn-sm btn-ghost" data-act="lens-add-del" data-i="${i}">${icon("trash")}Удалить</button></div></div>`).join("")}
+      <button class="btn btn-sm" data-act="lens-add">${icon("plus")}Добавить факт персонажа</button>
+      ${effective(pv)}
+      <div class="row" style="margin-top:16px"><button class="btn btn-ghost btn-sm" data-act="lens-clear">${icon("x")}Снять связь с миром</button></div>`;
+  }
+
+  // Превью «Мир персонажа»: что получится из пака и линзы. Только просмотр — в модель это не уходит.
+  function effective(pv) {
+    const ORIGIN = { pack: ["пак", ""], override: ["заменено для персонажа", "ovr"], lens: ["только у персонажа", "own"] };
+    const WHY = { "pack-disabled": "выключен в паке", "lens-disabled": "не действует для персонажа", "lens-addition-disabled": "выключен", "addition-id-collides": "id совпадает с фактом пака" };
+    const r = pv.report;
+    const warns = (r.warnings || []).concat((pv.lensIssues || []).filter((x) => x.level === "error"));
+    return `<div class="block-title" style="margin-top:22px">Мир персонажа <small>${r.effective} из ${r.packFacts} фактов пака${r.additions ? ` + ${r.additions} своих` : ""}</small></div>
+      <p class="hint" style="margin-top:0">Итог: пак с учётом линзы. Только для просмотра — в контекст модели мир пока не подаётся.</p>
+      <ul class="eff-world">${pv.facts.map((f) => `<li class="${ORIGIN[f.origin][1]}"><span class="tag">${ORIGIN[f.origin][0]}</span> ${esc(f.text)}${f.origin === "override" ? ` <s>${esc(f.originalText)}</s>` : ""}</li>`).join("")}
+        ${pv.excluded.map((x) => `<li class="off"><span class="tag">${WHY[x.reason] || x.reason}</span> <s>${esc(x.text)}</s></li>`).join("")}</ul>
+      ${warns.length ? `<ul class="imp-issues">${warns.map((w) => `<li class="${w.level}"><b>${w.level === "error" ? "Ошибка" : "Внимание"}:</b> ${esc(w.message)}</li>`).join("")}</ul>` : ""}`;
+  }
+
+  Object.assign((PRP.views = PRP.views || {}), { worldLibrary, lensSection });
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -5637,6 +6181,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);
       await DB.delMany("experience", xs.map((x) => x.id));
+      // Линза мира принадлежит персонажу и удаляется с ним; общий пак остаётся (world/service).
+      if (ctx.svc && ctx.svc.world) await ctx.svc.world.removeForCard(cd.id);
       await DB.del("cards", cd.id);
       S.cards = S.cards.filter((c) => c.id !== cd.id);
       S.chats = S.chats.filter((c) => c.cardId !== cd.id);
@@ -5654,6 +6200,126 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
 
   PRP.cardService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/world/service.js */
+/* Prism RP — сервис мира (прикладной уровень): общие паки мира и линзы персонажей.
+   Загрузка, сохранение с проверкой, правила удаления, импорт и экспорт паков, превью «Мир персонажа».
+   Смысл — в чистых модулях world/model, world/lens, world/validate, world/resolve; хранилище — через ctx.DB.
+   Сохраняется только то, что прошло проверку world/validate (ошибки блокируют, предупреждения возвращаются).
+   Мир в контекст модели здесь НЕ подаётся (это FOUNDATION-W2). DOM не трогает. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const WM = PRP.worldModel, WL = PRP.worldLens, WR = PRP.worldResolve, WV = PRP.worldValidate;
+
+  const PACKS = "worldPacks", LENSES = "worldLenses";
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+
+  function create(ctx) {
+    const { S, DB } = ctx;
+    const upsert = (list, x) => { const i = list.findIndex((y) => y.id === x.id); if (i >= 0) list[i] = x; else list.push(x); };
+
+    async function loadAll() {
+      S.worldPacks = (await DB.all(PACKS)).map(WM.normalize).sort((a, b) => a.name.localeCompare(b.name));
+      S.worldLenses = (await DB.all(LENSES)).map(WL.normalize);
+    }
+    const packById = (id) => (S.worldPacks || []).find((p) => p.id === id) || null;
+    const lensForCard = (cardId) => (S.worldLenses || []).find((l) => l.cardId === cardId) || null;
+    const lensesForPack = (packId) => (S.worldLenses || []).filter((l) => l.packId === packId);
+
+    /* Паки. → { pack } или { error, issues } */
+    function newPack(name) { return WM.blank(name || "Новый мир"); }
+    const errorsText = (issues) => issues.filter((x) => x.level === "error").map((x) => x.message).join(" ");
+    async function savePack(draft) {
+      const issues = WV.validatePack(draft);
+      if (WV.hasErrors(issues)) return { error: issues.filter((x) => x.level === "error").map((x) => x.message).join(" "), issues };
+      const p = WM.normalize(draft);
+      p.updatedAt = Date.now();
+      await DB.put(PACKS, p);
+      upsert((S.worldPacks = S.worldPacks || []), p);
+      return { pack: p, issues };
+    }
+    /* Удаление пака запрещено, пока на него ссылаются линзы: иначе они осиротели бы молча.
+       → { ok } или { blocked: [{ lensId, cardId }] } — имена персонажей для сообщения подставляет интерфейс. */
+    async function deletePack(id) {
+      const refs = (await DB.byIndex(LENSES, "packId", id)) || [];
+      if (refs.length) return { blocked: refs.map((l) => ({ lensId: l.id, cardId: l.cardId })) };
+      await DB.del(PACKS, id);
+      S.worldPacks = (S.worldPacks || []).filter((p) => p.id !== id);
+      return { ok: true };
+    }
+    function exportPack(id) {
+      const p = packById(id);
+      if (!p) return null;
+      return { name: `${p.name || "мир"}.world.json`, text: JSON.stringify(WM.exportPack(p), null, 2) };
+    }
+    // Импорт: проверка до сохранения; битый или чужой файл — ошибка, ничего не сохраняется.
+    async function importPack(text) {
+      const r = WM.importPackText(text);
+      if (!r.ok) return { error: errorsText(r.issues) || "Файл не принят.", issues: r.issues };
+      return savePack(r.pack);
+    }
+
+    /* Линзы. Одна линза на персонажа; линза хранит только отличия от пака. */
+    async function saveLens(draft) {
+      // Линза — только к существующему паку: иначе отказ, без записи и без изменения состояния. Пак не создаётся.
+      const pack = packById(draft && draft.packId);
+      if (!pack) { const miss = [WV.packMissing(draft && draft.packId)]; return { error: errorsText(miss), issues: miss }; }
+      // Проверяется черновик как есть (до приведения), чтобы битые записи не «чинились» молча.
+      const issues = WV.validateLens(draft, pack);
+      if (WV.hasErrors(issues)) return { error: errorsText(issues), issues };
+      const l = WL.normalize(draft);
+      // Одна линза на персонажа: вторая отклоняется (то же ограничение держит уникальный индекс cardId в базе).
+      const one = WV.validateOneLensPerCard(l, await DB.byIndex(LENSES, "cardId", l.cardId));
+      if (WV.hasErrors(one)) return { error: errorsText(one), issues: one };
+      l.updatedAt = Date.now();
+      await DB.put(LENSES, l);
+      upsert((S.worldLenses = S.worldLenses || []), l);
+      return { lens: l, issues };
+    }
+    async function deleteLens(id) {
+      await DB.del(LENSES, id);
+      S.worldLenses = (S.worldLenses || []).filter((l) => l.id !== id);
+    }
+    // Сохранение раздела «Мир» редактора персонажа: черновик линзы или null — снять связь с миром.
+    async function saveLensForCard(cardId, draft) {
+      const cur = lensForCard(cardId);
+      if (!draft || !draft.packId) { if (cur) await deleteLens(cur.id); return { lens: null }; }
+      // Редактор правит единственную линзу персонажа: если в этой правке связь снимали и ставили заново,
+      // черновик получил новый id — запись остаётся той же (id существующей линзы), второй не появляется.
+      return saveLens(Object.assign({}, draft, { cardId }, cur ? { id: cur.id, createdAt: cur.createdAt } : {}));
+    }
+    // Персонаж удалён — его линза тоже (она только его). Пак остаётся.
+    async function removeForCard(cardId) {
+      const ls = (await DB.byIndex(LENSES, "cardId", cardId)) || [];
+      await DB.delMany(LENSES, ls.map((l) => l.id));
+      S.worldLenses = (S.worldLenses || []).filter((l) => l.cardId !== cardId);
+    }
+
+    /* Превью «Мир персонажа» для редактора: только просмотр. → { pack, lensIssues, ...resolve() } | null */
+    function preview(lensDraft) {
+      if (!lensDraft || !lensDraft.packId) return null;
+      const pack = packById(lensDraft.packId);
+      if (!pack) return { pack: null, missingPack: lensDraft.packId, facts: [], excluded: [], report: { warnings: [{ level: "warning", code: "pack-missing", message: "Пак мира не найден." }] } };
+      const lens = WL.normalize(lensDraft);
+      return Object.assign({ pack, lensIssues: WV.validateLens(Object.assign({}, lensDraft, { id: lensDraft.id || "draft", cardId: lensDraft.cardId || "draft" }), pack) }, WR.resolve(pack, lens));
+    }
+    // Пустые заготовки для форм (идентификаторы выдаёт модель).
+    const newFact = (prefix) => WM.fact({}, prefix || "wf");
+    const newOverride = (targetFactId, text) => WL.override({ targetFactId, text });
+    const newLens = (cardId, packId) => WL.blank(cardId, packId);
+    function draftLens(cardId) {
+      const cur = lensForCard(cardId);
+      return cur ? clone(cur) : null;
+    }
+
+    return { loadAll, packById, lensForCard, lensesForPack, newPack, savePack, deletePack, exportPack, importPack,
+      saveLens, deleteLens, saveLensForCard, removeForCard, preview, draftLens, newFact, newOverride, newLens };
+  }
+
+  PRP.worldService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -5813,6 +6479,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
         origin: location.origin && location.origin !== "null" ? location.origin : "*",
         assist: S.assist, assistList: S.assistList,
+        worldPacks: S.worldPacks, worldLenses: S.worldLenses, worldDraft: S.worldDraft, modal: S.modal,
+        // Превью «Мир персонажа» готовит сервис мира; представление только показывает.
+        lensPreview: S.modal && S.modal.kind === "card" && S.modal.section === "world" && S.modal.lens ? svc().world.preview(S.modal.lens) : null,
         assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
         assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
       };
@@ -5849,6 +6518,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         }
         if (scroll != null) $("#feed").scrollTop = scroll;
         if (S.find) applyFind(false);
+      } else if (S.view === "world") {
+        app.classList.remove("messenger");
+        $("#stage").innerHTML = V.worldLibrary(m);
       } else {
         app.classList.remove("messenger");
         $("#stage").innerHTML = V.home(m);
@@ -6267,7 +6939,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const { $, $$ } = ui;
 
     function openCardEditor(cd) {
-      S.modal = { kind: "card", section: "main", draft: svc.cards.draft(cd) };
+      S.modal = { kind: "card", section: "main", draft: svc.cards.draft(cd), lens: cd && cd.id ? svc.world.draftLens(cd.id) : null };
       ui.renderModal();
       setTimeout(() => { const n = $("#cf-name"); if (n && !S.modal.draft.name) n.focus(); }, 30);
     }
@@ -6307,6 +6979,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
         else e[k] = el.checked;
       });
+      PRP.lensForm.collect(S.modal, $$);
       return d;
     }
     const keepScroll = () => { S.modal.keepScroll = true; ui.renderModal(); };
@@ -6333,6 +7006,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       "card-save": async () => {
         const r = await svc.cards.save(collectCard());
         if (r.error) { ui.toast(r.error, true); S.modal.section = "main"; ui.renderModal(); return; }
+        // Линза мира — отдельная запись, привязанная к персонажу; пак при этом не меняется.
+        if (!r.isNew) {
+          const lr = await svc.world.saveLensForCard(r.card.id, S.modal.lens);
+          if (lr.error) { ui.toast("Мир персонажа не сохранён: " + lr.error, true); S.modal.section = "world"; ui.renderModal(); return; }
+        }
         S.modal = null;
         ui.renderAll();
         ui.toast(r.isNew ? `${r.card.name} создан(а). Нажмите на портрет, чтобы начать.` : "Изменения сохранены.");
@@ -6616,6 +7294,153 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/ui/controllers/world.js */
+/* Prism RP — контроллер мира: библиотека паков мира и раздел «Мир» (линза) в редакторе персонажа.
+   Обработчики тонкие: форма → черновик → сервис world → перерисовка. Правила — в world/*. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const split = (v) => String(v || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+
+  /* Поля раздела «Мир» редактора персонажа → черновик линзы (modal.lens). Только перенос значений формы. */
+  function collectLens(modal, $$) {
+    const l = modal && modal.lens;
+    if (!l || !$$("[data-lens],[data-lens-disable],[data-lens-ovr],[data-lens-add]").length) return l;
+    $$("[data-lens]").forEach((el) => {
+      const k = el.dataset.lens;
+      l[k] = k === "timelineVariant" ? el.value.trim() : split(el.value);
+    });
+    const boxes = $$("[data-lens-disable]");
+    if (boxes.length) {
+      const shown = new Set(boxes.map((el) => el.dataset.lensDisable));
+      // Ссылки на факты, которых в паке нет, сохраняются как есть (их показывают отдельно).
+      l.disabledFactIds = (l.disabledFactIds || []).filter((id) => !shown.has(id)).concat(boxes.filter((el) => el.checked).map((el) => el.dataset.lensDisable));
+    }
+    $$("[data-lens-ovr]").forEach((el) => { const o = l.overrides[+el.dataset.lensOvr]; if (o) o.text = el.value; });
+    $$("[data-lens-add]").forEach((el) => {
+      const f = l.additions[+el.dataset.lensAdd];
+      if (!f) return;
+      f[el.dataset.k] = el.dataset.k === "text" ? el.value : split(el.value);
+    });
+    return l;
+  }
+  PRP.lensForm = { collect: collectLens };
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.world = function (ctx) {
+    const { S, ui, svc, nav } = ctx;
+    const { $, $$ } = ui;
+    const W = () => svc.world;
+
+    // Поля библиотеки → черновик пака (S.worldDraft).
+    function collectPack() {
+      const d = S.worldDraft;
+      if (!d) return d;
+      $$("[data-wp]").forEach((el) => { d[el.dataset.wp] = el.value; });
+      $$("[data-wf]").forEach((el) => {
+        const f = d.facts[+el.dataset.wf];
+        if (!f) return;
+        const k = el.dataset.k;
+        if (k === "enabled") f.enabled = el.checked;
+        else if (k === "text" || k === "timeline" || k === "variant") f[k] = el.value;
+        else f[k] = split(el.value);
+      });
+      return d;
+    }
+    const lensModal = () => S.modal && S.modal.kind === "card" ? S.modal : null;
+    const rerenderModal = () => { S.modal.keepScroll = true; ui.renderModal(); };
+
+    const actions = {
+      world: () => nav.openWorld(),
+      "world-new": () => { S.worldDraft = W().newPack(); ui.renderStage(); setTimeout(() => { const n = $("#wp-name"); if (n) n.select(); }, 30); },
+      "world-open": (t) => { const p = W().packById(t.dataset.id); S.worldDraft = p ? clone(p) : null; ui.renderStage(); },
+      "world-fact-add": () => { const d = collectPack(); d.facts.push(W().newFact()); ui.renderStage(); },
+      "world-fact-del": (t) => { const d = collectPack(); d.facts.splice(+t.dataset.i, 1); ui.renderStage(); },
+      "world-save": async () => {
+        const r = await W().savePack(collectPack());
+        if (r.error) return ui.toast(r.error, true);
+        S.worldDraft = clone(r.pack);
+        ui.renderStage();
+        ui.toast("Мир сохранён.");
+      },
+      "world-export": () => {
+        const d = S.worldDraft;
+        const e = d && W().exportPack(d.id);
+        if (!e) return ui.toast("Сначала сохраните мир.", true);
+        ctx.files.download(e.name, e.text, "application/json");
+      },
+      "world-delete": async () => {
+        const d = S.worldDraft;
+        if (!d) return;
+        if (!W().packById(d.id)) { S.worldDraft = null; return ui.renderStage(); }
+        if (!confirm(`Удалить мир «${d.name}»? Это нельзя отменить.`)) return;
+        const r = await W().deletePack(d.id);
+        if (r.blocked) {
+          const names = r.blocked.map((ref) => (S.cards.find((c) => c.id === ref.cardId) || { name: "персонаж " + ref.cardId }).name);
+          return ui.toast(`Мир используют персонажи: ${names.join(", ")}. Сначала снимите связь с миром в их карточках (раздел «Мир»).`, true);
+        }
+        S.worldDraft = null;
+        ui.renderStage();
+        ui.toast("Мир удалён.");
+      },
+      "world-import": () => $("#file-world").click(),
+
+      // Линза в редакторе персонажа.
+      "lens-override-add": (t) => {
+        const m = lensModal(); if (!m) return;
+        collectLens(m, $$);
+        const f = (W().packById(m.lens.packId) || { facts: [] }).facts.find((x) => x.id === t.dataset.fid);
+        m.lens.overrides.push(W().newOverride(t.dataset.fid, f ? f.text : ""));
+        rerenderModal();
+      },
+      "lens-override-del": (t) => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.overrides.splice(+t.dataset.i, 1); rerenderModal(); },
+      "lens-disabled-del": (t) => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.disabledFactIds = m.lens.disabledFactIds.filter((id) => id !== t.dataset.fid); rerenderModal(); },
+      "lens-add": () => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.additions.push(W().newFact("wa")); rerenderModal(); },
+      "lens-add-del": (t) => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.additions.splice(+t.dataset.i, 1); rerenderModal(); },
+      "lens-clear": () => {
+        const m = lensModal(); if (!m) return;
+        if (m.lens && (m.lens.overrides.length || m.lens.additions.length || m.lens.disabledFactIds.length) && !confirm("Снять связь с миром? Замены, выключения и факты этого персонажа будут удалены при сохранении карточки.")) return;
+        m.lens = null;
+        rerenderModal();
+      },
+    };
+
+    async function change(t) {
+      if (t.id === "file-world" && t.files[0]) {
+        const file = t.files[0];
+        t.value = "";
+        const r = await W().importPack(await ctx.files.readFile(file, "text"));
+        if (r.error) { ui.toast(`${file.name}: ${r.error}`, true); return true; }
+        S.worldDraft = clone(r.pack);
+        nav.openWorld(true);
+        ui.toast(`Мир «${r.pack.name}» импортирован.`);
+        return true;
+      }
+      const m = lensModal();
+      if (m && t.matches && t.matches("[data-lens-pack]")) {
+        collectLens(m, $$);
+        const packId = t.value;
+        if (!packId) m.lens = null;
+        else if (!m.lens) m.lens = W().newLens(m.draft.id, packId);
+        else if (m.lens.packId !== packId) {
+          const tied = m.lens.overrides.length || m.lens.disabledFactIds.length;
+          if (tied && !confirm("Замены и выключения относятся к фактам прежнего мира и будут сброшены. Факты самого персонажа останутся. Продолжить?")) { t.value = m.lens.packId; return true; }
+          m.lens = Object.assign(W().newLens(m.draft.id, packId), { id: m.lens.id, additions: m.lens.additions, focusEntities: m.lens.focusEntities, focusTopics: m.lens.focusTopics, relevanceHints: m.lens.relevanceHints, timelineVariant: m.lens.timelineVariant, createdAt: m.lens.createdAt });
+        }
+        rerenderModal();
+        return true;
+      }
+      if (m && t.matches && t.matches("[data-lens-disable]")) { collectLens(m, $$); rerenderModal(); return true; }
+      return false;
+    }
+
+    return { actions, change };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/ui/app.js */
 /* Prism RP — корень приложения (composition root).
    Здесь: состояние сессии, сборка контекста зависимостей, навигация, загрузка,
@@ -6646,6 +7471,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
     assist: null, assistList: [],
+    worldPacks: [], worldLenses: [], worldDraft: null,
   };
 
   /* ── Контекст зависимостей ───────────────────────────────────────────
@@ -6673,6 +7499,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   ctx.svc.gen = PRP.generationService.create(ctx);
   ctx.svc.cards = PRP.cardService.create(ctx);
   ctx.svc.assist = PRP.assistService.create(ctx);
+  ctx.svc.world = PRP.worldService.create(ctx);
   const { ui, svc } = ctx;
   const { $ } = ui;
 
@@ -6685,6 +7512,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     S.cards = (await DB.all("cards")).map(PRP.cardModel.upgradeStored).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
+    await svc.world.loadAll();
     await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
@@ -6735,11 +7563,20 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     $("#rail").classList.remove("open");
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !ui.narrow()) i.focus(); }, 30); }
   }
-  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist });
+  // Библиотека миров. keepDraft — оставить открытым текущий черновик пака (например, после импорта).
+  function openWorld(keepDraft) {
+    if (!keepDraft) S.worldDraft = null;
+    S.view = "world";
+    S.find = null;
+    ui.rememberUi();
+    $("#rail").classList.remove("open");
+    ui.renderAll();
+  }
+  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist, openWorld });
 
   /* ── Контроллеры и разбор событий ─────────────────────────────────── */
   const C = PRP.controllers;
-  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist].map((make) => make(ctx));
+  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world].map((make) => make(ctx));
   const ACTS = Object.assign({
     home: goHome,
     "open-chat": (t) => openChat(t.dataset.id),

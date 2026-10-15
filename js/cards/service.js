@@ -87,6 +87,8 @@
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);
       await DB.delMany("experience", xs.map((x) => x.id));
+      // Линза мира принадлежит персонажу и удаляется с ним; общий пак остаётся (world/service).
+      if (ctx.svc && ctx.svc.world) await ctx.svc.world.removeForCard(cd.id);
       await DB.del("cards", cd.id);
       S.cards = S.cards.filter((c) => c.id !== cd.id);
       S.chats = S.chats.filter((c) => c.cardId !== cd.id);

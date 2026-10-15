@@ -9,7 +9,7 @@
     const { $, $$ } = ui;
 
     function openCardEditor(cd) {
-      S.modal = { kind: "card", section: "main", draft: svc.cards.draft(cd) };
+      S.modal = { kind: "card", section: "main", draft: svc.cards.draft(cd), lens: cd && cd.id ? svc.world.draftLens(cd.id) : null };
       ui.renderModal();
       setTimeout(() => { const n = $("#cf-name"); if (n && !S.modal.draft.name) n.focus(); }, 30);
     }
@@ -49,6 +49,7 @@
         else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
         else e[k] = el.checked;
       });
+      PRP.lensForm.collect(S.modal, $$);
       return d;
     }
     const keepScroll = () => { S.modal.keepScroll = true; ui.renderModal(); };
@@ -75,6 +76,11 @@
       "card-save": async () => {
         const r = await svc.cards.save(collectCard());
         if (r.error) { ui.toast(r.error, true); S.modal.section = "main"; ui.renderModal(); return; }
+        // Линза мира — отдельная запись, привязанная к персонажу; пак при этом не меняется.
+        if (!r.isNew) {
+          const lr = await svc.world.saveLensForCard(r.card.id, S.modal.lens);
+          if (lr.error) { ui.toast("Мир персонажа не сохранён: " + lr.error, true); S.modal.section = "world"; ui.renderModal(); return; }
+        }
         S.modal = null;
         ui.renderAll();
         ui.toast(r.isNew ? `${r.card.name} создан(а). Нажмите на портрет, чтобы начать.` : "Изменения сохранены.");

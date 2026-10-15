@@ -577,3 +577,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .opening-start { max-width: 520px; margin: 48px auto 0; text-align: center; padding: 0 16px; }
 .opening-start .lead { color: var(--text-2); font-size: 15px; margin: 0 0 10px; }
 .opening-start .btn { margin: 8px 0 14px; }
+
+/* ── Миры: библиотека и линза персонажа ──────────────────────────────── */
+.world-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 22px; align-items: start; }
+.world-list { display: flex; flex-direction: column; gap: 6px; }
+.world-item { text-align: left; border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; color: var(--text); }
+.world-item.on { border-color: var(--accent); background: var(--accent-wash); }
+.world-item b { display: block; font-size: 14px; }
+.world-item small { color: var(--muted); font-size: 12.5px; }
+.world-editor { min-width: 0; }
+.row.wrap { flex-wrap: wrap; }
+.row.wrap > .field { flex: 1 1 180px; min-width: 0; }
+.world-fact.off, .lens-fact.off { opacity: .6; }
+.lens-fact .lf-text { margin-bottom: 6px; }
+.eff-world { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.eff-world li { border-left: 3px solid var(--line); padding: 4px 10px; }
+.eff-world li.ovr { border-left-color: var(--warn); }
+.eff-world li.own { border-left-color: var(--accent); }
+.eff-world li.off { color: var(--muted); }
+.eff-world s { color: var(--muted); margin-left: 6px; }
+@media (max-width: 760px) { .world-layout { grid-template-columns: minmax(0, 1fr); } }
