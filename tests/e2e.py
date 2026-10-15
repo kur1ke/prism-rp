@@ -763,6 +763,42 @@ try:
         check("W1-36: мир не подаётся в модель", json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"] == n0 + 1 and "Где сейчас Тацуки?" in body and "WF-" not in body)
         shot(page, "14-foundation-w1.png")
 
+        # Узкий экран: все разделы редактора персонажа нажимаются (лента разделов не перекрыта телом окна)
+        page.set_viewport_size({"width": 390, "height": 820})
+        page.wait_for_timeout(300)
+        page.evaluate("PRP.app.ctx.nav.goHome()")
+        page.wait_for_selector(".home")
+        hime = page.evaluate("PRP.app.S.cards.find((c) => c.name === 'Химэ').id")
+        page.click(f".tile[data-id='{hime}'] .tile-edit")
+        page.wait_for_selector(".modal")
+        marks = {"greet": "#cf-first", "prompts": "#cf-ex", "lore": "[data-act=lore-add]", "images": "[data-ci=trigger]", "world": "[data-lens-pack]", "meta": "#cf-creator", "main": "#cf-name"}
+        nav = page.evaluate("(() => { const n = document.querySelector('.modal-nav'); return [n.scrollWidth, n.clientWidth]; })()")
+        tab_ok, world_ok = [], False
+        for sec, sel in marks.items():
+            try:
+                page.click(f"[data-act=card-section][data-section={sec}]", timeout=3000)
+                active = page.locator(f".modal-nav .rail-item.active[data-section={sec}]").count() == 1 and page.locator(sel).count() > 0
+                visible = page.evaluate("(() => { const a = document.querySelector('.modal-nav .rail-item.active').getBoundingClientRect(); return a.left >= 0 && a.right <= innerWidth; })()")
+                tab_ok.append(active and visible)
+                if sec == "world":
+                    world_ok = page.locator("[data-lens-pack]").count() == 1 and page.locator(".eff-world").count() == 1 and page.locator("[data-lens-disable]").count() >= 1
+            except Exception:
+                tab_ok.append(False)
+        check("узкий экран: все 7 разделов редактора нажимаются, активный раздел виден", all(tab_ok) and len(tab_ok) == 7)
+        check("узкий экран: лента разделов прокручивается, страница без горизонтальной прокрутки", nav[0] > nav[1] and page.evaluate("document.documentElement.scrollWidth") <= 390)
+        check("узкий экран: раздел «Мир» — выбор пака, линза и превью", world_ok)
+        page.click("[data-act=card-section][data-section=meta]")
+        page.fill("#cf-creator", "mobile-tester")
+        page.click("[data-act=card-save]")
+        page.wait_for_selector(".modal", state="detached")
+        page.click(f".tile[data-id='{hime}'] .tile-edit")
+        page.wait_for_selector(".modal")
+        page.click("[data-act=card-section][data-section=meta]")
+        check("узкий экран: сохранение из дальнего раздела работает", page.input_value("#cf-creator") == "mobile-tester" and page.evaluate("PRP.app.S.worldLenses.some((l) => l.cardId === '" + hime + "')"))
+        page.click("[data-act=modal-close]")
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.wait_for_timeout(300)
+
         check("нет ошибок JS (standalone)", not errors)
         if errors: print("   ", errors[:5])
 
