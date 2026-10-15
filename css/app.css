@@ -600,3 +600,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .eff-world li.off { color: var(--muted); }
 .eff-world s { color: var(--muted); margin-left: 6px; }
 @media (max-width: 760px) { .world-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── База не открылась ───────────────────────────────────────────────── */
+.storage-error { max-width: 620px; margin: 40px auto 0; padding: 24px; border: 1px solid var(--warn); border-radius: var(--r-l); background: var(--raised); }
+.storage-error h1 { display: flex; align-items: center; gap: 10px; font-size: 22px; margin: 0 0 12px; }
+.storage-error h1 svg { width: 24px; height: 24px; color: var(--warn); flex: none; }
+.storage-error p { margin: 0 0 10px; line-height: 1.5; }

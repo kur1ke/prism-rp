@@ -86,5 +86,16 @@
     </div></div>`;
   }
 
-  Object.assign((PRP.views = PRP.views || {}), { rail, home });
+  // База браузера не открылась. Ничего не удалено: сообщение только объясняет, что сделать.
+  function storageError(e) {
+    const busy = e.code === "DB_BLOCKED" || e.code === "DB_OPEN_TIMEOUT";
+    return `<div class="home"><div class="home-inner"><div class="storage-error" data-code="${esc(e.code || "")}" role="alert">
+      <h1>${icon("alert")} Не удалось открыть базу Prism RP</h1>
+      ${busy ? `<p>Возможно, её держит другая вкладка Prism RP — например, редактор генератора или старая вкладка, открытая до обновления.</p>
+        <p><b>Закройте другие вкладки Prism RP и обновите эту страницу.</b> Если не поможет — перезапустите браузер.</p>`
+        : `<p>${esc(e.message || String(e))}</p><p>Обновите страницу. Если ошибка повторяется, перезапустите браузер.</p>`}
+      <p class="hint">Ваши персонажи и чаты не удалены: они остаются в браузере и откроются, когда база станет доступна.</p>
+      <button class="btn btn-primary" data-act="reload-page">Обновить страницу</button></div></div></div>`;
+  }
+  Object.assign((PRP.views = PRP.views || {}), { rail, home, storageError });
 })(typeof window !== "undefined" ? window : globalThis);

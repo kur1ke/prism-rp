@@ -846,6 +846,69 @@ try:
         check("W1-19: бэкап включает мир, восстановление его возвращает", bk["has"] and bk["packs"] == ["BK-FACT"] and bk["lenses"] == ["l-a"] and bk["cards"] == 1)
         p3.context.close()
 
+        # IndexedDB: старое соединение уступает обновлению; занятая база и зависшее открытие — видимая ошибка, данные целы
+        SEED_V3 = """() => new Promise((ok, fail) => {
+          const r = indexedDB.open('prism-rp', 3);
+          r.onupgradeneeded = () => { const db = r.result;
+            db.createObjectStore('cards', { keyPath: 'id' });
+            db.createObjectStore('chats', { keyPath: 'id' }).createIndex('cardId', 'cardId');
+            db.createObjectStore('messages', { keyPath: 'id' }).createIndex('chatId', 'chatId');
+            db.createObjectStore('experience', { keyPath: 'id' }).createIndex('owner', 'owner');
+            db.createObjectStore('settings', { keyPath: 'key' });
+            db.createObjectStore('images', { keyPath: 'id' }).createIndex('chatId', 'chatId');
+            db.createObjectStore('assist', { keyPath: 'id' }); };
+          r.onsuccess = () => { const db = r.result; const t = db.transaction(['cards'], 'readwrite');
+            t.objectStore('cards').put({ id: 'keep-card', name: 'Сохранная', description: 'должна пережить', lore: [], updatedAt: 1 });
+            t.oncomplete = () => { window.__db = db; ok(); }; t.onerror = () => fail(t.error); };
+          r.onerror = () => fail(r.error); })"""
+        COUNT = """() => new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result;
+          const names = [...db.objectStoreNames]; if (!names.includes('cards')) { ok({ v: db.version, cards: -1, names }); db.close(); return; }
+          const q = db.transaction('cards').objectStore('cards').getAll(); q.onsuccess = () => { ok({ v: db.version, cards: q.result.map((c) => c.id), names }); db.close(); }; }; })"""
+        # A. versionchange: открытое приложение (v4) уступает более новой версии из другой вкладки
+        cA = b.new_context(); a1 = cA.new_page()
+        a1.goto("http://127.0.0.1:8765/standalone/index.html"); a1.wait_for_selector(".home")
+        a1.evaluate("PRP.app.ctx.DB.put('cards', { id: 'vc-card', name: 'ВерсияТест', description: 'd', lore: [] })")
+        a2 = cA.new_page(); a2.goto("http://127.0.0.1:8765/web/version.json")
+        up = a2.evaluate("""() => new Promise((ok) => { let blocked = false; const r = indexedDB.open('prism-rp', 5);
+          r.onblocked = () => { blocked = true; }; r.onsuccess = () => { const db = r.result; const v = db.version, names = [...db.objectStoreNames]; db.close(); ok({ ok: true, blocked, v, names }); };
+          r.onerror = () => ok({ ok: false, blocked, err: String(r.error) }); setTimeout(() => ok({ ok: false, blocked, err: 'hang' }), 5000); })""")
+        after = a2.evaluate(COUNT)
+        a1.wait_for_timeout(200)
+        check("IndexedDB: открытое соединение уступает обновлению (versionchange) — без зависания и «занято»",
+              up.get("ok") and not up.get("blocked") and up.get("v") == 5 and "vc-card" in after["cards"] and "worldLenses" in after["names"])
+        check("IndexedDB: вкладка, уступившая базу, предупреждает обновить страницу", "Обновите эту страницу" in a1.inner_text("#toast"))
+        cA.close()
+        # B. база занята соединением, которое не закрывается (старая вкладка без versionchange) → DB_BLOCKED, данные целы
+        cB = b.new_context(); h = cB.new_page(); h.goto("http://127.0.0.1:8765/web/version.json"); h.evaluate(SEED_V3)
+        ap = cB.new_page(); ap.goto("http://127.0.0.1:8765/standalone/index.html")
+        try:
+            ap.wait_for_selector(".storage-error", timeout=10000)
+            code = ap.get_attribute(".storage-error", "data-code")
+        except Exception:
+            code = None
+        check("IndexedDB: занятая база — видимое сообщение (DB_BLOCKED), не пустой экран",
+              code == "DB_BLOCKED" and "Закройте другие вкладки Prism RP" in ap.inner_text(".storage-error") and ap.locator(".rail .brand").count() == 1)
+        h.evaluate("window.__db.close()")
+        ap.click("[data-act=reload-page]")
+        ap.wait_for_selector(".tile")
+        st = ap.evaluate(COUNT)
+        check("IndexedDB: после закрытия другой вкладки — обычный запуск, данные на месте, база v4",
+              st["v"] == 4 and st["cards"] == ["keep-card"] and "worldPacks" in st["names"] and "Сохранная" in ap.inner_text(".gallery"))
+        cB.close()
+        # C. открытие не отвечает вовсе → DB_OPEN_TIMEOUT; база не изменена
+        cC = b.new_context(); s0 = cC.new_page(); s0.goto("http://127.0.0.1:8765/web/version.json"); s0.evaluate(SEED_V3); s0.evaluate("window.__db.close()")
+        tp = cC.new_page()
+        tp.add_init_script("window.__PRP_DB_OPEN_TIMEOUT_MS = 400; const realOpen = indexedDB.open.bind(indexedDB); indexedDB.open = function (name, v) { if (name === 'prism-rp' && v) return {}; return realOpen(name, v); };")
+        tp.goto("http://127.0.0.1:8765/standalone/index.html")
+        try:
+            tp.wait_for_selector(".storage-error", timeout=5000)
+            tcode = tp.get_attribute(".storage-error", "data-code")
+        except Exception:
+            tcode = None
+        st2 = s0.evaluate(COUNT)
+        check("IndexedDB: зависшее открытие — DB_OPEN_TIMEOUT и сообщение, база не изменена", tcode == "DB_OPEN_TIMEOUT" and st2["v"] == 3 and st2["cards"] == ["keep-card"])
+        cC.close()
+
         # Сборка для Perchance с заглушкой плагина
         p2 = b.new_context(viewport={"width": 1440, "height": 900}).new_page()
         errors2 = []

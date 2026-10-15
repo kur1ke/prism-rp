@@ -137,6 +137,7 @@
     home: goHome,
     "open-chat": (t) => openChat(t.dataset.id),
     rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
+    "reload-page": () => location.reload(),
     "modal-bg": (t, e) => { if (e.target === t) { S.modal = null; ui.renderModal(); } },
     "modal-close": () => { S.modal = null; ui.renderModal(); },
   }, ...controllers.map((c) => c.actions));
@@ -206,9 +207,14 @@
       console.error(e);
       S.settings = S.settings || U.clone(ST.DEFAULTS);
       ui.renderAll();
-      ui.toast("Не удалось открыть хранилище браузера: " + e.message, true);
+      // База не открылась (занята другой вкладкой, не ответила или ошибка браузера): постоянное сообщение
+      // вместо пустого экрана. Данные не трогаются; помогает закрыть другие вкладки и обновить страницу.
+      if (e && /^DB_/.test(e.code || "")) $("#stage").innerHTML = PRP.views.storageError(e);
+      else ui.toast("Не удалось открыть хранилище браузера: " + e.message, true);
     }
   }
+  // Другая вкладка обновляет базу — это соединение уже закрыто; работать дальше можно только после обновления страницы.
+  DB.onVersionChange = () => ui.toast("Prism RP открыт в другой вкладке с более новой версией. Обновите эту страницу, чтобы продолжить.", true);
 
   PRP.app = { S, ctx, generate: (...a) => svc.gen.generate(...a), refreshPrism: () => svc.prism.refresh() };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
