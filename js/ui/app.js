@@ -27,6 +27,7 @@
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
     assist: null, assistList: [],
+    worldPacks: [], worldLenses: [], worldDraft: null,
   };
 
   /* ── Контекст зависимостей ───────────────────────────────────────────
@@ -54,6 +55,7 @@
   ctx.svc.gen = PRP.generationService.create(ctx);
   ctx.svc.cards = PRP.cardService.create(ctx);
   ctx.svc.assist = PRP.assistService.create(ctx);
+  ctx.svc.world = PRP.worldService.create(ctx);
   const { ui, svc } = ctx;
   const { $ } = ui;
 
@@ -66,6 +68,7 @@
     S.cards = (await DB.all("cards")).map(PRP.cardModel.upgradeStored).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
+    await svc.world.loadAll();
     await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
@@ -116,11 +119,20 @@
     $("#rail").classList.remove("open");
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !ui.narrow()) i.focus(); }, 30); }
   }
-  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist });
+  // Библиотека миров. keepDraft — оставить открытым текущий черновик пака (например, после импорта).
+  function openWorld(keepDraft) {
+    if (!keepDraft) S.worldDraft = null;
+    S.view = "world";
+    S.find = null;
+    ui.rememberUi();
+    $("#rail").classList.remove("open");
+    ui.renderAll();
+  }
+  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist, openWorld });
 
   /* ── Контроллеры и разбор событий ─────────────────────────────────── */
   const C = PRP.controllers;
-  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist].map((make) => make(ctx));
+  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world].map((make) => make(ctx));
   const ACTS = Object.assign({
     home: goHome,
     "open-chat": (t) => openChat(t.dataset.id),

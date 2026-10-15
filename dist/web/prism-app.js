@@ -2,9 +2,9 @@
 (function () {
   var d = document;
   ["https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap"].forEach(function (h) { var l = d.createElement("link"); l.rel = "stylesheet"; l.href = h; d.head.appendChild(l); });
-  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* Prism: переполнение, отбор опыта, непривязанные записи */\n.err-block { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--danger); border-radius: var(--r-m); padding: 10px 12px; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: 14px; }\n.err-block svg { width: 18px; height: 18px; color: var(--danger); flex: none; margin-top: 2px; }\n.exp-debug summary { cursor: pointer; font-weight: 600; font-size: 14px; }\n.exp-debug table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }\n.exp-debug th, .exp-debug td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }\n.exp-debug th { color: var(--muted); font-weight: 500; }\n.exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }\n.exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }\n.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }\n.legacy-block .memo { cursor: default; }\n\n/* ── Проверка импорта карточек ───────────────────────────────────────── */\n.imp-modal { width: min(720px, 100%); }\n.imp-item { border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); padding: 14px 16px; margin-bottom: 12px; }\n.imp-item.bad { border-color: var(--danger); }\n.imp-item h3 { display: flex; align-items: center; gap: 6px; }\n.imp-item h3 svg { width: 16px; height: 16px; flex: none; color: var(--danger); }\n.imp-fields { list-style: none; padding: 0; margin: 4px 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; font-size: 13.5px; color: var(--muted); }\n.imp-fields li.on { color: var(--text); }\n.imp-dir, .imp-note { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; font-size: 13.5px; }\n.imp-dir { border-left-color: var(--warn); }\n.imp-note.warn { border-left-color: var(--warn); }\n.imp-item details summary { cursor: pointer; color: var(--text-2); font-size: 13px; margin-top: 4px; }\n.imp-item .code { max-height: 220px; margin: 6px 0 0; }\n.imp-issues { padding-left: 18px; margin: 10px 0 0; font-size: 13.5px; }\n.imp-issues li { margin: 3px 0; }\n.imp-issues li.error b { color: var(--danger); }\n.imp-issues li.warning b { color: var(--warn); }\n.imp-issues li.info { color: var(--muted); }\n.dir-badge { font-size: 11.5px; border-radius: 5px; padding: 0 6px; border: 1px solid var(--line-soft); color: var(--muted); font-weight: 500; }\n.dir-badge.imported { color: var(--warn); border-color: var(--warn); }\n\n/* ── Пустая сцена: начало ────────────────────────────────────────────── */\n.opening-start { max-width: 520px; margin: 48px auto 0; text-align: center; padding: 0 16px; }\n.opening-start .lead { color: var(--text-2); font-size: 15px; margin: 0 0 10px; }\n.opening-start .btn { margin: 8px 0 14px; }\n"; d.head.appendChild(st);
+  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* Prism: переполнение, отбор опыта, непривязанные записи */\n.err-block { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--danger); border-radius: var(--r-m); padding: 10px 12px; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: 14px; }\n.err-block svg { width: 18px; height: 18px; color: var(--danger); flex: none; margin-top: 2px; }\n.exp-debug summary { cursor: pointer; font-weight: 600; font-size: 14px; }\n.exp-debug table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }\n.exp-debug th, .exp-debug td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }\n.exp-debug th { color: var(--muted); font-weight: 500; }\n.exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }\n.exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }\n.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }\n.legacy-block .memo { cursor: default; }\n\n/* ── Проверка импорта карточек ───────────────────────────────────────── */\n.imp-modal { width: min(720px, 100%); }\n.imp-item { border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); padding: 14px 16px; margin-bottom: 12px; }\n.imp-item.bad { border-color: var(--danger); }\n.imp-item h3 { display: flex; align-items: center; gap: 6px; }\n.imp-item h3 svg { width: 16px; height: 16px; flex: none; color: var(--danger); }\n.imp-fields { list-style: none; padding: 0; margin: 4px 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; font-size: 13.5px; color: var(--muted); }\n.imp-fields li.on { color: var(--text); }\n.imp-dir, .imp-note { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; font-size: 13.5px; }\n.imp-dir { border-left-color: var(--warn); }\n.imp-note.warn { border-left-color: var(--warn); }\n.imp-item details summary { cursor: pointer; color: var(--text-2); font-size: 13px; margin-top: 4px; }\n.imp-item .code { max-height: 220px; margin: 6px 0 0; }\n.imp-issues { padding-left: 18px; margin: 10px 0 0; font-size: 13.5px; }\n.imp-issues li { margin: 3px 0; }\n.imp-issues li.error b { color: var(--danger); }\n.imp-issues li.warning b { color: var(--warn); }\n.imp-issues li.info { color: var(--muted); }\n.dir-badge { font-size: 11.5px; border-radius: 5px; padding: 0 6px; border: 1px solid var(--line-soft); color: var(--muted); font-weight: 500; }\n.dir-badge.imported { color: var(--warn); border-color: var(--warn); }\n\n/* ── Пустая сцена: начало ────────────────────────────────────────────── */\n.opening-start { max-width: 520px; margin: 48px auto 0; text-align: center; padding: 0 16px; }\n.opening-start .lead { color: var(--text-2); font-size: 15px; margin: 0 0 10px; }\n.opening-start .btn { margin: 8px 0 14px; }\n\n/* ── Миры: библиотека и линза персонажа ──────────────────────────────── */\n.world-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 22px; align-items: start; }\n.world-list { display: flex; flex-direction: column; gap: 6px; }\n.world-item { text-align: left; border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; color: var(--text); }\n.world-item.on { border-color: var(--accent); background: var(--accent-wash); }\n.world-item b { display: block; font-size: 14px; }\n.world-item small { color: var(--muted); font-size: 12.5px; }\n.world-editor { min-width: 0; }\n.row.wrap { flex-wrap: wrap; }\n.row.wrap > .field { flex: 1 1 180px; min-width: 0; }\n.world-fact.off, .lens-fact.off { opacity: .6; }\n.lens-fact .lf-text { margin-bottom: 6px; }\n.eff-world { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }\n.eff-world li { border-left: 3px solid var(--line); padding: 4px 10px; }\n.eff-world li.ovr { border-left-color: var(--warn); }\n.eff-world li.own { border-left-color: var(--accent); }\n.eff-world li.off { color: var(--muted); }\n.eff-world s { color: var(--muted); margin-left: 6px; }\n@media (max-width: 760px) { .world-layout { grid-template-columns: minmax(0, 1fr); } }\n"; d.head.appendChild(st);
   var boot = d.getElementById("prism-boot"); if (boot) boot.remove();
-  var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
+  var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
 })();
@@ -77,8 +77,8 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
-  const DB_VERSION = 3;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist"];
+  const DB_VERSION = 4;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses"];
   let dbPromise = null;
 
   function open() {
@@ -96,6 +96,14 @@
         if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "id" }).createIndex("chatId", "chatId");
         // v3: разговоры с ассистентом (вне ролевой игры), сообщения хранятся внутри разговора.
         if (!db.objectStoreNames.contains("assist")) db.createObjectStore("assist", { keyPath: "id" });
+        // v4: общие паки мира и линзы персонажей (FOUNDATION-W1). Только добавление коллекций — старые данные не трогаются.
+        if (!db.objectStoreNames.contains("worldPacks")) db.createObjectStore("worldPacks", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("worldLenses")) {
+          const l = db.createObjectStore("worldLenses", { keyPath: "id" });
+          // Одна линза на персонажа — ограничение схемы, а не договорённость: вторую запись с тем же cardId база отклонит.
+          l.createIndex("cardId", "cardId", { unique: true });
+          l.createIndex("packId", "packId");
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -139,7 +147,7 @@
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 3, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 4, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
@@ -1023,6 +1031,322 @@
 
   PRP.cardImport = { fromObject, fromJsonText, fromPngBytes };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardImport;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/world/model.js */
+/* Prism RP — общий пак мира (Shared World Pack) и факт мира (World Fact). Чистый модуль.
+
+   Пак — переиспользуемое знание о мире или фандоме, общее для многих карточек.
+   Факт мира — декларативное утверждение о мире («Тацуки живёт в Каракуре»). Это НЕ указание модели,
+   НЕ черта характера, НЕ опыт, НЕ сценарий и НЕ состояние сцены.
+   Метаданные (entities, topics, locations, timeline, variant) — для будущего отбора (FOUNDATION-W2).
+   provenance — откуда факт; только сведения для человека, во время работы не исполняется.
+   Режим (сцена / переписка) миру не принадлежит: полей, зависящих от режима, здесь нет.
+   Без DOM, хранилища, сети и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const SCHEMA = 1;
+  const FORMAT = "prismrp-world-pack"; // собственный формат экспорта паков PrismRP
+
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+  const strList = (v) => (Array.isArray(v) ? v.map((x) => str(x).trim()).filter(Boolean) : []);
+  const uid = (p) => p + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+  function provenance(p) {
+    const o = isObj(p) ? p : {};
+    const out = { kind: o.kind === "imported" ? "imported" : "manual" };
+    if (o.sourceFormat) out.sourceFormat = str(o.sourceFormat);
+    if (o.sourceId) out.sourceId = str(o.sourceId);
+    if (o.note) out.note = str(o.note);
+    return out;
+  }
+
+  // Факт мира в каноническом виде. Пустой id получает новый; существующий не меняется никогда.
+  function fact(f, idPrefix) {
+    const o = isObj(f) ? f : {};
+    return {
+      id: str(o.id).trim() || uid(idPrefix || "wf"),
+      text: str(o.text),
+      entities: strList(o.entities),
+      topics: strList(o.topics),
+      locations: strList(o.locations),
+      timeline: str(o.timeline).trim(),
+      variant: str(o.variant).trim(),
+      enabled: o.enabled !== false,
+      provenance: provenance(o.provenance),
+    };
+  }
+
+  function blank(name) {
+    const now = Date.now();
+    return { id: uid("wp"), schema: SCHEMA, name: str(name), description: "", facts: [], source: { kind: "manual" }, createdAt: now, updatedAt: now };
+  }
+
+  // Приведение пака к каноническому виду (без исправления смысловых ошибок: повторы id остаются и видны в проверке).
+  function normalize(p) {
+    const o = isObj(p) ? p : {};
+    return {
+      id: str(o.id).trim(),
+      schema: SCHEMA,
+      name: str(o.name),
+      description: str(o.description),
+      facts: Array.isArray(o.facts) ? o.facts.map((f) => fact(f)) : [],
+      source: isObj(o.source) ? Object.assign({ kind: o.source.kind === "imported" ? "imported" : "manual" },
+        o.source.format ? { format: str(o.source.format) } : {}, o.source.importedAt ? { importedAt: o.source.importedAt } : {}) : { kind: "manual" },
+      createdAt: o.createdAt || Date.now(),
+      updatedAt: o.updatedAt || Date.now(),
+    };
+  }
+
+  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref ? { ref } : {});
+
+  /* Проверка пака. error — сохранить нельзя; warning — можно. На входе — сырые данные (до normalize),
+     чтобы ловить битые факты, а не молча их чинить. */
+  function validatePack(p) {
+    const out = [];
+    if (!isObj(p)) return [issue("error", "not-object", "Пак мира должен быть объектом.")];
+    if (!str(p.id).trim()) out.push(issue("error", "no-id", "У пака нет id."));
+    if (!str(p.name).trim()) out.push(issue("error", "no-name", "У пака нет названия."));
+    if (p.facts != null && !Array.isArray(p.facts)) out.push(issue("error", "facts-not-array", "Поле facts должно быть списком."));
+    const seen = new Set();
+    (Array.isArray(p.facts) ? p.facts : []).forEach((f, i) => {
+      if (!isObj(f)) { out.push(issue("error", "fact-malformed", `Факт №${i + 1} не является объектом.`, String(i))); return; }
+      const id = str(f.id).trim();
+      if (!id) out.push(issue("error", "fact-no-id", `У факта №${i + 1} нет id.`, String(i)));
+      else if (seen.has(id)) out.push(issue("error", "fact-duplicate-id", `Повторяется id факта: ${id}.`, id));
+      else seen.add(id);
+      if (f.text != null && typeof f.text !== "string") out.push(issue("error", "fact-text", `Текст факта ${id || "№" + (i + 1)} не строка.`, id));
+      else if (!str(f.text).trim()) out.push(issue("warning", "fact-empty", `Факт ${id || "№" + (i + 1)} без текста.`, id));
+      for (const k of ["entities", "topics", "locations"]) if (f[k] != null && !Array.isArray(f[k])) out.push(issue("error", "fact-meta", `Поле ${k} факта ${id || "№" + (i + 1)} должно быть списком.`, id));
+    });
+    return out;
+  }
+  const hasErrors = (issues) => issues.some((x) => x.level === "error");
+
+  /* Экспорт: канонический JSON пака. Линзы персонажей в экспорт пака не входят. */
+  function exportPack(p) {
+    return { app: "prism-rp", format: FORMAT, schema: SCHEMA, exportedAt: new Date().toISOString(), pack: normalize(p) };
+  }
+
+  /* Импорт: текст → проверенный пак или ошибки. Ничего не сохраняет и ничего не исполняет.
+     Принимается только собственный формат PrismRP; чужие форматы лорбуков не поддерживаются.
+     Новый id пака выдаётся всегда (чтобы не затереть существующий); id фактов сохраняются —
+     на них ссылаются переопределения. → { ok, pack | null, issues } */
+  function importPackText(text) {
+    let json;
+    try { json = JSON.parse(text); }
+    catch (e) { return { ok: false, pack: null, issues: [issue("error", "invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
+    if (!isObj(json) || json.app !== "prism-rp" || json.format !== FORMAT) {
+      return { ok: false, pack: null, issues: [issue("error", "unknown-format", "Это не пак мира PrismRP (нужны app: \"prism-rp\" и format: \"" + FORMAT + "\").")] };
+    }
+    if (json.schema !== SCHEMA) return { ok: false, pack: null, issues: [issue("error", "schema", `Версия пака ${json.schema} не поддерживается.`)] };
+    const raw = json.pack;
+    const issues = validatePack(raw);
+    if (hasErrors(issues)) return { ok: false, pack: null, issues };
+    const pack = normalize(raw);
+    const now = Date.now();
+    pack.id = uid("wp");
+    pack.source = { kind: "imported", format: FORMAT, importedAt: now };
+    pack.createdAt = now; pack.updatedAt = now;
+    return { ok: true, pack, issues };
+  }
+
+  PRP.worldModel = { SCHEMA, FORMAT, uid, fact, provenance, blank, normalize, validatePack, hasErrors, exportPack, importPackText, strList };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldModel;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/world/lens.js */
+/* Prism RP — линза персонажа (Character Lens). Чистый модуль.
+
+   Линза — то, что отличается или важно для одной карточки поверх ОДНОГО общего пака мира:
+     • focusEntities / focusTopics / relevanceHints — на чём сосредоточиться (для отбора в W2);
+     • timelineVariant — какая ветка канона или AU у этого персонажа (метаданные для W2);
+     • disabledFactIds — факты пака, которые для этого персонажа не действуют (явно по id);
+     • overrides — замена конкретного факта пака по его id (targetFactId);
+     • additions — факты мира, нужные только этому персонажу.
+   Линза никогда не меняет сам пак и не содержит его копию. Связь с карточкой — по cardId
+   (одна линза на карточку), с паком — по packId. Без DOM, хранилища, сети и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const WM = PRP.worldModel;
+
+  const SCHEMA = 1;
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref ? { ref } : {});
+
+  // Переопределение факта пака. Необязательные поля метаданных: если не заданы — берутся у целевого факта.
+  function override(o) {
+    const x = isObj(o) ? o : {};
+    const out = { id: str(x.id).trim() || WM.uid("wo"), targetFactId: str(x.targetFactId).trim(), text: str(x.text) };
+    for (const k of ["entities", "topics", "locations"]) if (Array.isArray(x[k])) out[k] = WM.strList(x[k]);
+    for (const k of ["timeline", "variant"]) if (x[k] != null) out[k] = str(x[k]).trim();
+    if (x.note) out.note = str(x.note);
+    return out;
+  }
+
+  function blank(cardId, packId) {
+    const now = Date.now();
+    return {
+      id: WM.uid("wl"), schema: SCHEMA, cardId: str(cardId), packId: str(packId),
+      focusEntities: [], focusTopics: [], relevanceHints: [], timelineVariant: "",
+      disabledFactIds: [], overrides: [], additions: [], createdAt: now, updatedAt: now,
+    };
+  }
+
+  function normalize(l) {
+    const o = isObj(l) ? l : {};
+    return {
+      id: str(o.id).trim(), schema: SCHEMA, cardId: str(o.cardId).trim(), packId: str(o.packId).trim(),
+      focusEntities: WM.strList(o.focusEntities), focusTopics: WM.strList(o.focusTopics), relevanceHints: WM.strList(o.relevanceHints),
+      timelineVariant: str(o.timelineVariant).trim(),
+      disabledFactIds: WM.strList(o.disabledFactIds),
+      overrides: Array.isArray(o.overrides) ? o.overrides.map(override) : [],
+      additions: Array.isArray(o.additions) ? o.additions.map((f) => WM.fact(f, "wa")) : [],
+      createdAt: o.createdAt || Date.now(), updatedAt: o.updatedAt || Date.now(),
+    };
+  }
+
+  /* Проверка линзы. pack (необязательно) — чтобы показать ссылки на несуществующие факты:
+     это предупреждения, а не ошибки — ссылка остаётся видимой и ничего не угадывается. */
+  function validateLens(l, pack) {
+    const out = [];
+    if (!isObj(l)) return [issue("error", "not-object", "Линза должна быть объектом.")];
+    if (!str(l.id).trim()) out.push(issue("error", "no-id", "У линзы нет id."));
+    if (!str(l.cardId).trim()) out.push(issue("error", "no-card", "Линза не привязана к персонажу."));
+    if (!str(l.packId).trim()) out.push(issue("error", "no-pack", "Линза не привязана к паку мира."));
+    for (const k of ["disabledFactIds", "overrides", "additions", "focusEntities", "focusTopics", "relevanceHints"]) {
+      if (l[k] != null && !Array.isArray(l[k])) out.push(issue("error", "not-array", `Поле ${k} должно быть списком.`, k));
+    }
+    const overrides = Array.isArray(l.overrides) ? l.overrides : [];
+    const targets = new Set();
+    overrides.forEach((o, i) => {
+      if (!isObj(o)) { out.push(issue("error", "override-malformed", `Переопределение №${i + 1} не является объектом.`, String(i))); return; }
+      const t = str(o.targetFactId).trim();
+      if (!t) out.push(issue("error", "override-no-target", `У переопределения №${i + 1} нет целевого факта.`, str(o.id)));
+      else if (targets.has(t)) out.push(issue("error", "override-duplicate-target", `Факт ${t} переопределён больше одного раза — неясно, какой вариант действует.`, t));
+      else targets.add(t);
+    });
+    const addIds = new Set();
+    (Array.isArray(l.additions) ? l.additions : []).forEach((f, i) => {
+      if (!isObj(f)) { out.push(issue("error", "addition-malformed", `Добавленный факт №${i + 1} не является объектом.`, String(i))); return; }
+      const id = str(f.id).trim();
+      if (!id) out.push(issue("error", "addition-no-id", `У добавленного факта №${i + 1} нет id.`, String(i)));
+      else if (addIds.has(id)) out.push(issue("error", "addition-duplicate-id", `Повторяется id добавленного факта: ${id}.`, id));
+      else addIds.add(id);
+    });
+    if (pack && isObj(pack)) {
+      const ids = new Set((pack.facts || []).map((f) => f && f.id));
+      if (str(l.packId) && str(pack.id) && str(l.packId) !== str(pack.id)) out.push(issue("error", "pack-mismatch", "Линза относится к другому паку."));
+      for (const t of targets) if (!ids.has(t)) out.push(issue("warning", "override-target-missing", `Переопределяемого факта ${t} нет в паке.`, t));
+      for (const d of WM.strList(l.disabledFactIds)) if (!ids.has(d)) out.push(issue("warning", "disabled-target-missing", `Выключаемого факта ${d} нет в паке.`, d));
+      for (const a of addIds) if (ids.has(a)) out.push(issue("warning", "addition-id-collides", `id добавленного факта ${a} совпадает с фактом пака.`, a));
+    }
+    return out;
+  }
+
+  PRP.worldLens = { SCHEMA, blank, normalize, override, validateLens };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldLens;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/world/resolve.js */
+/* Prism RP — разрешение статического мира: пак + линза → действующие факты. Чистый модуль.
+
+   Порядок власти W1: линза (переопределения, добавления, выключения) > общий пак.
+   (Наложение мира на конкретный чат — следующий этап, FOUNDATION-W2; здесь его нет.)
+
+   Правила:
+     • факт, выключенный в самом паке (enabled: false) или линзой (disabledFactIds), не действует;
+     • переопределение заменяет факт пака с тем же id (targetFactId); незаданные поля метаданных
+       берутся у исходного факта; id действующего факта — id факта пака;
+     • добавления линзы идут после фактов пака, в своём порядке;
+     • ссылки на несуществующие факты и повторы id — предупреждения в отчёте; совпадение по тексту
+       не ищется никогда;
+     • при повторе id в паке действует первый факт (детерминированно), остальные — в предупреждениях;
+     • входные пак и линза не изменяются.
+   В результат попадают только канонические поля пака и линзы: исходники карточек, их расширения,
+   опыт, сцена, сценарий и указания автора сюда не читаются. provenance переносится только для показа.
+   Результат — для просмотра (W1). В контекст модели он не подаётся. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const copy = (x) => JSON.parse(JSON.stringify(x));
+  const META = ["entities", "topics", "locations", "timeline", "variant"];
+
+  /* → { facts: [{ id, text, entities, topics, locations, timeline, variant, provenance, origin, overrideId?, note? }],
+         excluded: [{ id, text, reason: "pack-disabled" | "lens-disabled" }],
+         report: { packId, lensId, timelineVariant, packFacts, effective, disabled, packDisabled, overridden, additions, warnings } } */
+  function resolve(pack, lens) {
+    const warnings = [];
+    const warn = (code, message, ref) => warnings.push({ level: "warning", code, message, ref });
+    const p = pack ? copy(pack) : { id: "", facts: [] };
+    const l = lens ? copy(lens) : null;
+    if (l && l.packId && p.id && l.packId !== p.id) warn("pack-mismatch", "Линза относится к другому паку — её изменения не применены.", l.packId);
+    const useLens = l && (!l.packId || !p.id || l.packId === p.id);
+
+    // Факты пака: первый из повторяющихся id действует, остальные — предупреждение.
+    const packFacts = [];
+    const byId = new Map();
+    for (const f of p.facts || []) {
+      if (!f || typeof f !== "object" || !f.id) { warn("fact-malformed", "Факт пака без id пропущен.", ""); continue; }
+      if (byId.has(f.id)) { warn("fact-duplicate-id", `Повторяется id факта ${f.id}: действует первый.`, f.id); continue; }
+      byId.set(f.id, f);
+      packFacts.push(f);
+    }
+
+    const disabledIds = new Set(useLens ? l.disabledFactIds || [] : []);
+    for (const id of disabledIds) if (!byId.has(id)) warn("disabled-target-missing", `Выключаемого факта ${id} нет в паке — ссылка оставлена как есть.`, id);
+    const overrides = new Map();
+    for (const o of useLens ? l.overrides || [] : []) {
+      if (!o || !o.targetFactId) { warn("override-no-target", "Переопределение без целевого факта пропущено.", o && o.id); continue; }
+      if (overrides.has(o.targetFactId)) { warn("override-duplicate-target", `Факт ${o.targetFactId} переопределён повторно: действует первое переопределение.`, o.targetFactId); continue; }
+      if (!byId.has(o.targetFactId)) { warn("override-target-missing", `Переопределяемого факта ${o.targetFactId} нет в паке — ссылка оставлена как есть.`, o.targetFactId); continue; }
+      overrides.set(o.targetFactId, o);
+    }
+
+    const facts = [], excluded = [];
+    const overridden = [], packDisabled = [], disabled = [];
+    for (const f of packFacts) {
+      if (f.enabled === false) { excluded.push({ id: f.id, text: f.text, reason: "pack-disabled" }); packDisabled.push(f.id); continue; }
+      if (disabledIds.has(f.id)) { excluded.push({ id: f.id, text: f.text, reason: "lens-disabled" }); disabled.push(f.id); continue; }
+      const o = overrides.get(f.id);
+      const base = { id: f.id, text: f.text, entities: f.entities || [], topics: f.topics || [], locations: f.locations || [], timeline: f.timeline || "", variant: f.variant || "", provenance: f.provenance || { kind: "manual" } };
+      if (o) {
+        const eff = Object.assign(base, { text: o.text, origin: "override", overrideId: o.id, originalText: f.text });
+        for (const k of META) if (o[k] !== undefined) eff[k] = o[k];
+        if (o.note) eff.note = o.note;
+        facts.push(eff);
+        overridden.push({ targetFactId: f.id, overrideId: o.id });
+      } else facts.push(Object.assign(base, { origin: "pack" }));
+    }
+    const seenAdd = new Set();
+    let additions = 0;
+    for (const a of useLens ? l.additions || [] : []) {
+      if (!a || !a.id) { warn("addition-malformed", "Добавленный факт без id пропущен.", ""); continue; }
+      if (seenAdd.has(a.id)) { warn("addition-duplicate-id", `Повторяется id добавленного факта ${a.id}: действует первый.`, a.id); continue; }
+      seenAdd.add(a.id);
+      if (byId.has(a.id)) warn("addition-id-collides", `id добавленного факта ${a.id} совпадает с фактом пака.`, a.id);
+      if (a.enabled === false) { excluded.push({ id: a.id, text: a.text, reason: "lens-addition-disabled" }); continue; }
+      facts.push({ id: a.id, text: a.text, entities: a.entities || [], topics: a.topics || [], locations: a.locations || [], timeline: a.timeline || "", variant: a.variant || "", provenance: a.provenance || { kind: "manual" }, origin: "lens" });
+      additions++;
+    }
+    return {
+      facts, excluded,
+      report: {
+        packId: p.id || "", lensId: useLens ? l.id || "" : "", timelineVariant: useLens ? l.timelineVariant || "" : "",
+        focusEntities: useLens ? l.focusEntities || [] : [], focusTopics: useLens ? l.focusTopics || [] : [], relevanceHints: useLens ? l.relevanceHints || [] : [],
+        packFacts: packFacts.length, effective: facts.length, disabled, packDisabled, overridden, additions, warnings,
+      },
+    };
+  }
+
+  PRP.worldResolve = { resolve };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.worldResolve;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/prism/scene.js */
@@ -3098,6 +3422,7 @@
 
   // Иконки: тонкий штрих 1.6, currentColor.
   const P = {
+    globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5s1.2-6.1 3.5-8.5z"/>',
     home: '<path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/>',
@@ -3376,6 +3701,7 @@
       <nav class="rail-nav">
         <button class="rail-item ${m.view === "home" ? "active" : ""}" data-act="home">${icon("home")}Персонажи</button>
         <button class="rail-item ${m.view === "assist" ? "active" : ""}" data-act="assist" title="Разговор с моделью вне игры: советы, карточки, разбор чата">${icon("assist")}Ассистент</button>
+        <button class="rail-item ${m.view === "world" ? "active" : ""}" data-act="world" title="Общие паки мира для персонажей">${icon("globe")}Миры</button>
         <button class="rail-item" data-act="import">${icon("upload")}Импорт карточки</button>
       </nav>
       <div class="rail-head"><span>Недавние чаты</span></div>
@@ -3988,7 +4314,7 @@
   // Поля и их порядок — как в Character Card V2/V3 и SillyTavern. Рядом с подписью
   // мелко показан ключ спецификации, чтобы было видно, куда поле попадёт при экспорте.
   function cardModal(m, d, section) {
-    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["prompts", "Промпты", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["meta", "Автор и файл", "download"]];
+    const nav = [["main", "Основное", "card"], ["greet", "Приветствия", "bubble"], ["prompts", "Промпты", "edit"], ["lore", "Лорбук", "book"], ["images", "Изображения", "image"], ["world", "Мир", "globe"], ["meta", "Автор и файл", "download"]];
     const lab = (label, key) => `${label}${key ? ` <span class="spec-key">${key}</span>` : ""}`;
     const f = (id, label, key, value, rows, help, ph) => `<div class="field"><label for="${id}">${lab(label, key)}</label>${rows
       ? `<textarea id="${id}" rows="${rows}" data-cf="${id}" placeholder="${esc(ph || "")}">${esc(value || "")}</textarea>` : `<input id="${id}" data-cf="${id}" value="${esc(value || "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
@@ -4040,6 +4366,8 @@
           <label class="check"><input type="checkbox" data-lore="${i}" data-k="case_sensitive" ${e.case_sensitive ? "checked" : ""}><span>С учётом регистра</span></label></div>
           <div class="row" style="justify-content:flex-end"><button class="btn btn-sm btn-ghost" data-act="lore-del" data-i="${i}">${icon("trash")}Удалить запись</button></div></div>`).join("") || `<p class="empty-note">Лорбук пуст.</p>`}
         <button class="btn btn-sm" data-act="lore-add">${icon("plus")}Добавить запись</button>`;
+    } else if (section === "world") {
+      body = PRP.views.lensSection(m, d);
     } else if (section === "images") {
       const im = d.image || {};
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
@@ -4170,6 +4498,134 @@
   }
 
   Object.assign((PRP.views = PRP.views || {}), { importReview });
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/ui/views/world.js */
+/* Prism RP — экраны мира: библиотека общих паков мира и раздел «Мир» в редакторе персонажа
+   (линза персонажа и превью «Мир персонажа»). Только разметка: правила разрешения — в world/resolve,
+   данные для превью готовит world/service. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render;
+  const { esc, icon } = R;
+
+  const list = (a) => esc((a || []).join(", "));
+  const PROV = (p) => (p && p.kind === "imported" ? `импорт${p.sourceFormat ? " · " + esc(p.sourceFormat) : ""}` : "вручную");
+
+  /* ── Библиотека миров ─────────────────────────────────────────────── */
+  function worldLibrary(m) {
+    const packs = m.worldPacks || [];
+    const d = m.worldDraft;
+    const users = (id) => (m.worldLenses || []).filter((l) => l.packId === id).map((l) => (m.cards.find((c) => c.id === l.cardId) || {}).name).filter(Boolean);
+    return `<div class="home"><div class="home-inner">
+      <div class="home-top"><div><h1>Миры</h1>
+        <p class="sub">Общие паки мира: знания о мире или фандоме, которые разделяют разные персонажи. Что у конкретного персонажа иначе — задаётся в его карточке, в разделе «Мир».</p></div>
+        <div class="home-tools"><button class="btn" data-act="world-import">${icon("upload")}Импорт пака</button>
+          <button class="btn btn-primary" data-act="world-new">${icon("plus")}Новый мир</button></div></div>
+      <div class="world-layout">
+        <div class="world-list">${packs.length ? packs.map((p) => {
+          const u = users(p.id);
+          return `<button class="world-item ${d && d.id === p.id ? "on" : ""}" data-act="world-open" data-id="${p.id}">
+            <b>${esc(p.name || "Без названия")}</b><small>${p.facts.length} ${R.plural(p.facts.length, "факт", "факта", "фактов")}${u.length ? ` · персонажей: ${u.length}` : ""}</small></button>`;
+        }).join("") : `<p class="empty-note">Паков мира пока нет.</p>`}</div>
+        <div class="world-editor">${d ? packEditor(d, users(d.id)) : `<p class="hint">Выберите мир слева или создайте новый. Факт мира — утверждение о мире («Университет находится в Каракуре»), а не указание модели и не черта характера.</p>`}</div>
+      </div></div></div>`;
+  }
+
+  function packEditor(d, users) {
+    return `<div class="field"><label for="wp-name">Название</label><input id="wp-name" data-wp="name" value="${esc(d.name)}"></div>
+      <div class="field"><label for="wp-desc">Описание</label><textarea id="wp-desc" data-wp="description" rows="2">${esc(d.description)}</textarea></div>
+      <div class="block-title" style="margin-top:14px">Факты мира <small>${d.facts.length}</small></div>
+      <p class="hint" style="margin-top:0">Декларативные утверждения о мире. Метки (персонажи, темы, места, хронология, вариант) пригодятся для отбора фактов на следующих этапах.</p>
+      ${d.facts.map((f, i) => `<div class="lore world-fact ${f.enabled === false ? "off" : ""}" data-wf-row="${i}">
+        <div class="field"><label>Факт <span class="spec-key">${esc(f.id)}</span></label><textarea data-wf="${i}" data-k="text" rows="2" placeholder="Тацуки живёт в Каракуре.">${esc(f.text)}</textarea></div>
+        <div class="row wrap">
+          <div class="field"><label>Персонажи, сущности</label><input data-wf="${i}" data-k="entities" value="${list(f.entities)}" placeholder="Тацуки, Орихимэ"></div>
+          <div class="field"><label>Темы</label><input data-wf="${i}" data-k="topics" value="${list(f.topics)}" placeholder="дом, семья"></div>
+          <div class="field"><label>Места</label><input data-wf="${i}" data-k="locations" value="${list(f.locations)}" placeholder="Каракура"></div></div>
+        <div class="row wrap">
+          <div class="field"><label>Хронология</label><input data-wf="${i}" data-k="timeline" value="${esc(f.timeline)}" placeholder="канон"></div>
+          <div class="field"><label>Вариант</label><input data-wf="${i}" data-k="variant" value="${esc(f.variant)}" placeholder="основной"></div></div>
+        <div class="row" style="justify-content:space-between"><label class="check"><input type="checkbox" data-wf="${i}" data-k="enabled" ${f.enabled !== false ? "checked" : ""}><span>Действует</span></label>
+          <span class="hint" style="margin:0">Источник: ${PROV(f.provenance)}</span>
+          <button class="btn btn-sm btn-ghost" data-act="world-fact-del" data-i="${i}">${icon("trash")}Удалить</button></div>
+      </div>`).join("")}
+      <button class="btn btn-sm" data-act="world-fact-add">${icon("plus")}Добавить факт</button>
+      <div class="row" style="margin-top:20px;flex-wrap:wrap">
+        <button class="btn btn-primary" data-act="world-save">${icon("check")}Сохранить мир</button>
+        <button class="btn" data-act="world-export">${icon("download")}Экспорт JSON</button>
+        <span class="spacer"></span>
+        <button class="btn btn-danger" data-act="world-delete">${icon("trash")}Удалить мир</button></div>
+      ${users.length ? `<p class="hint" style="margin-top:8px">Этот мир используют: ${esc(users.join(", "))}. Удалить его можно, только когда ни один персонаж на него не ссылается.</p>` : ""}`;
+  }
+
+  /* ── Раздел «Мир» в редакторе персонажа ───────────────────────────── */
+  function lensSection(m, d) {
+    if (!d.id) return `<p class="lead">Мир персонажа</p><p class="hint">Сначала сохраните персонажа — затем можно привязать его к общему паку мира.</p>`;
+    const packs = m.worldPacks || [];
+    const lens = m.modal && m.modal.lens;
+    const pv = m.lensPreview;
+    const sel = `<div class="field"><label for="lens-pack">Общий пак мира</label><select id="lens-pack" data-lens-pack>
+      <option value="">— без мира —</option>${packs.map((p) => `<option value="${p.id}" ${lens && lens.packId === p.id ? "selected" : ""}>${esc(p.name || "Без названия")}</option>`).join("")}</select>
+      <span class="help">Пак общий для многих персонажей; здесь хранится только то, что у ${esc(d.name || "персонажа")} иначе. Сам пак отсюда не меняется.${packs.length ? "" : " Паков пока нет — создайте их в разделе «Миры»."}</span></div>`;
+    if (!lens || !lens.packId) return `<p class="lead">Мир персонажа</p>${sel}`;
+    if (!pv || !pv.pack) return `<p class="lead">Мир персонажа</p>${sel}<p class="err">${icon("alert")}<span>Пак мира не найден.</span></p>`;
+    const pack = pv.pack;
+    const ovrByTarget = new Map((lens.overrides || []).map((o, i) => [o.targetFactId, { o, i }]));
+    const factIds = new Set(pack.facts.map((f) => f.id));
+    const dangling = (lens.overrides || []).map((o, i) => ({ o, i })).filter((x) => !factIds.has(x.o.targetFactId));
+    const danglingDis = (lens.disabledFactIds || []).filter((id) => !factIds.has(id));
+    return `<p class="lead">Мир персонажа</p>${sel}
+      <div class="row wrap">
+        <div class="field"><label>В фокусе: персонажи, сущности</label><input data-lens="focusEntities" value="${list(lens.focusEntities)}"></div>
+        <div class="field"><label>В фокусе: темы</label><input data-lens="focusTopics" value="${list(lens.focusTopics)}"></div></div>
+      <div class="row wrap">
+        <div class="field"><label>Подсказки о важном</label><input data-lens="relevanceHints" value="${list(lens.relevanceHints)}" placeholder="соседи, университет"></div>
+        <div class="field"><label>Хронология / вариант персонажа</label><input data-lens="timelineVariant" value="${esc(lens.timelineVariant)}" placeholder="university-au"></div></div>
+      <div class="block-title" style="margin-top:14px">Факты пака «${esc(pack.name)}»</div>
+      <p class="hint" style="margin-top:0">Для этого персонажа факт можно выключить или заменить своим текстом. Пак и другие персонажи это не затрагивает.</p>
+      ${pack.facts.map((f) => {
+        const ov = ovrByTarget.get(f.id);
+        const off = (lens.disabledFactIds || []).includes(f.id);
+        return `<div class="lore lens-fact ${off ? "off" : ""}">
+          <div class="lf-text">${esc(f.text) || "<i>без текста</i>"} <span class="spec-key">${esc(f.id)}</span>${f.enabled === false ? ` <span class="tag">выключен в паке</span>` : ""}</div>
+          <div class="row" style="flex-wrap:wrap">
+            <label class="check"><input type="checkbox" data-lens-disable="${esc(f.id)}" ${off ? "checked" : ""}><span>Не действует для персонажа</span></label>
+            ${ov ? "" : `<button class="btn btn-sm" data-act="lens-override-add" data-fid="${esc(f.id)}">${icon("edit")}Заменить для персонажа</button>`}</div>
+          ${ov ? `<div class="field"><label>Для персонажа вместо этого</label><textarea data-lens-ovr="${ov.i}" rows="2">${esc(ov.o.text)}</textarea>
+            <button class="btn btn-sm btn-ghost" data-act="lens-override-del" data-i="${ov.i}">${icon("x")}Убрать замену</button></div>` : ""}
+        </div>`;
+      }).join("") || `<p class="empty-note">В паке нет фактов.</p>`}
+      ${dangling.length || danglingDis.length ? `<div class="block err-block">${icon("alert")}<div><b>Ссылки на факты, которых в паке нет.</b> Они сохранены как есть и не применяются; подходящий факт не подбирается по тексту.
+        <ul>${dangling.map((x) => `<li>Замена факта <span class="spec-key">${esc(x.o.targetFactId)}</span>: «${esc(x.o.text)}» <button class="btn btn-sm btn-ghost" data-act="lens-override-del" data-i="${x.i}">Убрать</button></li>`).join("")}
+        ${danglingDis.map((id) => `<li>Выключение факта <span class="spec-key">${esc(id)}</span> <button class="btn btn-sm btn-ghost" data-act="lens-disabled-del" data-fid="${esc(id)}">Убрать</button></li>`).join("")}</ul></div></div>` : ""}
+      <div class="block-title" style="margin-top:14px">Факты только этого персонажа</div>
+      ${(lens.additions || []).map((f, i) => `<div class="lore">
+        <div class="field"><label>Факт <span class="spec-key">${esc(f.id)}</span></label><textarea data-lens-add="${i}" data-k="text" rows="2" placeholder="Живёт напротив {{user}}.">${esc(f.text)}</textarea></div>
+        <div class="row wrap"><div class="field"><label>Персонажи, сущности</label><input data-lens-add="${i}" data-k="entities" value="${list(f.entities)}"></div>
+          <div class="field"><label>Темы</label><input data-lens-add="${i}" data-k="topics" value="${list(f.topics)}"></div>
+          <div class="field"><label>Места</label><input data-lens-add="${i}" data-k="locations" value="${list(f.locations)}"></div></div>
+        <div class="row" style="justify-content:flex-end"><button class="btn btn-sm btn-ghost" data-act="lens-add-del" data-i="${i}">${icon("trash")}Удалить</button></div></div>`).join("")}
+      <button class="btn btn-sm" data-act="lens-add">${icon("plus")}Добавить факт персонажа</button>
+      ${effective(pv)}
+      <div class="row" style="margin-top:16px"><button class="btn btn-ghost btn-sm" data-act="lens-clear">${icon("x")}Снять связь с миром</button></div>`;
+  }
+
+  // Превью «Мир персонажа»: что получится из пака и линзы. Только просмотр — в модель это не уходит.
+  function effective(pv) {
+    const ORIGIN = { pack: ["пак", ""], override: ["заменено для персонажа", "ovr"], lens: ["только у персонажа", "own"] };
+    const WHY = { "pack-disabled": "выключен в паке", "lens-disabled": "не действует для персонажа", "lens-addition-disabled": "выключен" };
+    const r = pv.report;
+    const warns = (r.warnings || []).concat((pv.lensIssues || []).filter((x) => x.level === "error"));
+    return `<div class="block-title" style="margin-top:22px">Мир персонажа <small>${r.effective} из ${r.packFacts} фактов пака${r.additions ? ` + ${r.additions} своих` : ""}</small></div>
+      <p class="hint" style="margin-top:0">Итог: пак с учётом линзы. Только для просмотра — в контекст модели мир пока не подаётся.</p>
+      <ul class="eff-world">${pv.facts.map((f) => `<li class="${ORIGIN[f.origin][1]}"><span class="tag">${ORIGIN[f.origin][0]}</span> ${esc(f.text)}${f.origin === "override" ? ` <s>${esc(f.originalText)}</s>` : ""}</li>`).join("")}
+        ${pv.excluded.map((x) => `<li class="off"><span class="tag">${WHY[x.reason] || x.reason}</span> <s>${esc(x.text)}</s></li>`).join("")}</ul>
+      ${warns.length ? `<ul class="imp-issues">${warns.map((w) => `<li class="${w.level}"><b>${w.level === "error" ? "Ошибка" : "Внимание"}:</b> ${esc(w.message)}</li>`).join("")}</ul>` : ""}`;
+  }
+
+  Object.assign((PRP.views = PRP.views || {}), { worldLibrary, lensSection });
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/ui/views/assist.js */
@@ -4997,6 +5453,8 @@
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);
       await DB.delMany("experience", xs.map((x) => x.id));
+      // Линза мира принадлежит персонажу и удаляется с ним; общий пак остаётся (world/service).
+      if (ctx.svc && ctx.svc.world) await ctx.svc.world.removeForCard(cd.id);
       await DB.del("cards", cd.id);
       S.cards = S.cards.filter((c) => c.id !== cd.id);
       S.chats = S.chats.filter((c) => c.cardId !== cd.id);
@@ -5014,6 +5472,123 @@
   }
 
   PRP.cardService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/world/service.js */
+/* Prism RP — сервис мира (прикладной уровень): общие паки мира и линзы персонажей.
+   Загрузка, сохранение с проверкой, правила удаления, импорт и экспорт паков, превью «Мир персонажа».
+   Смысл — в чистых модулях world/model, world/lens, world/resolve; хранилище — через ctx.DB.
+   Мир в контекст модели здесь НЕ подаётся (это FOUNDATION-W2). DOM не трогает. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const WM = PRP.worldModel, WL = PRP.worldLens, WR = PRP.worldResolve;
+
+  const PACKS = "worldPacks", LENSES = "worldLenses";
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+
+  function create(ctx) {
+    const { S, DB } = ctx;
+    const upsert = (list, x) => { const i = list.findIndex((y) => y.id === x.id); if (i >= 0) list[i] = x; else list.push(x); };
+
+    async function loadAll() {
+      S.worldPacks = (await DB.all(PACKS)).map(WM.normalize).sort((a, b) => a.name.localeCompare(b.name));
+      S.worldLenses = (await DB.all(LENSES)).map(WL.normalize);
+    }
+    const packById = (id) => (S.worldPacks || []).find((p) => p.id === id) || null;
+    const lensForCard = (cardId) => (S.worldLenses || []).find((l) => l.cardId === cardId) || null;
+    const lensesForPack = (packId) => (S.worldLenses || []).filter((l) => l.packId === packId);
+
+    /* Паки. → { pack } или { error, issues } */
+    function newPack(name) { return WM.blank(name || "Новый мир"); }
+    async function savePack(draft) {
+      const issues = WM.validatePack(draft);
+      if (WM.hasErrors(issues)) return { error: issues.filter((x) => x.level === "error").map((x) => x.message).join(" "), issues };
+      const p = WM.normalize(draft);
+      p.updatedAt = Date.now();
+      await DB.put(PACKS, p);
+      upsert((S.worldPacks = S.worldPacks || []), p);
+      return { pack: p, issues };
+    }
+    /* Удаление пака запрещено, пока на него ссылаются линзы: иначе они осиротели бы молча.
+       → { ok } или { blocked: [имена персонажей] } */
+    async function deletePack(id) {
+      const refs = (await DB.byIndex(LENSES, "packId", id)) || [];
+      if (refs.length) {
+        const names = refs.map((l) => (S.cards.find((c) => c.id === l.cardId) || { name: "(персонаж удалён)" }).name);
+        return { blocked: names };
+      }
+      await DB.del(PACKS, id);
+      S.worldPacks = (S.worldPacks || []).filter((p) => p.id !== id);
+      return { ok: true };
+    }
+    function exportPack(id) {
+      const p = packById(id);
+      if (!p) return null;
+      return { name: `${p.name || "мир"}.world.json`, text: JSON.stringify(WM.exportPack(p), null, 2) };
+    }
+    // Импорт: проверка до сохранения; битый или чужой файл — ошибка, ничего не сохраняется.
+    async function importPack(text) {
+      const r = WM.importPackText(text);
+      if (!r.ok) return { error: r.issues.map((x) => x.message).join(" "), issues: r.issues };
+      return savePack(r.pack);
+    }
+
+    /* Линзы. Одна линза на персонажа; линза хранит только отличия от пака. */
+    async function saveLens(draft) {
+      const l = WL.normalize(draft);
+      if (!l.id) l.id = WL.blank(l.cardId, l.packId).id;
+      const issues = WL.validateLens(l, packById(l.packId));
+      if (issues.some((x) => x.level === "error")) return { error: issues.filter((x) => x.level === "error").map((x) => x.message).join(" "), issues };
+      // Одна линза на персонажа: вторая отклоняется (то же ограничение держит уникальный индекс cardId в базе).
+      const other = (await DB.byIndex(LENSES, "cardId", l.cardId)).find((x) => x.id !== l.id);
+      if (other) return { error: "У этого персонажа уже есть линза мира: измените её, а не создавайте вторую.", issues: [{ level: "error", code: "lens-exists", message: "Линза для персонажа уже есть.", ref: other.id }] };
+      l.updatedAt = Date.now();
+      await DB.put(LENSES, l);
+      upsert((S.worldLenses = S.worldLenses || []), l);
+      return { lens: l, issues };
+    }
+    async function deleteLens(id) {
+      await DB.del(LENSES, id);
+      S.worldLenses = (S.worldLenses || []).filter((l) => l.id !== id);
+    }
+    // Сохранение раздела «Мир» редактора персонажа: черновик линзы или null — снять связь с миром.
+    async function saveLensForCard(cardId, draft) {
+      const cur = lensForCard(cardId);
+      if (!draft || !draft.packId) { if (cur) await deleteLens(cur.id); return { lens: null }; }
+      // Редактор правит единственную линзу персонажа: если в этой правке связь снимали и ставили заново,
+      // черновик получил новый id — запись остаётся той же (id существующей линзы), второй не появляется.
+      return saveLens(Object.assign({}, draft, { cardId }, cur ? { id: cur.id, createdAt: cur.createdAt } : {}));
+    }
+    // Персонаж удалён — его линза тоже (она только его). Пак остаётся.
+    async function removeForCard(cardId) {
+      const ls = (await DB.byIndex(LENSES, "cardId", cardId)) || [];
+      await DB.delMany(LENSES, ls.map((l) => l.id));
+      S.worldLenses = (S.worldLenses || []).filter((l) => l.cardId !== cardId);
+    }
+
+    /* Превью «Мир персонажа» для редактора: только просмотр. → { pack, lensIssues, ...resolve() } | null */
+    function preview(lensDraft) {
+      if (!lensDraft || !lensDraft.packId) return null;
+      const pack = packById(lensDraft.packId);
+      if (!pack) return { pack: null, missingPack: lensDraft.packId, facts: [], excluded: [], report: { warnings: [{ level: "warning", code: "pack-missing", message: "Пак мира не найден." }] } };
+      const lens = WL.normalize(lensDraft);
+      return Object.assign({ pack, lensIssues: WL.validateLens(Object.assign({}, lens, { id: lens.id || "draft", cardId: lens.cardId || "draft" }), pack) }, WR.resolve(pack, lens));
+    }
+    // Пустые заготовки для форм (идентификаторы выдаёт модель).
+    const newFact = (prefix) => WM.fact({}, prefix || "wf");
+    const newOverride = (targetFactId, text) => WL.override({ targetFactId, text });
+    const newLens = (cardId, packId) => WL.blank(cardId, packId);
+    function draftLens(cardId) {
+      const cur = lensForCard(cardId);
+      return cur ? clone(cur) : null;
+    }
+
+    return { loadAll, packById, lensForCard, lensesForPack, newPack, savePack, deletePack, exportPack, importPack,
+      saveLens, deleteLens, saveLensForCard, removeForCard, preview, draftLens, newFact, newOverride, newLens };
+  }
+
+  PRP.worldService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/assist/service.js */
@@ -5171,6 +5746,9 @@
         imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
         origin: location.origin && location.origin !== "null" ? location.origin : "*",
         assist: S.assist, assistList: S.assistList,
+        worldPacks: S.worldPacks, worldLenses: S.worldLenses, worldDraft: S.worldDraft, modal: S.modal,
+        // Превью «Мир персонажа» готовит сервис мира; представление только показывает.
+        lensPreview: S.modal && S.modal.kind === "card" && S.modal.section === "world" && S.modal.lens ? svc().world.preview(S.modal.lens) : null,
         assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
         assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
       };
@@ -5207,6 +5785,9 @@
         }
         if (scroll != null) $("#feed").scrollTop = scroll;
         if (S.find) applyFind(false);
+      } else if (S.view === "world") {
+        app.classList.remove("messenger");
+        $("#stage").innerHTML = V.worldLibrary(m);
       } else {
         app.classList.remove("messenger");
         $("#stage").innerHTML = V.home(m);
@@ -5622,7 +6203,7 @@
     const { $, $$ } = ui;
 
     function openCardEditor(cd) {
-      S.modal = { kind: "card", section: "main", draft: svc.cards.draft(cd) };
+      S.modal = { kind: "card", section: "main", draft: svc.cards.draft(cd), lens: cd && cd.id ? svc.world.draftLens(cd.id) : null };
       ui.renderModal();
       setTimeout(() => { const n = $("#cf-name"); if (n && !S.modal.draft.name) n.focus(); }, 30);
     }
@@ -5662,6 +6243,7 @@
         else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
         else e[k] = el.checked;
       });
+      PRP.lensForm.collect(S.modal, $$);
       return d;
     }
     const keepScroll = () => { S.modal.keepScroll = true; ui.renderModal(); };
@@ -5688,6 +6270,11 @@
       "card-save": async () => {
         const r = await svc.cards.save(collectCard());
         if (r.error) { ui.toast(r.error, true); S.modal.section = "main"; ui.renderModal(); return; }
+        // Линза мира — отдельная запись, привязанная к персонажу; пак при этом не меняется.
+        if (!r.isNew) {
+          const lr = await svc.world.saveLensForCard(r.card.id, S.modal.lens);
+          if (lr.error) { ui.toast("Мир персонажа не сохранён: " + lr.error, true); S.modal.section = "world"; ui.renderModal(); return; }
+        }
         S.modal = null;
         ui.renderAll();
         ui.toast(r.isNew ? `${r.card.name} создан(а). Нажмите на портрет, чтобы начать.` : "Изменения сохранены.");
@@ -5967,6 +6554,149 @@
   };
 })(typeof window !== "undefined" ? window : globalThis);
 
+/* js/ui/controllers/world.js */
+/* Prism RP — контроллер мира: библиотека паков мира и раздел «Мир» (линза) в редакторе персонажа.
+   Обработчики тонкие: форма → черновик → сервис world → перерисовка. Правила — в world/*. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const split = (v) => String(v || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+
+  /* Поля раздела «Мир» редактора персонажа → черновик линзы (modal.lens). Только перенос значений формы. */
+  function collectLens(modal, $$) {
+    const l = modal && modal.lens;
+    if (!l || !$$("[data-lens],[data-lens-disable],[data-lens-ovr],[data-lens-add]").length) return l;
+    $$("[data-lens]").forEach((el) => {
+      const k = el.dataset.lens;
+      l[k] = k === "timelineVariant" ? el.value.trim() : split(el.value);
+    });
+    const boxes = $$("[data-lens-disable]");
+    if (boxes.length) {
+      const shown = new Set(boxes.map((el) => el.dataset.lensDisable));
+      // Ссылки на факты, которых в паке нет, сохраняются как есть (их показывают отдельно).
+      l.disabledFactIds = (l.disabledFactIds || []).filter((id) => !shown.has(id)).concat(boxes.filter((el) => el.checked).map((el) => el.dataset.lensDisable));
+    }
+    $$("[data-lens-ovr]").forEach((el) => { const o = l.overrides[+el.dataset.lensOvr]; if (o) o.text = el.value; });
+    $$("[data-lens-add]").forEach((el) => {
+      const f = l.additions[+el.dataset.lensAdd];
+      if (!f) return;
+      f[el.dataset.k] = el.dataset.k === "text" ? el.value : split(el.value);
+    });
+    return l;
+  }
+  PRP.lensForm = { collect: collectLens };
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.world = function (ctx) {
+    const { S, ui, svc, nav } = ctx;
+    const { $, $$ } = ui;
+    const W = () => svc.world;
+
+    // Поля библиотеки → черновик пака (S.worldDraft).
+    function collectPack() {
+      const d = S.worldDraft;
+      if (!d) return d;
+      $$("[data-wp]").forEach((el) => { d[el.dataset.wp] = el.value; });
+      $$("[data-wf]").forEach((el) => {
+        const f = d.facts[+el.dataset.wf];
+        if (!f) return;
+        const k = el.dataset.k;
+        if (k === "enabled") f.enabled = el.checked;
+        else if (k === "text" || k === "timeline" || k === "variant") f[k] = el.value;
+        else f[k] = split(el.value);
+      });
+      return d;
+    }
+    const lensModal = () => S.modal && S.modal.kind === "card" ? S.modal : null;
+    const rerenderModal = () => { S.modal.keepScroll = true; ui.renderModal(); };
+
+    const actions = {
+      world: () => nav.openWorld(),
+      "world-new": () => { S.worldDraft = W().newPack(); ui.renderStage(); setTimeout(() => { const n = $("#wp-name"); if (n) n.select(); }, 30); },
+      "world-open": (t) => { const p = W().packById(t.dataset.id); S.worldDraft = p ? clone(p) : null; ui.renderStage(); },
+      "world-fact-add": () => { const d = collectPack(); d.facts.push(W().newFact()); ui.renderStage(); },
+      "world-fact-del": (t) => { const d = collectPack(); d.facts.splice(+t.dataset.i, 1); ui.renderStage(); },
+      "world-save": async () => {
+        const r = await W().savePack(collectPack());
+        if (r.error) return ui.toast(r.error, true);
+        S.worldDraft = clone(r.pack);
+        ui.renderStage();
+        ui.toast("Мир сохранён.");
+      },
+      "world-export": () => {
+        const d = S.worldDraft;
+        const e = d && W().exportPack(d.id);
+        if (!e) return ui.toast("Сначала сохраните мир.", true);
+        ctx.files.download(e.name, e.text, "application/json");
+      },
+      "world-delete": async () => {
+        const d = S.worldDraft;
+        if (!d) return;
+        if (!W().packById(d.id)) { S.worldDraft = null; return ui.renderStage(); }
+        if (!confirm(`Удалить мир «${d.name}»? Это нельзя отменить.`)) return;
+        const r = await W().deletePack(d.id);
+        if (r.blocked) return ui.toast(`Мир используют персонажи: ${r.blocked.join(", ")}. Сначала снимите связь с миром в их карточках (раздел «Мир»).`, true);
+        S.worldDraft = null;
+        ui.renderStage();
+        ui.toast("Мир удалён.");
+      },
+      "world-import": () => $("#file-world").click(),
+
+      // Линза в редакторе персонажа.
+      "lens-override-add": (t) => {
+        const m = lensModal(); if (!m) return;
+        collectLens(m, $$);
+        const f = (W().packById(m.lens.packId) || { facts: [] }).facts.find((x) => x.id === t.dataset.fid);
+        m.lens.overrides.push(W().newOverride(t.dataset.fid, f ? f.text : ""));
+        rerenderModal();
+      },
+      "lens-override-del": (t) => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.overrides.splice(+t.dataset.i, 1); rerenderModal(); },
+      "lens-disabled-del": (t) => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.disabledFactIds = m.lens.disabledFactIds.filter((id) => id !== t.dataset.fid); rerenderModal(); },
+      "lens-add": () => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.additions.push(W().newFact("wa")); rerenderModal(); },
+      "lens-add-del": (t) => { const m = lensModal(); if (!m) return; collectLens(m, $$); m.lens.additions.splice(+t.dataset.i, 1); rerenderModal(); },
+      "lens-clear": () => {
+        const m = lensModal(); if (!m) return;
+        if (m.lens && (m.lens.overrides.length || m.lens.additions.length || m.lens.disabledFactIds.length) && !confirm("Снять связь с миром? Замены, выключения и факты этого персонажа будут удалены при сохранении карточки.")) return;
+        m.lens = null;
+        rerenderModal();
+      },
+    };
+
+    async function change(t) {
+      if (t.id === "file-world" && t.files[0]) {
+        const file = t.files[0];
+        t.value = "";
+        const r = await W().importPack(await ctx.files.readFile(file, "text"));
+        if (r.error) { ui.toast(`${file.name}: ${r.error}`, true); return true; }
+        S.worldDraft = clone(r.pack);
+        nav.openWorld(true);
+        ui.toast(`Мир «${r.pack.name}» импортирован.`);
+        return true;
+      }
+      const m = lensModal();
+      if (m && t.matches && t.matches("[data-lens-pack]")) {
+        collectLens(m, $$);
+        const packId = t.value;
+        if (!packId) m.lens = null;
+        else if (!m.lens) m.lens = W().newLens(m.draft.id, packId);
+        else if (m.lens.packId !== packId) {
+          const tied = m.lens.overrides.length || m.lens.disabledFactIds.length;
+          if (tied && !confirm("Замены и выключения относятся к фактам прежнего мира и будут сброшены. Факты самого персонажа останутся. Продолжить?")) { t.value = m.lens.packId; return true; }
+          m.lens = Object.assign(W().newLens(m.draft.id, packId), { id: m.lens.id, additions: m.lens.additions, focusEntities: m.lens.focusEntities, focusTopics: m.lens.focusTopics, relevanceHints: m.lens.relevanceHints, timelineVariant: m.lens.timelineVariant, createdAt: m.lens.createdAt });
+        }
+        rerenderModal();
+        return true;
+      }
+      if (m && t.matches && t.matches("[data-lens-disable]")) { collectLens(m, $$); rerenderModal(); return true; }
+      return false;
+    }
+
+    return { actions, change };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
 /* js/ui/app.js */
 /* Prism RP — корень приложения (composition root).
    Здесь: состояние сессии, сборка контекста зависимостей, навигация, загрузка,
@@ -5997,6 +6727,7 @@
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
     assist: null, assistList: [],
+    worldPacks: [], worldLenses: [], worldDraft: null,
   };
 
   /* ── Контекст зависимостей ───────────────────────────────────────────
@@ -6024,6 +6755,7 @@
   ctx.svc.gen = PRP.generationService.create(ctx);
   ctx.svc.cards = PRP.cardService.create(ctx);
   ctx.svc.assist = PRP.assistService.create(ctx);
+  ctx.svc.world = PRP.worldService.create(ctx);
   const { ui, svc } = ctx;
   const { $ } = ui;
 
@@ -6036,6 +6768,7 @@
     S.cards = (await DB.all("cards")).map(PRP.cardModel.upgradeStored).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
+    await svc.world.loadAll();
     await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
@@ -6086,11 +6819,20 @@
     $("#rail").classList.remove("open");
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); setTimeout(() => { const i = $("#input"); if (i && !ui.narrow()) i.focus(); }, 30); }
   }
-  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist });
+  // Библиотека миров. keepDraft — оставить открытым текущий черновик пака (например, после импорта).
+  function openWorld(keepDraft) {
+    if (!keepDraft) S.worldDraft = null;
+    S.view = "world";
+    S.find = null;
+    ui.rememberUi();
+    $("#rail").classList.remove("open");
+    ui.renderAll();
+  }
+  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist, openWorld });
 
   /* ── Контроллеры и разбор событий ─────────────────────────────────── */
   const C = PRP.controllers;
-  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist].map((make) => make(ctx));
+  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world].map((make) => make(ctx));
   const ACTS = Object.assign({
     home: goHome,
     "open-chat": (t) => openChat(t.dataset.id),

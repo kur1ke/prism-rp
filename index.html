@@ -21,6 +21,7 @@
   <input type="file" id="file-card" accept=".png,.json,image/png,application/json" multiple hidden>
   <input type="file" id="file-backup" accept=".json,application/json" hidden>
   <input type="file" id="file-avatar" accept="image/*" hidden>
+  <input type="file" id="file-world" accept=".json,application/json" hidden>
 </div>
 
 <!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).
@@ -41,6 +42,10 @@
 <script src="js/cards/formats/urv-v2.js"></script>
 <script src="js/cards/validate.js"></script>
 <script src="js/cards/import.js"></script>
+<!-- Мир: модель пака → линза персонажа → разрешение (чистые). -->
+<script src="js/world/model.js"></script>
+<script src="js/world/lens.js"></script>
+<script src="js/world/resolve.js"></script>
 <script src="js/prism/scene.js"></script>
 <script src="js/prism/experience.js"></script>
 <script src="js/prism/scenario.js"></script>
@@ -62,6 +67,7 @@
 <script src="js/ui/views/settings.js"></script>
 <script src="js/ui/views/card-editor.js"></script>
 <script src="js/ui/views/import-review.js"></script>
+<script src="js/ui/views/world.js"></script>
 <script src="js/ui/views/assist.js"></script>
 <script src="js/chat/service.js"></script>
 <script src="js/prism/experience-service.js"></script>
@@ -69,6 +75,7 @@
 <script src="js/images/service.js"></script>
 <script src="js/generation/service.js"></script>
 <script src="js/cards/service.js"></script>
+<script src="js/world/service.js"></script>
 <script src="js/assist/service.js"></script>
 <script src="js/ui/shell.js"></script>
 <script src="js/ui/controllers/chat.js"></script>
@@ -77,6 +84,7 @@
 <script src="js/ui/controllers/settings.js"></script>
 <script src="js/ui/controllers/images.js"></script>
 <script src="js/ui/controllers/assist.js"></script>
+<script src="js/ui/controllers/world.js"></script>
 <script src="js/ui/app.js"></script>
 </body>
 </html>
