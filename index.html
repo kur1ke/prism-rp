@@ -23,20 +23,26 @@
   <input type="file" id="file-avatar" accept="image/*" hidden>
 </div>
 
+<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).
+     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления
+     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->
 <script src="js/core/util.js"></script>
 <script src="js/core/store.js"></script>
+<script src="js/core/settings.js"></script>
 <script src="js/prism/scene.js"></script>
 <script src="js/prism/experience.js"></script>
 <script src="js/prism/assembler.js"></script>
 <script src="js/assist/assist.js"></script>
 <script src="js/cards/ccard.js"></script>
-<script src="js/providers/openai.js"></script>
-<script src="js/providers/perchance.js"></script>
 <script src="js/chat/tree.js"></script>
 <script src="js/images/compose.js"></script>
 <script src="js/images/backends.js"></script>
 <script src="js/images/compile.js"></script>
+<script src="js/providers/openai.js"></script>
+<script src="js/providers/perchance.js"></script>
+<script src="js/providers/router.js"></script>
 <script src="js/ui/render.js"></script>
+<script src="js/ui/files.js"></script>
 <script src="js/ui/views/kit.js"></script>
 <script src="js/ui/views/home.js"></script>
 <script src="js/ui/views/chat.js"></script>
@@ -44,6 +50,20 @@
 <script src="js/ui/views/settings.js"></script>
 <script src="js/ui/views/card-editor.js"></script>
 <script src="js/ui/views/assist.js"></script>
+<script src="js/chat/service.js"></script>
+<script src="js/prism/experience-service.js"></script>
+<script src="js/prism/service.js"></script>
+<script src="js/images/service.js"></script>
+<script src="js/generation/service.js"></script>
+<script src="js/cards/service.js"></script>
+<script src="js/assist/service.js"></script>
+<script src="js/ui/shell.js"></script>
+<script src="js/ui/controllers/chat.js"></script>
+<script src="js/ui/controllers/drawer.js"></script>
+<script src="js/ui/controllers/cards.js"></script>
+<script src="js/ui/controllers/settings.js"></script>
+<script src="js/ui/controllers/images.js"></script>
+<script src="js/ui/controllers/assist.js"></script>
 <script src="js/ui/app.js"></script>
 </body>
 </html>
