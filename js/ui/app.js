@@ -406,11 +406,23 @@
     if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
     mode = mode || (msgId ? "regen" : "new");
 
+    // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
+    // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
     let path = activePath();
+    if (mode === "regen") path = path.slice(0, path.findIndex((m) => m.id === msgId));
+    const extraPost = mode === "continue" ? "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново." : "";
+    const built = buildPrism(path, extraPost);
+    S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
+    if (built.report.overflow) {
+      toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+      if (S.drawerOpen) { S.tab = "prism"; renderDrawer(); }
+      renderFeed();
+      return;
+    }
+
     let target, prefix = "";
     if (mode === "regen") {
       target = S.messages.find((m) => m.id === msgId);
-      path = path.slice(0, path.findIndex((m) => m.id === msgId));
       target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
       target.swipeIdx = target.swipes.length - 1;
     } else if (mode === "continue") {
@@ -423,20 +435,7 @@
     }
     await putMsg(target);
 
-    const extraPost = mode === "continue" ? "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново." : "";
-    const built = buildPrism(path, extraPost);
-    S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
-
     const sw = TR.activeSwipe(target);
-    if (built.report.overflow) {
-      // Не отправляем запрос, который заведомо не помещается в контекст модели.
-      sw.error = `Контекст не помещается даже после всех сокращений: ${built.report.used} из ${built.report.budget} токенов. Рамка, сцена и последние сообщения больше, чем позволяет модель. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`;
-      await putMsg(target);
-      await touchChat();
-      renderFeed();
-      if (S.drawerOpen) renderDrawer();
-      return;
-    }
     const ctrl = new AbortController();
     S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
     renderFeed();

@@ -518,8 +518,9 @@
      они помечаются legacyUnscoped, хранятся целиком и в Prism не попадают,
      пока пользователь сам не привяжет их к чату.
 
-   Отбор: тема → участники → важность → свежесть (только при равенстве).
-   Знак события (valence) — метаданные; сам по себе отбор не запускает. */
+   Отбор: входит только запись, совпавшая по теме с происходящим. Среди подходящих порядок:
+   тема → участники → важность → свежесть (только при равенстве). Важность не создаёт
+   релевантность; знак события (valence) — метаданные и отбор не запускает. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -658,8 +659,6 @@
     return { topic, domainHits, wordHits, participant, weight: Number(r.weight) || 1 };
   }
 
-  // Порог: без совпадения по теме входит только определяющее событие (важность 3).
-  const FORMATIVE = 3;
 
   /* records: все записи; ctx: { chatId, path, present: [ids], text, names: [имена], limit, ownerId? }
      → { selected: [записи в хронологическом порядке], debug: [строки отбора] } */
@@ -674,7 +673,8 @@
       const inChat = r.chatId === c.chatId && scopeOf(r) !== "legacy";
       if (!inChat) continue; // чужие чаты и непривязанные записи даже не показываем в отладке
       const rel = relevance(r, c, vocab);
-      const eligible = vis.visible && r.status === "active" && (rel.topic > 0 || rel.weight >= FORMATIVE);
+      // Релевантность решает, может ли запись войти; важность лишь упорядочивает подходящие.
+      const eligible = vis.visible && r.status === "active" && rel.topic > 0;
       rows.push({ r, visible: vis.visible, reason: vis.reason, active: r.status === "active", eligible, ...rel, recencyRank: 0, selected: false });
     }
     // Свежесть: ранг среди записей чата (1 — самая новая). Только для разрешения равенства.
@@ -707,7 +707,7 @@
   }
   function format(list) { return (list || []).map(formatOne).join("\n"); }
 
-  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, tokens, stem, FORMATIVE };
+  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, tokens, stem };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.experience;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -3644,11 +3644,23 @@
     if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
     mode = mode || (msgId ? "regen" : "new");
 
+    // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
+    // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
     let path = activePath();
+    if (mode === "regen") path = path.slice(0, path.findIndex((m) => m.id === msgId));
+    const extraPost = mode === "continue" ? "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново." : "";
+    const built = buildPrism(path, extraPost);
+    S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
+    if (built.report.overflow) {
+      toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+      if (S.drawerOpen) { S.tab = "prism"; renderDrawer(); }
+      renderFeed();
+      return;
+    }
+
     let target, prefix = "";
     if (mode === "regen") {
       target = S.messages.find((m) => m.id === msgId);
-      path = path.slice(0, path.findIndex((m) => m.id === msgId));
       target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
       target.swipeIdx = target.swipes.length - 1;
     } else if (mode === "continue") {
@@ -3661,20 +3673,7 @@
     }
     await putMsg(target);
 
-    const extraPost = mode === "continue" ? "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново." : "";
-    const built = buildPrism(path, extraPost);
-    S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
-
     const sw = TR.activeSwipe(target);
-    if (built.report.overflow) {
-      // Не отправляем запрос, который заведомо не помещается в контекст модели.
-      sw.error = `Контекст не помещается даже после всех сокращений: ${built.report.used} из ${built.report.budget} токенов. Рамка, сцена и последние сообщения больше, чем позволяет модель. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`;
-      await putMsg(target);
-      await touchChat();
-      renderFeed();
-      if (S.drawerOpen) renderDrawer();
-      return;
-    }
     const ctrl = new AbortController();
     S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
     renderFeed();

@@ -95,7 +95,7 @@ t("describe: отношение словом и причиной, без чис�
 //                        └→ B2 → B3
 const P = (ids, sw) => ids.map((id) => ({ id, swipeIdx: (sw && sw[id]) || 0 }));
 const PATH_A3 = P(["R", "A1", "A2", "A3"]), PATH_B3 = P(["R", "A1", "B2", "B3"]);
-const X = (id, extra) => Object.assign({ id, owner: "c1", status: "active", event: "событие " + id, valence: 0, weight: 3, about: ["user"], domains: [], createdAt: 1, source: { messageIds: [] } }, extra);
+const X = (id, extra) => Object.assign({ id, owner: "c1", status: "active", event: "событие " + id, valence: 0, weight: 1, about: ["user"], domains: ["тест"], createdAt: 1, source: { messageIds: [] } }, extra);
 const E1 = X("E1", { chatId: "X", source: { chatId: "X", messageIds: ["A2"] } });
 const E2 = X("E2", { chatId: "X", source: { chatId: "X", messageIds: ["B2"] } });
 const E3 = X("E3", { chatId: "X", source: { chatId: "X", messageIds: [] } });
@@ -109,13 +109,14 @@ t("PRISM1-2/3: опыт ветки A не виден в ветке B и возв
   assert.deepStrictEqual(vis(PATH_B3), ["E2", "E3"]);
   assert.deepStrictEqual(vis(PATH_A3), ["E1", "E3"]);
   // В Prism попадает только видимое
-  const sel = E.rank(ALL, { chatId: "X", path: PATH_B3, present: ["user"], text: "" }).selected.map((r) => r.id).sort();
+  const sel = E.rank(ALL, { chatId: "X", path: PATH_B3, present: ["user"], text: "тест" }).selected.map((r) => r.id).sort();
   assert.deepStrictEqual(sel, ["E2", "E3"]);
 });
 t("PRISM1-1/5: другой чат с той же карточкой не видит опыт, ручная запись — только в своём чате", () => {
   const y = ALL.filter((r) => E.visibility(r, { chatId: "Y", path: [] }).visible).map((r) => r.id);
   assert.deepStrictEqual(y, ["E4"]);
-  assert.ok(!E.rank(ALL, { chatId: "Y", path: [], present: ["user"] }).selected.some((r) => r.chatId === "X"));
+  const ySel = E.rank(ALL, { chatId: "Y", path: [], present: ["user"], text: "тест" }).selected;
+  assert.deepStrictEqual(ySel.map((r) => r.id), ["E4"]);
 });
 t("PRISM1-4: ручная запись видна во всех ветках своего чата", () => {
   assert.ok(vis(PATH_A3).includes("E3") && vis(PATH_B3).includes("E3") && vis(P(["R"])).includes("E3"));
@@ -161,7 +162,8 @@ t("PRISM1-6/7: миграция не угадывает чат и сохраня
   assert.deepStrictEqual(again.changed, []);
   assert.deepStrictEqual(again.records, res.records);
   // Непривязанные не попадают в Prism ни одного чата
-  assert.ok(!E.rank(res.records, { chatId: "X", path: PATH_A3, present: ["user"], text: "" }).selected.some((r) => ["m3", "m4", "m5"].includes(r.id)));
+  const migrated = res.records.map((r) => Object.assign({}, r, { status: "active", domains: ["тест"] }));
+  assert.ok(!E.rank(migrated, { chatId: "X", path: PATH_A3, present: ["user"], text: "тест" }).selected.some((r) => ["m3", "m4", "m5"].includes(r.id)));
 });
 t("ручная привязка старой записи: становится записью на весь чат, происхождение сохранено", () => {
   const r = E.assignToChat({ id: "m3", legacyUnscoped: true, chatId: null, source: { messageIds: ["A1", "Q1"] } }, "X");
@@ -184,6 +186,8 @@ t("PRISM1-9: тема важнее присутствия, важности и �
   assert.strictEqual(r.ranked[0].id, "old-topic");
   assert.ok(!r.selected.some((x) => x.id === "recent-user"), "свежесть не спасает нерелевантное");
   assert.ok(!r.selected.some((x) => x.id === "user-wrong"), "присутствие не заменяет тему");
+  assert.ok(!r.selected.some((x) => x.id === "heavy-unrel"), "важность не создаёт релевантность");
+  assert.deepStrictEqual(r.selected.map((x) => x.id), ["old-topic"]);
   const dbg = r.debug.find((x) => x.id === "old-topic");
   assert.ok(dbg.topic >= 1 && dbg.selected && dbg.visible);
 });
@@ -204,6 +208,20 @@ t("PRISM1-8: нет подбора по противоположному зна�
   const r = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Можно тебе доверить деньги?", limit: 8 });
   assert.deepStrictEqual(r.selected.map((x) => x.id), ["fin"]);
   assert.ok(!r.selected.some((x) => x.__counter));
+});
+t("важность не создаёт релевантность: несколько «важных» записей не по теме и одна старая по теме", () => {
+  const set = [
+    R1("w3a", { event: "Бросил её одну после аварии", domains: ["доверие", "опасность"], weight: 3, about: ["user"], createdAt: 5 }),
+    R1("w3b", { event: "Признался ей в любви", domains: ["любовь"], weight: 3, about: ["user"], createdAt: 6 }),
+    R1("w3c", { event: "Спас её на пожаре", domains: ["пожар", "спасение"], weight: 3, about: ["user"], createdAt: 7 }),
+    R1("ramen", { event: "Научил её варить рамен", domains: ["рамен", "готовка"], weight: 1, about: ["user"], createdAt: 1 }),
+  ];
+  const r = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Какой рецепт рамена тебе больше нравится?", limit: 8 });
+  assert.deepStrictEqual(r.selected.map((x) => x.id), ["ramen"]);
+  const none = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Сегодня хорошая погода.", limit: 8 });
+  assert.deepStrictEqual(none.selected, [], "если ничего не относится к теме, опыт не подаётся");
+  const built = A.build({ card: { name: "Химэ", description: "d" }, experiences: none.ranked, history: [{ role: "user", text: "Сегодня хорошая погода." }] });
+  assert.ok(!built.messages[0].content.includes("Что Химэ помнит"), "пустой опыт — допустимо");
 });
 t("тема: имена участников не засчитываются как совпадение темы", () => {
   const set = [R1("name", { event: "Химэ рассердилась", domains: ["химэ"], weight: 1 })];
@@ -367,6 +385,16 @@ t("PRISM1-21: отчёт о сокращениях точен", () => {
   const h = r.report.truncated.find((t) => t.layer === "history");
   assert.strictEqual(h.dropped, r.report.historyTotal - r.report.historyKept);
   assert.strictEqual(r.report.examples, !layers.includes("examples"));
+});
+
+t("continue после жёсткого сокращения: остаётся текущий ответ и указание продолжить", () => {
+  const cont = "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось.";
+  const h = hist(30, 120).concat([{ role: "assistant", text: "Начало ответа, которое надо продолжить" }]);
+  const r = A.build({ card: authorCard, sceneState: baseScene, history: h, extraPost: cont, contextTokens: 900, reserveTokens: 300 });
+  assert.ok(r.report.used <= r.report.budget && !r.report.overflow);
+  const nonSys = r.messages.filter((m) => m.role !== "system");
+  assert.strictEqual(nonSys[nonSys.length - 1].content, "Начало ответа, которое надо продолжить");
+  assert.ok(r.messages[r.messages.length - 1].content.includes("Продолжи последнее сообщение Юки"));
 });
 
 /* ── Карточки ── */

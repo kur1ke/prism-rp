@@ -40,6 +40,8 @@ class H(BaseHTTPRequestHandler):
         for k, v in LISTS.items():
             if self.path.endswith("/sdapi/v1/" + k):
                 return self.json(v)
+        if self.path.endswith("/count"):
+            return self.json({"chat": len(LOG), "img": len(IMG_LOG)})
         if self.path.endswith("/img-last"):
             return self.json(IMG_LOG[-1] if IMG_LOG else {})
         if self.path.endswith("/models"):

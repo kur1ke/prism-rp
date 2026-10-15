@@ -13,8 +13,9 @@
      они помечаются legacyUnscoped, хранятся целиком и в Prism не попадают,
      пока пользователь сам не привяжет их к чату.
 
-   Отбор: тема → участники → важность → свежесть (только при равенстве).
-   Знак события (valence) — метаданные; сам по себе отбор не запускает. */
+   Отбор: входит только запись, совпавшая по теме с происходящим. Среди подходящих порядок:
+   тема → участники → важность → свежесть (только при равенстве). Важность не создаёт
+   релевантность; знак события (valence) — метаданные и отбор не запускает. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -153,8 +154,6 @@
     return { topic, domainHits, wordHits, participant, weight: Number(r.weight) || 1 };
   }
 
-  // Порог: без совпадения по теме входит только определяющее событие (важность 3).
-  const FORMATIVE = 3;
 
   /* records: все записи; ctx: { chatId, path, present: [ids], text, names: [имена], limit, ownerId? }
      → { selected: [записи в хронологическом порядке], debug: [строки отбора] } */
@@ -169,7 +168,8 @@
       const inChat = r.chatId === c.chatId && scopeOf(r) !== "legacy";
       if (!inChat) continue; // чужие чаты и непривязанные записи даже не показываем в отладке
       const rel = relevance(r, c, vocab);
-      const eligible = vis.visible && r.status === "active" && (rel.topic > 0 || rel.weight >= FORMATIVE);
+      // Релевантность решает, может ли запись войти; важность лишь упорядочивает подходящие.
+      const eligible = vis.visible && r.status === "active" && rel.topic > 0;
       rows.push({ r, visible: vis.visible, reason: vis.reason, active: r.status === "active", eligible, ...rel, recencyRank: 0, selected: false });
     }
     // Свежесть: ранг среди записей чата (1 — самая новая). Только для разрешения равенства.
@@ -202,6 +202,6 @@
   }
   function format(list) { return (list || []).map(formatOne).join("\n"); }
 
-  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, tokens, stem, FORMATIVE };
+  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, tokens, stem };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.experience;
 })(typeof window !== "undefined" ? window : globalThis);

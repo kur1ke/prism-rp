@@ -226,9 +226,8 @@ try:
         page.fill("#x-event", "Кира соврал Химэ о деньгах")
         page.fill("#x-interp", "Решила, что он считает её наивной")
         page.click("[data-act=x-val][data-v='-2']")
-        page.click("[data-act=x-weight][data-v='3']")
         check("значения формы опыта переживают перерисовку", page.input_value("#x-event") == "Кира соврал Химэ о деньгах")
-        page.fill("#x-domain-add", "деньги, доверие")
+        page.fill("#x-domain-add", "деньги, доверие, кафе")
         page.keyboard.press("Enter")
         check("темы-чипы", wait_text(page, "#x-domains", "доверие"))
         page.click("[data-act=exp-save]")
@@ -452,6 +451,46 @@ try:
         page.click("[data-act=exp-assign][data-id=legacy1]")
         check("миграция: ручная привязка к чату", wait_text(page, "#drawer-body", "Старое событие без чата") and "Без привязки к чату" not in page.inner_text("#drawer-body"))
         page.click("[data-act=tab][data-tab=scene]")
+
+        # OVERFLOW: заведомо непомещающийся контекст не меняет дерево и не уходит в модель (new / regen / continue)
+        if not page.locator(".drawer.open").count(): page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=scene]")
+        page.fill("[data-sc-top=loc]", "Огромное место " + "очень длинное описание места " * 120)
+        page.dispatch_event("[data-sc-top=loc]", "change")
+        page.wait_for_timeout(300)
+        res = page.evaluate("""async () => {
+          const A = window.PRP.app, S = A.S, DB = window.PRP.store;
+          const chatNow = () => S.chats.find((c) => c.id === S.chatId);
+          const snap = async () => JSON.stringify({
+            mem: S.messages.map((m) => JSON.stringify(m)).sort(),
+            db: (await DB.byIndex('messages', 'chatId', S.chatId)).map((m) => JSON.stringify(m)).sort(),
+            leaf: chatNow().leafId, leafDb: (await DB.get('chats', S.chatId)).leafId,
+          });
+          const count = async () => (await (await fetch('http://127.0.0.1:8766/count')).json()).chat;
+          // последний ответ модели на активном пути
+          let m = S.messages.find((x) => x.id === chatNow().leafId);
+          while (m && m.role !== 'assistant') m = S.messages.find((x) => x.id === m.parentId);
+          const keep = { ctx: S.settings.contextTokens, auto: S.settings.autoContext, mt: S.settings.sampler.max_tokens };
+          S.settings.contextTokens = 600; S.settings.autoContext = false; S.settings.sampler.max_tokens = 300;
+          const before = await snap(), c0 = await count();
+          const out = {};
+          for (const mode of ['new', 'regen', 'continue']) {
+            await A.generate(mode === 'new' ? undefined : m.id, mode);
+            out[mode] = { same: (await snap()) === before, overflow: !!(S.lastPrism && S.lastPrism.report.overflow), gen: !!S.gen };
+          }
+          out.calls = (await count()) - c0;
+          Object.assign(S.settings, { contextTokens: keep.ctx, autoContext: keep.auto }); S.settings.sampler.max_tokens = keep.mt;
+          return out;
+        }""")
+        for mode in ["new", "regen", "continue"]:
+            check(f"OVERFLOW {mode}: дерево не изменилось, отчёт Prism показывает переполнение", res[mode]["same"] and res[mode]["overflow"] and not res[mode]["gen"])
+        check("OVERFLOW: модель не вызывалась", res["calls"] == 0)
+        check("OVERFLOW: ошибка показана вне истории", "не помещается" in page.inner_text("#toast") and "не помещается" not in page.inner_text("#feed"))
+        check("OVERFLOW: открыта вкладка Prism с переполнением", "Не помещается" in page.inner_text("#drawer-body"))
+        page.click("[data-act=tab][data-tab=scene]")
+        page.fill("[data-sc-top=loc]", "Кафе, терраса")
+        page.dispatch_event("[data-sc-top=loc]", "change")
+        page.wait_for_timeout(300)
 
         # Мобильная ширина
         page.set_viewport_size({"width": 390, "height": 820})
