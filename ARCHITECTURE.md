@@ -19,7 +19,8 @@ ui/app.js ── корень: состояние сессии S, контекс
    │        │
    │        ▼
    │   чистые модули предметной области (без DOM, хранилища, сети и S)
-   │     prism/scene · prism/experience · prism/assembler · chat/tree · cards/ccard
+   │     prism/scene · prism/experience · prism/assembler · chat/tree
+   │     cards/model · cards/ccard · cards/formats/* · cards/validate · cards/import
    │     assist/assist · images/compose · images/compile · core/settings · core/util
    │        │
    │        ▼
@@ -44,7 +45,12 @@ ui/app.js ── корень: состояние сессии S, контекс
 | `prism/experience` | канон чата и ветки, видимость, миграция (чистая), отбор, формат | util | DOM, хранилища, провайдеров, S |
 | `prism/assembler` | сборка контекста, строгий бюджет, порядок уступок | util, scene, experience | хранилища, генерации, дерева чата |
 | `chat/tree` | дерево сообщений, путь, варианты | — | Prism, провайдеров, интерфейса |
-| `cards/ccard` | форматы карточек V1/V2/V3, PNG-чанки | — | хранилища, интерфейса |
+| `cards/model` | каноническая карточка (CardDraft): поля, указания автора `{text, origin, enabled, reviewed}`, `activeText` (только включённые), приведение старых сохранённых | — | всего остального |
+| `cards/ccard` | PNG-чанки `chara`/`ccv3`, экспорт канонической карточки в V2/V3 (в `system_prompt`/`post_history_instructions` — только включённые указания; `prism_rp.disabledDirectives` = сохранённое из `source.preserved` + поверх текущие выключенные, только хранение) | model | хранилища, интерфейса, разбора форматов |
+| `cards/formats/detect` | определение формата по содержимому; неизвестный формат не адаптируется | formats/common | хранилища, интерфейса |
+| `cards/formats/cc-v1`, `cc-v2`, `cc-v3`, `urv-v2` | адаптер формата → канонический черновик + заметки; исходник в `source` (только хранение); импортированные указания выключены | model, formats/common | хранилища, интерфейса, рантайма |
+| `cards/validate` | ошибки (сохранить нельзя), предупреждения, сведения | model | хранилища, интерфейса |
+| `cards/import` | конвейер: текст/PNG → JSON → формат → адаптер → черновик → проверка; ничего не сохраняет | ccard, formats, validate | хранилища, интерфейса |
 | `assist/assist` | инструкция ассистента, контекст из карточки и чата | util | хранилища, провайдеров |
 | `images/compose`, `images/compile` | промпт картинки, перевод (через переданную функцию) | — | хранилища, DOM |
 | `images/backends` | транспорт генераторов картинок | — | смысла Prism |
@@ -55,7 +61,7 @@ ui/app.js ── корень: состояние сессии S, контекс
 | `prism/experience-service` | загрузка, миграция, черновики, сохранение, привязка опыта | experience, scene, store, chat/service | DOM, провайдеров |
 | `generation/service` | ход: предварительная проверка → узел или вариант → модель → разбор → сохранение → автокартинка | prism/service, chat/service, images/service, router, scene | DOM (только через ctx.ui) |
 | `images/service` | рисование, загрузка картинок чата, списки A1111 | compose, compile, backends, router, chat/service | DOM (только через ctx.ui) |
-| `cards/service` | импорт, сохранение, удаление с каскадом, экспорт | ccard, store, ui/files | DOM (только через ctx.ui / files) |
+| `cards/service` | импорт в два шага (`prepareImport` — без сохранения, `commitImport` — после проверки, включение указаний только по явному выбору), сохранение, удаление с каскадом, экспорт | import, model, ccard, store, ui/files | DOM (только через ctx.ui / files) |
 | `assist/service` | разговоры ассистента, генерация | assist, router, tree, scene, store | DOM (только через ctx.ui) |
 | `ui/files` | скачивание, чтение файлов, PNG портрета, буфер обмена | render | смысла Prism |
 | `ui/views/*` | разметка экранов | render, scene, tree, openai (только PRESETS), experience (scopeOf), assist (STARTERS) | хранилища, сервисов, S напрямую (работают с моделью m) |
@@ -77,7 +83,7 @@ ui/app.js ── корень: состояние сессии S, контекс
 
 ## Куда класть будущее
 
-- **Адаптеры форматов карточек (FOUNDATION-A)** — `cards/formats/*`; импорт меняется только в `cards/service.importFiles`.
+- **Новый формат карточки** — адаптер в `cards/formats/<формат>.js` (регистрируется через `PRP.cardFormats.register`), правило определения в `cards/formats/detect.js`, подключение в `index.html` между `formats/common.js` и `cards/import.js`. Рантайм читает только каноническую карточку; `source` во время работы не читается никогда.
 - **Начало мира (FOUNDATION-B)** — правило сценария в `prism/assembler`, генерация первой сцены в `generation/service` (новый режим), кнопка в `ui/controllers/chat`.
 - **Переписка (FOUNDATION-C/D)** — `js/messenger/{state,time,activity,initiative}.js` (чистые) и `messenger/service.js`; `app.js` и контроллеры только вызывают.
 - **Мир, линзы, наложения** — `js/world/*`, **процедурные события** — `js/procedural/*`, **отношения** — `prism/relationship.js` (чистый) с подключением в `prism/service`.

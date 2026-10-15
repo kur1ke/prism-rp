@@ -1,41 +1,65 @@
 /* Prism RP — карточки персонажей (прикладной уровень).
-   Импорт файлов (JSON/PNG) → разбор формата (cards/ccard.js) → сохранение; сохранение
-   черновика редактора; удаление с каскадом; экспорт JSON/PNG.
-   Смысл форматов (V1/V2/V3, PNG-чанки) — только в ccard.js. Файловый ввод-вывод — PRP.files. */
+   Импорт в два шага: prepareImport читает файлы и прогоняет их через конвейер cards/import.js
+   (формат → адаптер → канонический черновик → проверка) и НИЧЕГО не сохраняет; commitImport
+   сохраняет только подтверждённые на экране проверки черновики. Импортированные указания автора
+   включаются лишь по явному выбору пользователя.
+   Также: сохранение черновика редактора, удаление с каскадом, экспорт JSON/PNG.
+   Смысл форматов — в cards/formats/*, модель — в cards/model.js. Файловый ввод-вывод — PRP.files. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, CC = PRP.ccard;
+  const U = PRP.util, CC = PRP.ccard, CM = PRP.cardModel, IMP = PRP.cardImport;
 
   function create(ctx) {
     const { S, DB } = ctx;
     const F = () => ctx.files;
 
     // Черновик для редактора: копия карточки или новая пустая.
-    function draft(cd) { return U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })); }
+    function draft(cd) { return U.clone(cd ? CM.upgradeStored(cd) : CM.blank()); }
 
-    /* Импорт файлов по одному; ошибка одного файла не мешает остальным.
-       → { last: последняя добавленная карточка | null, errors: [{file, message}] } */
-    async function importFiles(files) {
-      let last = null;
-      const errors = [];
+    /* Шаг 1 импорта: файлы → результаты проверки, без сохранения.
+       → [{ ok, fileName, detection, draft | null, issues, avatar }] */
+    async function prepareImport(files) {
+      const out = [];
       for (const file of files) {
+        let r;
         try {
-          let json, avatar = null;
-          if (/\.json$/i.test(file.name) || file.type === "application/json") json = JSON.parse(await F().readFile(file, "text"));
-          else { json = CC.cardJsonFromPng(new Uint8Array(await F().readFile(file))); avatar = await F().readFile(file, "dataurl"); }
-          const cd = CC.normalize(json);
-          cd.id = U.uid("card");
-          cd.avatar = avatar;
-          await DB.put("cards", cd);
-          S.cards.unshift(cd);
-          last = cd;
+          const isJson = /\.json$/i.test(file.name) || file.type === "application/json";
+          if (isJson) r = IMP.fromJsonText(await F().readFile(file, "text"), file.name);
+          else {
+            r = IMP.fromPngBytes(new Uint8Array(await F().readFile(file)), file.name);
+            if (r.ok) r.avatar = await F().readFile(file, "dataurl");
+          }
         } catch (e) {
-          errors.push({ file: file.name, message: e.message });
-          if (ctx.ui) ctx.ui.toast(`${file.name}: ${e.message}`, true);
+          r = { ok: false, fileName: file.name, detection: { format: "unknown", version: "", sourceType: "", reason: "" }, draft: null, issues: [{ level: "error", code: "read", message: "Файл не удалось прочитать: " + (e.message || e) }] };
         }
+        out.push(r);
       }
-      return { last, errors };
+      return out;
+    }
+
+    /* Шаг 2 импорта: сохранить подтверждённые черновики.
+       choices[i] = { system: bool, postHistory: bool } — явное включение импортированных указаний
+       (по умолчанию выключены). Файлы с ошибками не сохраняются никогда. → [сохранённые карточки] */
+    async function commitImport(items, choices) {
+      const saved = [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (!it || !it.ok || !it.draft) continue;
+        const cd = U.clone(it.draft);
+        const ch = (choices && choices[i]) || {};
+        for (const k of ["system", "postHistory"]) {
+          const dv = cd.directives[k];
+          if (dv.origin === "imported" && ch[k] === true && dv.text.trim()) { dv.enabled = true; dv.reviewed = true; }
+        }
+        cd.id = U.uid("card");
+        cd.avatar = it.avatar || null;
+        cd.createdAt = cd.updatedAt = Date.now();
+        await DB.put("cards", cd);
+        S.cards.unshift(cd);
+        saved.push(cd);
+      }
+      return saved;
     }
 
     // Сохранить черновик редактора. → { error } или { card, isNew }.
@@ -76,7 +100,7 @@
       return { name: `${d.name || "персонаж"}.png`, blob: new Blob([CC.embedInPng(await F().avatarPngBytes(d), d)], { type: "image/png" }) };
     }
 
-    return { draft, importFiles, save, remove, exportJson, exportPng };
+    return { draft, prepareImport, commitImport, save, remove, exportJson, exportPng };
   }
 
   PRP.cardService = { create };

@@ -563,6 +563,27 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }
 .legacy-block .memo { cursor: default; }
 
+/* ── Проверка импорта карточек ───────────────────────────────────────── */
+.imp-modal { width: min(720px, 100%); }
+.imp-item { border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); padding: 14px 16px; margin-bottom: 12px; }
+.imp-item.bad { border-color: var(--danger); }
+.imp-item h3 { display: flex; align-items: center; gap: 6px; }
+.imp-item h3 svg { width: 16px; height: 16px; flex: none; color: var(--danger); }
+.imp-fields { list-style: none; padding: 0; margin: 4px 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; font-size: 13.5px; color: var(--muted); }
+.imp-fields li.on { color: var(--text); }
+.imp-dir, .imp-note { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; font-size: 13.5px; }
+.imp-dir { border-left-color: var(--warn); }
+.imp-note.warn { border-left-color: var(--warn); }
+.imp-item details summary { cursor: pointer; color: var(--text-2); font-size: 13px; margin-top: 4px; }
+.imp-item .code { max-height: 220px; margin: 6px 0 0; }
+.imp-issues { padding-left: 18px; margin: 10px 0 0; font-size: 13.5px; }
+.imp-issues li { margin: 3px 0; }
+.imp-issues li.error b { color: var(--danger); }
+.imp-issues li.warning b { color: var(--warn); }
+.imp-issues li.info { color: var(--muted); }
+.dir-badge { font-size: 11.5px; border-radius: 5px; padding: 0 6px; border: 1px solid var(--line-soft); color: var(--muted); font-weight: 500; }
+.dir-badge.imported { color: var(--warn); border-color: var(--warn); }
+
 </style>
 </head>
 <body>
@@ -809,6 +830,806 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/model.js */
+/* Prism RP — каноническая модель карточки персонажа (CardDraft / сохранённая карточка).
+   Один формат для всех источников (CC V1/V2/V3, URV v2, созданные в редакторе).
+   Смысл полей разведён:
+     • личность (постоянная основа): description, appearance, personality, background;
+     • начало мира: scenario; авторское начало: firstMes, altGreetings;
+     • манера: mesExample; справочные сведения: lore (не указания);
+     • указания автора: directives.system / directives.postHistory — отдельный уровень власти,
+       у каждого явный флаг enabled; импортированные приходят выключенными;
+     • метаданные: creator, creatorNotes, tags, version; картинки: image;
+     • source — исходник и сведения импорта, ТОЛЬКО хранение: во время работы не читается.
+   Чистый модуль: без DOM, хранилища и сети. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const SCHEMA = 2;
+
+  // Указание автора. Созданное в редакторе включено (отправляется, если в нём есть текст);
+  // импортированное — выключено и не проверено, пока пользователь не включит его сам.
+  function directive(text, origin) {
+    const o = origin === "imported" ? "imported" : "authored";
+    return { text: String(text || ""), origin: o, enabled: o === "authored", reviewed: o === "authored" };
+  }
+  function importedDirective(text) {
+    return String(text || "").trim() ? directive(text, "imported") : directive("", "authored");
+  }
+
+  function blank() {
+    const now = Date.now();
+    return {
+      id: null, schema: SCHEMA,
+      name: "",
+      description: "", appearance: "", personality: "", background: "",
+      scenario: "",
+      firstMes: "", altGreetings: [],
+      mesExample: "",
+      lore: [],
+      directives: { system: directive("", "authored"), postHistory: directive("", "authored") },
+      creator: "", creatorNotes: "", tags: [], version: "",
+      image: undefined,
+      avatar: null,
+      source: null,
+      createdAt: now, updatedAt: now,
+    };
+  }
+
+  // Текст указания, который реально уходит в модель: только включённое и непустое.
+  // Никаких запасных путей: source, extensions и прочее хранимое сюда не попадает.
+  function activeText(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? String(d.text) : "";
+  }
+  // Есть ли у указания текст, который сейчас выключен (для отчёта и предупреждений).
+  function hasDisabledText(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return !!(d && !d.enabled && String(d.text || "").trim());
+  }
+
+  /* Приведение карточки, сохранённой в 0.5.0 и раньше (поля systemPrompt / postHistory / raw / spec).
+     Старые указания были видны в редакторе и уходили в модель — поэтому они становятся
+     авторскими включёнными, поведение не меняется. Исходник переезжает в source. */
+  function upgradeStored(card) {
+    if (!card || card.schema === SCHEMA) return card;
+    const c = Object.assign(blank(), card);
+    c.schema = SCHEMA;
+    c.appearance = card.appearance || "";
+    c.background = card.background || "";
+    c.altGreetings = Array.isArray(card.altGreetings) ? card.altGreetings : [];
+    c.lore = Array.isArray(card.lore) ? card.lore : [];
+    c.tags = Array.isArray(card.tags) ? card.tags : [];
+    c.directives = card.directives || {
+      system: directive(card.systemPrompt || "", "authored"),
+      postHistory: directive(card.postHistory || "", "authored"),
+    };
+    if (!card.source && card.raw) c.source = { format: card.spec === "chara_card_v3" ? "ccv3" : card.spec === "chara_card_v2" ? "ccv2" : "ccv1", version: "", sourceType: "json", raw: card.raw, importedAt: card.createdAt || null, unmapped: [], compiled: [], preserved: {} };
+    delete c.systemPrompt; delete c.postHistory; delete c.raw; delete c.spec;
+    return c;
+  }
+
+  // Поля, по которым видно, что в карточке есть содержание (не только имя).
+  const CONTENT_FIELDS = ["description", "appearance", "personality", "background", "scenario", "firstMes", "mesExample"];
+  function hasContent(card) {
+    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim());
+  }
+
+  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/ccard.js */
+/* Prism RP — файл карточки Character Card: чтение карточки из PNG (tEXt/iTXt «chara» и «ccv3»)
+   и экспорт канонической карточки обратно в JSON / PNG (V2 и V3).
+   Разбор форматов при импорте — в cards/formats/* (определение формата и адаптеры). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  /* ── base64 ⇄ UTF-8 ─────────────────────────────────────────────────── */
+  function b64ToUtf8(b64) {
+    const bin = atob(String(b64).replace(/\s+/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+  function utf8ToB64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  /* ── PNG ────────────────────────────────────────────────────────────── */
+  const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
+  let CRC_TABLE = null;
+  function crc32(bytes) {
+    if (!CRC_TABLE) {
+      CRC_TABLE = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        CRC_TABLE[n] = c >>> 0;
+      }
+    }
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function readChunks(u8) {
+    for (let i = 0; i < 8; i++) if (u8[i] !== SIG[i]) throw new Error("Файл не является PNG");
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const chunks = [];
+    let p = 8;
+    while (p + 8 <= u8.length) {
+      const len = dv.getUint32(p);
+      const type = String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
+      const data = u8.subarray(p + 8, p + 8 + len);
+      chunks.push({ type, data });
+      p += 12 + len;
+      if (type === "IEND") break;
+    }
+    return chunks;
+  }
+
+  function latin1(bytes) {
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return s;
+  }
+
+  function textChunks(chunks) {
+    const out = {};
+    for (const c of chunks) {
+      if (c.type === "tEXt") {
+        const z = c.data.indexOf(0);
+        if (z > 0) out[latin1(c.data.subarray(0, z)).toLowerCase()] = latin1(c.data.subarray(z + 1));
+      } else if (c.type === "iTXt") {
+        const z = c.data.indexOf(0);
+        if (z <= 0) continue;
+        const key = latin1(c.data.subarray(0, z)).toLowerCase();
+        const comp = c.data[z + 1];
+        if (comp) continue; // сжатый iTXt в карточках не встречается
+        let q = z + 3;
+        q = c.data.indexOf(0, q) + 1; // language
+        q = c.data.indexOf(0, q) + 1; // translated keyword
+        out[key] = new TextDecoder("utf-8").decode(c.data.subarray(q));
+      }
+    }
+    return out;
+  }
+
+  function cardJsonFromPng(u8) {
+    const t = textChunks(readChunks(u8));
+    const raw = t.ccv3 || t.chara;
+    if (!raw) throw new Error("В PNG нет данных карточки (chara/ccv3)");
+    const txt = /^\s*\{/.test(raw) ? raw : b64ToUtf8(raw);
+    return JSON.parse(txt);
+  }
+
+  function makeChunk(type, data) {
+    const out = new Uint8Array(12 + data.length);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+    return out;
+  }
+
+  function textChunk(key, value) {
+    const k = new TextEncoder().encode(key);
+    const v = new TextEncoder().encode(value); // value — base64, т. е. ASCII
+    const data = new Uint8Array(k.length + 1 + v.length);
+    data.set(k, 0); data[k.length] = 0; data.set(v, k.length + 1);
+    return makeChunk("tEXt", data);
+  }
+
+  // Встраивает карточку в PNG: убирает старые chara/ccv3, пишет V2 и V3 перед IEND.
+  function embedInPng(u8, card) {
+    const chunks = readChunks(u8);
+    const parts = [new Uint8Array(SIG)];
+    for (const c of chunks) {
+      if (c.type === "tEXt" || c.type === "iTXt") {
+        const z = c.data.indexOf(0);
+        const key = z > 0 ? latin1(c.data.subarray(0, z)).toLowerCase() : "";
+        if (key === "chara" || key === "ccv3") continue;
+      }
+      if (c.type === "IEND") {
+        parts.push(textChunk("chara", utf8ToB64(JSON.stringify(toSpec(card, "v2")))));
+        parts.push(textChunk("ccv3", utf8ToB64(JSON.stringify(toSpec(card, "v3")))));
+      }
+      parts.push(makeChunk(c.type, c.data));
+    }
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    const out = new Uint8Array(total);
+    let o = 0;
+    for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  }
+
+  /* ── Экспорт ────────────────────────────────────────────────────────────
+     Каноническая карточка Prism (cards/model.js) → Character Card V2/V3.
+     • Внешность и прошлое, которых нет в стандарте, складываются в description абзацами;
+       раздельные поля Prism едут в extensions.prism_rp.fields (для обратного импорта в Prism).
+     • В system_prompt / post_history_instructions попадают только ВКЛЮЧЁННЫЕ указания.
+       Выключенные (например, непроверенные импортированные) хранятся в
+       extensions.prism_rp.disabledDirectives — только для сохранности: при импорте это поле
+       хранится в source.preserved и указанием не становится.
+       Порядок для disabledDirectives (детерминированный):
+         1) берётся сохранённое source.preserved.disabledDirectives (как было в файле);
+         2) поверх — текущие выключенные непустые указания карточки (текущее побеждает по тому же ключу);
+         3) включённые указания идут только в system_prompt / post_history_instructions;
+            сохранённое значение по тому же ключу при этом остаётся в расширении как есть
+            (это лишь хранение: при импорте и во время игры оно не читается).
+     • Для карточек, импортированных из V2/V3, неизвестные поля data исходника сохраняются.
+       Исходники других форматов (V1, URV) в экспорт не переносятся. */
+  function toSpec(card, ver) {
+    const CM = PRP.cardModel;
+    const v3 = ver === "v3";
+    const src = card.source && (card.source.format === "ccv2" || card.source.format === "ccv3") && card.source.raw && card.source.raw.data;
+    const base = src ? JSON.parse(JSON.stringify(src)) : {};
+    const oldBook = base.character_book || {};
+    const description = [card.description, card.appearance ? "Внешность:\n" + card.appearance : "", card.background ? "Прошлое:\n" + card.background : ""]
+      .map((x) => String(x || "").trim()).filter(Boolean).join("\n\n");
+    const data = Object.assign(base, {
+      name: card.name,
+      description,
+      personality: card.personality || "",
+      scenario: card.scenario || "",
+      first_mes: card.firstMes || "",
+      mes_example: card.mesExample || "",
+      creator_notes: card.creatorNotes || "",
+      system_prompt: CM.activeText(card, "system"),
+      post_history_instructions: CM.activeText(card, "postHistory"),
+      alternate_greetings: card.altGreetings || [],
+      tags: card.tags || [],
+      creator: card.creator || "",
+      character_version: card.version || "",
+      extensions: base.extensions || {},
+    });
+    if (card.lore && card.lore.length) {
+      data.character_book = Object.assign({}, oldBook, {
+        extensions: oldBook.extensions || {},
+        entries: card.lore.map((e, i) => {
+          const raw = e.raw && typeof e.raw === "object" && (card.source && /^ccv/.test(card.source.format)) ? JSON.parse(JSON.stringify(e.raw)) : {};
+          return Object.assign(raw, {
+            keys: e.keys || [],
+            secondary_keys: e.secondary_keys || [],
+            selective: !!e.selective,
+            content: e.content || "",
+            extensions: raw.extensions || {},
+            enabled: e.enabled !== false,
+            insertion_order: e.insertion_order != null ? Number(e.insertion_order) || 0 : i,
+            case_sensitive: !!e.case_sensitive,
+            constant: !!e.constant,
+            position: e.position === "before_char" ? "before_char" : "after_char",
+            name: e.comment || "",
+            comment: e.comment || "",
+            id: i,
+            ...(v3 ? { use_regex: !!raw.use_regex } : {}),
+          });
+        }),
+      });
+    } else delete data.character_book;
+    // Пространство Prism в extensions: картинки, раздельные поля, выключенные указания.
+    const ext = Object.assign({}, data.extensions);
+    const pr = Object.assign({}, ext.prism_rp);
+    delete pr.image; delete pr.fields; delete pr.disabledDirectives;
+    const im = card.image && Object.keys(card.image).length ? card.image : null;
+    if (im) pr.image = JSON.parse(JSON.stringify(im));
+    if (card.appearance || card.background) pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
+    const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};
+    if (CM.hasDisabledText(card, "system")) dis.system = card.directives.system.text;
+    if (CM.hasDisabledText(card, "postHistory")) dis.postHistory = card.directives.postHistory.text;
+    if (Object.keys(dis).length) pr.disabledDirectives = dis;
+    if (Object.keys(pr).length) ext.prism_rp = pr; else delete ext.prism_rp;
+    data.extensions = ext;
+    if (v3) {
+      data.group_only_greetings = data.group_only_greetings || [];
+      data.nickname = data.nickname || undefined;
+      return { spec: "chara_card_v3", spec_version: "3.0", data };
+    }
+    delete data.assets; delete data.group_only_greetings; delete data.nickname;
+    return { spec: "chara_card_v2", spec_version: "2.0", data };
+  }
+
+  PRP.ccard = { toSpec, cardJsonFromPng, embedInPng, crc32, b64ToUtf8, utf8ToB64 };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.ccard;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/formats/common.js */
+/* Prism RP — общее для адаптеров форматов карточек: реестр адаптеров и мелкие помощники.
+   Адаптер — чистая функция (json, detection) → { draft, notes } в каноническую модель (cards/model.js).
+   Особенности каждого формата живут только в своём файле cards/formats/<формат>.js. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+
+  const adapters = {};
+  function register(format, fn) { adapters[format] = fn; }
+
+  const clone = (o) => (o == null ? o : JSON.parse(JSON.stringify(o)));
+  const str = (v) => (typeof v === "string" ? v : v == null ? "" : typeof v === "number" ? String(v) : "");
+  const strList = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => str(x).trim()).filter(Boolean);
+  const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+
+  // Ключи объекта, которые адаптер не разобрал: путь вида "data.profile.age".
+  function unmapped(obj, known, prefix) {
+    if (!isObj(obj)) return [];
+    return Object.keys(obj).filter((k) => !known.includes(k)).map((k) => (prefix ? prefix + "." : "") + k);
+  }
+
+  // Запись лорбука в каноническом виде. raw — исходная запись (для экспорта и происхождения).
+  function loreEntry(e, i, extra) {
+    const x = isObj(e) ? e : { content: str(e) };
+    return Object.assign({
+      keys: strList(x.keys != null ? x.keys : x.key),
+      secondary_keys: strList(x.secondary_keys),
+      selective: !!x.selective,
+      content: str(x.content != null ? x.content : x.text),
+      enabled: x.enabled !== false && x.disable !== true,
+      constant: !!x.constant,
+      case_sensitive: !!x.case_sensitive,
+      insertion_order: x.insertion_order != null ? Number(x.insertion_order) || 0 : x.priority != null ? Number(x.priority) || 0 : x.order != null ? Number(x.order) || 0 : i,
+      position: x.position === "before_char" ? "before_char" : "after_char",
+      comment: str(x.comment || x.name || x.title),
+      raw: clone(x),
+    }, extra || {});
+  }
+
+  // Заметка адаптера: уровень (error | warning | info), код и текст для экрана проверки.
+  const note = (level, code, message, extra) => Object.assign({ level, code, message }, extra || {});
+
+  PRP.cardFormats = Object.assign(PRP.cardFormats || {}, { adapters, register, helpers: { clone, str, strList, isObj, unmapped, loreEntry, note } });
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/formats/detect.js */
+/* Prism RP — определение формата карточки по содержимому (не по имени файла).
+   → { format: "ccv1" | "ccv2" | "ccv3" | "urv2" | "unknown", version, confidence: "high" | "medium" | "none",
+       sourceType: "json" | "png", reason } */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const { isObj } = PRP.cardFormats.helpers;
+
+  const V1_CONTENT = ["description", "personality", "scenario", "first_mes", "mes_example", "char_persona", "world_scenario", "char_greeting", "example_dialogue"];
+
+  function detect(json, sourceType) {
+    const base = { sourceType: sourceType || "json" };
+    const out = (format, version, confidence, reason) => Object.assign({ format, version, confidence, reason }, base);
+    if (!isObj(json)) return out("unknown", "", "none", Array.isArray(json) ? "в файле массив, а не карточка" : "в файле не объект JSON");
+
+    // URV v2: type + version + data.
+    if (json.type === "urv-char") {
+      if (json.version === 2 && isObj(json.data)) return out("urv2", "2", "high", "type: urv-char, version: 2");
+      return out("unknown", String(json.version || ""), "none", `URV-карточка версии ${json.version == null ? "?" : json.version} не поддерживается (нужна версия 2 с полем data)`);
+    }
+
+    // Character Card V2 / V3: spec + data.
+    if (json.spec === "chara_card_v3" || json.spec === "chara_card_v2") {
+      const v3 = json.spec === "chara_card_v3";
+      if (!isObj(json.data)) return out("unknown", "", "none", `указан spec ${json.spec}, но нет объекта data`);
+      return out(v3 ? "ccv3" : "ccv2", String(json.spec_version || (v3 ? "3.0" : "2.0")), "high", `spec: ${json.spec}`);
+    }
+    if (json.spec) return out("unknown", "", "none", `неизвестный spec: ${String(json.spec).slice(0, 40)}`);
+
+    // Character Card V1 (TavernAI / Pygmalion): поля в корне — имя и хотя бы одно поле содержания.
+    const hasName = typeof json.name === "string" || typeof json.char_name === "string";
+    if (hasName && V1_CONTENT.some((k) => typeof json[k] === "string")) return out("ccv1", "1", "medium", "поля V1 в корне (имя и описание/приветствие)");
+
+    const keys = Object.keys(json).slice(0, 8).join(", ");
+    return out("unknown", "", "none", keys ? `не похоже ни на один известный формат (ключи: ${keys})` : "пустой объект");
+  }
+
+  // Адаптация по результату определения. Неизвестный формат не адаптируется никогда.
+  function adapt(json, detection) {
+    const fn = PRP.cardFormats.adapters[detection.format];
+    if (!fn) return null;
+    return fn(json, detection);
+  }
+
+  PRP.cardFormats.detect = detect;
+  PRP.cardFormats.adapt = adapt;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/formats/cc-v1.js */
+/* Prism RP — адаптер Character Card V1: поля в корне (TavernAI: name, description, personality,
+   scenario, first_mes, mes_example; Pygmalion: char_name, char_persona, world_scenario,
+   char_greeting, example_dialogue). Неразобранные ключи корня хранятся в исходнике. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats, CM = PRP.cardModel;
+  const { clone, str, strList, unmapped, note } = F.helpers;
+
+  const KNOWN = ["name", "char_name", "description", "char_persona", "personality", "scenario", "world_scenario", "first_mes", "char_greeting",
+    "mes_example", "example_dialogue", "creator_notes", "tags", "creator", "character_version", "metadata"];
+
+  F.register("ccv1", (json, detection) => {
+    const notes = [];
+    const d = CM.blank();
+    const pick = (a, b) => (str(json[a]).trim() ? str(json[a]) : str(json[b]));
+    d.name = pick("name", "char_name").trim();
+    d.description = pick("description", "char_persona");
+    d.personality = str(json.personality);
+    d.scenario = pick("scenario", "world_scenario");
+    d.firstMes = pick("first_mes", "char_greeting");
+    d.mesExample = pick("mes_example", "example_dialogue");
+    d.creatorNotes = str(json.creator_notes);
+    d.tags = strList(json.tags);
+    d.creator = str(json.creator);
+    d.version = str(json.character_version);
+    if (json.char_name || json.char_persona || json.char_greeting) notes.push(note("info", "pygmalion", "Поля в стиле Pygmalion (char_name, char_persona, …) разобраны как V1."));
+    const un = unmapped(json, KNOWN, "");
+    if (un.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${un.join(", ")}.`));
+    d.source = { format: "ccv1", version: detection.version, sourceType: detection.sourceType, adapter: "cc-v1", importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: {} };
+    return { draft: d, notes };
+  });
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/formats/cc-v2.js */
+/* Prism RP — адаптер Character Card V2 (spec: chara_card_v2). Разбор поля data используется и для V3.
+   system_prompt и post_history_instructions становятся импортированными указаниями — выключенными.
+   Расширения (extensions) хранятся в исходнике; из них читается только наше prism_rp
+   (настройки картинок и раздельные поля Prism), ничего из расширений не становится указанием. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats, CM = PRP.cardModel;
+  const { clone, str, strList, isObj, unmapped, loreEntry, note } = F.helpers;
+
+  const KNOWN = ["name", "description", "personality", "scenario", "first_mes", "mes_example", "creator_notes", "system_prompt", "post_history_instructions",
+    "alternate_greetings", "tags", "creator", "character_version", "character_book", "extensions"];
+
+  // data (V2/V3) → черновик; notes дополняются. known — разобранные ключи (V3 добавляет свои).
+  function mapData(data, detection, json, known) {
+    const notes = [];
+    const d = CM.blank();
+    const ext = isObj(data.extensions) ? data.extensions : {};
+    const prism = isObj(ext.prism_rp) ? ext.prism_rp : {};
+    d.name = str(data.name).trim();
+    // Раздельные поля Prism (наш экспорт складывает внешность и прошлое в description для других приложений).
+    // Поля берутся раздельно, только если description не правили после экспорта (совпадает со сборкой из них).
+    const pf = isObj(prism.fields) ? prism.fields : null;
+    const composed = pf && [pf.description, pf.appearance ? "Внешность:\n" + pf.appearance : "", pf.background ? "Прошлое:\n" + pf.background : ""]
+      .map((x) => str(x).trim()).filter(Boolean).join("\n\n");
+    if (pf && composed === str(data.description).trim()) {
+      d.description = str(pf.description);
+      d.appearance = str(pf.appearance);
+      d.background = str(pf.background);
+    } else {
+      d.description = str(data.description);
+      if (pf) notes.push(note("info", "prism-fields-stale", "Описание менялось после экспорта из Prism: взято целиком из description."));
+    }
+    d.personality = str(data.personality);
+    d.scenario = str(data.scenario);
+    d.firstMes = str(data.first_mes);
+    d.altGreetings = strList(data.alternate_greetings);
+    d.mesExample = str(data.mes_example);
+    d.creatorNotes = str(data.creator_notes);
+    d.tags = strList(data.tags);
+    d.creator = str(data.creator);
+    d.version = str(data.character_version);
+    const book = isObj(data.character_book) ? data.character_book : null;
+    d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
+    if (isObj(prism.image)) d.image = clone(prism.image);
+
+    // Указания автора: только из стандартных полей, импортированные и выключенные.
+    // Пустое стандартное поле = указания нет. Расширения (в т. ч. prism_rp.disabledDirectives) указаниями не становятся.
+    d.directives.system = CM.importedDirective(str(data.system_prompt));
+    d.directives.postHistory = CM.importedDirective(str(data.post_history_instructions));
+    const dis = isObj(prism.disabledDirectives) ? clone(prism.disabledDirectives) : null;
+    if (dis) notes.push(note("info", "prism-disabled-directives", "Выключенные указания из прошлого экспорта Prism (extensions.prism_rp.disabledDirectives) сохранены в исходнике и не восстанавливаются."));
+
+    // Расширения других приложений: хранятся, не выполняются.
+    const otherExt = Object.keys(ext).filter((k) => k !== "prism_rp");
+    if (otherExt.includes("depth_prompt")) notes.push(note("warning", "ext-depth-prompt", "Заметка персонажа SillyTavern (extensions.depth_prompt) сохранена, но не используется: это указание, а не часть характера."));
+    if (otherExt.length) notes.push(note("info", "ext-preserved", `Расширения других приложений сохранены без изменений: ${otherExt.join(", ")}.`));
+    if (isObj(prism.image)) notes.push(note("info", "prism-image", "Настройки картинок Prism (триггер, LoRA, гардероб) перенесены из карточки."));
+
+    const un = unmapped(data, known, "data");
+    if (un.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${un.join(", ")}.`));
+    d.source = {
+      format: detection.format, version: detection.version, sourceType: detection.sourceType, adapter: "cc-" + detection.format.slice(2),
+      importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: dis ? { disabledDirectives: dis } : {},
+    };
+    return { draft: d, notes };
+  }
+
+  F.register("ccv2", (json, detection) => mapData(json.data, detection, json, KNOWN));
+  F.ccData = { mapData, KNOWN };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/formats/cc-v3.js */
+/* Prism RP — адаптер Character Card V3 (spec: chara_card_v3). Поля data как у V2,
+   плюс поля V3, которых нет в модели Prism: они хранятся в исходнике и показываются на проверке. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats;
+  const { note } = F.helpers;
+
+  const V3_ONLY = ["nickname", "group_only_greetings", "assets", "creator_notes_multilingual", "source", "creation_date", "modification_date"];
+
+  F.register("ccv3", (json, detection) => {
+    const res = F.ccData.mapData(json.data, detection, json, F.ccData.KNOWN.concat(V3_ONLY));
+    const present = V3_ONLY.filter((k) => json.data[k] != null && !(Array.isArray(json.data[k]) && !json.data[k].length));
+    if (present.length) {
+      res.notes.push(note("info", "v3-preserved", `Поля V3 сохранены, но пока не используются: ${present.join(", ")}.`));
+      res.draft.source.unmapped = res.draft.source.unmapped.concat(present.map((k) => "data." + k));
+    }
+    return res;
+  });
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/formats/urv-v2.js */
+/* Prism RP — адаптер URV v2 (type: "urv-char", version: 2).
+   Профиль раскладывается по полям Prism. Заметка (systemNote) и напоминание (reminderMessage)
+   становятся импортированными указаниями — выключенными. Собранный data.systemPrompt, повторяющий
+   разложенные поля, только хранится и показывается на проверке: он не включается никогда.
+   userOverride и неизвестные поля хранятся и показываются, но во время работы не используются. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const F = PRP.cardFormats, CM = PRP.cardModel;
+  const { clone, str, isObj, unmapped, loreEntry, note } = F.helpers;
+
+  const DATA_KNOWN = ["id", "name", "description", "profile", "firstMessage", "reminderMessage", "userOverride", "lorebook", "exampleDialogue", "systemPrompt",
+    "imageTrigger", "outfitTags", "imageStyleTrigger", "nsfwTags", "imageLoras"];
+  const PROFILE_KNOWN = ["name", "age", "gender", "appearance", "personality", "background", "scenario", "systemNote"];
+
+  const text = (v) => (typeof v === "string" ? v : isObj(v) ? str(v.text != null ? v.text : v.content != null ? v.content : v.message) : str(v));
+  const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+  // Пример диалога URV → блок формата mes_example. → строка или null, если форма не распознана.
+  function exampleBlock(ex) {
+    const line = (who, t) => (String(t || "").trim() ? `${who}: ${String(t).trim()}` : "");
+    if (typeof ex === "string") return ex.trim() ? "<START>\n" + ex.trim() : "";
+    if (Array.isArray(ex)) {
+      if (ex.every((x) => typeof x === "string")) return ["<START>", line("{{user}}", ex[0]), line("{{char}}", ex[1])].concat(ex.slice(2).map((t, i) => line(i % 2 ? "{{char}}" : "{{user}}", t))).filter(Boolean).join("\n");
+      if (ex.every((x) => isObj(x) && x.role)) return ["<START>"].concat(ex.map((x) => line(/^(user|human)$/i.test(x.role) ? "{{user}}" : "{{char}}", text(x)))).filter(Boolean).join("\n");
+      return null;
+    }
+    if (isObj(ex)) {
+      const u = ex.user != null ? ex.user : ex.input != null ? ex.input : ex.question;
+      const c = ex.char != null ? ex.char : ex.character != null ? ex.character : ex.assistant != null ? ex.assistant : ex.output != null ? ex.output : ex.answer;
+      if (u != null || c != null) return ["<START>", line("{{user}}", text(u)), line("{{char}}", text(c))].filter(Boolean).join("\n");
+      if (ex.text != null || ex.content != null) return "<START>\n" + text(ex).trim();
+    }
+    return null;
+  }
+
+  // Лорбук URV: объект-карта или массив. Ключ карты — ключевое слово, если запись своих ключей не задаёт
+  // и ключ не похож на служебный id.
+  function loreFromUrv(lb, notes) {
+    const out = [];
+    const looksLikeId = (k) => /^\d+$/.test(k) || /^[0-9a-f-]{16,}$/i.test(k) || /^(entry|lore)[-_]?\d+$/i.test(k);
+    if (Array.isArray(lb)) lb.forEach((e, i) => out.push(loreEntry(e, i, { source: "urv.lorebook" })));
+    else if (isObj(lb)) Object.keys(lb).forEach((k, i) => {
+      const v = lb[k];
+      const e = loreEntry(typeof v === "string" ? { content: v } : v, i, { source: "urv.lorebook", sourceKey: k });
+      if (!e.keys.length && !looksLikeId(k)) e.keys = [k];
+      if (!e.comment) e.comment = looksLikeId(k) ? "" : k;
+      out.push(e);
+    });
+    else if (lb != null) notes.push(note("warning", "lore-shape", "Лорбук в незнакомом виде: сохранён в исходнике, но не разобран."));
+    const empty = out.filter((e) => !e.content.trim()).length;
+    if (empty) notes.push(note("warning", "lore-empty", `Записей лорбука без текста: ${empty}. Они перенесены, но в модель не попадут.`));
+    return out;
+  }
+
+  // Карта «название → теги» в строки формата Prism «название: теги».
+  function mapLines(v) {
+    if (typeof v === "string") return v;
+    if (Array.isArray(v) && v.every((x) => typeof x === "string")) return v.join("\n");
+    if (isObj(v) && Object.values(v).every((x) => typeof x === "string" || (Array.isArray(x) && x.every((y) => typeof y === "string")))) {
+      return Object.keys(v).map((k) => `${k}: ${Array.isArray(v[k]) ? v[k].join(", ") : v[k]}`).join("\n");
+    }
+    return null;
+  }
+  function loras(v) {
+    const list = Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,\n]/) : null;
+    if (!list) return null;
+    const out = [];
+    for (const x of list) {
+      if (isObj(x) && str(x.name).trim()) out.push({ name: str(x.name).trim(), weight: x.weight != null ? Number(x.weight) || 1 : 1 });
+      else if (typeof x === "string" && x.trim()) {
+        const m = x.trim().match(/^<?(?:lora:)?([^:>]+)(?::([\d.]+))?>?$/i);
+        if (!m) return null;
+        out.push({ name: m[1].trim(), weight: m[2] ? Number(m[2]) : 1 });
+      } else if (x != null && !(typeof x === "string")) return null;
+    }
+    return out;
+  }
+
+  /* Собранный systemPrompt: повторяет ли он разложенные поля?
+     Берутся начала (до 60 символов) непустых полей длиной от 20 символов и ищутся в тексте промпта. */
+  function compiledCheck(prompt, fields) {
+    const p = norm(prompt);
+    const probes = Object.keys(fields).filter((k) => norm(fields[k]).length >= 20);
+    const hits = probes.filter((k) => p.includes(norm(fields[k]).slice(0, 60)));
+    const compiled = hits.length >= 2 || (hits.length === 1 && probes.length === 1);
+    return { compiled, hits, probes };
+  }
+
+  F.register("urv2", (json, detection) => {
+    const notes = [];
+    const data = json.data, prof = isObj(data.profile) ? data.profile : {};
+    const d = CM.blank();
+    d.name = (str(prof.name).trim() || str(data.name).trim());
+    const facts = [prof.age != null && str(prof.age).trim() ? `Возраст: ${str(prof.age).trim()}` : "", prof.gender != null && str(prof.gender).trim() ? `Пол: ${str(prof.gender).trim()}` : ""].filter(Boolean).join(" · ");
+    d.description = [facts, str(data.description).trim()].filter(Boolean).join("\n\n");
+    if (facts) notes.push(note("info", "profile-facts", "Возраст и пол из профиля добавлены в начало описания."));
+    d.appearance = str(prof.appearance);
+    d.personality = str(prof.personality);
+    d.background = str(prof.background);
+    d.scenario = str(prof.scenario);
+
+    // Первые сообщения: первое — основное, остальные — альтернативные приветствия.
+    const fm = Array.isArray(data.firstMessage) ? data.firstMessage : data.firstMessage != null ? [data.firstMessage] : [];
+    const greetings = fm.map(text).map((s) => s.trim()).filter(Boolean);
+    d.firstMes = greetings[0] || "";
+    d.altGreetings = greetings.slice(1);
+    if (greetings.length > 1) notes.push(note("warning", "multi-first", `Первых сообщений: ${greetings.length}. Первое стало основным, остальные — альтернативными приветствиями.`));
+
+    // Примеры диалогов.
+    const exs = Array.isArray(data.exampleDialogue) ? data.exampleDialogue : data.exampleDialogue != null ? [data.exampleDialogue] : [];
+    const blocks = exs.map(exampleBlock);
+    const bad = blocks.filter((b) => b === null).length;
+    d.mesExample = blocks.filter(Boolean).join("\n");
+    if (bad) notes.push(note("warning", "examples-shape", `Примеров диалога в незнакомом виде: ${bad}. Они сохранены в исходнике, но не перенесены.`));
+
+    d.lore = loreFromUrv(data.lorebook, notes);
+
+    // Указания: заметка и напоминание — импортированные, выключенные.
+    d.directives.system = CM.importedDirective(str(prof.systemNote));
+    d.directives.postHistory = CM.importedDirective(str(data.reminderMessage));
+
+    const source = {
+      format: "urv2", version: "2", sourceType: detection.sourceType, adapter: "urv-v2", importedAt: Date.now(), raw: clone(json),
+      unmapped: [], compiled: [], preserved: {},
+    };
+
+    // Собранный systemPrompt.
+    const sp = str(data.systemPrompt);
+    if (sp.trim()) {
+      const chk = compiledCheck(sp, { appearance: d.appearance, personality: d.personality, background: d.background, scenario: d.scenario, systemNote: str(prof.systemNote) });
+      if (chk.compiled) {
+        source.compiled.push({ field: "data.systemPrompt", text: sp, matched: chk.hits });
+        notes.push(note("warning", "compiled-prompt", "Собранный промпт источника (data.systemPrompt) сохранён, но не включён: те же поля импортированы по отдельности."));
+      } else if (!d.directives.system.text.trim()) {
+        d.directives.system = CM.importedDirective(sp);
+        notes.push(note("warning", "system-prompt-candidate", "data.systemPrompt не похож на собранный дубль полей: предложен как указание автора, выключен."));
+      } else {
+        source.preserved.systemPrompt = sp;
+        notes.push(note("warning", "system-prompt-preserved", "data.systemPrompt сохранён, но не включён: место указания занято заметкой профиля (systemNote)."));
+      }
+    }
+
+    // userOverride: хранится и показывается, во время работы не используется.
+    if (data.userOverride != null && (typeof data.userOverride !== "string" || data.userOverride.trim())) {
+      source.preserved.userOverride = clone(data.userOverride);
+      notes.push(note("warning", "user-override", "userOverride (переопределение собеседника из URV) сохранён, но не применяется."));
+    }
+    if (data.id != null) source.preserved.id = clone(data.id);
+
+    // Картинки: переносится только то, что отображается однозначно.
+    const im = {};
+    const keep = (k, why) => { source.preserved[k] = clone(data[k]); notes.push(note("warning", "image-preserved", `${k} сохранён, но не перенесён: ${why}.`)); };
+    if (str(data.imageTrigger).trim()) im.trigger = str(data.imageTrigger).trim();
+    if (str(data.imageStyleTrigger).trim()) im.styleTrigger = str(data.imageStyleTrigger).trim();
+    if (data.outfitTags != null) { const v = mapLines(data.outfitTags); if (v == null) keep("outfitTags", "незнакомый вид"); else if (v.trim()) im.wardrobe = v; }
+    if (data.nsfwTags != null) { const v = mapLines(data.nsfwTags); if (v == null) keep("nsfwTags", "незнакомый вид"); else if (v.trim()) im.nsfw = v; }
+    if (data.imageLoras != null) { const v = loras(data.imageLoras); if (v) im.loras = v; else keep("imageLoras", "незнакомый вид"); }
+    if (Object.keys(im).length) { d.image = im; notes.push(note("info", "image-mapped", "Настройки картинок перенесены: " + Object.keys(im).join(", ") + ".")); }
+
+    source.unmapped = unmapped(data, DATA_KNOWN, "data").concat(unmapped(prof, PROFILE_KNOWN, "data.profile"));
+    if (source.unmapped.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${source.unmapped.join(", ")}.`));
+    d.source = source;
+    return { draft: d, notes };
+  });
+
+  F.urv = { compiledCheck, exampleBlock };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/validate.js */
+/* Prism RP — проверка черновика карточки перед сохранением.
+   Уровни: error — сохранить нельзя; warning — можно после проверки; info — сведения о переносе.
+   Чистый модуль. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const CM = PRP.cardModel;
+
+  const note = (level, code, message) => ({ level, code, message });
+
+  function validate(d) {
+    const out = [];
+    if (!d) return [note("error", "no-draft", "Карточку не удалось разобрать.")];
+    if (!String(d.name || "").trim()) out.push(note("error", "no-name", "У персонажа нет имени: поле имени в файле пустое или отсутствует."));
+    if (!CM.hasContent(d)) out.push(note("error", "empty-card", "В карточке нет ни описания, ни личности, ни сценария, ни приветствия — сохранять нечего."));
+    const dir = (which, label) => {
+      const x = d.directives && d.directives[which];
+      if (x && x.origin === "imported" && String(x.text || "").trim()) {
+        out.push(note("warning", "directive-" + which, `${label} из файла сохранено, но выключено. Включите его, только если доверяете тексту.`));
+      }
+    };
+    dir("system", "Указание автора (системное)");
+    dir("postHistory", "Указание автора после истории");
+    const lore = d.lore || [];
+    if (lore.length) out.push(note("info", "lore", `Записей лорбука: ${lore.length}. Это справочные сведения персонажа, не указания.`));
+    return out;
+  }
+
+  const hasErrors = (issues) => issues.some((x) => x.level === "error");
+
+  PRP.cardValidate = { validate, hasErrors };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardValidate;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/cards/import.js */
+/* Prism RP — конвейер импорта карточки (чистый):
+     байты/текст → JSON (или PNG-чанк chara/ccv3) → определение формата → адаптер
+     → канонический черновик → проверка.
+   Ничего не сохраняет: результат показывается на экране проверки, сохранение — только после подтверждения.
+   Неизвестный или битый файл даёт ошибку, а не пустую карточку. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const CC = PRP.ccard, F = PRP.cardFormats, VAL = PRP.cardValidate;
+
+  const err = (code, message) => ({ level: "error", code, message });
+
+  /* → { ok, fileName, detection, draft | null, issues: [{level, code, message}] } */
+  function fromObject(json, sourceType, fileName) {
+    const detection = F.detect(json, sourceType);
+    if (detection.format === "unknown") {
+      return { ok: false, fileName, detection, draft: null, issues: [err("unknown-format", "Формат не распознан: " + detection.reason + ".")] };
+    }
+    let res;
+    try { res = F.adapt(json, detection); }
+    catch (e) { return { ok: false, fileName, detection, draft: null, issues: [err("malformed", "Карточку не удалось разобрать: " + (e.message || e) + ".")] }; }
+    const issues = res.notes.concat(VAL.validate(res.draft));
+    // Ошибки — первыми, затем предупреждения, затем сведения.
+    const rank = { error: 0, warning: 1, info: 2 };
+    issues.sort((a, b) => rank[a.level] - rank[b.level]);
+    return { ok: !VAL.hasErrors(issues), fileName, detection, draft: res.draft, issues };
+  }
+
+  function fromJsonText(text, fileName) {
+    let json;
+    try { json = JSON.parse(text); }
+    catch (e) { return { ok: false, fileName, detection: { format: "unknown", version: "", confidence: "none", sourceType: "json", reason: "не JSON" }, draft: null, issues: [err("invalid-json", "Файл не является корректным JSON: " + e.message)] }; }
+    return fromObject(json, "json", fileName);
+  }
+
+  function fromPngBytes(u8, fileName) {
+    const det0 = { format: "unknown", version: "", confidence: "none", sourceType: "png", reason: "" };
+    let json;
+    try { json = CC.cardJsonFromPng(u8); }
+    catch (e) { return { ok: false, fileName, detection: Object.assign(det0, { reason: e.message }), draft: null, issues: [err("png", e.message)] }; }
+    return fromObject(json, "png", fileName);
+  }
+
+  PRP.cardImport = { fromObject, fromJsonText, fromPngBytes };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardImport;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -1428,6 +2249,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       .sort((a, b) => (a.insertion_order || 0) - (b.insertion_order || 0));
   }
 
+  // Текст указания автора, который можно отправить: только включённое и непустое (cards/model.js).
+  // Никаких запасных путей к исходнику карточки, расширениям или старым полям.
+  function directiveText(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? String(d.text) : "";
+  }
+
   function section(title, body) {
     body = String(body || "").trim();
     return body ? `### ${title}\n${body}` : "";
@@ -1452,7 +2280,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
      Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
      Если не помещается, уступают по порядку:
        1 старая история → 2 примеры речи → 3 лорбук → 4 менее релевантный опыт
-       → 5 указания после истории → 6 персона, сценарий, указания автора, хвост описания
+       → 5 указания после истории → 6 персона, сценарий, указания автора, прошлое, внешность, хвост описания
        (по абзацам, затем по предложениям) → 7 самый релевантный опыт → 8 история до последнего сообщения.
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -1471,15 +2299,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     // Изменяемое состояние сборки: что сейчас входит.
     const st = {
-      authorSys: m(card.systemPrompt || "").trim(),
+      authorSys: m(directiveText(card, "system")).trim(),
       description: m(card.description || "").trim(),
+      appearance: m(card.appearance || "").trim(),
       personality: m(card.personality || "").trim(),
+      background: m(card.background || "").trim(),
       scenario: m(card.scenario || "").trim(),
       examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
       exps: (o.experiences || []).slice(),
-      postHistory: o.noPostHistory ? "" : m(card.postHistory || "").trim(),
+      postHistory: o.noPostHistory ? "" : m(directiveText(card, "postHistory")).trim(),
       keepOld: null, // сколько старых сообщений (сверх minHistory) оставить; null — все
       minH: Math.min(o.minHistory, history.length),
     };
@@ -1489,7 +2319,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
-      const cardBody = [st.description, st.personality ? "Личность: " + st.personality : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+      const cardBody = [st.description, st.appearance ? "Внешность: " + st.appearance : "", st.personality ? "Личность: " + st.personality : "",
+        st.background ? "Прошлое: " + st.background : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
       const kept = keptOlder.concat(history.slice(history.length - st.minH));
@@ -1563,6 +2394,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
       function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
+      function background() { if (!st.background) return false; st.background = ""; note("card.background", "прошлое"); return true; },
+      function appearance() { if (!st.appearance) return false; st.appearance = ""; note("card.appearance", "внешность"); return true; },
       function descriptionTail() {
         const d = st.description;
         if (!d) return false;
@@ -1613,7 +2446,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         loreDropped: loreAll.length - loreKept,
         examples: !!st.examples,
         postHistory: !!st.postHistory,
-        postHistoryDisabled: !!o.noPostHistory && !!(card.postHistory || "").trim(),
+        postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
@@ -1666,6 +2499,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
 
 
+  function activeDirective(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? d.text : "";
+  }
   // Карточка → компактный текст для контекста ассистента.
   function cardText(card) {
     if (!card) return "";
@@ -1677,13 +2514,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return [
       `Имя: ${card.name}`,
       f("Описание (description)", card.description),
+      f("Внешность", card.appearance),
       f("Личность (personality)", card.personality),
+      f("Прошлое", card.background),
       f("Сценарий (scenario)", card.scenario),
       f("Первое сообщение (first_mes)", card.firstMes),
       alts.length ? `Альтернативные приветствия: ${alts.length}` : "",
       f("Примеры диалогов (mes_example)", card.mesExample),
-      f("Системный промпт карточки", card.systemPrompt),
-      f("Инструкции после истории", card.postHistory),
+      // Только включённые указания автора; выключенные (например, непроверенные импортированные) сюда не попадают.
+      f("Указания автора (включены)", activeDirective(card, "system")),
+      f("Указания автора после истории (включены)", activeDirective(card, "postHistory")),
       lore ? `Лорбук:\n${lore}` : "",
       im.trigger || im.wardrobe || im.look ? f("Изображения — триггер", im.trigger) + (im.look ? `\nВнешность для картинок:\n${im.look}` : "") + (im.wardrobe ? `\nГардероб:\n${im.wardrobe}` : "") : "",
     ].filter(Boolean).join("\n\n");
@@ -1745,249 +2585,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   PRP.assist = { SYSTEM, STARTERS, starters, cardText, chatText, build, title, blank };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.assist;
-})(typeof window !== "undefined" ? window : globalThis);
-
-</script>
-<script>/* js/cards/ccard.js */
-/* Prism RP — карточки персонажей Character Card V1/V2/V3.
-   Импорт из JSON и PNG (tEXt/iTXt «chara» и «ccv3»), экспорт обратно в JSON и PNG.
-   Исходный JSON сохраняется целиком в card.raw, чтобы поля, которые приложение
-   не моделирует (extensions и т. п.), переживали импорт → экспорт без потерь. */
-(function (root) {
-  "use strict";
-  const PRP = (root.PRP = root.PRP || {});
-
-  /* ── base64 ⇄ UTF-8 ─────────────────────────────────────────────────── */
-  function b64ToUtf8(b64) {
-    const bin = atob(String(b64).replace(/\s+/g, ""));
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new TextDecoder("utf-8").decode(bytes);
-  }
-  function utf8ToB64(str) {
-    const bytes = new TextEncoder().encode(str);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    return btoa(bin);
-  }
-
-  /* ── PNG ────────────────────────────────────────────────────────────── */
-  const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
-  let CRC_TABLE = null;
-  function crc32(bytes) {
-    if (!CRC_TABLE) {
-      CRC_TABLE = new Uint32Array(256);
-      for (let n = 0; n < 256; n++) {
-        let c = n;
-        for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-        CRC_TABLE[n] = c >>> 0;
-      }
-    }
-    let crc = 0xffffffff;
-    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
-    return (crc ^ 0xffffffff) >>> 0;
-  }
-
-  function readChunks(u8) {
-    for (let i = 0; i < 8; i++) if (u8[i] !== SIG[i]) throw new Error("Файл не является PNG");
-    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
-    const chunks = [];
-    let p = 8;
-    while (p + 8 <= u8.length) {
-      const len = dv.getUint32(p);
-      const type = String.fromCharCode(u8[p + 4], u8[p + 5], u8[p + 6], u8[p + 7]);
-      const data = u8.subarray(p + 8, p + 8 + len);
-      chunks.push({ type, data });
-      p += 12 + len;
-      if (type === "IEND") break;
-    }
-    return chunks;
-  }
-
-  function latin1(bytes) {
-    let s = "";
-    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-    return s;
-  }
-
-  function textChunks(chunks) {
-    const out = {};
-    for (const c of chunks) {
-      if (c.type === "tEXt") {
-        const z = c.data.indexOf(0);
-        if (z > 0) out[latin1(c.data.subarray(0, z)).toLowerCase()] = latin1(c.data.subarray(z + 1));
-      } else if (c.type === "iTXt") {
-        const z = c.data.indexOf(0);
-        if (z <= 0) continue;
-        const key = latin1(c.data.subarray(0, z)).toLowerCase();
-        const comp = c.data[z + 1];
-        if (comp) continue; // сжатый iTXt в карточках не встречается
-        let q = z + 3;
-        q = c.data.indexOf(0, q) + 1; // language
-        q = c.data.indexOf(0, q) + 1; // translated keyword
-        out[key] = new TextDecoder("utf-8").decode(c.data.subarray(q));
-      }
-    }
-    return out;
-  }
-
-  function cardJsonFromPng(u8) {
-    const t = textChunks(readChunks(u8));
-    const raw = t.ccv3 || t.chara;
-    if (!raw) throw new Error("В PNG нет данных карточки (chara/ccv3)");
-    const txt = /^\s*\{/.test(raw) ? raw : b64ToUtf8(raw);
-    return JSON.parse(txt);
-  }
-
-  function makeChunk(type, data) {
-    const out = new Uint8Array(12 + data.length);
-    const dv = new DataView(out.buffer);
-    dv.setUint32(0, data.length);
-    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
-    out.set(data, 8);
-    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
-    return out;
-  }
-
-  function textChunk(key, value) {
-    const k = new TextEncoder().encode(key);
-    const v = new TextEncoder().encode(value); // value — base64, т. е. ASCII
-    const data = new Uint8Array(k.length + 1 + v.length);
-    data.set(k, 0); data[k.length] = 0; data.set(v, k.length + 1);
-    return makeChunk("tEXt", data);
-  }
-
-  // Встраивает карточку в PNG: убирает старые chara/ccv3, пишет V2 и V3 перед IEND.
-  function embedInPng(u8, card) {
-    const chunks = readChunks(u8);
-    const parts = [new Uint8Array(SIG)];
-    for (const c of chunks) {
-      if (c.type === "tEXt" || c.type === "iTXt") {
-        const z = c.data.indexOf(0);
-        const key = z > 0 ? latin1(c.data.subarray(0, z)).toLowerCase() : "";
-        if (key === "chara" || key === "ccv3") continue;
-      }
-      if (c.type === "IEND") {
-        parts.push(textChunk("chara", utf8ToB64(JSON.stringify(toSpec(card, "v2")))));
-        parts.push(textChunk("ccv3", utf8ToB64(JSON.stringify(toSpec(card, "v3")))));
-      }
-      parts.push(makeChunk(c.type, c.data));
-    }
-    const total = parts.reduce((n, p) => n + p.length, 0);
-    const out = new Uint8Array(total);
-    let o = 0;
-    for (const p of parts) { out.set(p, o); o += p.length; }
-    return out;
-  }
-
-  /* ── Нормализация ───────────────────────────────────────────────────── */
-  function arr(v) { return Array.isArray(v) ? v.slice() : v ? [v] : []; }
-
-  function normalize(json) {
-    const spec = json && json.spec;
-    const d = spec === "chara_card_v2" || spec === "chara_card_v3" ? json.data || {} : json || {};
-    const book = d.character_book || null;
-    return {
-      id: null,
-      name: d.name || d.char_name || "Без имени",
-      description: d.description || "",
-      personality: d.personality || "",
-      scenario: d.scenario || "",
-      firstMes: d.first_mes || "",
-      altGreetings: arr(d.alternate_greetings),
-      mesExample: d.mes_example || "",
-      systemPrompt: d.system_prompt || "",
-      postHistory: d.post_history_instructions || "",
-      creatorNotes: d.creator_notes || "",
-      tags: arr(d.tags),
-      creator: d.creator || "",
-      version: d.character_version || "",
-      lore: book && Array.isArray(book.entries)
-        ? book.entries.map((e, i) => ({
-            keys: arr(e.keys).map(String),
-            secondary_keys: arr(e.secondary_keys).map(String),
-            selective: !!e.selective,
-            content: e.content || "",
-            enabled: e.enabled !== false,
-            constant: !!e.constant,
-            case_sensitive: !!e.case_sensitive,
-            insertion_order: e.insertion_order != null ? e.insertion_order : i,
-            position: e.position === "before_char" ? "before_char" : "after_char",
-            comment: e.comment || e.name || "",
-            raw: e,
-          }))
-        : [],
-      image: (d.extensions && d.extensions.prism_rp && d.extensions.prism_rp.image) ? JSON.parse(JSON.stringify(d.extensions.prism_rp.image)) : undefined,
-      avatar: null,
-      spec: spec || "v1",
-      raw: json,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-  }
-
-  function toSpec(card, ver) {
-    const v3 = ver === "v3";
-    const base = card.raw && card.raw.data ? JSON.parse(JSON.stringify(card.raw.data)) : {};
-    const oldBook = base.character_book || {};
-    const data = Object.assign(base, {
-      name: card.name,
-      description: card.description,
-      personality: card.personality,
-      scenario: card.scenario,
-      first_mes: card.firstMes,
-      mes_example: card.mesExample,
-      creator_notes: card.creatorNotes,
-      system_prompt: card.systemPrompt,
-      post_history_instructions: card.postHistory,
-      alternate_greetings: card.altGreetings || [],
-      tags: card.tags || [],
-      creator: card.creator || "",
-      character_version: card.version || "",
-      extensions: base.extensions || {},
-    });
-    if (card.lore && card.lore.length) {
-      data.character_book = Object.assign({}, oldBook, {
-        extensions: oldBook.extensions || {},
-        entries: card.lore.map((e, i) => {
-          const raw = e.raw && typeof e.raw === "object" ? JSON.parse(JSON.stringify(e.raw)) : {};
-          return Object.assign(raw, {
-            keys: e.keys || [],
-            secondary_keys: e.secondary_keys || [],
-            selective: !!e.selective,
-            content: e.content || "",
-            extensions: raw.extensions || {},
-            enabled: e.enabled !== false,
-            insertion_order: e.insertion_order != null ? Number(e.insertion_order) || 0 : i,
-            case_sensitive: !!e.case_sensitive,
-            constant: !!e.constant,
-            position: e.position === "before_char" ? "before_char" : "after_char",
-            name: e.comment || "",
-            comment: e.comment || "",
-            id: i,
-            ...(v3 ? { use_regex: !!raw.use_regex } : {}),
-          });
-        }),
-      });
-    } else delete data.character_book;
-    // Настройки изображений (триггер, LoRA, гардероб) едут вместе с карточкой
-    // в пространстве extensions — другие приложения его не трогают.
-    const ext = Object.assign({}, data.extensions);
-    const im = card.image && Object.keys(card.image).length ? card.image : null;
-    if (im) ext.prism_rp = Object.assign({}, ext.prism_rp, { image: JSON.parse(JSON.stringify(im)) });
-    else if (ext.prism_rp) { ext.prism_rp = Object.assign({}, ext.prism_rp); delete ext.prism_rp.image; if (!Object.keys(ext.prism_rp).length) delete ext.prism_rp; }
-    data.extensions = ext;
-    if (v3) {
-      data.group_only_greetings = data.group_only_greetings || [];
-      data.nickname = data.nickname || undefined;
-      return { spec: "chara_card_v3", spec_version: "3.0", data };
-    }
-    delete data.assets; delete data.group_only_greetings; delete data.nickname;
-    return { spec: "chara_card_v2", spec_version: "2.0", data };
-  }
-
-  PRP.ccard = { normalize, toSpec, cardJsonFromPng, embedInPng, crc32, b64ToUtf8, utf8ToB64 };
-  if (typeof module !== "undefined" && module.exports) module.exports = PRP.ccard;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -3750,7 +4347,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           <div class="mt"><span class="tag">не привязана</span><span style="flex:1"></span><button class="btn btn-sm" data-act="exp-assign" data-id="${r.id}">Привязать к этому чату</button></div></div>`).join("")}</div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.description": "описание" };
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
   const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
@@ -3930,13 +4527,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const lab = (label, key) => `${label}${key ? ` <span class="spec-key">${key}</span>` : ""}`;
     const f = (id, label, key, value, rows, help, ph) => `<div class="field"><label for="${id}">${lab(label, key)}</label>${rows
       ? `<textarea id="${id}" rows="${rows}" data-cf="${id}" placeholder="${esc(ph || "")}">${esc(value || "")}</textarea>` : `<input id="${id}" data-cf="${id}" value="${esc(value || "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
+    const dirField = (k, label, key, rows, help) => {
+      const x = (d.directives && d.directives[k]) || { text: "", origin: "authored", enabled: true };
+      const badge = x.origin === "imported" ? `<span class="dir-badge imported">из файла${x.reviewed ? "" : " · не проверено"}</span>` : `<span class="dir-badge">своё</span>`;
+      return `<div class="field"><label for="cf-dir-${k}">${lab(label, key)} ${badge}</label>
+        <textarea id="cf-dir-${k}" rows="${rows}" data-cf-dir="${k}">${esc(x.text || "")}</textarea>
+        <label class="check"><input type="checkbox" data-cf-dir="${k}" ${x.enabled ? "checked" : ""}><span>Включено — отправлять модели</span></label>
+        <span class="help">${help}</span></div>`;
+    };
     let body = "";
     if (section === "main") {
       body = `<div class="card-edit"><div><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div></div>
         <div>${f("cf-name", "Имя", "name", d.name)}
-          ${f("cf-desc", "Описание", "description", d.description, 9, "Внешность, характер, прошлое — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
-          ${f("cf-pers", "Краткое описание личности", "personality", d.personality, 2, "Несколько черт одной строкой.")}
+          ${f("cf-desc", "Описание", "description", d.description, 7, "Кто это — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
+          ${f("cf-app", "Внешность", "", d.appearance, 3, "При экспорте в Character Card добавляется в description абзацем «Внешность».")}
+          ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
+          ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>`;
     } else if (section === "greet") {
@@ -3948,8 +4555,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <button class="btn btn-sm" data-act="alt-add">${icon("plus")}Добавить приветствие</button>`;
     } else if (section === "prompts") {
       body = `${f("cf-ex", "Примеры диалогов", "mes_example", d.mesExample, 8, "Как персонаж говорит. Каждый пример начинается с &lt;START&gt;, реплики — {{user}}: и {{char}}:", "<START>\n{{user}}: Привет.\n{{char}}: …")}
-        ${f("cf-sys", "Системный промпт", "system_prompt", d.systemPrompt, 4, "Заменяет общий системный промпт. {{original}} подставит общий. Пусто — используется общий.")}
-        ${f("cf-post", "Инструкции после истории", "post_history_instructions", d.postHistory, 3, "Идут в конец контекста, ближе всего к ответу (jailbreak / UJB в других приложениях).")}`;
+        <div class="block-title" style="margin-top:18px">Указания автора</div>
+        <p class="hint" style="margin-top:0">Отдельный уровень власти: в модель уходят, только когда включены. Указания из импортированного файла приходят выключенными — включите их, если доверяете тексту.</p>
+        ${dirField("system", "Системное указание", "system_prompt", 4, "Идёт отдельным разделом «указания автора» в начале контекста.")}
+        ${dirField("postHistory", "Указание после истории", "post_history_instructions", 3, "Идёт в конец контекста, ближе всего к ответу. Общий выключатель — в настройках.")}`;
     } else if (section === "lore") {
       const posSel = (i, v) => `<select data-lore="${i}" data-k="position"><option value="before_char" ${v === "before_char" ? "selected" : ""}>Перед описанием персонажа</option><option value="after_char" ${v !== "before_char" ? "selected" : ""}>После описания персонажа</option></select>`;
       body = `<p class="lead">${lab("Лорбук персонажа", "character_book")}<br>Сведения о мире подмешиваются в контекст, когда в последних сообщениях звучат ключевые слова.</p>
@@ -3983,6 +4592,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
         ${f("cf-notes", "Заметки создателя", "creator_notes", d.creatorNotes, 4, "Для людей, не для модели: как играть, рекомендованные настройки. В контекст не идут.")}
+        ${sourceBlock(d.source)}
         <div class="block-title" style="margin-top:24px">Файл карточки</div><p class="hint">Экспорт в Character Card V2/V3 — открывается в SillyTavern, RisuAI, Chub и других. Поля, которых нет в редакторе, сохраняются как были. Настройки изображений и LoRA едут внутри карточки (extensions.prism_rp).</p>
         <div class="row"><button class="btn" data-act="card-png">${icon("download")}PNG с портретом</button><button class="btn" data-act="card-json">${icon("download")}JSON</button></div>
         ${d.id ? `<div class="block-title" style="margin-top:28px">Удаление</div><p class="hint">Удалит персонажа вместе со всеми чатами и опытом.</p>
@@ -3995,7 +4605,107 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <nav class="modal-nav">${nav.map(([id, n, ic]) => `<button class="rail-item ${section === id ? "active" : ""}" data-act="card-section" data-section="${id}">${icon(ic)}${n}</button>`).join("")}</nav>
       <div class="modal-body">${body}</div></div></div>`;
   }
+  // Откуда карточка: формат исходника и то, что сохранено без использования. Только показ.
+  function sourceBlock(s) {
+    if (!s) return "";
+    const FORMAT = { ccv1: "Character Card V1", ccv2: "Character Card V2", ccv3: "Character Card V3", urv2: "URV v2" };
+    const pres = Object.keys(s.preserved || {}), comp = (s.compiled || []).length, unm = (s.unmapped || []).length;
+    return `<div class="block-title" style="margin-top:24px">Исходник</div>
+      <p class="hint">Импортировано из ${esc(FORMAT[s.format] || s.format || "файла")}${s.sourceType ? ` (${esc(String(s.sourceType).toUpperCase())})` : ""}${s.importedAt ? `, ${esc(new Date(s.importedAt).toLocaleString())}` : ""}.
+      Исходный файл хранится целиком и во время игры не читается.${comp ? " Собранный промпт источника сохранён и не включается." : ""}
+      ${pres.length ? `<br>Сохранено без использования: ${pres.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}
+      ${unm ? `<br>Неизвестные поля: ${s.unmapped.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}</p>`;
+  }
   Object.assign((PRP.views = PRP.views || {}), { cardModal });
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/ui/views/import-review.js */
+/* Prism RP — экран проверки импорта карточек.
+   Показывает, что распознано и куда легло, что сохранено без использования, предупреждения и ошибки.
+   Импортированные указания автора показаны отдельно, с флажками «включить» — по умолчанию сняты.
+   Ничего не сохраняется, пока пользователь не нажмёт «Импортировать». */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render;
+  const { esc, icon } = R;
+
+  const FORMAT = { ccv1: "Character Card V1", ccv2: "Character Card V2", ccv3: "Character Card V3", urv2: "URV v2", unknown: "не распознан" };
+  const LEVEL = { error: "Ошибка", warning: "Внимание", info: "Сведения" };
+  const DIR = { system: "Указание автора (системное)", postHistory: "Указание автора после истории" };
+
+  function fieldList(d) {
+    const has = (v) => !!String(v || "").trim();
+    const alts = (d.altGreetings || []).length;
+    const rows = [
+      ["Описание", has(d.description)], ["Внешность", has(d.appearance)], ["Личность", has(d.personality)], ["Прошлое", has(d.background)],
+      ["Сценарий", has(d.scenario)],
+      ["Первое сообщение" + (alts ? ` + ${alts} альтернативн.` : ""), has(d.firstMes)],
+      ["Примеры диалога", has(d.mesExample)],
+      [`Лорбук: ${(d.lore || []).length}`, (d.lore || []).length > 0],
+      ["Настройки картинок", !!(d.image && Object.keys(d.image).length)],
+    ];
+    return `<ul class="imp-fields">${rows.map(([n, ok]) => `<li class="${ok ? "on" : ""}">${ok ? "✓" : "—"} ${esc(n)}</li>`).join("")}</ul>`;
+  }
+
+  function directives(d, i, choice) {
+    const out = [];
+    for (const k of ["system", "postHistory"]) {
+      const x = d.directives && d.directives[k];
+      if (!x || x.origin !== "imported" || !String(x.text || "").trim()) continue;
+      out.push(`<div class="imp-dir">
+        <label class="check"><input type="checkbox" data-imp-dir="${i}" data-k="${k}" ${choice && choice[k] ? "checked" : ""}>
+          <span><b>${DIR[k]}</b> — импортировано, выключено. Включите, только если доверяете тексту.</span></label>
+        <details><summary>Текст (${x.text.length} симв.)</summary><pre class="code">${esc(x.text)}</pre></details></div>`);
+    }
+    return out.length ? `<div class="block-title">Указания автора</div>${out.join("")}` : "";
+  }
+
+  function sourceInfo(d) {
+    const s = d.source || {};
+    const parts = [];
+    for (const c of s.compiled || []) {
+      parts.push(`<div class="imp-note warn"><b>Собранный промпт (${esc(c.field)})</b> — дубль разложенных полей, сохранён и <b>не будет включён</b>.
+        <details><summary>Показать (${c.text.length} симв.)</summary><pre class="code">${esc(c.text)}</pre></details></div>`);
+    }
+    const pres = Object.keys(s.preserved || {});
+    if (pres.length) {
+      parts.push(`<div class="imp-note">Сохранено, но не используется: ${pres.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}
+        <details><summary>Показать</summary><pre class="code">${esc(JSON.stringify(s.preserved, null, 2))}</pre></details></div>`);
+    }
+    if ((s.unmapped || []).length) parts.push(`<div class="imp-note">Неизвестные поля (хранятся в исходнике): ${s.unmapped.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}</div>`);
+    return parts.join("");
+  }
+
+  function item(r, i, choice) {
+    const det = r.detection || {};
+    const fmt = `${FORMAT[det.format] || det.format}${det.sourceType ? ` · ${det.sourceType.toUpperCase()}` : ""}`;
+    const issues = (r.issues || []).filter((x) => r.ok ? x.code !== "directive-system" && x.code !== "directive-postHistory" : true);
+    const list = issues.length ? `<ul class="imp-issues">${issues.map((x) => `<li class="${x.level}"><b>${LEVEL[x.level]}:</b> ${esc(x.message)}</li>`).join("")}</ul>` : "";
+    if (!r.ok) {
+      return `<section class="imp-item bad" data-imp-item="${i}"><h3>${icon("x")} ${esc(r.fileName || "файл")}</h3>
+        <p class="hint">Формат: ${esc(fmt)}. Карточка не будет добавлена.</p>${list}</section>`;
+    }
+    const d = r.draft;
+    return `<section class="imp-item" data-imp-item="${i}"><h3>${esc(d.name)}</h3>
+      <p class="hint">${esc(r.fileName || "")} · формат: ${esc(fmt)}</p>
+      ${fieldList(d)}${directives(d, i, choice)}${sourceInfo(d)}${list}</section>`;
+  }
+
+  function importReview(m, modal) {
+    const items = modal.items || [];
+    const n = items.filter((r) => r.ok).length;
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow imp-modal" role="dialog" aria-modal="true" aria-label="Проверка импорта">
+      <div class="modal-head"><h2>Проверка импорта</h2>
+        <button class="icon-btn" data-act="import-cancel" title="Отмена">${icon("x")}</button></div>
+      <div class="modal-body"><p class="lead">Проверьте, что распознано. Пока вы не нажмёте «Импортировать», ничего не сохраняется.</p>
+        ${items.map((r, i) => item(r, i, (modal.choices || [])[i])).join("")}
+        <div class="modal-foot"><button class="btn" data-act="import-cancel">Отмена</button>
+          <button class="btn btn-primary" data-act="import-confirm" ${n ? "" : "disabled"}>${icon("check")}Импортировать${items.length > 1 ? ` (${n})` : ""}</button></div></div></div></div>`;
+  }
+
+  Object.assign((PRP.views = PRP.views || {}), { importReview });
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -4642,43 +5352,67 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 </script>
 <script>/* js/cards/service.js */
 /* Prism RP — карточки персонажей (прикладной уровень).
-   Импорт файлов (JSON/PNG) → разбор формата (cards/ccard.js) → сохранение; сохранение
-   черновика редактора; удаление с каскадом; экспорт JSON/PNG.
-   Смысл форматов (V1/V2/V3, PNG-чанки) — только в ccard.js. Файловый ввод-вывод — PRP.files. */
+   Импорт в два шага: prepareImport читает файлы и прогоняет их через конвейер cards/import.js
+   (формат → адаптер → канонический черновик → проверка) и НИЧЕГО не сохраняет; commitImport
+   сохраняет только подтверждённые на экране проверки черновики. Импортированные указания автора
+   включаются лишь по явному выбору пользователя.
+   Также: сохранение черновика редактора, удаление с каскадом, экспорт JSON/PNG.
+   Смысл форматов — в cards/formats/*, модель — в cards/model.js. Файловый ввод-вывод — PRP.files. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, CC = PRP.ccard;
+  const U = PRP.util, CC = PRP.ccard, CM = PRP.cardModel, IMP = PRP.cardImport;
 
   function create(ctx) {
     const { S, DB } = ctx;
     const F = () => ctx.files;
 
     // Черновик для редактора: копия карточки или новая пустая.
-    function draft(cd) { return U.clone(cd || Object.assign(CC.normalize({ name: "" }), { id: null })); }
+    function draft(cd) { return U.clone(cd ? CM.upgradeStored(cd) : CM.blank()); }
 
-    /* Импорт файлов по одному; ошибка одного файла не мешает остальным.
-       → { last: последняя добавленная карточка | null, errors: [{file, message}] } */
-    async function importFiles(files) {
-      let last = null;
-      const errors = [];
+    /* Шаг 1 импорта: файлы → результаты проверки, без сохранения.
+       → [{ ok, fileName, detection, draft | null, issues, avatar }] */
+    async function prepareImport(files) {
+      const out = [];
       for (const file of files) {
+        let r;
         try {
-          let json, avatar = null;
-          if (/\.json$/i.test(file.name) || file.type === "application/json") json = JSON.parse(await F().readFile(file, "text"));
-          else { json = CC.cardJsonFromPng(new Uint8Array(await F().readFile(file))); avatar = await F().readFile(file, "dataurl"); }
-          const cd = CC.normalize(json);
-          cd.id = U.uid("card");
-          cd.avatar = avatar;
-          await DB.put("cards", cd);
-          S.cards.unshift(cd);
-          last = cd;
+          const isJson = /\.json$/i.test(file.name) || file.type === "application/json";
+          if (isJson) r = IMP.fromJsonText(await F().readFile(file, "text"), file.name);
+          else {
+            r = IMP.fromPngBytes(new Uint8Array(await F().readFile(file)), file.name);
+            if (r.ok) r.avatar = await F().readFile(file, "dataurl");
+          }
         } catch (e) {
-          errors.push({ file: file.name, message: e.message });
-          if (ctx.ui) ctx.ui.toast(`${file.name}: ${e.message}`, true);
+          r = { ok: false, fileName: file.name, detection: { format: "unknown", version: "", sourceType: "", reason: "" }, draft: null, issues: [{ level: "error", code: "read", message: "Файл не удалось прочитать: " + (e.message || e) }] };
         }
+        out.push(r);
       }
-      return { last, errors };
+      return out;
+    }
+
+    /* Шаг 2 импорта: сохранить подтверждённые черновики.
+       choices[i] = { system: bool, postHistory: bool } — явное включение импортированных указаний
+       (по умолчанию выключены). Файлы с ошибками не сохраняются никогда. → [сохранённые карточки] */
+    async function commitImport(items, choices) {
+      const saved = [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (!it || !it.ok || !it.draft) continue;
+        const cd = U.clone(it.draft);
+        const ch = (choices && choices[i]) || {};
+        for (const k of ["system", "postHistory"]) {
+          const dv = cd.directives[k];
+          if (dv.origin === "imported" && ch[k] === true && dv.text.trim()) { dv.enabled = true; dv.reviewed = true; }
+        }
+        cd.id = U.uid("card");
+        cd.avatar = it.avatar || null;
+        cd.createdAt = cd.updatedAt = Date.now();
+        await DB.put("cards", cd);
+        S.cards.unshift(cd);
+        saved.push(cd);
+      }
+      return saved;
     }
 
     // Сохранить черновик редактора. → { error } или { card, isNew }.
@@ -4719,7 +5453,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return { name: `${d.name || "персонаж"}.png`, blob: new Blob([CC.embedInPng(await F().avatarPngBytes(d), d)], { type: "image/png" }) };
     }
 
-    return { draft, importFiles, save, remove, exportJson, exportPng };
+    return { draft, prepareImport, commitImport, save, remove, exportJson, exportPng };
   }
 
   PRP.cardService = { create };
@@ -4969,7 +5703,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           <button class="icon-btn" data-act="modal-close" title="Закрыть">${R.icon("x")}</button></span></figcaption></figure></div>`;
         return;
       }
-      rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section) : V.cardModal(m, S.modal.draft, S.modal.section);
+      rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section)
+        : S.modal.kind === "import" ? V.importReview(m, S.modal)
+        : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       S.modal.keepScroll = false;
     }
@@ -5339,11 +6075,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // Поля открытого раздела редактора → черновик (S.modal.draft).
     function collectCard() {
       const d = S.modal.draft;
-      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-sys": "systemPrompt", "cf-post": "postHistory", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
+      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-bg": "background", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
       $$("[data-cf]").forEach((el) => {
         const id = el.dataset.cf;
         if (map[id]) d[map[id]] = el.value;
         else if (id === "cf-tags") d.tags = el.value.split(",").map((s) => s.trim()).filter(Boolean);
+      });
+      // Указания автора: текст и явный флаг «включено». Флаг меняет только сам пользователь.
+      $$("[data-cf-dir]").forEach((el) => {
+        const k = el.dataset.cfDir, x = d.directives[k];
+        if (el.type === "checkbox") { x.enabled = el.checked; if (el.checked) x.reviewed = true; }
+        else x.text = el.value;
       });
       if ($("[data-alt]") || S.modal.section === "greet") {
         d.altGreetings = (d.altGreetings || []).slice();
@@ -5372,6 +6114,19 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     const actions = {
       import: () => $("#file-card").click(),
+      // Проверка импорта: флажки указаний читаются из формы, сохраняются только распознанные файлы.
+      "import-confirm": async () => {
+        const m = S.modal;
+        if (!m || m.kind !== "import") return;
+        const choices = m.items.map(() => ({}));
+        $$("[data-imp-dir]").forEach((el) => { choices[+el.dataset.impDir][el.dataset.k] = el.checked; });
+        const saved = await svc.cards.commitImport(m.items, choices);
+        S.modal = null;
+        S.view = "home";
+        ui.renderAll();
+        if (saved.length) ui.toast(saved.length === 1 ? `Добавлен(а): ${saved[0].name}` : `Добавлено персонажей: ${saved.length}`);
+      },
+      "import-cancel": () => { S.modal = null; ui.renderModal(); },
       "new-card": () => openCardEditor(null),
       "open-card": (t) => nav.openCard(t.dataset.id),
       "edit-card": (t) => { ui.closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : ctx.card()); },
@@ -5404,9 +6159,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     async function change(t) {
       if (t.id === "file-card") {
-        const r = await svc.cards.importFiles([...t.files]);
-        if (r.last) { S.view = "home"; ui.renderAll(); ui.toast(`Добавлен(а): ${r.last.name}`); }
+        const files = [...t.files];
         t.value = "";
+        if (!files.length) return true;
+        const items = await svc.cards.prepareImport(files);
+        S.modal = { kind: "import", items, choices: items.map(() => ({ system: false, postHistory: false })) };
+        ui.renderModal();
         return true;
       }
       if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await ctx.files.readFile(t.files[0], "dataurl"); t.value = ""; ui.renderModal(); return true; }
@@ -5725,7 +6483,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
-    S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    S.cards = (await DB.all("cards")).map(PRP.cardModel.upgradeStored).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
     await svc.exp.migrate();

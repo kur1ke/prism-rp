@@ -57,6 +57,13 @@
       .sort((a, b) => (a.insertion_order || 0) - (b.insertion_order || 0));
   }
 
+  // Текст указания автора, который можно отправить: только включённое и непустое (cards/model.js).
+  // Никаких запасных путей к исходнику карточки, расширениям или старым полям.
+  function directiveText(card, which) {
+    const d = card && card.directives && card.directives[which];
+    return d && d.enabled && String(d.text || "").trim() ? String(d.text) : "";
+  }
+
   function section(title, body) {
     body = String(body || "").trim();
     return body ? `### ${title}\n${body}` : "";
@@ -81,7 +88,7 @@
      Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
      Если не помещается, уступают по порядку:
        1 старая история → 2 примеры речи → 3 лорбук → 4 менее релевантный опыт
-       → 5 указания после истории → 6 персона, сценарий, указания автора, хвост описания
+       → 5 указания после истории → 6 персона, сценарий, указания автора, прошлое, внешность, хвост описания
        (по абзацам, затем по предложениям) → 7 самый релевантный опыт → 8 история до последнего сообщения.
      Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -100,15 +107,17 @@
 
     // Изменяемое состояние сборки: что сейчас входит.
     const st = {
-      authorSys: m(card.systemPrompt || "").trim(),
+      authorSys: m(directiveText(card, "system")).trim(),
       description: m(card.description || "").trim(),
+      appearance: m(card.appearance || "").trim(),
       personality: m(card.personality || "").trim(),
+      background: m(card.background || "").trim(),
       scenario: m(card.scenario || "").trim(),
       examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
       exps: (o.experiences || []).slice(),
-      postHistory: o.noPostHistory ? "" : m(card.postHistory || "").trim(),
+      postHistory: o.noPostHistory ? "" : m(directiveText(card, "postHistory")).trim(),
       keepOld: null, // сколько старых сообщений (сверх minHistory) оставить; null — все
       minH: Math.min(o.minHistory, history.length),
     };
@@ -118,7 +127,8 @@
 
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
-      const cardBody = [st.description, st.personality ? "Личность: " + st.personality : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+      const cardBody = [st.description, st.appearance ? "Внешность: " + st.appearance : "", st.personality ? "Личность: " + st.personality : "",
+        st.background ? "Прошлое: " + st.background : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
       const kept = keptOlder.concat(history.slice(history.length - st.minH));
@@ -192,6 +202,8 @@
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
       function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
+      function background() { if (!st.background) return false; st.background = ""; note("card.background", "прошлое"); return true; },
+      function appearance() { if (!st.appearance) return false; st.appearance = ""; note("card.appearance", "внешность"); return true; },
       function descriptionTail() {
         const d = st.description;
         if (!d) return false;
@@ -242,7 +254,7 @@
         loreDropped: loreAll.length - loreKept,
         examples: !!st.examples,
         postHistory: !!st.postHistory,
-        postHistoryDisabled: !!o.noPostHistory && !!(card.postHistory || "").trim(),
+        postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),

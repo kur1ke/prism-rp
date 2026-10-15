@@ -551,3 +551,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }
 .legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }
 .legacy-block .memo { cursor: default; }
+
+/* ── Проверка импорта карточек ───────────────────────────────────────── */
+.imp-modal { width: min(720px, 100%); }
+.imp-item { border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); padding: 14px 16px; margin-bottom: 12px; }
+.imp-item.bad { border-color: var(--danger); }
+.imp-item h3 { display: flex; align-items: center; gap: 6px; }
+.imp-item h3 svg { width: 16px; height: 16px; flex: none; color: var(--danger); }
+.imp-fields { list-style: none; padding: 0; margin: 4px 0 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 12px; font-size: 13.5px; color: var(--muted); }
+.imp-fields li.on { color: var(--text); }
+.imp-dir, .imp-note { border-left: 3px solid var(--line); padding: 4px 0 4px 10px; margin: 8px 0; font-size: 13.5px; }
+.imp-dir { border-left-color: var(--warn); }
+.imp-note.warn { border-left-color: var(--warn); }
+.imp-item details summary { cursor: pointer; color: var(--text-2); font-size: 13px; margin-top: 4px; }
+.imp-item .code { max-height: 220px; margin: 6px 0 0; }
+.imp-issues { padding-left: 18px; margin: 10px 0 0; font-size: 13.5px; }
+.imp-issues li { margin: 3px 0; }
+.imp-issues li.error b { color: var(--danger); }
+.imp-issues li.warning b { color: var(--warn); }
+.imp-issues li.info { color: var(--muted); }
+.dir-badge { font-size: 11.5px; border-radius: 5px; padding: 0 6px; border: 1px solid var(--line-soft); color: var(--muted); font-weight: 500; }
+.dir-badge.imported { color: var(--warn); border-color: var(--warn); }

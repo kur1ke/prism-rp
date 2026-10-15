@@ -7,7 +7,16 @@ require(J("core/util.js"));
 require(J("prism/scene.js"));
 require(J("prism/experience.js"));
 require(J("prism/assembler.js"));
+require(J("cards/model.js"));
 require(J("cards/ccard.js"));
+require(J("cards/formats/common.js"));
+require(J("cards/formats/detect.js"));
+require(J("cards/formats/cc-v1.js"));
+require(J("cards/formats/cc-v2.js"));
+require(J("cards/formats/cc-v3.js"));
+require(J("cards/formats/urv-v2.js"));
+require(J("cards/validate.js"));
+require(J("cards/import.js"));
 require(J("providers/openai.js"));
 require(J("chat/tree.js"));
 require(J("images/compose.js"));
@@ -16,7 +25,10 @@ require(J("images/compile.js"));
 require(J("assist/assist.js"));
 require(J("core/settings.js"));
 require(J("ui/render.js"));
-const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG } = globalThis.PRP;
+const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG, cardModel: CM, cardFormats: CF, cardImport: IMP, cardValidate: VAL } = globalThis.PRP;
+// Импорт карточки из объекта → черновик (для тестов, где важен только результат).
+const normalize = (json) => { const r = IMP.fromObject(json, "json", "t.json"); if (!r.ok) throw new Error(r.issues.map((x) => x.message).join("; ")); return r.draft; };
+const authored = (sys, post) => ({ system: CM.directive(sys || "", "authored"), postHistory: CM.directive(post || "", "authored") });
 
 let passed = 0, failed = 0;
 function t(name, fn) {
@@ -257,7 +269,7 @@ t("PRISM1-12: соседняя ветка не наследует настрое
 /* ── Сборщик ── */
 const card = {
   name: "Химэ", description: "Студентка, {{user}} — её одногруппник.", personality: "ревнивая, но отходчивая",
-  scenario: "", systemPrompt: "", postHistory: "", mesExample: "<START>\n{{char}}: Ну и ладно!",
+  scenario: "", mesExample: "<START>\n{{char}}: Ну и ладно!",
   lore: [{ keys: ["университет"], content: "Токийский университет", enabled: true }, { keys: [], content: "Мир — современная Япония", constant: true }],
 };
 t("сборка: слои подписаны, макросы подставлены, протокол в конце", () => {
@@ -293,7 +305,7 @@ t("сборка: бюджет режет старую историю, но де�
 });
 
 /* ── Сборщик: указания автора и строгий бюджет (этап 1) ── */
-const authorCard = { name: "Юки", description: "shy but curious", personality: "", scenario: "", systemPrompt: "always answer in first person", postHistory: "use terse sentences", lore: [] };
+const authorCard = { name: "Юки", description: "shy but curious", personality: "", scenario: "", directives: authored("always answer in first person", "use terse sentences"), lore: [] };
 const costOf = (msgs) => msgs.reduce((n, x) => n + Math.ceil(x.content.length / 3.5) + 4, 0);
 t("PRISM1-13: указания автора отделены от склонностей", () => {
   const r = A.build({ card: authorCard, history: [{ role: "user", text: "hi" }] });
@@ -365,7 +377,7 @@ t("PRISM1-19: огромная карточка — детерминирован
   assert.ok(desc.split("\n\n").every((p) => !p.startsWith("Абзац") || p.endsWith(".")));
 });
 t("огромные указания после истории ≤ бюджета, уступают раньше карточки", () => {
-  const c = Object.assign({}, authorCard, { postHistory: big(3000) });
+  const c = Object.assign({}, authorCard, { directives: authored("always answer in first person", big(3000)) });
   const r = A.build(Object.assign({ card: c, sceneState: baseScene, history: hist(4, 20) }, BUD));
   strict(r);
   assert.ok(r.report.truncated.some((t) => t.layer === "postHistory"));
@@ -405,7 +417,7 @@ function tinyPng() {
 }
 t("карточка: V2 → PNG → обратно без потерь, extensions сохраняются", () => {
   const v2 = { spec: "chara_card_v2", spec_version: "2.0", data: { name: "Химэ ✿", description: "Описание", first_mes: "Привет", mes_example: "", personality: "", scenario: "", creator_notes: "", system_prompt: "", post_history_instructions: "", alternate_greetings: ["Йо"], tags: ["школа"], creator: "я", character_version: "1", extensions: { foo: { bar: 1 } }, character_book: { entries: [{ keys: ["Токио"], content: "Город", enabled: true, insertion_order: 0, extensions: {} }], extensions: {} } } };
-  const card = C.normalize(v2);
+  const card = normalize(v2);
   assert.strictEqual(card.name, "Химэ ✿");
   assert.strictEqual(card.lore[0].keys[0], "Токио");
   const png = C.embedInPng(tinyPng(), card);
@@ -424,7 +436,7 @@ t("карточка: поля CCv2 и лорбук туда-обратно, LoRA
     creator_notes: "n", system_prompt: "sp", post_history_instructions: "ph", alternate_greetings: ["a1", "a2"], tags: ["t"], creator: "me", character_version: "1.2",
     extensions: { other_app: { x: 1 } },
     character_book: { entries: [{ keys: ["кафе"], secondary_keys: ["вечер"], selective: true, content: "c", enabled: true, insertion_order: 5, position: "before_char", comment: "Кафе", constant: false, priority: 7, extensions: { st: 1 } }] } } };
-  const c = C.normalize(src);
+  const c = normalize(src);
   assert.strictEqual(c.creatorNotes, "n"); assert.strictEqual(c.version, "1.2"); assert.deepStrictEqual(c.altGreetings, ["a1", "a2"]);
   assert.deepStrictEqual(c.lore[0].secondary_keys, ["вечер"]); assert.strictEqual(c.lore[0].position, "before_char"); assert.strictEqual(c.lore[0].comment, "Кафе");
   c.image = { trigger: "yuki", loras: [{ name: "Yuki_IL", weight: 0.8 }] };
@@ -434,7 +446,7 @@ t("карточка: поля CCv2 и лорбук туда-обратно, LoRA
   assert.ok(e.selective && e.secondary_keys[0] === "вечер" && e.position === "before_char" && e.priority === 7 && e.extensions.st === 1 && e.name === "Кафе");
   assert.strictEqual(out.extensions.other_app.x, 1);
   assert.strictEqual(out.extensions.prism_rp.image.loras[0].name, "Yuki_IL");
-  assert.strictEqual(C.normalize({ spec: "chara_card_v2", data: out }).image.loras[0].name, "Yuki_IL");
+  assert.strictEqual(normalize({ spec: "chara_card_v2", data: out }).image.loras[0].name, "Yuki_IL");
 });
 t("лорбук: выборочная запись требует доп. ключ, позиция before_char", () => {
   const cd = { name: "Юки", description: "Описание Юки", lore: [
@@ -452,9 +464,9 @@ t("карточка: CRC верный (сверка с zlib)", () => {
   const data = Buffer.from("IEND");
   assert.strictEqual(C.crc32(data), zlib.crc32 ? zlib.crc32(data) : 0xae426082);
 });
-t("карточка: V1 и V3 нормализуются", () => {
-  assert.strictEqual(C.normalize({ name: "A", first_mes: "hi" }).firstMes, "hi");
-  assert.strictEqual(C.normalize({ spec: "chara_card_v3", data: { name: "B", nickname: "Би" } }).name, "B");
+t("карточка: V1 и V3 импортируются", () => {
+  assert.strictEqual(normalize({ name: "A", first_mes: "hi" }).firstMes, "hi");
+  assert.strictEqual(normalize({ spec: "chara_card_v3", data: { name: "B", nickname: "Би", description: "d" } }).name, "B");
 });
 
 /* ── Провайдер ── */
@@ -677,6 +689,272 @@ t("настройки: картинки включены и закреплённ
   assert.strictEqual(STG.imagesOn(s, false), false); assert.strictEqual(STG.imagesOn(s, true), true);
   assert.strictEqual(STG.qualityPinned(s), true);
   s.images.promptMode = "off"; assert.strictEqual(STG.qualityPinned(s), false);
+});
+
+/* ── FOUNDATION-A: импорт карточек (формат → адаптер → черновик → проверка) ── */
+const fs = require("fs");
+const URV = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "urv-orihime.json"), "utf8"));
+const V2FULL = { spec: "chara_card_v2", spec_version: "2.0", data: { name: "Юки", description: "desc", personality: "pers", scenario: "scen", first_mes: "hi", mes_example: "<START>\n{{char}}: да",
+  creator_notes: "", system_prompt: "SYS-IMPORTED", post_history_instructions: "POST-IMPORTED", alternate_greetings: ["a1"], tags: [], creator: "", character_version: "",
+  extensions: { depth_prompt: { prompt: "DEPTH-EXT", depth: 4 } }, character_book: { entries: [{ keys: ["кафе"], content: "Кафе", enabled: true, insertion_order: 0 }] } } };
+const imp = (json, st) => IMP.fromObject(json, st || "json", "f");
+const outbound = (card) => A.build({ card, history: [{ role: "user", text: "hi" }] }).messages.map((m) => m.content).join("\n");
+
+t("FA fixture 1: V1 → черновик", () => {
+  const r = imp({ name: "Ая", description: "d", first_mes: "привет", personality: "p", scenario: "s", mes_example: "" });
+  assert.ok(r.ok); assert.strictEqual(r.detection.format, "ccv1"); assert.strictEqual(r.draft.firstMes, "привет");
+  const r2 = imp({ char_name: "Пиг", char_persona: "persona", char_greeting: "yo", world_scenario: "w", example_dialogue: "<START>" });
+  assert.ok(r2.ok); assert.strictEqual(r2.draft.name, "Пиг"); assert.strictEqual(r2.draft.description, "persona"); assert.strictEqual(r2.draft.firstMes, "yo");
+});
+t("FA fixture 2: V2 → черновик, лорбук и приветствия", () => {
+  const r = imp(V2FULL);
+  assert.ok(r.ok); assert.strictEqual(r.detection.format, "ccv2");
+  assert.deepStrictEqual(r.draft.altGreetings, ["a1"]); assert.strictEqual(r.draft.lore[0].keys[0], "кафе");
+  assert.strictEqual(r.draft.source.format, "ccv2"); assert.strictEqual(r.draft.source.raw.data.name, "Юки");
+});
+t("FA fixture 3: V3 → черновик, V3-поля сохранены", () => {
+  const r = imp({ spec: "chara_card_v3", spec_version: "3.0", data: Object.assign({}, V2FULL.data, { nickname: "Ю", group_only_greetings: ["g"], assets: [] }) });
+  assert.ok(r.ok); assert.strictEqual(r.detection.format, "ccv3"); assert.strictEqual(r.draft.source.raw.data.nickname, "Ю");
+});
+t("FA fixture 4: PNG (chara и ccv3) → тот же черновик, что из JSON", () => {
+  const c = normalize(V2FULL);
+  const png = C.embedInPng(tinyPng(), c);
+  const r = IMP.fromPngBytes(png, "x.png");
+  assert.ok(r.ok); assert.strictEqual(r.detection.sourceType, "png"); assert.strictEqual(r.detection.format, "ccv3");
+  assert.strictEqual(r.draft.name, "Юки"); assert.strictEqual(r.draft.description, "desc");
+  const bad = IMP.fromPngBytes(tinyPng(), "plain.png");
+  assert.ok(!bad.ok && bad.draft === null && bad.issues[0].level === "error");
+});
+t("FA fixture 5: URV v2 → черновик", () => {
+  const r = imp(URV);
+  assert.ok(r.ok, JSON.stringify(r.issues)); assert.strictEqual(r.detection.format, "urv2");
+  const d = r.draft;
+  assert.ok(d.name.trim()); assert.ok(d.appearance.trim() && d.personality.trim() && d.background.trim() && d.scenario.trim());
+  assert.ok(/Возраст/.test(d.description));
+  assert.ok(d.mesExample.startsWith("<START>"));
+  assert.ok(d.source.preserved.userOverride, "userOverride сохранён");
+  assert.ok(r.issues.some((x) => x.code === "user-override"));
+});
+t("FA fixture 6: неизвестный формат → ошибка, без черновика", () => {
+  for (const j of [{ foo: 1 }, [], { spec: "chara_card_v9", data: {} }, { type: "urv-char", version: 3, data: {} }, {}, "строка", 42, null]) {
+    const r = imp(j);
+    assert.ok(!r.ok && r.draft === null, JSON.stringify(j)); assert.strictEqual(r.issues[0].code, "unknown-format");
+  }
+});
+t("FA fixture 7: битый файл → ошибка, не «Без имени»", () => {
+  const r = IMP.fromJsonText("{ not json", "x.json");
+  assert.ok(!r.ok && r.draft === null && r.issues[0].code === "invalid-json");
+  for (const j of [{ spec: "chara_card_v2", data: { name: "", description: "x" } }, { spec: "chara_card_v2", data: { name: "Пусто" } }, { spec: "chara_card_v2" }]) {
+    const x = imp(j);
+    assert.ok(!x.ok && x.issues.some((i) => i.level === "error"), JSON.stringify(j));
+  }
+});
+t("FA fixture 8: system_prompt импортируется выключенным и не уходит в модель", () => {
+  const d = imp(V2FULL).draft;
+  assert.deepStrictEqual(d.directives.system, { text: "SYS-IMPORTED", origin: "imported", enabled: false, reviewed: false });
+  assert.ok(!outbound(d).includes("SYS-IMPORTED"));
+  d.directives.system.enabled = true;
+  assert.ok(outbound(d).includes("SYS-IMPORTED"), "включённое — уходит");
+});
+t("FA fixture 9: post_history выключен и не уходит в модель", () => {
+  const d = imp(V2FULL).draft;
+  assert.strictEqual(d.directives.postHistory.enabled, false); assert.strictEqual(d.directives.postHistory.origin, "imported");
+  assert.ok(!outbound(d).includes("POST-IMPORTED"));
+  d.directives.postHistory.enabled = true;
+  assert.ok(outbound(d).includes("POST-IMPORTED"));
+  assert.ok(!A.build({ card: d, history: [{ role: "user", text: "hi" }], noPostHistory: true }).messages.some((m) => m.content.includes("POST-IMPORTED")), "общий выключатель цел");
+});
+t("FA fixture 10: URV собранный systemPrompt сохранён, помечен и не включается", () => {
+  const r = imp(URV), d = r.draft;
+  assert.strictEqual(d.source.compiled.length, 1); assert.strictEqual(d.source.compiled[0].field, "data.systemPrompt");
+  assert.ok(r.issues.some((x) => x.code === "compiled-prompt"));
+  assert.notStrictEqual(d.directives.system.text, URV.data.systemPrompt);
+  d.directives.system.enabled = true; d.directives.postHistory.enabled = true;
+  assert.ok(!outbound(d).includes(URV.data.systemPrompt.slice(0, 80)), "собранный промпт не уходит даже при включённых указаниях");
+});
+t("FA fixture 11: исходник и расширения не становятся указанием", () => {
+  const d = imp(V2FULL).draft;
+  d.directives.system.text = ""; d.directives.postHistory.text = "";
+  const out = outbound(d);
+  assert.ok(!out.includes("SYS-IMPORTED") && !out.includes("POST-IMPORTED") && !out.includes("DEPTH-EXT"));
+  assert.strictEqual(CM.activeText(d, "system"), "");
+  assert.ok(imp(V2FULL).issues.some((x) => x.code === "ext-depth-prompt"));
+});
+t("FA fixture 12: пустое указание = указания нет (без запасных путей)", () => {
+  const d = imp(V2FULL).draft;
+  d.directives.system = CM.directive("   ", "authored");
+  assert.strictEqual(CM.activeText(d, "system"), "");
+  assert.ok(!outbound(d).includes("Указания автора карточки (правила"));
+  assert.strictEqual(C.toSpec(d, "v2").data.system_prompt, "");
+});
+t("FA fixture 13: несколько первых сообщений URV → основное + альтернативные", () => {
+  const r = imp(URV);
+  assert.ok(r.draft.firstMes.trim()); assert.ok(r.draft.altGreetings.length >= 1);
+  assert.ok(r.issues.some((x) => x.code === "multi-first"));
+  const one = imp({ type: "urv-char", version: 2, data: { name: "X", firstMessage: [{ text: "a" }, "b", ""] } }).draft;
+  assert.strictEqual(one.firstMes, "a"); assert.deepStrictEqual(one.altGreetings, ["b"]);
+});
+t("FA fixture 14: лорбук URV в виде карты", () => {
+  const lore = imp(URV).draft.lore;
+  assert.ok(lore.length >= 3);
+  const map = imp({ type: "urv-char", version: 2, data: { name: "X", description: "d", lorebook: { "Город": "Текст", "42": { content: "по id", keys: [] }, lore_3: { keys: ["k"], content: "c", priority: 9 } } } }).draft.lore;
+  const city = map.find((e) => e.content === "Текст"), byId = map.find((e) => e.content === "по id"), l3 = map.find((e) => e.content === "c");
+  assert.ok(city && byId && l3);
+  assert.deepStrictEqual(city.keys, ["Город"]);
+  assert.deepStrictEqual(byId.keys, [], "служебный id не становится ключом");
+  assert.deepStrictEqual(l3.keys, ["k"]); assert.strictEqual(l3.insertion_order, 9);
+});
+t("FA fixture 15: экспорт после импорта — только включённые указания, выключенные в prism_rp", () => {
+  const d = imp(V2FULL).draft;
+  let out = C.toSpec(d, "v3").data;
+  assert.strictEqual(out.system_prompt, ""); assert.strictEqual(out.post_history_instructions, "");
+  assert.deepStrictEqual(out.extensions.prism_rp.disabledDirectives, { system: "SYS-IMPORTED", postHistory: "POST-IMPORTED" });
+  assert.strictEqual(out.extensions.depth_prompt.prompt, "DEPTH-EXT", "чужие расширения сохранены");
+  // E: повторный импорт экспорта не восстанавливает указания из расширения
+  const back = imp({ spec: "chara_card_v3", data: out }).draft;
+  assert.strictEqual(back.directives.system.text, ""); assert.strictEqual(back.directives.postHistory.text, "");
+  assert.deepStrictEqual(back.source.preserved.disabledDirectives, { system: "SYS-IMPORTED", postHistory: "POST-IMPORTED" });
+  d.directives.system.enabled = true;
+  out = C.toSpec(d, "v2").data;
+  assert.strictEqual(out.system_prompt, "SYS-IMPORTED"); assert.ok(!out.extensions.prism_rp || !out.extensions.prism_rp.disabledDirectives || !out.extensions.prism_rp.disabledDirectives.system);
+  // URV → экспорт V2: внешность и прошлое в description, раздельные поля в prism_rp.fields, обратный импорт их восстанавливает
+  const u = imp(URV).draft;
+  const ux = C.toSpec(u, "v2");
+  assert.ok(ux.data.description.includes("Внешность:\n") && ux.data.description.includes("Прошлое:\n"));
+  assert.ok(!JSON.stringify(ux).includes("userOverride"), "исходник URV не переносится");
+  const ub = imp(ux).draft;
+  assert.strictEqual(ub.appearance, u.appearance); assert.strictEqual(ub.background, u.background); assert.strictEqual(ub.description, u.description);
+  ux.data.description += "\n\nправка в другом приложении";
+  assert.ok(imp(ux).draft.description.endsWith("правка в другом приложении"), "правленое описание не теряется");
+});
+
+t("FA unit: определение формата", () => {
+  const f = (j) => CF.detect(j, "json").format;
+  assert.strictEqual(f({ spec: "chara_card_v2", data: {} }), "ccv2");
+  assert.strictEqual(f({ spec: "chara_card_v3", data: {} }), "ccv3");
+  assert.strictEqual(f({ type: "urv-char", version: 2, data: {} }), "urv2");
+  assert.strictEqual(f({ type: "urv-char", version: "2", data: {} }), "unknown");
+  assert.strictEqual(f({ name: "A", description: "d" }), "ccv1");
+  assert.strictEqual(f({ name: "A" }), "unknown", "одно имя — не карточка");
+  assert.strictEqual(f({ spec: "chara_card_v2", data: "x" }), "unknown");
+  assert.strictEqual(CF.detect({ spec: "chara_card_v2", data: {} }, "png").sourceType, "png");
+  assert.strictEqual(CF.adapt({ foo: 1 }, { format: "unknown" }), null, "неизвестный не адаптируется");
+});
+t("FA unit: адаптеры дают каноническую форму", () => {
+  const keys = Object.keys(CM.blank()).sort();
+  for (const j of [{ name: "A", description: "d" }, V2FULL, { spec: "chara_card_v3", data: V2FULL.data }, URV]) {
+    const d = imp(j).draft;
+    assert.deepStrictEqual(Object.keys(d).sort(), keys);
+    assert.strictEqual(d.schema, CM.SCHEMA);
+    for (const k of ["system", "postHistory"]) assert.deepStrictEqual(Object.keys(d.directives[k]).sort(), ["enabled", "origin", "reviewed", "text"]);
+    assert.ok(d.source && d.source.raw && d.source.format);
+  }
+});
+t("FA unit: проверка черновика", () => {
+  const b = CM.blank();
+  assert.ok(VAL.validate(b).some((x) => x.code === "no-name"));
+  b.name = "A";
+  assert.ok(VAL.validate(b).some((x) => x.code === "empty-card"));
+  b.firstMes = "hi";
+  assert.ok(!VAL.hasErrors(VAL.validate(b)));
+  b.directives.system = CM.importedDirective("x");
+  assert.ok(VAL.validate(b).some((x) => x.code === "directive-system" && x.level === "warning"));
+  const r = imp(V2FULL);
+  assert.deepStrictEqual(r.issues.map((x) => x.level), r.issues.map((x) => x.level).slice().sort((a, c) => ["error", "warning", "info"].indexOf(a) - ["error", "warning", "info"].indexOf(c)), "ошибки → предупреждения → сведения");
+});
+t("FA unit: карантин указаний", () => {
+  assert.deepStrictEqual(CM.importedDirective("t"), { text: "t", origin: "imported", enabled: false, reviewed: false });
+  assert.deepStrictEqual(CM.importedDirective("  "), { text: "", origin: "authored", enabled: true, reviewed: true }, "пустое импортированное — просто пустое");
+  assert.strictEqual(CM.directive("t").enabled, true, "своё — включено");
+  const c = CM.blank(); c.directives.system = CM.importedDirective("Q");
+  assert.strictEqual(CM.activeText(c, "system"), ""); assert.ok(CM.hasDisabledText(c, "system"));
+  assert.ok(!A.build({ card: Object.assign(c, { name: "N", description: "d" }), history: [{ role: "user", text: "hi" }] }).messages.some((m) => m.content.includes("Q\n") || m.content.endsWith("Q")));
+});
+t("FA unit: URV — проверка собранного промпта", () => {
+  const f = { a: "Длинное описание внешности персонажа номер один", b: "Характер у неё довольно сложный и переменчивый" };
+  assert.ok(CF.urv.compiledCheck("Intro. " + f.a + ". И ещё: " + f.b, f).compiled);
+  assert.ok(!CF.urv.compiledCheck("Совершенно другой текст указания", f).compiled);
+  const own = imp({ type: "urv-char", version: 2, data: { name: "X", description: "d", systemPrompt: "Пиши от первого лица." } });
+  assert.strictEqual(own.draft.directives.system.text, "Пиши от первого лица."); assert.strictEqual(own.draft.directives.system.enabled, false);
+  assert.ok(own.issues.some((x) => x.code === "system-prompt-candidate"));
+  const both = imp({ type: "urv-char", version: 2, data: { name: "X", description: "d", profile: { systemNote: "note" }, systemPrompt: "Другое указание." } });
+  assert.strictEqual(both.draft.directives.system.text, "note"); assert.strictEqual(both.draft.source.preserved.systemPrompt, "Другое указание.");
+});
+t("FA unit: старые сохранённые карточки приводятся без смены поведения", () => {
+  const old = { id: "c1", name: "Old", description: "d", systemPrompt: "OLD-SYS", postHistory: "", raw: { a: 1 }, spec: "chara_card_v2", lore: [] };
+  const u = CM.upgradeStored(old);
+  assert.strictEqual(u.directives.system.enabled, true); assert.strictEqual(u.directives.system.origin, "authored");
+  assert.ok(!("systemPrompt" in u) && !("raw" in u)); assert.strictEqual(u.source.raw.a, 1); assert.strictEqual(u.id, "c1");
+  assert.ok(outbound(u).includes("OLD-SYS"));
+  assert.strictEqual(CM.upgradeStored(u), u, "повторно не трогает");
+});
+t("FA unit: внешность и прошлое в карточке и уступают бюджету раньше описания", () => {
+  const c = Object.assign(CM.blank(), { name: "N", description: "DESC-CORE", appearance: "APP-X", background: "BG-Y" });
+  const o = outbound(c);
+  assert.ok(o.includes("Внешность: APP-X") && o.includes("Прошлое: BG-Y"));
+  const fat = Object.assign(CM.blank(), { name: "N", description: "DESC-CORE " + big(250), appearance: "APP-X " + big(700), background: "BG-Y " + big(700) });
+  const r = A.build(Object.assign({ card: fat, sceneState: baseScene, history: hist(4, 20) }, BUD));
+  assert.ok(r.report.used <= r.report.budget && !r.report.overflow);
+  const layers = r.report.truncated.map((x) => x.layer);
+  assert.ok(layers.includes("card.background"), JSON.stringify(layers));
+  assert.ok(r.messages[0].content.includes("DESC-CORE"), "описание остаётся");
+});
+t("FA unit: ассистент видит только включённые указания", () => {
+  const c = imp(V2FULL).draft;
+  assert.ok(!AST.cardText(c).includes("SYS-IMPORTED") && !AST.cardText(c).includes("POST-IMPORTED"));
+  c.directives.system.enabled = true;
+  assert.ok(AST.cardText(c).includes("SYS-IMPORTED"));
+});
+
+t("FA review fix: prism_rp.disabledDirectives — только сохранность, переживает круги импорта/экспорта", () => {
+  for (const spec of ["chara_card_v2", "chara_card_v3"]) {
+    const ver = spec === "chara_card_v3" ? "v3" : "v2";
+    const card = { spec, data: { name: "Х", description: "d", first_mes: "hi", system_prompt: "", post_history_instructions: "",
+      extensions: { prism_rp: { disabledDirectives: { system: "OLD-SYS", postHistory: "OLD-POST" } } } } };
+    // 1: импорт — только в source.preserved
+    const r = imp(card);
+    assert.ok(r.ok);
+    assert.strictEqual(r.draft.directives.system.text, ""); assert.strictEqual(r.draft.directives.postHistory.text, "");
+    assert.deepStrictEqual(r.draft.source.preserved.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
+    assert.ok(!r.issues.some((x) => x.code === "directive-system" || x.code === "directive-postHistory"));
+    // 2: рантайм не видит, даже если пустые указания включены
+    const on = JSON.parse(JSON.stringify(r.draft));
+    on.directives.system.enabled = true; on.directives.postHistory.enabled = true;
+    assert.ok(!outbound(on).includes("OLD-") && !AST.cardText(on).includes("OLD-"));
+    // 3: первый повторный экспорт сохраняет в расширении, стандартные поля пусты
+    const ex1 = C.toSpec(r.draft, ver);
+    assert.strictEqual(ex1.data.system_prompt, ""); assert.strictEqual(ex1.data.post_history_instructions, "");
+    assert.deepStrictEqual(ex1.data.extensions.prism_rp.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
+    // 4: второй импорт — снова не указание
+    const r2 = imp(ex1);
+    assert.strictEqual(r2.draft.directives.system.text, ""); assert.strictEqual(r2.draft.directives.postHistory.text, "");
+    assert.ok(!outbound(r2.draft).includes("OLD-"));
+    // 5: второй экспорт — всё ещё сохранено
+    const ex2 = C.toSpec(r2.draft, ver);
+    assert.deepStrictEqual(ex2.data.extensions.prism_rp.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
+    assert.strictEqual(ex2.data.system_prompt, "");
+    // 6: текущее выключенное указание побеждает устаревшее сохранённое по тому же ключу
+    const nw = JSON.parse(JSON.stringify(r2.draft));
+    nw.directives.system = CM.directive("NEW-SYS", "authored"); nw.directives.system.enabled = false;
+    const ex3 = C.toSpec(nw, ver);
+    assert.strictEqual(ex3.data.system_prompt, "");
+    assert.deepStrictEqual(ex3.data.extensions.prism_rp.disabledDirectives, { system: "NEW-SYS", postHistory: "OLD-POST" });
+    // C: включённое указание — только в system_prompt; сохранённое по тому же ключу остаётся хранением
+    nw.directives.system.enabled = true;
+    const ex4 = C.toSpec(nw, ver);
+    assert.strictEqual(ex4.data.system_prompt, "NEW-SYS");
+    assert.deepStrictEqual(ex4.data.extensions.prism_rp.disabledDirectives, { system: "OLD-SYS", postHistory: "OLD-POST" });
+    const r4 = imp(ex4).draft;
+    assert.strictEqual(r4.directives.system.text, "NEW-SYS"); assert.strictEqual(r4.directives.system.enabled, false, "из system_prompt — импортированное, выключено");
+    assert.strictEqual(r4.directives.postHistory.text, "");
+  }
+  // экспорт выключенного канонического указания и повторный импорт без восстановления
+  const c = imp(V2FULL).draft;
+  const out = C.toSpec(c, "v2");
+  assert.strictEqual(out.data.extensions.prism_rp.disabledDirectives.system, "SYS-IMPORTED"); assert.strictEqual(out.data.system_prompt, "");
+  const back = imp(out).draft;
+  assert.strictEqual(back.directives.system.text, ""); assert.ok(!outbound(back).includes("SYS-IMPORTED"));
+  assert.strictEqual(C.toSpec(back, "v2").data.extensions.prism_rp.disabledDirectives.system, "SYS-IMPORTED");
 });
 
 console.log(`\n${passed} пройдено, ${failed} с ошибками`);

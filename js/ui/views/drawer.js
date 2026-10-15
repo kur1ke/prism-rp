@@ -112,7 +112,7 @@
           <div class="mt"><span class="tag">не привязана</span><span style="flex:1"></span><button class="btn btn-sm" data-act="exp-assign" data-id="${r.id}">Привязать к этому чату</button></div></div>`).join("")}</div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.description": "описание" };
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
   const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;

@@ -14,13 +14,23 @@
     const lab = (label, key) => `${label}${key ? ` <span class="spec-key">${key}</span>` : ""}`;
     const f = (id, label, key, value, rows, help, ph) => `<div class="field"><label for="${id}">${lab(label, key)}</label>${rows
       ? `<textarea id="${id}" rows="${rows}" data-cf="${id}" placeholder="${esc(ph || "")}">${esc(value || "")}</textarea>` : `<input id="${id}" data-cf="${id}" value="${esc(value || "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
+    const dirField = (k, label, key, rows, help) => {
+      const x = (d.directives && d.directives[k]) || { text: "", origin: "authored", enabled: true };
+      const badge = x.origin === "imported" ? `<span class="dir-badge imported">из файла${x.reviewed ? "" : " · не проверено"}</span>` : `<span class="dir-badge">своё</span>`;
+      return `<div class="field"><label for="cf-dir-${k}">${lab(label, key)} ${badge}</label>
+        <textarea id="cf-dir-${k}" rows="${rows}" data-cf-dir="${k}">${esc(x.text || "")}</textarea>
+        <label class="check"><input type="checkbox" data-cf-dir="${k}" ${x.enabled ? "checked" : ""}><span>Включено — отправлять модели</span></label>
+        <span class="help">${help}</span></div>`;
+    };
     let body = "";
     if (section === "main") {
       body = `<div class="card-edit"><div><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div></div>
         <div>${f("cf-name", "Имя", "name", d.name)}
-          ${f("cf-desc", "Описание", "description", d.description, 9, "Внешность, характер, прошлое — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
-          ${f("cf-pers", "Краткое описание личности", "personality", d.personality, 2, "Несколько черт одной строкой.")}
+          ${f("cf-desc", "Описание", "description", d.description, 7, "Кто это — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
+          ${f("cf-app", "Внешность", "", d.appearance, 3, "При экспорте в Character Card добавляется в description абзацем «Внешность».")}
+          ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
+          ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>`;
     } else if (section === "greet") {
@@ -32,8 +42,10 @@
         <button class="btn btn-sm" data-act="alt-add">${icon("plus")}Добавить приветствие</button>`;
     } else if (section === "prompts") {
       body = `${f("cf-ex", "Примеры диалогов", "mes_example", d.mesExample, 8, "Как персонаж говорит. Каждый пример начинается с &lt;START&gt;, реплики — {{user}}: и {{char}}:", "<START>\n{{user}}: Привет.\n{{char}}: …")}
-        ${f("cf-sys", "Системный промпт", "system_prompt", d.systemPrompt, 4, "Заменяет общий системный промпт. {{original}} подставит общий. Пусто — используется общий.")}
-        ${f("cf-post", "Инструкции после истории", "post_history_instructions", d.postHistory, 3, "Идут в конец контекста, ближе всего к ответу (jailbreak / UJB в других приложениях).")}`;
+        <div class="block-title" style="margin-top:18px">Указания автора</div>
+        <p class="hint" style="margin-top:0">Отдельный уровень власти: в модель уходят, только когда включены. Указания из импортированного файла приходят выключенными — включите их, если доверяете тексту.</p>
+        ${dirField("system", "Системное указание", "system_prompt", 4, "Идёт отдельным разделом «указания автора» в начале контекста.")}
+        ${dirField("postHistory", "Указание после истории", "post_history_instructions", 3, "Идёт в конец контекста, ближе всего к ответу. Общий выключатель — в настройках.")}`;
     } else if (section === "lore") {
       const posSel = (i, v) => `<select data-lore="${i}" data-k="position"><option value="before_char" ${v === "before_char" ? "selected" : ""}>Перед описанием персонажа</option><option value="after_char" ${v !== "before_char" ? "selected" : ""}>После описания персонажа</option></select>`;
       body = `<p class="lead">${lab("Лорбук персонажа", "character_book")}<br>Сведения о мире подмешиваются в контекст, когда в последних сообщениях звучат ключевые слова.</p>
@@ -67,6 +79,7 @@
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
         ${f("cf-notes", "Заметки создателя", "creator_notes", d.creatorNotes, 4, "Для людей, не для модели: как играть, рекомендованные настройки. В контекст не идут.")}
+        ${sourceBlock(d.source)}
         <div class="block-title" style="margin-top:24px">Файл карточки</div><p class="hint">Экспорт в Character Card V2/V3 — открывается в SillyTavern, RisuAI, Chub и других. Поля, которых нет в редакторе, сохраняются как были. Настройки изображений и LoRA едут внутри карточки (extensions.prism_rp).</p>
         <div class="row"><button class="btn" data-act="card-png">${icon("download")}PNG с портретом</button><button class="btn" data-act="card-json">${icon("download")}JSON</button></div>
         ${d.id ? `<div class="block-title" style="margin-top:28px">Удаление</div><p class="hint">Удалит персонажа вместе со всеми чатами и опытом.</p>
@@ -78,6 +91,17 @@
         <button class="icon-btn" data-act="modal-close" title="Закрыть без сохранения">${icon("x")}</button></div>
       <nav class="modal-nav">${nav.map(([id, n, ic]) => `<button class="rail-item ${section === id ? "active" : ""}" data-act="card-section" data-section="${id}">${icon(ic)}${n}</button>`).join("")}</nav>
       <div class="modal-body">${body}</div></div></div>`;
+  }
+  // Откуда карточка: формат исходника и то, что сохранено без использования. Только показ.
+  function sourceBlock(s) {
+    if (!s) return "";
+    const FORMAT = { ccv1: "Character Card V1", ccv2: "Character Card V2", ccv3: "Character Card V3", urv2: "URV v2" };
+    const pres = Object.keys(s.preserved || {}), comp = (s.compiled || []).length, unm = (s.unmapped || []).length;
+    return `<div class="block-title" style="margin-top:24px">Исходник</div>
+      <p class="hint">Импортировано из ${esc(FORMAT[s.format] || s.format || "файла")}${s.sourceType ? ` (${esc(String(s.sourceType).toUpperCase())})` : ""}${s.importedAt ? `, ${esc(new Date(s.importedAt).toLocaleString())}` : ""}.
+      Исходный файл хранится целиком и во время игры не читается.${comp ? " Собранный промпт источника сохранён и не включается." : ""}
+      ${pres.length ? `<br>Сохранено без использования: ${pres.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}
+      ${unm ? `<br>Неизвестные поля: ${s.unmapped.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}</p>`;
   }
   Object.assign((PRP.views = PRP.views || {}), { cardModal });
 })(typeof window !== "undefined" ? window : globalThis);

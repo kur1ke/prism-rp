@@ -63,7 +63,7 @@
     S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
-    S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    S.cards = (await DB.all("cards")).map(PRP.cardModel.upgradeStored).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
     await svc.exp.migrate();

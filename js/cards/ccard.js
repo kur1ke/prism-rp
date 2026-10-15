@@ -1,7 +1,6 @@
-/* Prism RP — карточки персонажей Character Card V1/V2/V3.
-   Импорт из JSON и PNG (tEXt/iTXt «chara» и «ccv3»), экспорт обратно в JSON и PNG.
-   Исходный JSON сохраняется целиком в card.raw, чтобы поля, которые приложение
-   не моделирует (extensions и т. п.), переживали импорт → экспорт без потерь. */
+/* Prism RP — файл карточки Character Card: чтение карточки из PNG (tEXt/iTXt «chara» и «ccv3»)
+   и экспорт канонической карточки обратно в JSON / PNG (V2 и V3).
+   Разбор форматов при импорте — в cards/formats/* (определение формата и адаптеры). */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -129,66 +128,40 @@
     return out;
   }
 
-  /* ── Нормализация ───────────────────────────────────────────────────── */
-  function arr(v) { return Array.isArray(v) ? v.slice() : v ? [v] : []; }
-
-  function normalize(json) {
-    const spec = json && json.spec;
-    const d = spec === "chara_card_v2" || spec === "chara_card_v3" ? json.data || {} : json || {};
-    const book = d.character_book || null;
-    return {
-      id: null,
-      name: d.name || d.char_name || "Без имени",
-      description: d.description || "",
-      personality: d.personality || "",
-      scenario: d.scenario || "",
-      firstMes: d.first_mes || "",
-      altGreetings: arr(d.alternate_greetings),
-      mesExample: d.mes_example || "",
-      systemPrompt: d.system_prompt || "",
-      postHistory: d.post_history_instructions || "",
-      creatorNotes: d.creator_notes || "",
-      tags: arr(d.tags),
-      creator: d.creator || "",
-      version: d.character_version || "",
-      lore: book && Array.isArray(book.entries)
-        ? book.entries.map((e, i) => ({
-            keys: arr(e.keys).map(String),
-            secondary_keys: arr(e.secondary_keys).map(String),
-            selective: !!e.selective,
-            content: e.content || "",
-            enabled: e.enabled !== false,
-            constant: !!e.constant,
-            case_sensitive: !!e.case_sensitive,
-            insertion_order: e.insertion_order != null ? e.insertion_order : i,
-            position: e.position === "before_char" ? "before_char" : "after_char",
-            comment: e.comment || e.name || "",
-            raw: e,
-          }))
-        : [],
-      image: (d.extensions && d.extensions.prism_rp && d.extensions.prism_rp.image) ? JSON.parse(JSON.stringify(d.extensions.prism_rp.image)) : undefined,
-      avatar: null,
-      spec: spec || "v1",
-      raw: json,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-  }
-
+  /* ── Экспорт ────────────────────────────────────────────────────────────
+     Каноническая карточка Prism (cards/model.js) → Character Card V2/V3.
+     • Внешность и прошлое, которых нет в стандарте, складываются в description абзацами;
+       раздельные поля Prism едут в extensions.prism_rp.fields (для обратного импорта в Prism).
+     • В system_prompt / post_history_instructions попадают только ВКЛЮЧЁННЫЕ указания.
+       Выключенные (например, непроверенные импортированные) хранятся в
+       extensions.prism_rp.disabledDirectives — только для сохранности: при импорте это поле
+       хранится в source.preserved и указанием не становится.
+       Порядок для disabledDirectives (детерминированный):
+         1) берётся сохранённое source.preserved.disabledDirectives (как было в файле);
+         2) поверх — текущие выключенные непустые указания карточки (текущее побеждает по тому же ключу);
+         3) включённые указания идут только в system_prompt / post_history_instructions;
+            сохранённое значение по тому же ключу при этом остаётся в расширении как есть
+            (это лишь хранение: при импорте и во время игры оно не читается).
+     • Для карточек, импортированных из V2/V3, неизвестные поля data исходника сохраняются.
+       Исходники других форматов (V1, URV) в экспорт не переносятся. */
   function toSpec(card, ver) {
+    const CM = PRP.cardModel;
     const v3 = ver === "v3";
-    const base = card.raw && card.raw.data ? JSON.parse(JSON.stringify(card.raw.data)) : {};
+    const src = card.source && (card.source.format === "ccv2" || card.source.format === "ccv3") && card.source.raw && card.source.raw.data;
+    const base = src ? JSON.parse(JSON.stringify(src)) : {};
     const oldBook = base.character_book || {};
+    const description = [card.description, card.appearance ? "Внешность:\n" + card.appearance : "", card.background ? "Прошлое:\n" + card.background : ""]
+      .map((x) => String(x || "").trim()).filter(Boolean).join("\n\n");
     const data = Object.assign(base, {
       name: card.name,
-      description: card.description,
-      personality: card.personality,
-      scenario: card.scenario,
-      first_mes: card.firstMes,
-      mes_example: card.mesExample,
-      creator_notes: card.creatorNotes,
-      system_prompt: card.systemPrompt,
-      post_history_instructions: card.postHistory,
+      description,
+      personality: card.personality || "",
+      scenario: card.scenario || "",
+      first_mes: card.firstMes || "",
+      mes_example: card.mesExample || "",
+      creator_notes: card.creatorNotes || "",
+      system_prompt: CM.activeText(card, "system"),
+      post_history_instructions: CM.activeText(card, "postHistory"),
       alternate_greetings: card.altGreetings || [],
       tags: card.tags || [],
       creator: card.creator || "",
@@ -199,7 +172,7 @@
       data.character_book = Object.assign({}, oldBook, {
         extensions: oldBook.extensions || {},
         entries: card.lore.map((e, i) => {
-          const raw = e.raw && typeof e.raw === "object" ? JSON.parse(JSON.stringify(e.raw)) : {};
+          const raw = e.raw && typeof e.raw === "object" && (card.source && /^ccv/.test(card.source.format)) ? JSON.parse(JSON.stringify(e.raw)) : {};
           return Object.assign(raw, {
             keys: e.keys || [],
             secondary_keys: e.secondary_keys || [],
@@ -219,12 +192,19 @@
         }),
       });
     } else delete data.character_book;
-    // Настройки изображений (триггер, LoRA, гардероб) едут вместе с карточкой
-    // в пространстве extensions — другие приложения его не трогают.
+    // Пространство Prism в extensions: картинки, раздельные поля, выключенные указания.
     const ext = Object.assign({}, data.extensions);
+    const pr = Object.assign({}, ext.prism_rp);
+    delete pr.image; delete pr.fields; delete pr.disabledDirectives;
     const im = card.image && Object.keys(card.image).length ? card.image : null;
-    if (im) ext.prism_rp = Object.assign({}, ext.prism_rp, { image: JSON.parse(JSON.stringify(im)) });
-    else if (ext.prism_rp) { ext.prism_rp = Object.assign({}, ext.prism_rp); delete ext.prism_rp.image; if (!Object.keys(ext.prism_rp).length) delete ext.prism_rp; }
+    if (im) pr.image = JSON.parse(JSON.stringify(im));
+    if (card.appearance || card.background) pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
+    const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};
+    if (CM.hasDisabledText(card, "system")) dis.system = card.directives.system.text;
+    if (CM.hasDisabledText(card, "postHistory")) dis.postHistory = card.directives.postHistory.text;
+    if (Object.keys(dis).length) pr.disabledDirectives = dis;
+    if (Object.keys(pr).length) ext.prism_rp = pr; else delete ext.prism_rp;
     data.extensions = ext;
     if (v3) {
       data.group_only_greetings = data.group_only_greetings || [];
@@ -235,6 +215,6 @@
     return { spec: "chara_card_v2", spec_version: "2.0", data };
   }
 
-  PRP.ccard = { normalize, toSpec, cardJsonFromPng, embedInPng, crc32, b64ToUtf8, utf8ToB64 };
+  PRP.ccard = { toSpec, cardJsonFromPng, embedInPng, crc32, b64ToUtf8, utf8ToB64 };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.ccard;
 })(typeof window !== "undefined" ? window : globalThis);
