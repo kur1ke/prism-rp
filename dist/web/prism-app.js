@@ -1,12 +1,12 @@
-/* Prism RP 0.4.0 — сборка для загрузчика. Исходники: github.com/kur1ke/prism-rp */
+/* Prism RP 0.5.0 — сборка для загрузчика. Исходники: github.com/kur1ke/prism-rp */
 (function () {
   var d = document;
   ["https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap"].forEach(function (h) { var l = d.createElement("link"); l.rel = "stylesheet"; l.href = h; d.head.appendChild(l); });
-  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n"; d.head.appendChild(st);
+  var st = d.createElement("style"); st.textContent = "/* Prism RP — дизайн-система.\n   Идея: свет, разложенный призмой. Спокойные сливово-чернильные поверхности;\n   единственный яркий элемент — спектральная линия под шапкой чата, которая\n   течёт, пока модель пишет. Интерфейс — Onest, ролевая проза — Literata. */\n\n:root, [data-theme=\"dusk\"] {\n  --bg: #15131d;\n  --surface: #1c1a27;\n  --raised: #252233;\n  --sunken: #110f18;\n  --line: #322d45;\n  --line-soft: #26223a;\n  --text: #ece7f6;\n  --text-2: #b9b2cf;\n  --muted: #8d86a6;\n  --accent: #b79cff;\n  --accent-strong: #9c7bff;\n  --accent-ink: #160f2b;\n  --accent-wash: rgba(183, 156, 255, .12);\n  --me: #4a3a8c;\n  --me-ink: #f3efff;\n  --them: #221f30;\n  --ok: #6fd6a8;\n  --warn: #f2c26b;\n  --danger: #ff8a9a;\n  --prose: #e9e4f2;\n  --action: #a99fc4;\n  --speech: #fff6e8;\n  --shadow: 0 18px 50px rgba(5, 3, 12, .55);\n  --spectrum: linear-gradient(90deg, #7fd1ff, #b79cff 30%, #ff9ec7 55%, #ffd08a 78%, #8ff0c3);\n  color-scheme: dark;\n}\n[data-theme=\"dawn\"] {\n  --bg: #f1eef7;\n  --surface: #ffffff;\n  --raised: #f6f3fb;\n  --sunken: #e8e3f2;\n  --line: #ddd6ea;\n  --line-soft: #ebe6f3;\n  --text: #1e1a2b;\n  --text-2: #4b4462;\n  --muted: #7a7393;\n  --accent: #6b4edb;\n  --accent-strong: #5636c9;\n  --accent-ink: #ffffff;\n  --accent-wash: rgba(107, 78, 219, .09);\n  --me: #6b4edb;\n  --me-ink: #ffffff;\n  --them: #ffffff;\n  --ok: #1f9d6c;\n  --warn: #b7791f;\n  --danger: #d0384f;\n  --prose: #231e33;\n  --action: #6e6788;\n  --speech: #1e1a2b;\n  --shadow: 0 18px 50px rgba(60, 40, 120, .14);\n  --spectrum: linear-gradient(90deg, #39a7e6, #6b4edb 30%, #e05596 55%, #e7a33c 78%, #2fb985);\n  color-scheme: light;\n}\n[data-theme=\"paper\"] {\n  --bg: #efe8dc;\n  --surface: #f8f3ea;\n  --raised: #f2ebdf;\n  --sunken: #e6dccc;\n  --line: #d9ccb6;\n  --line-soft: #e5dacb;\n  --text: #2b2318;\n  --text-2: #54473a;\n  --muted: #85766a;\n  --accent: #7a4d9e;\n  --accent-strong: #653a8a;\n  --accent-ink: #fbf6ff;\n  --accent-wash: rgba(122, 77, 158, .1);\n  --me: #7a4d9e;\n  --me-ink: #fbf6ff;\n  --them: #fbf7f0;\n  --ok: #3f8a5c;\n  --warn: #9c6a12;\n  --danger: #b03a3a;\n  --prose: #2b2318;\n  --action: #7a6a5a;\n  --speech: #1f1810;\n  --shadow: 0 18px 50px rgba(80, 60, 30, .15);\n  --spectrum: linear-gradient(90deg, #3d8fc2, #7a4d9e 30%, #c2507e 55%, #c98a2a 78%, #3f9a72);\n  color-scheme: light;\n}\n\n:root {\n  --ui: \"Onest\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif;\n  --read: \"Literata\", Georgia, \"Times New Roman\", serif;\n  --fs: 15px;\n  --prose-fs: 17px;\n  --r-s: 8px;\n  --r-m: 12px;\n  --r-l: 18px;\n  --rail: 264px;\n  --drawer: 384px;\n}\n\n* { box-sizing: border-box; }\nhtml, body { height: 100%; margin: 0; }\nbody { background: var(--bg); color: var(--text); font: var(--fs)/1.5 var(--ui); -webkit-font-smoothing: antialiased; text-align: left; }\nbutton, input, textarea, select { font: inherit; color: inherit; }\n[hidden] { display: none !important; }\n:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }\n::selection { background: var(--accent-wash); }\n.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }\n@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }\n\n/* ── Каркас ─────────────────────────────────────────────────────────── */\n/* Perchance по умолчанию центрирует текст страницы — возвращаем обычное выравнивание. */\n.app { text-align: left; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; overflow: hidden; }\n/* Служебные контейнеры не участвуют в сетке: их содержимое позиционируется фиксированно. */\n#pop-root, #modal-root { display: contents; }\n.rail { background: var(--surface); border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; min-height: 0; }\n.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }\n\n.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; font-weight: 700; font-size: 17px; letter-spacing: -.01em; background: none; border: 0; cursor: pointer; text-align: left; }\n.brand-glyph { width: 26px; height: 26px; flex: none; }\n.rail-nav { padding: 0 10px; display: flex; flex-direction: column; gap: 2px; }\n.rail-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-s); border: 0; background: none; cursor: pointer; color: var(--text-2); text-align: left; width: 100%; }\n.rail-item:hover { background: var(--raised); color: var(--text); }\n.rail-item.active { background: var(--accent-wash); color: var(--text); }\n.rail-item svg { width: 18px; height: 18px; flex: none; }\n.rail-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; color: var(--muted); font-size: 13px; }\n.rail-chats { flex: 1; overflow: auto; padding: 0 10px 10px; }\n.rail-chat { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: var(--r-m); cursor: pointer; }\n.rail-chat:hover { background: var(--raised); }\n.rail-chat.active { background: var(--raised); box-shadow: inset 2px 0 0 var(--accent); }\n.rail-chat .t1 { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .t2 { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.rail-chat .kind { color: var(--muted); }\n.rail-chat .kind svg { width: 15px; height: 15px; }\n.rail-foot { border-top: 1px solid var(--line-soft); padding: 10px; display: flex; gap: 6px; }\n\n/* ── Кнопки и поля ──────────────────────────────────────────────────── */\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); background: var(--raised); padding: 8px 14px; border-radius: var(--r-m); cursor: pointer; white-space: nowrap; color: var(--text); font-weight: 500; line-height: 1.2; }\n.btn:hover { border-color: var(--accent); }\n.btn svg { width: 17px; height: 17px; }\n.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }\n.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }\n.btn-ghost { background: transparent; border-color: transparent; color: var(--text-2); }\n.btn-ghost:hover { background: var(--raised); border-color: transparent; color: var(--text); }\n.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }\n.btn-sm { padding: 5px 10px; font-size: 13.5px; border-radius: var(--r-s); }\n.btn:disabled { opacity: .45; cursor: default; }\n.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-s); border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }\n.icon-btn:hover { background: var(--raised); color: var(--text); }\n.icon-btn.on { color: var(--accent); background: var(--accent-wash); }\n.icon-btn svg { width: 19px; height: 19px; }\n.file-btn input { display: none; }\n\n.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; min-width: 0; }\n.field > label, .label { font-size: 13px; color: var(--text-2); font-weight: 500; display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }\n.label svg, .field > label svg { width: 15px; height: 15px; flex: none; }\n.field .help { font-size: 12.5px; color: var(--muted); }\n.input, .field input:not([type=checkbox]):not([type=range]), .field textarea, .field select {\n  width: 100%; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--r-s); padding: 8px 10px; color: var(--text);\n}\n.field textarea { resize: vertical; min-height: 76px; line-height: 1.5; }\n.input:focus, .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }\n.row > .btn { align-self: flex-end; }\n.row > .field { flex: 1; min-width: 100px; }\n.check { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; margin: 8px 0; cursor: pointer; text-align: left; }\n.check > span { flex: 1; min-width: 0; }\n.checks { display: flex; flex-wrap: wrap; gap: 0 18px; }\n.checks .check { margin: 4px 0; }\n.check input { margin-top: 3px; accent-color: var(--accent); }\n.check small { display: block; color: var(--muted); font-size: 12.5px; }\n\n.seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }\n.seg button { border: 0; background: none; padding: 5px 13px; border-radius: 999px; cursor: pointer; color: var(--text-2); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }\n.seg button svg { width: 15px; height: 15px; }\n.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.25); }\n\n.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--raised); border: 1px solid var(--line-soft); font-size: 13.5px; max-width: 100%; }\n.chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.chip button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }\n.chip button:hover { background: var(--line); color: var(--text); }\n.chip button svg { width: 12px; height: 12px; }\n.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }\n.chip-add { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; min-width: 90px; width: 140px; font-size: 13.5px; color: var(--text); }\n.chip-add:focus { outline: none; border-color: var(--accent); border-style: solid; }\n\n/* ── Аватары ────────────────────────────────────────────────────────── */\n.av { position: relative; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--raised); }\n.av img { width: 100%; height: 100%; object-fit: cover; }\n.av-34 { width: 34px; height: 34px; font-size: 14px; }\n.av-40 { width: 40px; height: 40px; font-size: 16px; }\n.av-48 { width: 48px; height: 48px; font-size: 19px; }\n.av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }\n\n/* ── Главный экран ──────────────────────────────────────────────────── */\n.home { flex: 1; overflow: auto; }\n.home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }\n.home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }\n.home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }\n.home .sub { color: var(--text-2); margin: 6px 0 0; max-width: 60ch; }\n.home-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.search { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 0 10px; height: 38px; min-width: 220px; }\n.search svg { width: 17px; height: 17px; color: var(--muted); flex: none; }\n.search input { border: 0; background: none; outline: none; width: 100%; height: 100%; }\n.search:focus-within { border-color: var(--accent); }\n\n.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 18px; }\n.tile { position: relative; border-radius: var(--r-l); overflow: hidden; aspect-ratio: 3 / 4; background: var(--surface); border: 1px solid var(--line-soft); cursor: pointer; display: block; padding: 0; text-align: left; color: #fff; }\n.tile:hover .tile-art { transform: scale(1.035); }\n.tile-art { position: absolute; inset: 0; transition: transform .45s cubic-bezier(.2,.7,.2,1); display: grid; place-items: center; font-size: 64px; font-weight: 700; color: rgba(255,255,255,.85); }\n.tile-art img { width: 100%; height: 100%; object-fit: cover; }\n.tile-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(10, 6, 20, .88)); }\n.tile-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px; }\n.tile-name { font-weight: 700; font-size: 17px; line-height: 1.2; text-shadow: 0 1px 8px rgba(0,0,0,.4); }\n.tile-tags { font-size: 12.5px; opacity: .78; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.tile-count { position: absolute; top: 10px; right: 10px; background: rgba(10, 6, 20, .55); backdrop-filter: blur(6px); border-radius: 999px; font-size: 12px; padding: 2px 9px; }\n.tile-new { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); border: 1.5px dashed var(--line); background: transparent; }\n.tile-new:hover { border-color: var(--accent); color: var(--text); }\n.tile-new svg { width: 30px; height: 30px; }\n.tile-new label, .tile-new span { cursor: pointer; }\n\n.welcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 8px 0 30px; }\n.step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-l); padding: 18px; }\n.step h3 { margin: 6px 0 4px; font-size: 16px; }\n.step p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }\n.step .n { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); font-weight: 700; font-size: 13px; }\n.section-title { font-size: 15px; font-weight: 600; color: var(--text-2); margin: 30px 0 12px; }\n\n/* ── Чат ────────────────────────────────────────────────────────────── */\n.chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }\n.chat-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 18px; background: var(--surface); position: relative; min-height: 64px; }\n.chat-head::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--spectrum); opacity: .35; background-size: 200% 100%; }\n.app.generating .chat-head::after { opacity: 1; animation: flow 2.4s linear infinite; }\n@keyframes flow { from { background-position: 0 0; } to { background-position: -200% 0; } }\n.head-who { min-width: 0; flex: 1; }\n.head-name { font-weight: 700; font-size: 16px; display: flex; gap: 10px; align-items: center; }\n.head-name .rename { opacity: 0; }\n.head-who:hover .rename { opacity: 1; }\n.head-scene { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.head-scene.live { color: var(--accent); }\n.head-tools { display: flex; align-items: center; gap: 2px; }\n\n.findbar { display: flex; gap: 8px; align-items: center; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }\n.findbar .search { flex: 1; height: 34px; }\n.findbar .count { color: var(--muted); font-size: 13px; min-width: 52px; text-align: right; }\nmark { background: color-mix(in srgb, var(--warn) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }\nmark.cur { background: var(--warn); color: #1b1300; }\n\n.feed { flex: 1; overflow: auto; padding: 26px 22px 12px; scroll-behavior: smooth; }\n.feed-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }\n\n/* Сцена: проза */\n.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; }\n.turn-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }\n.turn-name { font-weight: 650; font-size: 14.5px; }\n.turn-time { color: var(--muted); font-size: 12px; }\n.prose { font-family: var(--read); font-size: var(--prose-fs); line-height: 1.72; color: var(--prose); white-space: pre-wrap; overflow-wrap: anywhere; }\n.prose em { color: var(--action); font-style: italic; }\n.prose q { quotes: none; color: var(--speech); }\n.prose strong { font-weight: 650; }\n.turn.user .prose { font-family: var(--ui); font-size: 15.5px; line-height: 1.6; color: var(--text); }\n.turn.user .bubble-plain { background: var(--raised); border: 1px solid var(--line-soft); border-radius: 4px var(--r-l) var(--r-l) var(--r-l); padding: 10px 14px; display: inline-block; max-width: 100%; }\n.cursor::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n@keyframes caret { 50% { opacity: 0; } }\n\n.turn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }\n.delta { font-size: 12px; color: var(--text-2); background: var(--sunken); border: 1px solid var(--line-soft); padding: 1px 8px; border-radius: 999px; }\n.tools { display: flex; align-items: center; gap: 2px; margin-top: 6px; opacity: 0; transition: opacity .15s; }\n.turn:hover .tools, .turn:focus-within .tools, .turn.last .tools, .msg-row:hover .tools, .msg-row.last .tools { opacity: 1; }\n.tool { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; }\n.tool:hover { background: var(--raised); color: var(--text); }\n.tool svg { width: 15px; height: 15px; }\n.swipes { display: inline-flex; align-items: center; color: var(--muted); font-size: 12.5px; margin-right: 6px; }\n.swipes .tool { padding: 4px; }\ndetails.think { margin: 2px 0 8px; font-size: 13.5px; color: var(--muted); }\ndetails.think summary { cursor: pointer; list-style: none; display: inline-flex; gap: 6px; align-items: center; }\ndetails.think summary::-webkit-details-marker { display: none; }\ndetails.think summary svg { width: 14px; height: 14px; }\ndetails.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; border-left: 2px solid var(--line); }\n.err { color: var(--danger); font-size: 14px; margin-top: 6px; white-space: pre-wrap; display: flex; gap: 8px; align-items: flex-start; }\n.err svg { width: 17px; height: 17px; flex: none; margin-top: 2px; }\n.editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }\n\n/* Картинки */\n.shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }\n.shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }\n.shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }\n.shot.wait { display: flex; flex-direction: column; }\n.shot-wait { flex: 1; display: grid; place-items: center; color: var(--text-2); font-size: 14px; background:\n  linear-gradient(110deg, transparent 30%, var(--accent-wash) 50%, transparent 70%) var(--sunken); background-size: 250% 100%; animation: shimmer 1.6s linear infinite; min-height: 120px; }\n@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -100% 0; } }\n.shot-cap { font-size: 12px; color: var(--muted); padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.shot-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; background: rgba(12, 8, 22, .62); backdrop-filter: blur(6px); border-radius: 10px; padding: 2px; opacity: 0; transition: opacity .15s; }\n.shot:hover .shot-tools, .shot:focus-within .shot-tools { opacity: 1; }\n.shot-tools .icon-btn { color: #f2eefc; width: 32px; height: 32px; }\n.shot-tools .icon-btn:hover { background: rgba(255,255,255,.14); color: #fff; }\n.shot.failed { width: auto; max-width: 440px; padding: 12px 14px; aspect-ratio: auto !important; }\n.shots.in-bubble .shot { width: min(78%, 360px); }\n.msg-row.them .shots.in-bubble { justify-content: flex-start; }\n@media (hover: none) { .shot-tools { opacity: 1; } }\n.lightbox { background: rgba(6, 4, 12, .88); }\n.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }\n.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }\n.lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }\n.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.lb-tools { display: flex; gap: 6px; flex: none; }\n.lb-tools .icon-btn { color: #f2eefc; }\n.lora-rows { display: flex; flex-direction: column; gap: 6px; }\n.lora-row { flex-wrap: nowrap; align-items: center; }\n.prov.dim { opacity: .55; }\n\n/* Мессенджер */\n.app.messenger .feed { background:\n  radial-gradient(circle at 15% 10%, var(--accent-wash), transparent 40%),\n  radial-gradient(circle at 85% 90%, var(--accent-wash), transparent 45%); }\n.app.messenger .feed-inner { max-width: 660px; gap: 2px; }\n.daymark { align-self: center; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line-soft); padding: 2px 12px; border-radius: 999px; margin: 12px 0 8px; }\n.msg-row { display: flex; flex-direction: column; margin-top: 8px; }\n.msg-row.me { align-items: flex-end; }\n.msg-row.them { align-items: flex-start; }\n.bub { max-width: min(78%, 480px); padding: 8px 13px; border-radius: 20px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; margin-top: 3px; font-size: 15.5px; position: relative; }\n.msg-row.me .bub { background: var(--me); color: var(--me-ink); }\n.msg-row.them .bub { background: var(--them); border: 1px solid var(--line-soft); }\n.msg-row.me .bub:last-of-type { border-bottom-right-radius: 6px; }\n.msg-row.them .bub:last-of-type { border-bottom-left-radius: 6px; }\n.stamp { font-size: 11px; color: var(--muted); margin: 3px 8px 0; }\n.typing { display: inline-flex; gap: 4px; padding: 12px 15px !important; }\n.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot 1.2s infinite; }\n.typing i:nth-child(2) { animation-delay: .18s; } .typing i:nth-child(3) { animation-delay: .36s; }\n@keyframes dot { 0%, 70%, 100% { opacity: .25; transform: none; } 35% { opacity: 1; transform: translateY(-2px); } }\n.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); display: inline-block; }\n\n/* Композер */\n.composer-wrap { padding: 8px 18px 16px; }\n.composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }\n.app.messenger .composer { max-width: 660px; }\n.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }\n.composer textarea { width: 100%; border: 0; outline: none; background: none; resize: none; max-height: 240px; padding: 6px 0; line-height: 1.5; font-size: 15.5px; }\n.composer-bar { display: flex; align-items: center; gap: 6px; }\n.composer-bar .spacer { flex: 1; }\n.pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line-soft); background: var(--raised); border-radius: 999px; padding: 4px 11px 4px 9px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 260px; }\n.pill:hover { border-color: var(--accent); color: var(--text); }\n.pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.pill svg { width: 15px; height: 15px; flex: none; }\n.meter { width: 22px; height: 22px; flex: none; }\n.meter circle { fill: none; stroke-width: 3; }\n.meter .bg { stroke: var(--line); }\n.meter .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .4s; }\n.meter.hot .fg { stroke: var(--warn); }\n.send { width: 38px; height: 38px; border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; cursor: pointer; flex: none; }\n.send:hover { background: var(--accent-strong); }\n.send svg { width: 18px; height: 18px; }\n.send.stop { background: var(--danger); color: #fff; }\n\n/* Поповеры */\n.pop { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); box-shadow: var(--shadow); padding: 6px; min-width: 260px; max-width: min(360px, 94vw); max-height: 70vh; overflow: auto; }\n.pop-title { font-size: 12.5px; color: var(--muted); padding: 8px 10px 4px; }\n.pop-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--r-s); cursor: pointer; color: var(--text); }\n.pop-item:hover { background: var(--raised); }\n.pop-item.on { background: var(--accent-wash); }\n.pop-item small { display: block; color: var(--muted); font-size: 12.5px; }\n.pop-item svg { width: 17px; height: 17px; flex: none; color: var(--muted); }\n.pop-sep { height: 1px; background: var(--line-soft); margin: 6px 4px; }\n\n/* ── Выдвижная панель ───────────────────────────────────────────────── */\n.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer); max-width: 100vw; background: var(--surface); border-left: 1px solid var(--line); z-index: 40; display: flex; flex-direction: column; transform: translateX(102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n.drawer.open { transform: none; }\n@media (min-width: 1280px) {\n  .app.drawer-open { grid-template-columns: var(--rail) minmax(0, 1fr) var(--drawer); }\n  .app.drawer-open .drawer { position: relative; transform: none; box-shadow: none; grid-column: 3; grid-row: 1; transition: none; }\n}\n.drawer-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 0 12px; border-bottom: 1px solid var(--line-soft); }\n.drawer-tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }\n.dtab { border: 0; background: none; padding: 10px 10px 12px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }\n.dtab svg { width: 16px; height: 16px; }\n.dtab.on { color: var(--text); border-bottom-color: var(--accent); }\n.drawer-body { flex: 1; overflow: auto; padding: 18px; }\n.block { margin-bottom: 22px; }\n.block-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 650; font-size: 14.5px; margin-bottom: 10px; }\n.block-title small { color: var(--muted); font-weight: 400; font-size: 12.5px; }\n.hint { font-size: 13px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }\n.panel { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 14px; margin-bottom: 10px; }\n.who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }\n.who b { font-size: 15px; }\n.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }\n.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }\n.rel input[type=range] { width: 100%; accent-color: var(--accent); }\n.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }\n.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }\n.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }\n.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }\n.pick button:last-child { border-right: 0; }\n.pick button.on { background: var(--accent); color: var(--accent-ink); }\n.memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }\n.memo:hover { border-color: var(--line); }\n.memo.off { opacity: .55; }\n.memo .ev { font-size: 14.5px; }\n.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }\n.memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }\n.tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }\n.tag.pos { color: var(--ok); }\n.tag.neg { color: var(--danger); }\n.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }\n.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }\n.kv dt { color: var(--muted); }\n.kv dd { margin: 0; }\n.code { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, \"SF Mono\", Consolas, monospace; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: var(--r-s); padding: 12px; overflow-wrap: anywhere; max-height: 60vh; overflow: auto; }\n.code .role { color: var(--accent); font-weight: 700; }\n.bar-meter { height: 8px; border-radius: 999px; background: var(--sunken); overflow: hidden; display: flex; margin: 8px 0 4px; }\n.bar-meter i { display: block; height: 100%; }\n.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--text-2); }\n.legend span::before { content: \"\"; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); vertical-align: 0; }\n\n/* ── Модальные окна ─────────────────────────────────────────────────── */\n.scrim { position: fixed; inset: 0; background: rgba(8, 5, 16, .55); z-index: 35; backdrop-filter: blur(2px); }\n.modal-wrap { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(8, 5, 16, .55); backdrop-filter: blur(3px); }\n.modal { width: min(920px, 100%); max-height: min(780px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }\n.modal.narrow { width: min(560px, 100%); grid-template-columns: minmax(0, 1fr); }\n.modal-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px 22px; border-bottom: 1px solid var(--line-soft); }\n.modal-head h2 { margin: 0; font-size: 18px; flex: 1; letter-spacing: -.01em; }\n.modal-nav { padding: 12px 10px; border-right: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; overflow: auto; }\n.modal-body { overflow: auto; padding: 22px 26px 26px; }\n.modal-body h3 { font-size: 16px; margin: 0 0 4px; }\n.modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }\n.modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }\n.prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }\n.prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }\n.prov .radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }\n.prov.on .radio { border: 5px solid var(--accent); }\n.prov .nm { font-weight: 600; }\n.prov .ds { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 14px; }\n.preset { border: 1px solid var(--line-soft); background: var(--raised); border-radius: var(--r-m); padding: 10px 12px; cursor: pointer; text-align: left; }\n.preset.on { border-color: var(--accent); background: var(--accent-wash); }\n.preset b { display: block; font-size: 14px; }\n.preset small { color: var(--muted); font-size: 12.5px; }\n.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }\n.theme { border: 2px solid var(--line-soft); border-radius: var(--r-m); padding: 0; cursor: pointer; overflow: hidden; background: none; text-align: left; }\n.theme.on { border-color: var(--accent); }\n.theme .sw { height: 64px; display: flex; align-items: flex-end; padding: 8px; gap: 5px; }\n.theme .sw i { display: block; height: 10px; border-radius: 3px; }\n.theme .nm { padding: 8px 10px; font-size: 13.5px; font-weight: 600; background: var(--raised); }\n.card-edit { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; }\n.portrait { width: 180px; aspect-ratio: 3 / 4; border-radius: var(--r-l); overflow: hidden; display: grid; place-items: center; font-size: 56px; font-weight: 700; color: #fff; position: relative; }\n.portrait img { width: 100%; height: 100%; object-fit: cover; }\n.portrait .chg { position: absolute; bottom: 8px; left: 8px; right: 8px; }\n.lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }\n\n.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }\n.toast.err { border-color: var(--danger); }\n.toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }\n.toast.err svg { color: var(--danger); }\n.toast:not(.err) svg { color: var(--ok); }\n\n.empty-note { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 14px; }\n.only-narrow { display: none !important; }\n\n/* ── Адаптив ────────────────────────────────────────────────────────── */\n@media (max-width: 900px) {\n  .app { grid-template-columns: minmax(0, 1fr); }\n  .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }\n  .rail.open { transform: none; }\n  .only-narrow { display: inline-grid !important; }\n  .modal { grid-template-columns: minmax(0, 1fr); }\n  .modal-nav { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line-soft); overflow-x: auto; padding: 8px; }\n  .modal-nav .rail-item { width: auto; white-space: nowrap; }\n  .card-edit { grid-template-columns: minmax(0, 1fr); }\n  .portrait { width: 140px; }\n}\n@media (max-width: 600px) {\n  .home-inner { padding: 20px 16px 40px; }\n  .home h1 { font-size: 24px; }\n  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n  .feed { padding: 16px 12px 8px; }\n  .turn { grid-template-columns: 30px minmax(0, 1fr); gap: 10px; }\n  .turn .av { width: 30px; height: 30px; font-size: 13px; }\n  .composer-wrap { padding: 6px 10px 10px; }\n  .pill { max-width: 150px; }\n  .modal-wrap { padding: 0; }\n  .modal { max-height: 100%; height: 100%; border-radius: 0; }\n  .drawer { width: 100vw; }\n  .head-tools .wide { display: none; }\n  :root { --prose-fs: 16px; }\n}\n\n/* Редактор карточки: ключ спецификации рядом с подписью */\n.spec-key { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 5px; font-weight: 400; }\n.alt-greet > label { justify-content: space-between; display: flex; }\n.alt-greet .icon-btn { width: 26px; height: 26px; }\n\n/* Где редактировать персонажа: кнопка на плитке и шапка чата */\n.tile-edit { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 8px; border-radius: 999px; border: 0; cursor: pointer;\n  background: rgba(10, 6, 20, .6); backdrop-filter: blur(6px); color: #fff; font: 500 12.5px var(--ui); opacity: .9; transition: opacity .15s, background .15s; z-index: 2; }\n.tile-edit svg { width: 14px; height: 14px; }\n.tile:hover .tile-edit, .tile:focus-within .tile-edit, .tile-edit:focus-visible { opacity: 1; }\n.tile-edit:hover { background: var(--accent); }\n@media (hover: none) { .tile-edit { opacity: 1; } .tile-edit span { display: none; } .tile-edit { padding: 6px; } }\n.head-av { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; line-height: 0; }\n.head-av:hover { box-shadow: 0 0 0 2px var(--accent); }\n.head-card { border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer; text-align: left; }\n.head-card:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }\n\n/* Ассистент — разговор с моделью вне игры */\n.assist-mark { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); flex: none; }\n.assist-mark svg { width: 22px; height: 22px; }\n.assist-head .pill .av { width: 18px; height: 18px; font-size: 10px; flex: none; }\n.pop-item .av { flex: none; }\n.av-18 { width: 18px; height: 18px; font-size: 10px; }\n.av-22 { width: 22px; height: 22px; font-size: 11px; }\n.assist-empty { text-align: center; padding: 6vh 8px 10px; max-width: 620px; margin: 0 auto; }\n.assist-hero { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; background: var(--accent-wash); color: var(--accent); }\n.assist-hero svg { width: 34px; height: 34px; }\n.assist-empty h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.01em; }\n.assist-empty p { color: var(--text-2); margin: 0 auto 20px; line-height: 1.55; }\n.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; text-align: left; }\n.starter { border: 1px solid var(--line-soft); background: var(--surface); color: var(--text); border-radius: var(--r-m); padding: 12px 14px; cursor: pointer; font: inherit; font-size: 14px; text-align: left; line-height: 1.4; }\n.starter:hover { border-color: var(--accent); background: var(--accent-wash); }\n.aturn { display: flex; flex-direction: column; min-width: 0; }\n.aturn.user { align-items: flex-end; }\n.aturn.user .bubble-plain { background: var(--accent-wash); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: var(--r-l) var(--r-l) 4px var(--r-l); padding: 10px 14px; max-width: min(640px, 92%); line-height: 1.55; overflow-wrap: anywhere; }\n.aturn .tools { margin-top: 4px; }\n.aturn:hover .tools, .aturn:focus-within .tools, .aturn.last .tools { opacity: 1; }\n.md { font-size: 15.5px; line-height: 1.65; color: var(--text); overflow-wrap: anywhere; }\n.md > :first-child { margin-top: 0; }\n.md > :last-child { margin-bottom: 0; }\n.md p { margin: 0 0 .75em; }\n.md ul, .md ol { margin: 0 0 .75em; padding-left: 1.4em; }\n.md li { margin: .2em 0; }\n.md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; font-size: 1.05em; }\n.md h3 { font-size: 1.15em; }\n.md blockquote { margin: 0 0 .75em; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }\n.md code { font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 5px; padding: 0 4px; }\n.md .mdcode { position: relative; margin: 0 0 .9em; }\n.md pre { margin: 0; background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; overflow: auto; white-space: pre-wrap; }\n.md pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; }\n.md .code-copy { position: absolute; top: 6px; right: 6px; opacity: .7; }\n.md .code-copy:hover { opacity: 1; }\n.md.cursor > :last-child::after, .md.cursor:empty::after { content: \"\"; display: inline-block; width: .5em; height: 1.05em; vertical-align: -0.15em; margin-left: 2px; background: var(--accent); animation: caret 1s steps(2) infinite; border-radius: 2px; }\n.md.cursor::after { content: none; }\n@media (max-width: 600px) { .assist-head .pill { max-width: 128px; } .assist-head .assist-mark { display: none; } }\n.assist-head .head-who { overflow: hidden; }\n.assist-head .head-scene { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* Prism: переполнение, отбор опыта, непривязанные записи */\n.err-block { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--danger); border-radius: var(--r-m); padding: 10px 12px; color: var(--text); background: color-mix(in srgb, var(--danger) 10%, transparent); font-size: 14px; }\n.err-block svg { width: 18px; height: 18px; color: var(--danger); flex: none; margin-top: 2px; }\n.exp-debug summary { cursor: pointer; font-weight: 600; font-size: 14px; }\n.exp-debug table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }\n.exp-debug th, .exp-debug td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }\n.exp-debug th { color: var(--muted); font-weight: 500; }\n.exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }\n.exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }\n.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }\n.legacy-block .memo { cursor: default; }\n"; d.head.appendChild(st);
   var boot = d.getElementById("prism-boot"); if (boot) boot.remove();
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n</div>";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
-  window.PRISM_RP_VERSION = "0.4.0";
+  window.PRISM_RP_VERSION = "0.5.0";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -331,7 +331,7 @@
   function charOf(state, name) {
     const key = Object.keys(state.chars).find((k) => k.toLowerCase() === name.toLowerCase());
     if (key) return state.chars[key];
-    return (state.chars[name] = { wear: [], pose: "", mood: "", rel: 0, relLog: [] });
+    return (state.chars[name] = { wear: [], pose: "", mood: "", moodSrc: null, moodTurn: null, rel: 0, relLog: [] });
   }
 
   function sameItem(a, b) {
@@ -354,7 +354,12 @@
           case "add": splitList(v).forEach((it) => { if (!ch.wear.some((w) => sameItem(w, it))) ch.wear.push(it); }); break;
           case "remove": splitList(v).forEach((it) => { ch.wear = ch.wear.filter((w) => !sameItem(w, it)); }); break;
           case "pose": ch.pose = isClear(v) ? "" : v; break;
-          case "mood": ch.mood = isClear(v) ? "" : v; break;
+          case "mood":
+            ch.mood = isClear(v) ? "" : v;
+            // Источник оценки на активном пути: сообщение и номер хода (для возраста).
+            ch.moodSrc = ch.mood ? (msgId || null) : null;
+            ch.moodTurn = ch.mood ? (meta && meta.turn != null ? meta.turn : 0) : null;
+            break;
           case "rel": {
             const m = String(v).match(/^([+-]?\d+)\s*(.*)$/);
             if (!m) { ok = false; break; }
@@ -397,10 +402,35 @@
   }
 
   // Свёртка: начальная сцена + дельты по сообщениям активной ветки.
+  /* steps: [{ msgId, ops, role? }] по активному пути. Ход = ответ модели (role "assistant");
+     если роль не указана, ходом считается каждый шаг. Возраст настроения считается
+     заново по каждой ветке и нигде не хранится. */
   function fold(initBody, steps) {
-    let st = apply(emptyState(), parseBody(initBody || "")).state;
-    for (const step of steps || []) st = apply(st, step.ops, { msgId: step.msgId }).state;
+    let st = apply(emptyState(), parseBody(initBody || ""), { turn: 0 }).state;
+    let turn = 0;
+    for (const step of steps || []) {
+      if (!step.role || step.role === "assistant") turn++;
+      st = apply(st, step.ops, { msgId: step.msgId, turn }).state;
+    }
+    st.turn = turn;
+    for (const n of Object.keys(st.chars)) {
+      const ch = st.chars[n];
+      ch.moodAge = ch.mood ? Math.max(0, turn - (ch.moodTurn || 0)) : null;
+    }
     return st;
+  }
+
+  function plural(n, one, few, many) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return many;
+    if (b > 1 && b < 5) return few;
+    if (b === 1) return one;
+    return many;
+  }
+  function ageWords(age) {
+    if (age == null) return "";
+    if (age === 0) return "отмечено сейчас";
+    return `отмечено ${age} ${plural(age, "ход", "хода", "ходов")} назад`;
   }
 
   /* ── Описание для модели и для интерфейса ───────────────────────────── */
@@ -431,7 +461,7 @@
       const bits = [];
       if (ch.wear.length) bits.push("одет(а): " + ch.wear.join(", "));
       if (ch.pose) bits.push(ch.pose);
-      if (ch.mood) bits.push("настроение (оценка): " + ch.mood);
+      if (ch.mood) bits.push("настроение (оценка): " + ch.mood + (ch.moodAge != null ? " — " + ageWords(ch.moodAge) : ""));
       if (ch.rel !== 0 || ch.relLog.length) {
         const why = ch.relLog.slice(-2).map((r) => r.why).filter(Boolean);
         bits.push(`отношение к собеседнику (${o.userName || "собеседник"}): ${relWord(ch.rel)}` + (why.length ? ` — ${why.join("; ")}` : ""));
@@ -468,24 +498,37 @@
     "Указывай только то, что изменилось. Не пересказывай сцену в тексте ответа. Если ничего не изменилось — строку не пиши.",
   ].join("\n");
 
-  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, describe, summaryLine, formatClock, relWord, opLabel, PROTOCOL };
+  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, ageWords, describe, summaryLine, formatClock, relWord, opLabel, PROTOCOL };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.scene;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/prism/experience.js */
 /* Prism RP — опыт персонажа (Experience).
-   Запись = свидетельство прошлого, а не инструкция. Отбор релевантного опыта
-   намеренно добирает противовес: если выбрана сильная запись одного знака
-   о человеке, к ней добавляется лучшая запись противоположного знака о нём же,
-   чтобы реакция взвешивала, а не повторяла одну травму. */
+   Запись = свидетельство прошлого, а не инструкция.
+
+   Канон (этап 1):
+   • Каждый чат — отдельный мир. Опыт принадлежит чату: record.chatId === chat.id.
+     Одна и та же карточка в другом чате этот опыт не видит.
+   • Внутри чата опыт подчиняется веткам так же, как сцена:
+       – source.messageIds пуст → запись «на весь чат», видна во всех ветках;
+       – иначе запись видна, только если ВСЕ её сообщения лежат на активном пути,
+         и (если записан source.swipes) у них активен тот же вариант ответа.
+     Скрытые записи не удаляются: вернулись в ветку — запись снова видна.
+   • Записи без надёжной привязки к чату (старые данные) не угадываются:
+     они помечаются legacyUnscoped, хранятся целиком и в Prism не попадают,
+     пока пользователь сам не привяжет их к чату.
+
+   Отбор: входит только запись, совпавшая по теме с происходящим. Среди подходящих порядок:
+   тема → участники → важность → свежесть (только при равенстве). Важность не создаёт
+   релевантность; знак события (valence) — метаданные и отбор не запускает. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
 
-  function blank(ownerId) {
+  function blank(ownerId, chatId) {
     return {
       id: null,
-      chatId: null,
+      chatId: chatId || null,
       owner: ownerId || null,
       witnesses: [],
       event: "",
@@ -495,75 +538,176 @@
       about: [],
       valence: 0,
       weight: 1,
-      source: { chatId: null, messageIds: [], sceneTime: "" },
+      source: { chatId: chatId || null, messageIds: [], swipes: {}, sceneTime: "" },
       status: "active",
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
   }
 
+  /* ── Канон: чат и ветка ─────────────────────────────────────────────── */
+
+  // "branch" — привязана к сообщениям; "chat" — на весь чат; "legacy" — без надёжного чата.
+  function scopeOf(r) {
+    if (!r || r.legacyUnscoped || !r.chatId) return "legacy";
+    return (r.source && r.source.messageIds && r.source.messageIds.length) ? "branch" : "chat";
+  }
+
+  /* ctx: { chatId, path: [{id, swipeIdx}] } — активный путь текущего чата.
+     → { visible, reason } */
+  function visibility(r, ctx) {
+    const c = ctx || {};
+    if (!r) return { visible: false, reason: "нет записи" };
+    const scope = scopeOf(r);
+    if (scope === "legacy") return { visible: false, reason: "не привязана к чату" };
+    if (r.chatId !== c.chatId) return { visible: false, reason: "другой чат" };
+    if (scope === "chat") return { visible: true, reason: "на весь чат" };
+    const onPath = new Map((c.path || []).map((p) => [p.id, p.swipeIdx || 0]));
+    const sw = (r.source && r.source.swipes) || {};
+    for (const id of r.source.messageIds) {
+      if (!onPath.has(id)) return { visible: false, reason: "другая ветка" };
+      if (sw[id] != null && onPath.get(id) !== sw[id]) return { visible: false, reason: "другой вариант ответа" };
+    }
+    return { visible: true, reason: "в этой ветке" };
+  }
+
+  /* Миграция старых записей. Чистая функция, идемпотентна.
+     lookup.messageChat(id) → chatId сообщения или null (если сообщения нет).
+     → { records: [новые объекты], changed: [id], legacy: число } */
+  function migrate(records, lookup) {
+    const L = lookup || {};
+    const out = [], changed = [];
+    let legacy = 0;
+    for (const r0 of records || []) {
+      const r = JSON.parse(JSON.stringify(r0));
+      r.source = r.source || {};
+      if (!Array.isArray(r.source.messageIds)) r.source.messageIds = [];
+      let chatId = r.chatId || null;
+      if (!chatId && r.source.chatId) chatId = r.source.chatId;
+      if (!chatId && r.source.messageIds.length && L.messageChat) {
+        const chats = new Set(r.source.messageIds.map((id) => L.messageChat(id)));
+        // Только однозначно: все сообщения найдены и все из одного чата.
+        if (chats.size === 1 && !chats.has(null) && !chats.has(undefined)) chatId = [...chats][0];
+      }
+      if (chatId) {
+        if (r.chatId !== chatId || r.legacyUnscoped) {
+          r.chatId = chatId;
+          delete r.legacyUnscoped;
+          if (!r.source.chatId) r.source.chatId = chatId;
+          changed.push(r.id);
+        }
+      } else {
+        legacy++;
+        if (!r.legacyUnscoped || r.chatId) { r.legacyUnscoped = true; r.chatId = null; changed.push(r.id); }
+      }
+      out.push(r);
+    }
+    return { records: out, changed, legacy };
+  }
+
+  // Ручная привязка старой записи к чату. Происхождение сохраняется в source.originMessageIds;
+  // запись становится «на весь чат», потому что её сообщения этому чату не принадлежат.
+  function assignToChat(r0, chatId) {
+    const r = JSON.parse(JSON.stringify(r0));
+    r.source = r.source || {};
+    if ((r.source.messageIds || []).length) r.source.originMessageIds = r.source.messageIds.slice();
+    r.source.messageIds = [];
+    r.source.swipes = {};
+    r.source.assignedManually = true;
+    r.chatId = chatId;
+    delete r.legacyUnscoped;
+    return r;
+  }
+
+  /* ── Отбор по теме ───────────────────────────────────────────────────── */
+
   function stem(w) {
     w = String(w || "").toLowerCase().trim();
     return w.length > 5 ? w.slice(0, Math.max(4, w.length - 2)) : w;
   }
-
-  function domainHits(rec, textLow) {
-    let n = 0;
-    for (const d of rec.domains || []) {
-      const s = stem(d);
-      if (s && textLow.includes(s)) n++;
-    }
-    return n;
+  function tokens(text) {
+    return String(text || "").toLowerCase().replace(/ё/g, "е").match(/[\p{L}\p{N}]+/gu) || [];
+  }
+  // Словарь контекста: уникальные слова без имён участников.
+  function contextVocab(text, names) {
+    const skip = new Set();
+    for (const n of names || []) tokens(n).forEach((t) => skip.add(t));
+    const set = new Set();
+    for (const t of tokens(text)) if (t.length >= 3 && !skip.has(t)) set.add(t);
+    return { words: [...set], skip };
+  }
+  // Тема (домен) совпала, если каждое её слово (по основе) встречается в контексте.
+  function domainHit(domain, vocab) {
+    const parts = tokens(domain).filter((t) => t.length >= 3 && !vocab.skip.has(t));
+    if (!parts.length) return false;
+    return parts.every((p) => { const s = stem(p); return vocab.words.some((w) => w.startsWith(s)); });
   }
 
-  // records: все записи; ctx: { ownerId, present: [id], text, limit }
-  function select(records, ctx) {
+  // Числа отбора для одной записи.
+  function relevance(r, ctx, vocab) {
+    const doms = [...new Set((r.domains || []).map((d) => String(d).toLowerCase().trim()).filter(Boolean))];
+    const domainHits = doms.filter((d) => domainHit(d, vocab)).length;
+    // Слабый запасной сигнал: длинные слова самого события, если темы не заданы или не совпали.
+    let wordHits = 0;
+    if (!domainHits) {
+      const ev = new Set(tokens(r.event).filter((t) => t.length >= 5 && !vocab.skip.has(t)).map(stem));
+      for (const s of ev) if (vocab.words.some((w) => w.startsWith(s))) wordHits++;
+    }
+    const topic = domainHits + 0.25 * Math.min(wordHits, 3);
+    const present = new Set(ctx.present || []);
+    const participant = (r.about || []).some((a) => present.has(a)) ? 1 : 0;
+    return { topic, domainHits, wordHits, participant, weight: Number(r.weight) || 1 };
+  }
+
+
+  /* records: все записи; ctx: { chatId, path, present: [ids], text, names: [имена], limit, ownerId? }
+     → { selected: [записи в хронологическом порядке], debug: [строки отбора] } */
+  function rank(records, ctx) {
     const c = ctx || {};
-    const limit = c.limit || 8;
-    const textLow = String(c.text || "").toLowerCase();
-    const present = new Set(c.present || []);
-    const pool = (records || []).filter((r) => r.status === "active" && (!c.ownerId || r.owner === c.ownerId));
-    if (!pool.length) return [];
-    const times = pool.map((r) => r.createdAt || 0);
-    const tMin = Math.min(...times), tMax = Math.max(...times);
-    const scored = pool.map((r) => {
-      const aboutHit = (r.about || []).some((a) => present.has(a)) ? 1 : 0;
-      const recency = tMax > tMin ? ((r.createdAt || 0) - tMin) / (tMax - tMin) : 1;
-      const score = 2 * aboutHit + 1.5 * domainHits(r, textLow) + (r.weight || 1) + recency;
-      return { r, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    const chosen = scored.slice(0, limit).map((x) => x.r);
-    const chosenIds = new Set(chosen.map((r) => r.id));
-
-    // Противовесы — сверх лимита, не больше двух.
-    const extra = [];
-    for (const r of chosen) {
-      if (Math.abs(r.valence || 0) < 2 || extra.length >= 2) continue;
-      for (const p of r.about || []) {
-        const sign = Math.sign(r.valence);
-        const hasOpposite = chosen.concat(extra).some((x) => (x.about || []).includes(p) && Math.sign(x.valence || 0) === -sign);
-        if (hasOpposite) continue;
-        const best = scored.find((x) => !chosenIds.has(x.r.id) && !extra.some((e) => e.id === x.r.id) &&
-          (x.r.about || []).includes(p) && Math.sign(x.r.valence || 0) === -sign);
-        if (best) extra.push(Object.assign({}, best.r, { __counter: true }));
-        if (extra.length >= 2) break;
-      }
+    const limit = c.limit != null ? c.limit : 8;
+    const vocab = contextVocab(c.text, c.names);
+    const rows = [];
+    for (const r of records || []) {
+      if (c.ownerId && r.owner && r.owner !== c.ownerId) continue;
+      const vis = visibility(r, c);
+      const inChat = r.chatId === c.chatId && scopeOf(r) !== "legacy";
+      if (!inChat) continue; // чужие чаты и непривязанные записи даже не показываем в отладке
+      const rel = relevance(r, c, vocab);
+      // Релевантность решает, может ли запись войти; важность лишь упорядочивает подходящие.
+      const eligible = vis.visible && r.status === "active" && rel.topic > 0;
+      rows.push({ r, visible: vis.visible, reason: vis.reason, active: r.status === "active", eligible, ...rel, recencyRank: 0, selected: false });
     }
-    // Хронологический порядок читается моделью как история, а не как рейтинг.
-    return chosen.concat(extra).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    // Свежесть: ранг среди записей чата (1 — самая новая). Только для разрешения равенства.
+    rows.slice().sort((a, b) => (b.r.createdAt || 0) - (a.r.createdAt || 0)).forEach((x, i) => { x.recencyRank = i + 1; });
+    const cmp = (a, b) => (b.topic - a.topic) || (b.participant - a.participant) || (b.weight - a.weight) || (a.recencyRank - b.recencyRank);
+    const pool = rows.filter((x) => x.eligible).sort(cmp);
+    pool.slice(0, limit).forEach((x, i) => { x.selected = true; x.priority = i + 1; });
+    const selectedRows = pool.filter((x) => x.selected);
+    return {
+      // Порядок важности (priority) нужен сборщику: при нехватке места уходят последние.
+      ranked: selectedRows.map((x) => x.r),
+      // Хронологический порядок читается моделью как история, а не как рейтинг.
+      selected: selectedRows.map((x) => x.r).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+      debug: rows.sort((a, b) => (b.selected - a.selected) || cmp(a, b)).map((x) => ({
+        id: x.r.id, event: x.r.event, topic: x.topic, domainHits: x.domainHits, wordHits: x.wordHits, participant: x.participant,
+        weight: x.weight, recencyRank: x.recencyRank, visible: x.visible, reason: x.reason, active: x.active, selected: x.selected, priority: x.priority || null,
+      })),
+      visibleCount: rows.filter((x) => x.visible && x.active).length,
+    };
   }
 
-  function format(list) {
-    return (list || []).map((r) => {
-      const parts = ["— " + (r.source && r.source.sceneTime ? `[${r.source.sceneTime}] ` : "") + r.event.trim()];
-      if (r.interpretation) parts.push("  тогда понял(а) это так: " + r.interpretation.trim());
-      if (r.consequences) parts.push("  последствия: " + r.consequences.trim());
-      return parts.join("\n");
-    }).join("\n");
-  }
+  // Совместимость: только список в хронологическом порядке.
+  function select(records, ctx) { return rank(records, ctx).selected; }
 
-  PRP.experience = { blank, select, format };
+  function formatOne(r) {
+    const parts = ["— " + (r.source && r.source.sceneTime ? `[${r.source.sceneTime}] ` : "") + String(r.event || "").trim()];
+    if (r.interpretation) parts.push("  тогда понял(а) это так: " + r.interpretation.trim());
+    if (r.consequences) parts.push("  последствия: " + r.consequences.trim());
+    return parts.join("\n");
+  }
+  function format(list) { return (list || []).map(formatOne).join("\n"); }
+
+  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, tokens, stem };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.experience;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -593,6 +737,8 @@
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры речи {{char}} (стиль, не сюжет)",
+      author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
+      authorPost: "Указания автора карточки (после истории)",
     },
     messenger: {
       frame:
@@ -607,6 +753,8 @@
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
+      author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
+      authorPost: "Указания автора карточки (после истории)",
     },
   };
 
@@ -628,118 +776,196 @@
     return body ? `### ${title}\n${body}` : "";
   }
 
-  /* opts: {
+  /* Сборка контекста со строгим бюджетом.
+
+     opts: {
        mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
-       experiences: [] (уже отобранные), history: [{role, text}],
-       contextTokens, reserveTokens, singleSystem, minHistory, sceneProtocol
-     } */
+       experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
+       history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
+       sceneProtocol, extraPost, noPostHistory
+     }
+
+     Итоговый порядок (обычный транспорт):
+       system: РАМКА → УКАЗАНИЯ АВТОРА (system_prompt) → лорбук «до персонажа» → КАРТОЧКА
+               → примеры речи → ПЕРСОНА → лорбук → ОПЫТ → СЦЕНА
+       user/assistant: ИСТОРИЯ
+       system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → протокол сцены и рисования
+     При singleSystem всё служебное идёт одним system в начале, затем строго user/assistant.
+
+     Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
+     Если не помещается, уступают по порядку:
+       1 старая история → 2 примеры речи → 3 лорбук → 4 менее релевантный опыт
+       → 5 указания после истории → 6 персона, сценарий, указания автора, хвост описания
+       (по абзацам, затем по предложениям) → 7 самый релевантный опыт → 8 история до последнего сообщения.
+     Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
+     не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
-    const m = (s) => U.macros(s, vars);
+    const m = (x) => U.macros(x, vars);
     const tok = U.estimateTokens;
     const budget = Math.max(512, o.contextTokens - o.reserveTokens);
 
-    const cardBody = [
-      card.description,
-      card.personality ? "Личность: " + card.personality : "",
-      card.scenario ? "Обстоятельства: " + card.scenario : "",
-      card.systemPrompt ? "Указания автора карточки: " + card.systemPrompt : "",
-    ].filter(Boolean).join("\n\n");
-
-    const fixed = {
-      frame: m(T.frame),
-      card: section(m(T.card), m(cardBody)),
-      persona: section(m(T.persona), m(o.userDesc || "")),
-      scene: section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user })),
-      post: [m(card.postHistory || ""), o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n"),
-    };
-    let used = Object.values(fixed).reduce((n, s) => n + tok(s), 0);
-
     const history = (o.history || []).filter((h) => h && h.text);
-    const minH = history.slice(-o.minHistory);
-    used += minH.reduce((n, h) => n + tok(h.text) + 4, 0);
-
-    // Опыт: противовесы и сильные записи не выбрасываются первыми.
-    let exps = (o.experiences || []).slice();
-    const expCost = (list) => tok(EXP.format(list)) + 30;
-    while (exps.length && used + expCost(exps) > budget) {
-      const weakest = exps.filter((e) => !e.__counter).sort((a, b) => (a.weight || 1) - (b.weight || 1))[0] || exps[0];
-      exps = exps.filter((e) => e !== weakest);
-    }
-    const droppedExp = (o.experiences || []).length - exps.length;
-    const memory = exps.length ? section(m(T.memory), EXP.format(exps)) : "";
-    used += tok(memory);
-
-    // Лорбук — по ключам из последних сообщений.
     const recentText = history.slice(-4).map((h) => h.text).join("\n");
     const loreAll = matchLore(card.lore, recentText);
-    const lore = [], loreBefore = [];
-    for (const e of loreAll) {
-      const c = tok(e.content) + 2;
-      if (used + c > budget) break;
-      (e.position === "before_char" ? loreBefore : lore).push(m(e.content)); used += c;
-    }
-    const loreBlock = lore.length ? section(m(T.lore), lore.join("\n\n")) : "";
-    const loreBeforeBlock = loreBefore.length ? section(m(T.lore), loreBefore.join("\n\n")) : "";
 
-    // Примеры речи — если остаётся место.
-    let examples = "";
-    if (card.mesExample) {
-      const ex = section(m(T.examples), m(card.mesExample).replace(/<START>/gi, "").trim());
-      if (used + tok(ex) <= budget - 200) { examples = ex; used += tok(ex); }
-    }
+    // Изменяемое состояние сборки: что сейчас входит.
+    const st = {
+      authorSys: m(card.systemPrompt || "").trim(),
+      description: m(card.description || "").trim(),
+      personality: m(card.personality || "").trim(),
+      scenario: m(card.scenario || "").trim(),
+      examples: card.mesExample ? m(card.mesExample).replace(/<START>/gi, "").trim() : "",
+      persona: m(o.userDesc || "").trim(),
+      lore: loreAll.slice(),
+      exps: (o.experiences || []).slice(),
+      postHistory: o.noPostHistory ? "" : m(card.postHistory || "").trim(),
+      keepOld: null, // сколько старых сообщений (сверх minHistory) оставить; null — все
+      minH: Math.min(o.minHistory, history.length),
+    };
+    const frame = m(T.frame);
+    const scene = section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user }));
+    const protocol = [o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
 
-    // История: от новых к старым, сколько влезает.
-    const older = history.slice(0, Math.max(0, history.length - minH.length));
-    const keptOlder = [];
-    for (let i = older.length - 1; i >= 0; i--) {
-      const c = tok(older[i].text) + 4;
-      if (used + c > budget) break;
-      keptOlder.unshift(older[i]); used += c;
+    function parts() {
+      const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
+      const cardBody = [st.description, st.personality ? "Личность: " + st.personality : "", st.scenario ? "Сценарий: " + st.scenario : ""].filter(Boolean).join("\n\n");
+      const older = history.slice(0, history.length - st.minH);
+      const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
+      const kept = keptOlder.concat(history.slice(history.length - st.minH));
+      return {
+        head: [
+          frame,
+          section(T.author, st.authorSys),
+          section(m(T.lore), loreText("before")),
+          section(m(T.card), cardBody || "(описания нет)"),
+          section(m(T.examples), st.examples),
+          section(m(T.persona), st.persona),
+          section(m(T.lore), loreText("after")),
+          section(m(T.memory), EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)))),
+          scene,
+        ].filter(Boolean),
+        post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
+        history: kept,
+      };
     }
-    const keptHistory = keptOlder.concat(minH);
-
-    const head = [fixed.frame, loreBeforeBlock, fixed.card, examples, fixed.persona, loreBlock, memory, fixed.scene].filter(Boolean).join("\n\n");
-    const msgs = keptHistory.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
-    let messages;
-    if (o.singleSystem) {
-      // Строгие Jinja-шаблоны: одно system в начале, затем строго user/assistant.
-      const merged = [];
-      for (const x of msgs) {
-        const last = merged[merged.length - 1];
-        if (last && last.role === x.role) last.content += "\n\n" + x.content;
-        else merged.push(Object.assign({}, x));
+    function render() {
+      const p = parts();
+      const msgs = p.history.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
+      if (o.singleSystem) {
+        // Строгие Jinja-шаблоны: одно system в начале, затем строго user/assistant.
+        const merged = [];
+        for (const x of msgs) {
+          const last = merged[merged.length - 1];
+          if (last && last.role === x.role) last.content += "\n\n" + x.content;
+          else merged.push(Object.assign({}, x));
+        }
+        if (!merged.length || merged[0].role !== "user") merged.unshift({ role: "user", content: "[Начало]" });
+        return { p, messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
       }
-      if (!merged.length || merged[0].role !== "user") merged.unshift({ role: "user", content: "[Начало]" });
-      messages = [{ role: "system", content: [head, fixed.post].filter(Boolean).join("\n\n") }].concat(merged);
-    } else {
-      messages = [{ role: "system", content: head }].concat(msgs);
-      if (fixed.post) messages.push({ role: "system", content: fixed.post });
+      const out = [{ role: "system", content: p.head.join("\n\n") }].concat(msgs);
+      if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
+      return { p, messages: out };
+    }
+    const cost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
+    const fits = () => cost(render().messages) <= budget;
+
+    const truncated = [];
+    const note = (layer, detail) => {
+      const t = truncated.find((x) => x.layer === layer);
+      if (t) { if (typeof detail === "number") t.dropped = (t.dropped || 0) + detail; else if (detail) t.detail = detail; }
+      else truncated.push(Object.assign({ layer }, typeof detail === "number" ? { dropped: detail } : detail ? { detail } : {}));
+    };
+
+    // Порядок уступок. Каждая функция убирает одну порцию и возвращает true, либо false, если убирать нечего.
+    const olderCount = Math.max(0, history.length - st.minH);
+    const reducers = [
+      function oldHistory() {
+        const cur = st.keepOld == null ? olderCount : st.keepOld;
+        if (!cur) return false;
+        // Двоичный поиск: сколько самых свежих старых сообщений можно оставить.
+        let lo = 0, hi = cur - 1;
+        st.keepOld = 0;
+        if (!fits()) { note("history", cur); return true; }
+        while (lo < hi) {
+          const mid = Math.ceil((lo + hi + 1) / 2);
+          st.keepOld = mid;
+          if (fits()) lo = mid; else hi = mid - 1;
+        }
+        st.keepOld = lo;
+        note("history", cur - lo);
+        return true;
+      },
+      function examples() { if (!st.examples) return false; st.examples = ""; note("examples", "примеры речи"); return true; },
+      function lore() { if (!st.lore.length) return false; st.lore.pop(); note("lore", 1); return true; },
+      function lowExperience() { if (st.exps.length <= 1) return false; st.exps.pop(); note("experience", 1); return true; },
+      function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
+      function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
+      function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
+      function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
+      function descriptionTail() {
+        const d = st.description;
+        if (!d) return false;
+        const paras = d.split(/\n\s*\n/);
+        let next;
+        if (paras.length > 1) next = paras.slice(0, -1).join("\n\n");
+        else {
+          const sents = d.match(/[^.!?…]+[.!?…]+[»")\]]*\s*|[^.!?…]+$/g) || [d];
+          if (sents.length <= 1) return false; // первое предложение — минимум описания
+          next = sents.slice(0, -1).join("").trim();
+        }
+        st.description = next;
+        note("card.description", `описание сокращено до ${next.length} симв. из ${(m(card.description || "").trim()).length}`);
+        return true;
+      },
+      function topExperience() { if (!st.exps.length) return false; st.exps.pop(); note("experience", 1); return true; },
+      function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
+    ];
+
+    let overflow = false;
+    if (!fits()) {
+      for (const r of reducers) {
+        while (!fits() && r()) { /* уступаем порциями */ }
+        if (fits()) break;
+      }
+      overflow = !fits();
     }
 
+    const { p, messages } = render();
+    const used = cost(messages);
+    const keptHistory = p.history;
+    const tokLayer = (x) => tok(x) + (x ? 2 : 0);
+    const loreKept = st.lore.length;
     return {
       messages,
       report: {
         budget,
         used,
+        fits: used <= budget,
+        overflow,
+        truncated,
         historyKept: keptHistory.length,
         historyTotal: history.length,
-        experienceKept: exps.length,
-        experienceDropped: droppedExp,
-        loreKept: lore.length + loreBefore.length,
+        experienceKept: st.exps.length,
+        experienceDropped: (o.experiences || []).length - st.exps.length,
+        loreKept,
         loreMatched: loreAll.length,
-        examples: !!examples,
+        loreDropped: loreAll.length - loreKept,
+        examples: !!st.examples,
+        postHistory: !!st.postHistory,
+        postHistoryDisabled: !!o.noPostHistory && !!(card.postHistory || "").trim(),
         layers: {
-          frame: tok(fixed.frame),
-          card: tok(fixed.card) + tok(examples) + tok(fixed.persona),
-          memory: tok(memory),
-          scene: tok(fixed.scene),
-          lore: tok(loreBlock) + tok(loreBeforeBlock),
+          frame: tok(frame),
+          author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
+          card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : ""),
+          memory: tokLayer(st.exps.length ? section(m(T.memory), EXP.format(st.exps)) : ""),
+          scene: tok(scene),
+          lore: tokLayer(st.lore.length ? st.lore.map((e) => m(e.content)).join("\n\n") : ""),
           history: keptHistory.reduce((n, h) => n + tok(h.text) + 4, 0),
-          post: tok(fixed.post),
+          post: tok(protocol),
         },
       },
     };
@@ -2667,7 +2893,9 @@
 
   function memoryTab(m) {
     const d = m.expDraft;
-    const list = m.exps.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const ev = m.expView || { visible: [], hiddenInChat: 0, legacy: [] };
+    const list = ev.visible.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const scopeTag = (r) => (PRP.experience.scopeOf(r) === "branch" ? `<span class="tag" title="Видна только в этой ветке чата">ветка</span>` : `<span class="tag" title="Видна во всех ветках этого чата">весь чат</span>`);
     const valColor = (v) => (v > 0 ? "var(--ok)" : v < 0 ? "var(--danger)" : "var(--line)");
     const valWord = { "-3": "тяжело", "-2": "плохо", "-1": "неприятно", "0": "нейтрально", "1": "приятно", "2": "хорошо", "3": "очень важно" };
     if (d) {
@@ -2690,7 +2918,7 @@
           ${d.id ? `<span style="flex:1"></span><button class="btn btn-danger btn-sm" data-act="exp-del">Удалить</button>` : ""}</div></div>`;
     }
     return `<div class="block"><div class="block-title">Опыт ${esc(m.card.name)} <small>${list.length}</small></div>
-      <p class="hint">Пережитые события. Персонаж помнит их во всех своих чатах и учитывает, но может поступить вопреки.</p>
+      <p class="hint">Пережитое в этом чате — в этом мире. Другие чаты с ${esc(m.card.name)} его не видят. Событие из сообщения видно только в своей ветке; добавленное вручную — во всех ветках чата.${ev.hiddenInChat ? ` В других ветках этого чата ещё ${ev.hiddenInChat} ${R.plural(ev.hiddenInChat, "запись", "записи", "записей")}.` : ""}</p>
       <button class="btn btn-sm" data-act="exp-new">${icon("plus")}Добавить событие</button></div>
       ${list.map((r) => `<div class="memo ${r.status !== "active" ? "off" : ""}" data-act="exp-edit" data-id="${r.id}" role="button" tabindex="0">
         <span class="memo-bar" style="background:${valColor(r.valence)}"></span>
@@ -2698,11 +2926,17 @@
         ${r.interpretation ? `<div class="in">${esc(r.interpretation)}</div>` : ""}
         <div class="mt"><span class="tag ${r.valence > 0 ? "pos" : r.valence < 0 ? "neg" : ""}">${valWord[r.valence]}</span>
           ${(r.domains || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}
-          ${r.status === "superseded" ? `<span class="tag">пересмотрено</span>` : ""}${r.source && r.source.sceneTime ? `<span class="tag">${esc(r.source.sceneTime)}</span>` : ""}</div>
-      </div>`).join("") || `<p class="empty-note">Пока пусто. Нажмите «В опыт» под важным сообщением.</p>`}`;
+          ${r.status === "superseded" ? `<span class="tag">пересмотрено</span>` : ""}${r.source && r.source.sceneTime ? `<span class="tag">${esc(r.source.sceneTime)}</span>` : ""}${scopeTag(r)}</div>
+      </div>`).join("") || `<p class="empty-note">Пока пусто. Нажмите «В опыт» под важным сообщением.</p>`}
+      ${ev.legacy.length ? `<div class="block legacy-block"><div class="block-title">Без привязки к чату <small>${ev.legacy.length}</small></div>
+        <p class="hint">Старые записи, для которых нельзя точно сказать, в каком чате они случились. В контекст они не попадают. Привяжите к этому чату те, что относятся к нему.</p>
+        ${ev.legacy.map((r) => `<div class="memo off"><span class="memo-bar" style="background:${valColor(r.valence)}"></span>
+          <div class="ev">${esc(r.event || "Без описания")}</div>${r.interpretation ? `<div class="in">${esc(r.interpretation)}</div>` : ""}
+          <div class="mt"><span class="tag">не привязана</span><span style="flex:1"></span><button class="btn btn-sm" data-act="exp-assign" data-id="${r.id}">Привязать к этому чату</button></div></div>`).join("")}</div>` : ""}`;
   }
 
-  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.description": "описание" };
+  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
     if (!p) return `<p class="hint">Здесь видно, что получает модель: карточку как склонности, опыт как свидетельства, сцену как факты.</p>
@@ -2712,11 +2946,21 @@
     return `<div class="block"><div class="block-title">Контекст <small>${r.used} из ${r.budget} токенов, оценка</small></div>
         <div class="bar-meter">${LAYERS.map(([k, , c]) => `<i style="width:${(r.layers[k] / Math.max(total, r.budget)) * 100}%;background:${c}" title="${k}"></i>`).join("")}</div>
         <div class="legend">${LAYERS.filter(([k]) => r.layers[k]).map(([k, n, c]) => `<span style="--c:${c}">${n} ${r.layers[k]}</span>`).join("")}</div></div>
+      ${r.overflow ? `<div class="block err-block">${icon("alert")}<div><b>Не помещается.</b> Даже после всех сокращений нужно ${r.used} из ${r.budget} токенов: рамка, сцена и последние сообщения больше, чем позволяет модель. Запрос не будет отправлен.</div></div>` : ""}
       <div class="block"><dl class="kv">
+        <dt>Бюджет</dt><dd>${r.used} из ${r.budget} — ${r.fits ? "помещается" : "<b>не помещается</b>"}</dd>
         <dt>История</dt><dd>${r.historyKept} из ${r.historyTotal} сообщений</dd>
-        <dt>Опыт</dt><dd>${r.experienceKept} ${R.plural(r.experienceKept, "запись", "записи", "записей")}${r.experienceDropped ? `, не поместилось ${r.experienceDropped}` : ""}</dd>
-        <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших</dd>
-        <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd></dl></div>
+        <dt>Опыт</dt><dd>${r.experienceKept} ${R.plural(r.experienceKept, "запись", "записи", "записей")}${r.experienceDropped ? `, не поместилось ${r.experienceDropped}` : ""}${r.experienceVisible != null ? `; видно в ветке ${r.experienceVisible}` : ""}</dd>
+        ${r.legacyUnscoped ? `<dt>Без привязки</dt><dd>${r.legacyUnscoped} — в контекст не идут</dd>` : ""}
+        <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
+        <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
+        ${r.postHistoryDisabled ? `<dt>После истории</dt><dd>указания автора выключены в настройках</dd>` : ""}
+        ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "") + (t.detail && t.layer === "card.description" ? ` (${esc(t.detail)})` : "")).join(", ")}</dd>` : ""}
+        </dl></div>
+      ${(r.expDebug || []).length ? `<details class="block exp-debug"><summary>Отбор опыта</summary>
+        <table><thead><tr><th>Событие</th><th title="совпадение по темам">тема</th><th title="о присутствующих">участ.</th><th title="важность">важн.</th><th title="ранг свежести, только при равенстве">свеж.</th><th>итог</th></tr></thead><tbody>
+        ${r.expDebug.map((x) => `<tr class="${x.selected ? "sel" : ""}"><td>${esc((x.event || "").slice(0, 60))}</td><td>${x.topic}</td><td>${x.participant}</td><td>${x.weight}</td><td>${x.recencyRank}</td><td>${x.selected ? "в контексте" : !x.visible ? esc(x.reason) : !x.active ? "не действует" : "не выбрано"}</td></tr>`).join("")}
+        </tbody></table></details>` : ""}
       <div class="block"><div class="block-title">Что ушло в модель <button class="btn btn-sm btn-ghost" data-act="prism-preview">${icon("regen")}Обновить</button></div>
         <div class="code">${p.messages.map((x) => `<span class="role">${esc(x.role)}</span>\n${esc(x.content)}`).join("\n\n")}</div></div>`;
   }
@@ -2747,6 +2991,7 @@
           <div class="field"><label>Записей опыта за ход</label><input type="number" min="0" max="30" data-set-num="expLimit" value="${s.expLimit}"></div></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
+        <label class="check"><input type="checkbox" data-set="noPostHistory" ${s.noPostHistory ? "checked" : ""}><span>Не передавать инструкции после истории<small>Касается только указаний автора карточки (post_history_instructions), не самого характера. По умолчанию выключено — для совместимости с карточками.</small></span></label>
         <label class="check"><input type="checkbox" data-set="sceneProtocol" ${s.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сцены<small>Время, место, одежда, настроение — короткой служебной строкой, которую приложение прячет.</small></span></label>
         <div class="block-title" style="margin-top:20px">Ассистент</div>
         <div class="field"><label for="assist-sys">Инструкция ассистента</label><textarea id="assist-sys" rows="5" data-set-text="assistSystem" placeholder="${esc(PRP.assist.SYSTEM)}">${esc(s.assistSystem || "")}</textarea>
@@ -3010,6 +3255,7 @@
     autoContext: true,
     singleSystem: false,
     sceneProtocol: true,
+    noPostHistory: false,
     expLimit: 8,
     theme: "dusk",
     proseSize: 17,
@@ -3087,6 +3333,32 @@
     return S.settings.contextTokens || 8192;
   }
 
+  /* ── Опыт: канон чата и ветки ───────────────────────────────────────── */
+  function pathCtx(path) { return (path || activePath()).map((m) => ({ id: m.id, swipeIdx: m.swipeIdx || 0 })); }
+  // Что показывать во вкладке «Опыт»: видимое в этой ветке, скрытое в других ветках, непривязанное.
+  function expView(path) {
+    const ctx = { chatId: S.chatId, path: pathCtx(path) };
+    const inChat = S.experience.filter((r) => r.chatId === S.chatId && !r.legacyUnscoped);
+    const visible = inChat.filter((r) => EX.visibility(r, ctx).visible);
+    return { visible, hiddenInChat: inChat.length - visible.length, legacy: S.experience.filter((r) => EX.scopeOf(r) === "legacy") };
+  }
+  // Однократная (и повторяемая без вреда) миграция старых записей: привязка к чату без догадок.
+  async function migrateExperience() {
+    const all = await DB.all("experience");
+    const need = all.filter((r) => !r.chatId && !(r.source && r.source.chatId) && r.source && (r.source.messageIds || []).length);
+    const msgChat = new Map();
+    for (const r of need) for (const id of r.source.messageIds) {
+      if (msgChat.has(id)) continue;
+      const msg = await DB.get("messages", id);
+      msgChat.set(id, msg ? msg.chatId : null);
+    }
+    const res = EX.migrate(all, { messageChat: (id) => (msgChat.has(id) ? msgChat.get(id) : null) });
+    const changed = res.records.filter((r) => res.changed.includes(r.id));
+    if (changed.length) await DB.putMany("experience", changed);
+    S.legacyExperience = res.legacy;
+    return res;
+  }
+
   /* ── Модель представления ───────────────────────────────────────────── */
   function activePath() {
     const c = chat();
@@ -3094,7 +3366,7 @@
   }
   function sceneState(path) {
     const c = chat();
-    return SC.fold(c ? c.sceneInit : "", (path || activePath()).map((m) => ({ msgId: m.id, ops: TR.activeSwipe(m).sceneOps || [] })));
+    return SC.fold(c ? c.sceneInit : "", (path || activePath()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
   }
   function vm() {
     const path = activePath();
@@ -3102,7 +3374,7 @@
       S, view: S.view, cards: S.cards, chats: S.chats, card: card(), chat: chat(), persona: persona(), path,
       scene: chat() ? sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
       provider: activeProvider(), providers: providerList(), settings: S.settings,
-      exps: S.experience, expDraft: S.expDraft, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
+      exps: S.experience, expView: expView(path), expDraft: S.expDraft, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
       drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
       stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
       imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
@@ -3219,6 +3491,7 @@
     S.cards = (await DB.all("cards")).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await DB.all("assist");
+    await migrateExperience();
     const ui = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!ui.drawerOpen && !narrow();
     if (ui.chatId && S.chats.some((c) => c.id === ui.chatId)) await openChat(ui.chatId, true);
@@ -3342,13 +3615,20 @@
     const st = sceneState(path);
     const history = path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })).filter((h) => h.text);
     const recent = history.slice(-4).map((h) => h.text).join("\n");
-    const exps = EX.select(S.experience, { ownerId: cd.id, present: ["user"].concat(st.present), text: recent, limit: S.settings.expLimit });
-    return AS.build({
-      mode: c.mode, card: cd, userName: persona().name, userDesc: persona().description,
-      sceneState: st, experiences: exps, history, extraPost,
-      contextTokens: contextTokens(), reserveTokens: S.settings.sampler.max_tokens || 700,
-      singleSystem: S.settings.singleSystem, sceneProtocol: S.settings.sceneProtocol,
+    const ex = EX.rank(S.experience, {
+      chatId: c.id, path: pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
+      text: recent, names: [cd.name, persona().name].concat(st.present), limit: S.settings.expLimit,
     });
+    const built = AS.build({
+      mode: c.mode, card: cd, userName: persona().name, userDesc: persona().description,
+      sceneState: st, experiences: ex.ranked, history, extraPost,
+      contextTokens: contextTokens(), reserveTokens: S.settings.sampler.max_tokens || 700,
+      singleSystem: S.settings.singleSystem, sceneProtocol: S.settings.sceneProtocol, noPostHistory: !!S.settings.noPostHistory,
+    });
+    built.report.expDebug = ex.debug;
+    built.report.experienceVisible = ex.visibleCount;
+    built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
+    return built;
   }
   function refreshPrism() {
     if (!chat() || !card()) { S.lastPrism = null; return; }
@@ -3364,11 +3644,23 @@
     if (!prov) { toast("Модель не подключена. Откройте «Настройки → Модели».", true); openSettings("models"); return; }
     mode = mode || (msgId ? "regen" : "new");
 
+    // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
+    // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
     let path = activePath();
+    if (mode === "regen") path = path.slice(0, path.findIndex((m) => m.id === msgId));
+    const extraPost = mode === "continue" ? "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново." : "";
+    const built = buildPrism(path, extraPost);
+    S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
+    if (built.report.overflow) {
+      toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+      if (S.drawerOpen) { S.tab = "prism"; renderDrawer(); }
+      renderFeed();
+      return;
+    }
+
     let target, prefix = "";
     if (mode === "regen") {
       target = S.messages.find((m) => m.id === msgId);
-      path = path.slice(0, path.findIndex((m) => m.id === msgId));
       target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
       target.swipeIdx = target.swipes.length - 1;
     } else if (mode === "continue") {
@@ -3380,10 +3672,6 @@
       await putChat(c);
     }
     await putMsg(target);
-
-    const extraPost = mode === "continue" ? "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново." : "";
-    const built = buildPrism(path, extraPost);
-    S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
 
     const sw = TR.activeSwipe(target);
     const ctrl = new AbortController();
@@ -3612,9 +3900,10 @@
     const path = activePath();
     const idx = path.findIndex((m) => m.id === msgId);
     const st = sceneState(path.slice(0, idx + 1));
-    const d = EX.blank(S.cardId);
+    const d = EX.blank(S.cardId, S.chatId);
     d.about = ["user"];
-    d.source = { chatId: S.chatId, messageIds: [msgId], sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
+    const msg = path[idx];
+    d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 }, sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
     S.expDraft = d;
     S.tab = "memory";
     S.drawerOpen = true;
@@ -3628,6 +3917,8 @@
     if (!d.event) { toast("Опишите, что произошло.", true); return; }
     if (!d.id) d.id = U.uid("x");
     d.owner = S.cardId;
+    // Новая запись всегда принадлежит текущему чату; непривязанные старые не трогаем.
+    if (!d.chatId && !d.legacyUnscoped) { d.chatId = S.chatId; d.source = Object.assign({ messageIds: [] }, d.source, { chatId: S.chatId }); }
     await DB.put("experience", d);
     const i = S.experience.findIndex((x) => x.id === d.id);
     if (i >= 0) S.experience[i] = d; else S.experience.push(d);
@@ -3669,7 +3960,7 @@
     const path = TR.path(TR.index(msgs), c.leafId);
     const cd = S.cards.find((x) => x.id === c.cardId);
     const lines = path.map((m) => ({ name: m.role === "user" ? persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
-    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, ops: TR.activeSwipe(m).sceneOps || [] })));
+    const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
     return { lines, scene: SC.summaryLine(st) || "" };
   }
   async function assistSend(text) {
@@ -3866,8 +4157,9 @@
   }
   async function deleteChat() {
     const c = chat();
-    if (!c || !confirm("Удалить этот чат? Опыт персонажа сохранится.")) return;
+    if (!c || !confirm("Удалить этот чат? Вместе с ним удалится опыт персонажа, накопленный в этом мире.")) return;
     const ms = await DB.byIndex("messages", "chatId", c.id);
+    await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
     await DB.delMany("messages", ms.map((m) => m.id));
     await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
     await DB.del("chats", c.id);
@@ -4124,7 +4416,17 @@
     "sc-remove": (t) => applySceneOps([op(t.dataset.name, "remove", t.dataset.item)]),
     "scene-init-save": async () => { const c = chat(); c.sceneInit = $("#scene-init").value.trim(); await putChat(c); refreshPrism(); renderDrawer(); renderFeed(); toast("Начальная сцена сохранена."); },
     // Опыт
-    "exp-new": () => { S.expDraft = Object.assign(EX.blank(S.cardId), { about: ["user"] }); renderDrawer(); },
+    "exp-new": () => { S.expDraft = Object.assign(EX.blank(S.cardId, S.chatId), { about: ["user"] }); renderDrawer(); },
+    "exp-assign": async (t) => {
+      const r = S.experience.find((x) => x.id === t.dataset.id);
+      if (!r || !confirm("Привязать эту запись к текущему чату? Она станет частью этого мира и будет видна во всех его ветках.")) return;
+      const nr = EX.assignToChat(r, S.chatId);
+      await DB.put("experience", nr);
+      S.experience = S.experience.map((x) => (x.id === nr.id ? nr : x));
+      S.legacyExperience = Math.max(0, (S.legacyExperience || 1) - 1);
+      refreshPrism(); renderDrawer();
+      toast("Запись привязана к этому чату.");
+    },
     "exp-edit": (t) => { S.expDraft = U.clone(S.experience.find((x) => x.id === t.dataset.id)); renderDrawer(); },
     "exp-cancel": () => { S.expDraft = null; renderDrawer(); },
     "exp-save": saveExp,

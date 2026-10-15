@@ -154,6 +154,7 @@ try:
         shot(page, "03-settings.png")
         page.click("[data-act=prov-save]")
         page.click("[data-act=settings][data-section=gen]")
+        check("настройка «не передавать инструкции после истории» выключена по умолчанию", page.locator("[data-set=noPostHistory]").count() == 1 and not page.is_checked("[data-set=noPostHistory]"))
         page.click(".preset[data-id=lively]")
         try:
             page.wait_for_function("document.querySelector('[data-sampler=temperature]') && document.querySelector('[data-sampler=temperature]').value === '1.1'", timeout=5000)
@@ -226,16 +227,24 @@ try:
         page.fill("#x-interp", "Решила, что он считает её наивной")
         page.click("[data-act=x-val][data-v='-2']")
         check("значения формы опыта переживают перерисовку", page.input_value("#x-event") == "Кира соврал Химэ о деньгах")
-        page.fill("#x-domain-add", "деньги, доверие")
+        page.fill("#x-domain-add", "деньги, доверие, кафе")
         page.keyboard.press("Enter")
         check("темы-чипы", wait_text(page, "#x-domains", "доверие"))
         page.click("[data-act=exp-save]")
         check("событие сохранено", wait_text(page, "#drawer-body", "соврал Химэ о деньгах"))
+        check("опыт из сообщения помечен как опыт ветки", wait_text(page, "#drawer-body", "ветка"))
         shot(page, "05-memory.png")
+        # Ветки: другой вариант ответа скрывает запись, возврат восстанавливает (PRISM1-2/3 в интерфейсе)
+        page.click(".turn.last [data-act=swipe][data-dir='1']")
+        check("ветка: в другом варианте запись скрыта", wait_text(page, ".turn.last .swipes", "2/2") and "соврал Химэ о деньгах" not in page.inner_text("#drawer-body") and "В других ветках этого чата ещё 1" in page.inner_text("#drawer-body"))
+        page.click(".turn.last [data-act=swipe][data-dir='-1']")
+        check("ветка: возврат восстанавливает запись", wait_text(page, "#drawer-body", "соврал Химэ о деньгах"))
 
         # Prism
         page.click("[data-act=tab][data-tab=prism]")
         check("Prism: память с интерпретацией", wait_text(page, "#drawer-body", "тогда понял(а) это так: Решила"))
+        check("Prism: строгий бюджет в отчёте", "помещается" in page.inner_text("#drawer-body"))
+        check("Prism: таблица отбора опыта", page.locator(".exp-debug tr.sel").count() == 1)
         check("Prism: полоса слоёв", page.locator(".bar-meter i").count() >= 5)
         shot(page, "06-prism.png")
 
@@ -330,7 +339,12 @@ try:
         check("переписка: пузыри", page.locator(".msg-row.them .bub").count() == 2)
         check("переписка: статус из сцены", wait_text(page, ".chat-head", "идёт к метро"))
         req = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last"))
-        check("переписка: рамка и общий опыт", "переписывается с Пользователь" in req["messages"][0]["content"] and "соврал Химэ" in req["messages"][0]["content"])
+        check("переписка: рамка", "переписывается с Пользователь" in req["messages"][0]["content"])
+        check("PRISM1-1: опыт другого чата не попадает в модель", "соврал Химэ" not in json.dumps(req["messages"], ensure_ascii=False))
+        page.click("[data-act=drawer]") if not page.locator(".drawer.open").count() else None
+        page.click("[data-act=tab][data-tab=memory]")
+        check("PRISM1-1: вкладка опыта другого чата пуста", "соврал Химэ" not in page.inner_text("#drawer-body"))
+        page.click("[data-act=tab][data-tab=scene]")
         shot(page, "07-messenger.png")
 
         # Модель из композера
@@ -352,6 +366,9 @@ try:
         page.click("[data-act=modal-close]")
         page.click(".rail-chat >> nth=1")
         page.wait_for_selector(".turn")
+        if not page.locator(".drawer.open").count(): page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=memory]")
+        check("PRISM1-1: в своём чате опыт на месте", wait_text(page, "#drawer-body", "соврал Химэ о деньгах"))
         shot(page, "08-paper.png")
 
         # Бэкап
@@ -414,6 +431,66 @@ try:
         check("экспорт PNG", png[:8] == b"\x89PNG\r\n\x1a\n")
         check("экспорт: LoRA едут внутри карточки", png_card_lora(png) == "Orihime_IL")
         page.click("[data-act=modal-close]")
+
+        # Миграция старого опыта: без надёжного чата — в карантин, не угадываем (PRISM1-6/7/24)
+        page.evaluate("""async () => {
+          const S = window.PRP.app.S;
+          await window.PRP.store.put('experience', { id: 'legacy1', owner: S.cardId, event: 'Старое событие без чата', interpretation: '', consequences: '', domains: [], about: ['user'], valence: 0, weight: 3, status: 'active', createdAt: 1, source: { messageIds: [] } });
+        }""")
+        page.reload()
+        page.wait_for_selector(".chat-head")
+        if not page.locator(".drawer.open").count(): page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=memory]")
+        check("миграция: непривязанная запись в отдельном разделе", wait_text(page, "#drawer-body", "Без привязки к чату"))
+        page.click("[data-act=tab][data-tab=prism]")
+        check("миграция: непривязанная не идёт в модель", "Старое событие без чата" not in page.inner_text(".code") and "Без привязки" in page.inner_text("#drawer-body"))
+        exp_all = page.evaluate("window.PRP.store.all('experience')")
+        check("PRISM1-24: опыт пишется только вручную (2 записи: своя и внесённая)", len(exp_all) == 2 and any(r.get("legacyUnscoped") for r in exp_all))
+        page.click("[data-act=tab][data-tab=memory]")
+        page.once("dialog", lambda d: d.accept())
+        page.click("[data-act=exp-assign][data-id=legacy1]")
+        check("миграция: ручная привязка к чату", wait_text(page, "#drawer-body", "Старое событие без чата") and "Без привязки к чату" not in page.inner_text("#drawer-body"))
+        page.click("[data-act=tab][data-tab=scene]")
+
+        # OVERFLOW: заведомо непомещающийся контекст не меняет дерево и не уходит в модель (new / regen / continue)
+        if not page.locator(".drawer.open").count(): page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=scene]")
+        page.fill("[data-sc-top=loc]", "Огромное место " + "очень длинное описание места " * 120)
+        page.dispatch_event("[data-sc-top=loc]", "change")
+        page.wait_for_timeout(300)
+        res = page.evaluate("""async () => {
+          const A = window.PRP.app, S = A.S, DB = window.PRP.store;
+          const chatNow = () => S.chats.find((c) => c.id === S.chatId);
+          const snap = async () => JSON.stringify({
+            mem: S.messages.map((m) => JSON.stringify(m)).sort(),
+            db: (await DB.byIndex('messages', 'chatId', S.chatId)).map((m) => JSON.stringify(m)).sort(),
+            leaf: chatNow().leafId, leafDb: (await DB.get('chats', S.chatId)).leafId,
+          });
+          const count = async () => (await (await fetch('http://127.0.0.1:8766/count')).json()).chat;
+          // последний ответ модели на активном пути
+          let m = S.messages.find((x) => x.id === chatNow().leafId);
+          while (m && m.role !== 'assistant') m = S.messages.find((x) => x.id === m.parentId);
+          const keep = { ctx: S.settings.contextTokens, auto: S.settings.autoContext, mt: S.settings.sampler.max_tokens };
+          S.settings.contextTokens = 600; S.settings.autoContext = false; S.settings.sampler.max_tokens = 300;
+          const before = await snap(), c0 = await count();
+          const out = {};
+          for (const mode of ['new', 'regen', 'continue']) {
+            await A.generate(mode === 'new' ? undefined : m.id, mode);
+            out[mode] = { same: (await snap()) === before, overflow: !!(S.lastPrism && S.lastPrism.report.overflow), gen: !!S.gen };
+          }
+          out.calls = (await count()) - c0;
+          Object.assign(S.settings, { contextTokens: keep.ctx, autoContext: keep.auto }); S.settings.sampler.max_tokens = keep.mt;
+          return out;
+        }""")
+        for mode in ["new", "regen", "continue"]:
+            check(f"OVERFLOW {mode}: дерево не изменилось, отчёт Prism показывает переполнение", res[mode]["same"] and res[mode]["overflow"] and not res[mode]["gen"])
+        check("OVERFLOW: модель не вызывалась", res["calls"] == 0)
+        check("OVERFLOW: ошибка показана вне истории", "не помещается" in page.inner_text("#toast") and "не помещается" not in page.inner_text("#feed"))
+        check("OVERFLOW: открыта вкладка Prism с переполнением", "Не помещается" in page.inner_text("#drawer-body"))
+        page.click("[data-act=tab][data-tab=scene]")
+        page.fill("[data-sc-top=loc]", "Кафе, терраса")
+        page.dispatch_event("[data-sc-top=loc]", "change")
+        page.wait_for_timeout(300)
 
         # Мобильная ширина
         page.set_viewport_size({"width": 390, "height": 820})

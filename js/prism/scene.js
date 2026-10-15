@@ -171,7 +171,7 @@
   function charOf(state, name) {
     const key = Object.keys(state.chars).find((k) => k.toLowerCase() === name.toLowerCase());
     if (key) return state.chars[key];
-    return (state.chars[name] = { wear: [], pose: "", mood: "", rel: 0, relLog: [] });
+    return (state.chars[name] = { wear: [], pose: "", mood: "", moodSrc: null, moodTurn: null, rel: 0, relLog: [] });
   }
 
   function sameItem(a, b) {
@@ -194,7 +194,12 @@
           case "add": splitList(v).forEach((it) => { if (!ch.wear.some((w) => sameItem(w, it))) ch.wear.push(it); }); break;
           case "remove": splitList(v).forEach((it) => { ch.wear = ch.wear.filter((w) => !sameItem(w, it)); }); break;
           case "pose": ch.pose = isClear(v) ? "" : v; break;
-          case "mood": ch.mood = isClear(v) ? "" : v; break;
+          case "mood":
+            ch.mood = isClear(v) ? "" : v;
+            // Источник оценки на активном пути: сообщение и номер хода (для возраста).
+            ch.moodSrc = ch.mood ? (msgId || null) : null;
+            ch.moodTurn = ch.mood ? (meta && meta.turn != null ? meta.turn : 0) : null;
+            break;
           case "rel": {
             const m = String(v).match(/^([+-]?\d+)\s*(.*)$/);
             if (!m) { ok = false; break; }
@@ -237,10 +242,35 @@
   }
 
   // Свёртка: начальная сцена + дельты по сообщениям активной ветки.
+  /* steps: [{ msgId, ops, role? }] по активному пути. Ход = ответ модели (role "assistant");
+     если роль не указана, ходом считается каждый шаг. Возраст настроения считается
+     заново по каждой ветке и нигде не хранится. */
   function fold(initBody, steps) {
-    let st = apply(emptyState(), parseBody(initBody || "")).state;
-    for (const step of steps || []) st = apply(st, step.ops, { msgId: step.msgId }).state;
+    let st = apply(emptyState(), parseBody(initBody || ""), { turn: 0 }).state;
+    let turn = 0;
+    for (const step of steps || []) {
+      if (!step.role || step.role === "assistant") turn++;
+      st = apply(st, step.ops, { msgId: step.msgId, turn }).state;
+    }
+    st.turn = turn;
+    for (const n of Object.keys(st.chars)) {
+      const ch = st.chars[n];
+      ch.moodAge = ch.mood ? Math.max(0, turn - (ch.moodTurn || 0)) : null;
+    }
     return st;
+  }
+
+  function plural(n, one, few, many) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return many;
+    if (b > 1 && b < 5) return few;
+    if (b === 1) return one;
+    return many;
+  }
+  function ageWords(age) {
+    if (age == null) return "";
+    if (age === 0) return "отмечено сейчас";
+    return `отмечено ${age} ${plural(age, "ход", "хода", "ходов")} назад`;
   }
 
   /* ── Описание для модели и для интерфейса ───────────────────────────── */
@@ -271,7 +301,7 @@
       const bits = [];
       if (ch.wear.length) bits.push("одет(а): " + ch.wear.join(", "));
       if (ch.pose) bits.push(ch.pose);
-      if (ch.mood) bits.push("настроение (оценка): " + ch.mood);
+      if (ch.mood) bits.push("настроение (оценка): " + ch.mood + (ch.moodAge != null ? " — " + ageWords(ch.moodAge) : ""));
       if (ch.rel !== 0 || ch.relLog.length) {
         const why = ch.relLog.slice(-2).map((r) => r.why).filter(Boolean);
         bits.push(`отношение к собеседнику (${o.userName || "собеседник"}): ${relWord(ch.rel)}` + (why.length ? ` — ${why.join("; ")}` : ""));
@@ -308,6 +338,6 @@
     "Указывай только то, что изменилось. Не пересказывай сцену в тексте ответа. Если ничего не изменилось — строку не пиши.",
   ].join("\n");
 
-  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, describe, summaryLine, formatClock, relWord, opLabel, PROTOCOL };
+  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, ageWords, describe, summaryLine, formatClock, relWord, opLabel, PROTOCOL };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.scene;
 })(typeof window !== "undefined" ? window : globalThis);

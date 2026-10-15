@@ -90,26 +90,167 @@ t("describe: отношение словом и причиной, без чис�
   assert.ok(!/-2/.test(d));
 });
 
-/* ── Опыт ── */
-const recs = [
-  { id: "a", owner: "c1", status: "active", event: "Он предал её", valence: -3, weight: 3, about: ["user"], domains: ["доверие"], createdAt: 3 },
-  { id: "b", owner: "c1", status: "active", event: "Он выручил её деньгами", valence: 2, weight: 1, about: ["user"], domains: ["деньги"], createdAt: 1 },
-  { id: "c", owner: "c1", status: "active", event: "Поссорилась с сестрой", valence: -1, weight: 1, about: ["sis"], domains: [], createdAt: 2 },
-  { id: "d", owner: "c2", status: "active", event: "чужой опыт", valence: 0, weight: 3, about: ["user"], domains: [], createdAt: 4 },
-  { id: "e", owner: "c1", status: "superseded", event: "старое", valence: 0, weight: 3, about: ["user"], domains: [], createdAt: 5 },
-];
-t("опыт: только свой и активный (эпистемическая граница)", () => {
-  const r = E.select(recs, { ownerId: "c1", present: ["user"], limit: 10 });
-  assert.deepStrictEqual(r.map((x) => x.id).sort(), ["a", "b", "c"]);
+/* ── Опыт: канон чата и веток (этап 1) ── */
+// Дерево чата X:  R → A1 → A2 → A3
+//                        └→ B2 → B3
+const P = (ids, sw) => ids.map((id) => ({ id, swipeIdx: (sw && sw[id]) || 0 }));
+const PATH_A3 = P(["R", "A1", "A2", "A3"]), PATH_B3 = P(["R", "A1", "B2", "B3"]);
+const X = (id, extra) => Object.assign({ id, owner: "c1", status: "active", event: "событие " + id, valence: 0, weight: 1, about: ["user"], domains: ["тест"], createdAt: 1, source: { messageIds: [] } }, extra);
+const E1 = X("E1", { chatId: "X", source: { chatId: "X", messageIds: ["A2"] } });
+const E2 = X("E2", { chatId: "X", source: { chatId: "X", messageIds: ["B2"] } });
+const E3 = X("E3", { chatId: "X", source: { chatId: "X", messageIds: [] } });
+const E4 = X("E4", { chatId: "Y", source: { chatId: "Y", messageIds: [] } });
+const E5 = X("E5", { chatId: null, legacyUnscoped: true, source: { messageIds: [] } });
+const ALL = [E1, E2, E3, E4, E5];
+const vis = (path) => ALL.filter((r) => E.visibility(r, { chatId: "X", path }).visible).map((r) => r.id);
+
+t("PRISM1-2/3: опыт ветки A не виден в ветке B и возвращается", () => {
+  assert.deepStrictEqual(vis(PATH_A3), ["E1", "E3"]);
+  assert.deepStrictEqual(vis(PATH_B3), ["E2", "E3"]);
+  assert.deepStrictEqual(vis(PATH_A3), ["E1", "E3"]);
+  // В Prism попадает только видимое
+  const sel = E.rank(ALL, { chatId: "X", path: PATH_B3, present: ["user"], text: "тест" }).selected.map((r) => r.id).sort();
+  assert.deepStrictEqual(sel, ["E2", "E3"]);
 });
-t("опыт: противовес добирается сверх лимита", () => {
-  const r = E.select(recs, { ownerId: "c1", present: ["user"], text: "", limit: 1 });
-  assert.deepStrictEqual(r.map((x) => x.id), ["b", "a"]);
-  assert.ok(r.find((x) => x.id === "b").__counter);
+t("PRISM1-1/5: другой чат с той же карточкой не видит опыт, ручная запись — только в своём чате", () => {
+  const y = ALL.filter((r) => E.visibility(r, { chatId: "Y", path: [] }).visible).map((r) => r.id);
+  assert.deepStrictEqual(y, ["E4"]);
+  const ySel = E.rank(ALL, { chatId: "Y", path: [], present: ["user"], text: "тест" }).selected;
+  assert.deepStrictEqual(ySel.map((r) => r.id), ["E4"]);
 });
-t("опыт: домены поднимают релевантность", () => {
-  const r = E.select(recs, { ownerId: "c1", present: [], text: "Одолжишь денег?", limit: 1 });
-  assert.strictEqual(r[0].id === "b" || r.some((x) => x.id === "b"), true);
+t("PRISM1-4: ручная запись видна во всех ветках своего чата", () => {
+  assert.ok(vis(PATH_A3).includes("E3") && vis(PATH_B3).includes("E3") && vis(P(["R"])).includes("E3"));
+});
+t("удалённая ветка: запись хранится, но не видна и никуда не переносится", () => {
+  const afterDelete = P(["R", "A1", "B2x"]); // ветку A2 удалили, путь пошёл иначе
+  assert.ok(!E.visibility(E1, { chatId: "X", path: afterDelete }).visible);
+  assert.strictEqual(E1.chatId, "X");
+  assert.deepStrictEqual(E1.source.messageIds, ["A2"]);
+});
+t("другой вариант ответа (свайп) скрывает опыт, записанный из прежнего варианта", () => {
+  const r = X("S", { chatId: "X", source: { chatId: "X", messageIds: ["A2"], swipes: { A2: 0 } } });
+  assert.ok(E.visibility(r, { chatId: "X", path: P(["R", "A1", "A2"], { A2: 0 }) }).visible);
+  assert.ok(!E.visibility(r, { chatId: "X", path: P(["R", "A1", "A2"], { A2: 1 }) }).visible);
+});
+t("PRISM1-6/7: миграция не угадывает чат и сохраняет все записи", () => {
+  const legacy = [
+    { id: "m1", owner: "c1", event: "есть source.chatId", interpretation: "i1", consequences: "k1", source: { chatId: "X", messageIds: ["A2"] } },
+    { id: "m2", owner: "c1", event: "сообщения из одного чата", source: { messageIds: ["A1", "A2"] } },
+    { id: "m3", owner: "c1", event: "сообщения из разных чатов", source: { messageIds: ["A1", "Q1"] } },
+    { id: "m4", owner: "c1", event: "сообщение не найдено", source: { messageIds: ["ZZ"] } },
+    { id: "m5", owner: "c1", event: "без происхождения", source: { messageIds: [] } },
+    { id: "m6", owner: "c1", event: "уже со своим chatId", chatId: "Y", source: { messageIds: [] } },
+  ];
+  const snapshot = JSON.parse(JSON.stringify(legacy));
+  const msgChat = { A1: "X", A2: "X", Q1: "Y" };
+  const res = E.migrate(legacy, { messageChat: (id) => msgChat[id] || null });
+  const by = Object.fromEntries(res.records.map((r) => [r.id, r]));
+  assert.strictEqual(res.records.length, legacy.length);
+  assert.strictEqual(by.m1.chatId, "X");
+  assert.strictEqual(by.m2.chatId, "X");
+  for (const id of ["m3", "m4", "m5"]) { assert.strictEqual(by[id].chatId, null); assert.strictEqual(by[id].legacyUnscoped, true); assert.strictEqual(E.scopeOf(by[id]), "legacy"); }
+  assert.strictEqual(by.m6.chatId, "Y");
+  assert.strictEqual(res.legacy, 3);
+  for (const r of snapshot) {
+    const n = by[r.id];
+    assert.strictEqual(n.event, r.event); assert.strictEqual(n.interpretation, r.interpretation); assert.strictEqual(n.consequences, r.consequences);
+    assert.deepStrictEqual(n.source.messageIds, r.source.messageIds);
+  }
+  assert.deepStrictEqual(legacy, snapshot, "исходные объекты не изменены");
+  // Идемпотентность
+  const again = E.migrate(res.records, { messageChat: (id) => msgChat[id] || null });
+  assert.deepStrictEqual(again.changed, []);
+  assert.deepStrictEqual(again.records, res.records);
+  // Непривязанные не попадают в Prism ни одного чата
+  const migrated = res.records.map((r) => Object.assign({}, r, { status: "active", domains: ["тест"] }));
+  assert.ok(!E.rank(migrated, { chatId: "X", path: PATH_A3, present: ["user"], text: "тест" }).selected.some((r) => ["m3", "m4", "m5"].includes(r.id)));
+});
+t("ручная привязка старой записи: становится записью на весь чат, происхождение сохранено", () => {
+  const r = E.assignToChat({ id: "m3", legacyUnscoped: true, chatId: null, source: { messageIds: ["A1", "Q1"] } }, "X");
+  assert.strictEqual(r.chatId, "X"); assert.ok(!r.legacyUnscoped);
+  assert.deepStrictEqual(r.source.originMessageIds, ["A1", "Q1"]);
+  assert.strictEqual(E.scopeOf(r), "chat");
+  assert.ok(E.visibility(r, { chatId: "X", path: PATH_B3 }).visible);
+});
+
+/* ── Опыт: отбор (этап 1) ── */
+const R1 = (id, extra) => Object.assign({ id, owner: "c1", chatId: "X", status: "active", valence: 0, weight: 1, about: [], domains: [], createdAt: 1, source: { messageIds: [] } }, extra);
+t("PRISM1-9: тема важнее присутствия, важности и свежести", () => {
+  const set = [
+    R1("old-topic", { event: "Взял у неё деньги в долг и не вернул", domains: ["деньги"], weight: 1, about: ["user"], createdAt: 1 }),
+    R1("recent-user", { event: "Ходили в кино", domains: ["кино"], weight: 1, about: ["user"], createdAt: 10 }),
+    R1("heavy-unrel", { event: "Умерла бабушка", domains: ["семья"], weight: 3, about: [], createdAt: 5 }),
+    R1("user-wrong", { event: "Спорили о музыке", domains: ["музыка"], weight: 2, about: ["user"], createdAt: 9 }),
+  ];
+  const r = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Слушай, насчёт долга: деньги я верну", names: ["Химэ", "Кира"], limit: 8 });
+  assert.strictEqual(r.ranked[0].id, "old-topic");
+  assert.ok(!r.selected.some((x) => x.id === "recent-user"), "свежесть не спасает нерелевантное");
+  assert.ok(!r.selected.some((x) => x.id === "user-wrong"), "присутствие не заменяет тему");
+  assert.ok(!r.selected.some((x) => x.id === "heavy-unrel"), "важность не создаёт релевантность");
+  assert.deepStrictEqual(r.selected.map((x) => x.id), ["old-topic"]);
+  const dbg = r.debug.find((x) => x.id === "old-topic");
+  assert.ok(dbg.topic >= 1 && dbg.selected && dbg.visible);
+});
+t("PRISM1-10: свежесть решает только при равной релевантности", () => {
+  const set = [
+    R1("older", { domains: ["деньги"], weight: 2, about: ["user"], createdAt: 1 }),
+    R1("newer", { domains: ["деньги"], weight: 2, about: ["user"], createdAt: 9 }),
+    R1("newest-weaker", { domains: ["деньги"], weight: 1, about: ["user"], createdAt: 20 }),
+  ];
+  const r = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "деньги", limit: 8 });
+  assert.deepStrictEqual(r.ranked.map((x) => x.id), ["newer", "older", "newest-weaker"]);
+});
+t("PRISM1-8: нет подбора по противоположному знаку", () => {
+  const set = [
+    R1("fin", { event: "Украл у неё деньги", domains: ["деньги", "доверие"], valence: -3, weight: 2, about: ["user"], createdAt: 1 }),
+    R1("flowers", { event: "Подарил ей цветы", domains: ["цветы", "подарок"], valence: 2, weight: 1, about: ["user"], createdAt: 2 }),
+  ];
+  const r = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Можно тебе доверить деньги?", limit: 8 });
+  assert.deepStrictEqual(r.selected.map((x) => x.id), ["fin"]);
+  assert.ok(!r.selected.some((x) => x.__counter));
+});
+t("важность не создаёт релевантность: несколько «важных» записей не по теме и одна старая по теме", () => {
+  const set = [
+    R1("w3a", { event: "Бросил её одну после аварии", domains: ["доверие", "опасность"], weight: 3, about: ["user"], createdAt: 5 }),
+    R1("w3b", { event: "Признался ей в любви", domains: ["любовь"], weight: 3, about: ["user"], createdAt: 6 }),
+    R1("w3c", { event: "Спас её на пожаре", domains: ["пожар", "спасение"], weight: 3, about: ["user"], createdAt: 7 }),
+    R1("ramen", { event: "Научил её варить рамен", domains: ["рамен", "готовка"], weight: 1, about: ["user"], createdAt: 1 }),
+  ];
+  const r = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Какой рецепт рамена тебе больше нравится?", limit: 8 });
+  assert.deepStrictEqual(r.selected.map((x) => x.id), ["ramen"]);
+  const none = E.rank(set, { chatId: "X", path: [], present: ["user"], text: "Сегодня хорошая погода.", limit: 8 });
+  assert.deepStrictEqual(none.selected, [], "если ничего не относится к теме, опыт не подаётся");
+  const built = A.build({ card: { name: "Химэ", description: "d" }, experiences: none.ranked, history: [{ role: "user", text: "Сегодня хорошая погода." }] });
+  assert.ok(!built.messages[0].content.includes("Что Химэ помнит"), "пустой опыт — допустимо");
+});
+t("тема: имена участников не засчитываются как совпадение темы", () => {
+  const set = [R1("name", { event: "Химэ рассердилась", domains: ["химэ"], weight: 1 })];
+  const r = E.rank(set, { chatId: "X", path: [], present: [], text: "Химэ, привет", names: ["Химэ"], limit: 8 });
+  assert.strictEqual(r.selected.length, 0);
+});
+
+/* ── Сцена: возраст настроения (этап 1) ── */
+const turns = (ids, moodAt) => ids.flatMap((id) => [
+  { msgId: "u" + id, role: "user", ops: [] },
+  { msgId: id, role: "assistant", ops: id === moodAt ? S.parseBody("Химэ.mood=подавлена") : [] },
+]);
+t("PRISM1-11: возраст настроения считается по активной ветке", () => {
+  const ids = Array.from({ length: 13 }, (_, i) => "M" + (i + 1));
+  const st = S.fold("", turns(ids, "M3"));
+  assert.strictEqual(st.chars["Химэ"].mood, "подавлена");
+  assert.strictEqual(st.chars["Химэ"].moodSrc, "M3");
+  assert.strictEqual(st.chars["Химэ"].moodAge, 10);
+  assert.ok(S.describe(st).includes("настроение (оценка): подавлена — отмечено 10 ходов назад"));
+  const now = S.fold("", turns(["M1", "M2", "M3"], "M3"));
+  assert.ok(S.describe(now).includes("отмечено сейчас"));
+});
+t("PRISM1-12: соседняя ветка не наследует настроение; возврат восстанавливает возраст", () => {
+  const common = turns(["M1", "M2"], null);
+  const branchA = common.concat(turns(["M3", "M4", "M5"], "M3"));
+  const branchB = common.concat(turns(["N3", "N4"], null));
+  assert.ok(!S.fold("", branchB).chars["Химэ"]);
+  const back = S.fold("", branchA);
+  assert.strictEqual(back.chars["Химэ"].moodAge, 2);
 });
 
 /* ── Сборщик ── */
@@ -120,7 +261,7 @@ const card = {
 };
 t("сборка: слои подписаны, макросы подставлены, протокол в конце", () => {
   const st = S.fold("loc=Кафе", []);
-  const r = A.build({ card, userName: "Кира", sceneState: st, experiences: [recs[0]], history: [{ role: "assistant", text: "Привет" }, { role: "user", text: "Как университет?" }] });
+  const r = A.build({ card, userName: "Кира", sceneState: st, experiences: [R1("ev", { event: "Он предал её", weight: 3 })], history: [{ role: "assistant", text: "Привет" }, { role: "user", text: "Как университет?" }] });
   const sys = r.messages[0].content;
   assert.ok(sys.includes("не диктуют поступки"));
   assert.ok(sys.includes("Кира — её одногруппник"));
@@ -147,7 +288,113 @@ t("сборка: бюджет режет старую историю, но де�
   const r = A.build({ card, history: long, contextTokens: 4096, reserveTokens: 500 });
   assert.ok(r.report.historyKept < 60 && r.report.historyKept >= 4);
   assert.ok(r.messages.some((m) => m.content.endsWith("59")));
-  assert.ok(r.report.used <= r.report.budget + 1500);
+  assert.ok(r.report.used <= r.report.budget && r.report.fits && !r.report.overflow);
+});
+
+/* ── Сборщик: указания автора и строгий бюджет (этап 1) ── */
+const authorCard = { name: "Юки", description: "shy but curious", personality: "", scenario: "", systemPrompt: "always answer in first person", postHistory: "use terse sentences", lore: [] };
+const costOf = (msgs) => msgs.reduce((n, x) => n + Math.ceil(x.content.length / 3.5) + 4, 0);
+t("PRISM1-13: указания автора отделены от склонностей", () => {
+  const r = A.build({ card: authorCard, history: [{ role: "user", text: "hi" }] });
+  const head = r.messages[0].content, post = r.messages[r.messages.length - 1].content;
+  const cardSec = head.slice(head.indexOf("### Склонности"));
+  assert.ok(cardSec.startsWith("### Склонности и характер Юки") && cardSec.includes("shy but curious"));
+  assert.ok(!cardSec.split("### ")[1].includes("always answer"), "system_prompt не внутри склонностей");
+  assert.ok(head.indexOf("### Указания автора карточки (правила") < head.indexOf("### Склонности"));
+  assert.ok(head.includes("always answer in first person"));
+  assert.ok(post.startsWith("### Указания автора карточки (после истории)\nuse terse sentences"));
+  assert.ok(post.indexOf("use terse sentences") < post.indexOf("[scene:"), "после истории — до протокола, ближе всего к ответу среди указаний");
+});
+t("PRISM1-14: переключатель «не передавать инструкции после истории»", () => {
+  const h = [{ role: "user", text: "hi" }];
+  const on = A.build({ card: authorCard, history: h });
+  const off = A.build({ card: authorCard, history: h, noPostHistory: true });
+  assert.ok(on.messages.some((x) => x.content.includes("use terse sentences")));
+  assert.ok(!off.messages.some((x) => x.content.includes("use terse sentences")));
+  assert.strictEqual(off.messages[0].content, on.messages[0].content, "остальное без изменений");
+  assert.ok(off.report.postHistoryDisabled);
+  assert.strictEqual(A.build({ card: authorCard, history: h }).report.postHistory, true, "по умолчанию совместимость");
+});
+t("порядок слоёв в итоговом контексте", () => {
+  const c = Object.assign({}, authorCard, { lore: [{ keys: [], content: "LORE", constant: true, enabled: true }] });
+  const r = A.build({ card: c, userDesc: "PERSONA", sceneState: S.fold("loc=Кафе", []), experiences: [R1("e", { event: "EXP" })], history: [{ role: "user", text: "hi" }] });
+  const h = r.messages[0].content;
+  const order = ["Ты ведёшь ролевую игру", "### Указания автора", "### Склонности", "PERSONA", "LORE", "EXP", "### Сейчас (факты)"].map((k) => h.indexOf(k));
+  assert.ok(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), JSON.stringify(order));
+  assert.strictEqual(r.messages[1].content, "hi");
+});
+const big = (n, ch) => (ch || "слово ").repeat(n);
+const baseScene = S.fold("loc=Кафе; Юки.wear=пальто", []);
+const hist = (n, len) => Array.from({ length: n }, (_, i) => ({ role: i % 2 ? "user" : "assistant", text: big(len) + " #" + i }));
+const strict = (r) => { assert.ok(r.report.used <= r.report.budget, `used ${r.report.used} > budget ${r.report.budget}`); assert.strictEqual(r.report.used, costOf(r.messages)); assert.ok(r.report.fits && !r.report.overflow); };
+const BUD = { contextTokens: 3000, reserveTokens: 500 };
+t("PRISM1-15: обычная сборка ≤ бюджета", () => strict(A.build(Object.assign({ card: authorCard, sceneState: baseScene, history: hist(6, 20) }, BUD))));
+t("PRISM1-16: огромная история ≤ бюджета, последнее сообщение на месте", () => {
+  const r = A.build(Object.assign({ card: authorCard, sceneState: baseScene, history: hist(400, 60) }, BUD));
+  strict(r);
+  assert.ok(r.messages.some((m) => m.content.endsWith("#399")));
+  assert.ok(r.report.truncated.some((t) => t.layer === "history"));
+});
+t("PRISM1-17: огромный опыт ≤ бюджета, самая релевантная запись остаётся", () => {
+  const exps = Array.from({ length: 40 }, (_, i) => R1("x" + i, { event: "СОБЫТИЕ" + i + " " + big(60), createdAt: i }));
+  const r = A.build(Object.assign({ card: authorCard, sceneState: baseScene, experiences: exps, history: hist(4, 20) }, BUD));
+  strict(r);
+  assert.ok(r.messages[0].content.includes("СОБЫТИЕ0 "), "первая по важности осталась");
+  assert.ok(r.report.experienceDropped > 0 && r.report.truncated.some((t) => t.layer === "experience"));
+});
+t("PRISM1-18: огромный лорбук ≤ бюджета", () => {
+  const c = Object.assign({}, authorCard, { lore: Array.from({ length: 50 }, (_, i) => ({ keys: [], constant: true, enabled: true, content: "LORE" + i + " " + big(80), insertion_order: i })) });
+  const r = A.build(Object.assign({ card: c, sceneState: baseScene, history: hist(4, 20) }, BUD));
+  strict(r);
+  assert.ok(r.report.loreDropped > 0 && r.report.loreKept < 50);
+});
+t("PRISM1-19: огромная карточка — детерминированно, по абзацам и предложениям, имя на месте", () => {
+  const c = Object.assign({}, authorCard, { description: Array.from({ length: 40 }, (_, i) => `Абзац ${i}. ` + big(40, "текст ") + ".").join("\n\n"), scenario: big(300), mesExample: big(300) });
+  const r1 = A.build(Object.assign({ card: c, sceneState: baseScene, history: hist(4, 20) }, BUD));
+  const r2 = A.build(Object.assign({ card: c, sceneState: baseScene, history: hist(4, 20) }, BUD));
+  strict(r1);
+  assert.deepStrictEqual(r1.messages, r2.messages);
+  const h = r1.messages[0].content;
+  assert.ok(h.includes("### Склонности и характер Юки") && h.includes("Абзац 0."));
+  assert.ok(!h.includes("Абзац 39."));
+  const layers = r1.report.truncated.map((t) => t.layer);
+  assert.ok(layers.includes("card.description") && layers.includes("card.scenario") && layers.includes("examples"));
+  // Абзацы не режутся посередине: каждый оставшийся абзац описания целиком
+  const desc = h.slice(h.indexOf("Абзац 0."), h.indexOf("\n\n###", h.indexOf("Абзац 0.")) > 0 ? h.indexOf("\n\n###", h.indexOf("Абзац 0.")) : undefined);
+  assert.ok(desc.split("\n\n").every((p) => !p.startsWith("Абзац") || p.endsWith(".")));
+});
+t("огромные указания после истории ≤ бюджета, уступают раньше карточки", () => {
+  const c = Object.assign({}, authorCard, { postHistory: big(3000) });
+  const r = A.build(Object.assign({ card: c, sceneState: baseScene, history: hist(4, 20) }, BUD));
+  strict(r);
+  assert.ok(r.report.truncated.some((t) => t.layer === "postHistory"));
+  assert.ok(r.messages[0].content.includes("shy but curious"));
+});
+t("PRISM1-20: невозможное ядро (огромная сцена) — явный OVERFLOW, без молчаливого превышения", () => {
+  const huge = S.fold("loc=" + big(3000), []);
+  const r = A.build(Object.assign({ card: authorCard, sceneState: huge, history: hist(4, 20) }, BUD));
+  assert.strictEqual(r.report.overflow, true);
+  assert.strictEqual(r.report.fits, false);
+  assert.ok(r.report.used > r.report.budget);
+  assert.ok(r.messages[0].content.includes(big(3000).trim()), "сцена не обрезана наполовину");
+});
+t("PRISM1-21: отчёт о сокращениях точен", () => {
+  const r = A.build(Object.assign({ card: Object.assign({}, authorCard, { mesExample: big(800) }), sceneState: baseScene, history: hist(200, 40) }, BUD));
+  const layers = r.report.truncated.map((t) => t.layer);
+  assert.ok(layers.includes("history"));
+  const h = r.report.truncated.find((t) => t.layer === "history");
+  assert.strictEqual(h.dropped, r.report.historyTotal - r.report.historyKept);
+  assert.strictEqual(r.report.examples, !layers.includes("examples"));
+});
+
+t("continue после жёсткого сокращения: остаётся текущий ответ и указание продолжить", () => {
+  const cont = "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось.";
+  const h = hist(30, 120).concat([{ role: "assistant", text: "Начало ответа, которое надо продолжить" }]);
+  const r = A.build({ card: authorCard, sceneState: baseScene, history: h, extraPost: cont, contextTokens: 900, reserveTokens: 300 });
+  assert.ok(r.report.used <= r.report.budget && !r.report.overflow);
+  const nonSys = r.messages.filter((m) => m.role !== "system");
+  assert.strictEqual(nonSys[nonSys.length - 1].content, "Начало ответа, которое надо продолжить");
+  assert.ok(r.messages[r.messages.length - 1].content.includes("Продолжи последнее сообщение Юки"));
 });
 
 /* ── Карточки ── */
