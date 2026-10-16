@@ -14,8 +14,8 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
-  const DB_VERSION = 4;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses"];
+  const DB_VERSION = 5;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
   const OPEN_TIMEOUT_MS = 7000;
   let dbPromise = null;
@@ -57,6 +57,8 @@
           l.createIndex("cardId", "cardId", { unique: true });
           l.createIndex("packId", "packId");
         }
+        // v5: наложение мира на чат (FOUNDATION-W2), одна запись на чат. Только добавление коллекции — данные W1 и прочие не трогаются.
+        if (!db.objectStoreNames.contains("worldOverlays")) db.createObjectStore("worldOverlays", { keyPath: "chatId" });
       };
       req.onsuccess = () => {
         const db = req.result;
@@ -115,7 +117,7 @@
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 4, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 5, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },

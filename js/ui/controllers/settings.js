@@ -105,11 +105,13 @@
       if (t.id === "file-backup" && t.files[0]) {
         const data = JSON.parse(await ctx.files.readFile(t.files[0], "text"));
         const replace = confirm("Заменить текущие данные бэкапом?\n\nОК — заменить, Отмена — добавить к существующим.");
-        await DB.importAll(data, replace);
+        // Проверка до записи: наложение мира без чата сохранить нельзя — отбрасывается (svc.worldChat.checkBackup).
+        const chk = svc.worldChat.checkBackup(data);
+        await DB.importAll(chk.data, replace);
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();
-        ui.toast("Бэкап загружен.");
+        ui.toast(chk.rejected ? `Бэкап загружен; повреждённых записей мира чата пропущено: ${chk.rejected}.` : "Бэкап загружен.", !!chk.rejected);
         return true;
       }
       if (t.dataset.imgcfg !== undefined) { collectImgForm(); await save(); return true; }

@@ -77,12 +77,13 @@
       return { card: d, isNew };
     }
 
-    // Удалить персонажа вместе со всеми его чатами, сообщениями, картинками и опытом.
+    // Удалить персонажа вместе со всеми его чатами (с их сообщениями, картинками и наложением мира) и опытом.
     async function remove(cd) {
       for (const c of S.chats.filter((x) => x.cardId === cd.id)) {
         const ms = await DB.byIndex("messages", "chatId", c.id);
         await DB.delMany("messages", ms.map((m) => m.id));
         await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
+        await DB.del("worldOverlays", c.id); // наложение мира принадлежит чату и уходит вместе с ним
         await DB.del("chats", c.id);
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);

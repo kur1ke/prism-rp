@@ -80,12 +80,14 @@
     function latestForCard(cardId) {
       return S.chats.filter((c) => c.cardId === cardId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
     }
-    // Удалить чат целиком: сообщения, картинки и опыт этого мира. Состояние сбрасывается на «нет чата».
+    // Удалить чат целиком: сообщения, картинки, опыт и наложение мира этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
       const ms = await DB.byIndex("messages", "chatId", c.id);
       await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
       await DB.delMany("messages", ms.map((m) => m.id));
       await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
+      await DB.del("worldOverlays", c.id);
+      if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
       await DB.del("chats", c.id);
       S.chats = S.chats.filter((x) => x.id !== c.id);
       S.chatId = null; S.messages = [];

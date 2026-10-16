@@ -36,7 +36,7 @@
         </div>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
         <button class="icon-btn" data-act="edit-card" title="Карточка персонажа">${icon("card")}</button>
-        <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, Prism">${icon("panel")}</button>
+        <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата, Prism">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
     </header>`;

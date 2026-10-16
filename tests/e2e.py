@@ -760,12 +760,68 @@ try:
         page.wait_for_function(f"PRP.app.S.messages.length >= {nm + 2}")
         idle(page)
         body = json.dumps(json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last")), ensure_ascii=False)
-        check("W1-36: мир не подаётся в модель", json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"] == n0 + 1 and "Где сейчас Тацуки?" in body and "WF-" not in body)
+        # W2 изменил смысл этой проверки: мир теперь подаётся, но только релевантный и прошедший отбор по таймлайну.
+        # Здесь таймлайн чата не выбран (WF-HOME/WF-OSAKA помечены «canon»), WF-REAPERS выключен линзой, WF-NEIGHBOR не связан с ходом.
+        check("W1-36/W2: без выбранного таймлайна и без связи с ходом мир в модель не подаётся", json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"] == n0 + 1 and "Где сейчас Тацуки?" in body and "WF-" not in body)
         shot(page, "14-foundation-w1.png")
+
+        # FOUNDATION-W2: мир чата — таймлайн, явный факт ветки, подача в Prism, ветки, сохранение
+        if not page.evaluate("PRP.app.S.drawerOpen"):
+            page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=world]")
+        page.wait_for_selector("#wc-timeline")
+        wtxt = page.inner_text("#drawer-body")
+        check("W2-UI: вкладка «Мир чата» — действующие факты с пометкой отбора", "Мир чата" in wtxt and "WF-OSAKA" in wtxt and "таймлайн не выбран" in wtxt and "WF-NEIGHBOR" in wtxt and "выключено линзой" in wtxt)
+        page.fill("#wc-timeline", "canon")
+        page.click("[data-act=wc-sel-save]")
+        page.wait_for_timeout(200)
+        page.click("[data-act=wc-new]")
+        page.wait_for_selector("#wc-text")
+        check("W2-UI: по умолчанию — текущая ветка", page.is_checked("input[name=wc-scope][value=branch]"))
+        page.fill("#wc-text", "WF-BRANCH: Тацуки вступила в клуб карате.")
+        page.fill("#wc-ent", "Тацуки")
+        page.click("[data-act=wc-save]")
+        page.wait_for_timeout(300)
+        ov = page.evaluate("PRP.app.S.worldOverlay")
+        check("W2-UI: явный факт ветки сохранён с привязкой к ветке", ov["timeline"] == "canon" and len(ov["entries"]) == 1 and ov["entries"][0]["op"] == "assert"
+              and ov["entries"][0]["scope"] == "branch" and len(ov["entries"][0]["provenance"]["messageIds"]) >= 1)
+        shot(page, "15-w2-world-tab.png")
+        nm = page.evaluate("PRP.app.S.messages.length")
+        n0 = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"]
+        page.fill("#input", "А как дела у Тацуки?")
+        page.keyboard.press("Enter")
+        page.wait_for_function(f"PRP.app.S.messages.length >= {nm + 2}")
+        idle(page)
+        req = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last"))
+        sysmsg = "\n".join(m["content"] for m in req["messages"] if m["role"] == "system")
+        wsec = sysmsg[sysmsg.find("### Релевантные факты мира"):] if "### Релевантные факты мира" in sysmsg else ""
+        check("W2-30: в модель — факт ветки и замена линзы (таймлайн canon), без выключенного и без постороннего",
+              "WF-BRANCH" in wsec and "WF-OSAKA" in wsec and "WF-REAPERS" not in sysmsg and "WF-NEIGHBOR" not in sysmsg and "WF-HOME" not in sysmsg)
+        check("W2: ответ модели не пополнил мир чата", len(page.evaluate("PRP.app.S.worldOverlay.entries")) == 1)
+        page.click("[data-act=tab][data-tab=prism]")
+        check("W2: отчёт Prism показывает мир", wait_text(page, "#drawer-body", "Отбор мира") and "релевантных" in page.inner_text("#drawer-body"))
+        # соседняя ветка: лист на сообщении до привязки — факт ветки хранится, но не действует
+        sib = page.evaluate("""() => { const app = PRP.app, c = app.ctx.chat(); const keep = c.leafId;
+          const anchor = app.S.worldOverlay.entries[0].provenance.anchorId; const m = app.S.messages.find((x) => x.id === anchor);
+          c.leafId = m.parentId; const off = app.ctx.svc.worldChat.canon().facts.some((f) => f.text.startsWith('WF-BRANCH'));
+          c.leafId = keep; const on = app.ctx.svc.worldChat.canon().facts.some((f) => f.text.startsWith('WF-BRANCH')); return { off, on }; }""")
+        check("W2-25: до места привязки факт ветки не действует, на ветке — действует", not sib["off"] and sib["on"])
+        page.reload()
+        page.wait_for_selector("#input")
+        page.wait_for_function("PRP.app && PRP.app.S.worldOverlay && PRP.app.S.worldOverlay.entries.length === 1")
+        check("W2: после перезагрузки мир чата на месте", page.evaluate("PRP.app.ctx.svc.worldChat.canon().facts.some((f) => f.text.startsWith('WF-BRANCH'))") and page.evaluate("PRP.app.S.worldOverlay.timeline") == "canon")
+        shot(page, "15-foundation-w2.png")
 
         # Узкий экран: все разделы редактора персонажа нажимаются (лента разделов не перекрыта телом окна)
         page.set_viewport_size({"width": 390, "height": 820})
         page.wait_for_timeout(300)
+        if not page.evaluate("PRP.app.S.drawerOpen"):
+            page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=world]")
+        page.wait_for_selector("#wc-timeline")
+        shot(page, "16-w2-world-narrow.png")
+        check("W2-UI узкий экран: «Мир чата» открывается без горизонтальной прокрутки", page.locator("[data-act=wc-new]").count() == 1 and page.evaluate("document.documentElement.scrollWidth") <= 390)
+        page.click("[data-act=drawer-close]")
         page.evaluate("PRP.app.ctx.nav.goHome()")
         page.wait_for_selector(".home")
         hime = page.evaluate("PRP.app.S.cards.find((c) => c.name === 'Химэ').id")
@@ -829,7 +885,7 @@ try:
           const c = { cards: (await DB.all('cards')).length, chats: (await DB.all('chats')).length, messages: (await DB.all('messages')).length, experience: (await DB.all('experience')).length, packs: (await DB.all('worldPacks')).length };
           const v = await new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result; ok({ v: db.version, stores: [...db.objectStoreNames] }); db.close(); }; });
           return Object.assign(c, v); }""")
-        check("W1-13: база v3 → v4 без потерь, новые коллекции на месте", up["v"] == 4 and up["cards"] == 1 and up["chats"] == 1 and up["messages"] == 1 and up["experience"] == 1
+        check("W1-13: база v3 → v5 без потерь, новые коллекции на месте", up["v"] == 5 and "worldOverlays" in up["stores"] and up["cards"] == 1 and up["chats"] == 1 and up["messages"] == 1 and up["experience"] == 1
               and "worldPacks" in up["stores"] and "worldLenses" in up["stores"] and up["packs"] == 0 and "Старая" in p3.inner_text(".gallery"))
         uq = p3.evaluate("""async () => { const DB = PRP.app.ctx.DB;
           await DB.put('worldLenses', { id: 'l-a', cardId: 'old-card', packId: 'p' });
@@ -838,12 +894,23 @@ try:
         bk = p3.evaluate("""async () => { const DB = PRP.app.ctx.DB, W = PRP.app.ctx.svc.world;
           await W.savePack({ id: 'bk-pack', name: 'Бэкап', facts: [{ id: 'f1', text: 'BK-FACT' }] });
           const data = await DB.exportAll();
-          const has = ['worldPacks', 'worldLenses'].every((k) => Array.isArray(data[k])) && data.worldPacks.length === 1 && data.worldLenses.length === 1;
+          await DB.put('worldOverlays', { schema: 1, chatId: 'old-chat', timeline: '', variant: '', entries: [{ id: 'we1', op: 'assert', scope: 'chat', targetFactId: null, fact: { id: 'wc1', text: 'BK-OVERLAY' }, provenance: null, createdAt: 1 }] });
+          const has = ['worldPacks', 'worldLenses', 'worldOverlays'].every((k) => Array.isArray(data[k])) && data.worldPacks.length === 1 && data.worldLenses.length === 1;
+          const data2 = await DB.exportAll(); const hasOv = Array.isArray(data2.worldOverlays) && data2.worldOverlays.length === 1;
+          await DB.del('worldOverlays', 'old-chat');
           await DB.del('worldPacks', 'bk-pack'); await DB.del('worldLenses', 'l-a');
-          await DB.importAll(JSON.parse(JSON.stringify(data)), true);
-          const packs = await DB.all('worldPacks'), lenses = await DB.all('worldLenses');
-          return { has, packs: packs.map((p) => p.facts[0].text), lenses: lenses.map((l) => l.id), cards: (await DB.all('cards')).length }; }""")
+          const chk = PRP.app.ctx.svc.worldChat.checkBackup(JSON.parse(JSON.stringify(data2)));
+          await DB.importAll(chk.data, true);
+          const packs = await DB.all('worldPacks'), lenses = await DB.all('worldLenses'), ovs = await DB.all('worldOverlays');
+          return { has, hasOv, packs: packs.map((p) => p.facts[0].text), lenses: lenses.map((l) => l.id), cards: (await DB.all('cards')).length, ovs: ovs.map((o) => o.entries[0].fact.text) }; }""")
         check("W1-19: бэкап включает мир, восстановление его возвращает", bk["has"] and bk["packs"] == ["BK-FACT"] and bk["lenses"] == ["l-a"] and bk["cards"] == 1)
+        check("W2-33: бэкап включает мир чата, восстановление его возвращает", bk["hasOv"] and bk["ovs"] == ["BK-OVERLAY"])
+        dl = p3.evaluate("""async () => { const app = PRP.app; await app.ctx.nav.openChat('old-chat', true);
+          await app.ctx.svc.worldChat.commit({ op: 'assert', scope: 'chat', fact: { text: 'DEL-ME' } });
+          const before = !!(await app.ctx.DB.get('worldOverlays', 'old-chat'));
+          await app.ctx.svc.chat.deleteChat(app.ctx.chat());
+          return { before, after: !!(await app.ctx.DB.get('worldOverlays', 'old-chat')), packs: (await app.ctx.DB.all('worldPacks')).length }; }""")
+        check("W2-33: удаление чата удаляет его мир, пак остаётся", dl["before"] and not dl["after"] and dl["packs"] == 1)
         p3.context.close()
 
         # IndexedDB: старое соединение уступает обновлению; занятая база и зависшее открытие — видимая ошибка, данные целы
@@ -864,18 +931,18 @@ try:
         COUNT = """() => new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result;
           const names = [...db.objectStoreNames]; if (!names.includes('cards')) { ok({ v: db.version, cards: -1, names }); db.close(); return; }
           const q = db.transaction('cards').objectStore('cards').getAll(); q.onsuccess = () => { ok({ v: db.version, cards: q.result.map((c) => c.id), names }); db.close(); }; }; })"""
-        # A. versionchange: открытое приложение (v4) уступает более новой версии из другой вкладки
+        # A. versionchange: открытое приложение (v5) уступает более новой версии из другой вкладки
         cA = b.new_context(); a1 = cA.new_page()
         a1.goto("http://127.0.0.1:8765/standalone/index.html"); a1.wait_for_selector(".home")
         a1.evaluate("PRP.app.ctx.DB.put('cards', { id: 'vc-card', name: 'ВерсияТест', description: 'd', lore: [] })")
         a2 = cA.new_page(); a2.goto("http://127.0.0.1:8765/web/version.json")
-        up = a2.evaluate("""() => new Promise((ok) => { let blocked = false; const r = indexedDB.open('prism-rp', 5);
+        up = a2.evaluate("""() => new Promise((ok) => { let blocked = false; const r = indexedDB.open('prism-rp', 6);
           r.onblocked = () => { blocked = true; }; r.onsuccess = () => { const db = r.result; const v = db.version, names = [...db.objectStoreNames]; db.close(); ok({ ok: true, blocked, v, names }); };
           r.onerror = () => ok({ ok: false, blocked, err: String(r.error) }); setTimeout(() => ok({ ok: false, blocked, err: 'hang' }), 5000); })""")
         after = a2.evaluate(COUNT)
         a1.wait_for_timeout(200)
         check("IndexedDB: открытое соединение уступает обновлению (versionchange) — без зависания и «занято»",
-              up.get("ok") and not up.get("blocked") and up.get("v") == 5 and "vc-card" in after["cards"] and "worldLenses" in after["names"])
+              up.get("ok") and not up.get("blocked") and up.get("v") == 6 and "vc-card" in after["cards"] and "worldOverlays" in after["names"])
         check("IndexedDB: вкладка, уступившая базу, предупреждает обновить страницу", "Обновите эту страницу" in a1.inner_text("#toast"))
         cA.close()
         # B. база занята соединением, которое не закрывается (старая вкладка без versionchange) → DB_BLOCKED, данные целы
@@ -892,8 +959,8 @@ try:
         ap.click("[data-act=reload-page]")
         ap.wait_for_selector(".tile")
         st = ap.evaluate(COUNT)
-        check("IndexedDB: после закрытия другой вкладки — обычный запуск, данные на месте, база v4",
-              st["v"] == 4 and st["cards"] == ["keep-card"] and "worldPacks" in st["names"] and "Сохранная" in ap.inner_text(".gallery"))
+        check("IndexedDB: после закрытия другой вкладки — обычный запуск, данные на месте, база v5",
+              st["v"] == 5 and "worldOverlays" in st["names"] and st["cards"] == ["keep-card"] and "worldPacks" in st["names"] and "Сохранная" in ap.inner_text(".gallery"))
         cB.close()
         # C. открытие не отвечает вовсе → DB_OPEN_TIMEOUT; база не изменена
         cC = b.new_context(); s0 = cC.new_page(); s0.goto("http://127.0.0.1:8765/web/version.json"); s0.evaluate(SEED_V3); s0.evaluate("window.__db.close()")
@@ -908,6 +975,37 @@ try:
         st2 = s0.evaluate(COUNT)
         check("IndexedDB: зависшее открытие — DB_OPEN_TIMEOUT и сообщение, база не изменена", tcode == "DB_OPEN_TIMEOUT" and st2["v"] == 3 and st2["cards"] == ["keep-card"])
         cC.close()
+        # D. W2: первое настоящее обновление после защиты — v4 (W1) → v5. Данные W1 целы; старая вкладка v4 без уступки → DB_BLOCKED, без потерь.
+        SEED_V4 = """() => new Promise((ok, fail) => {
+          const r = indexedDB.open('prism-rp', 4);
+          r.onupgradeneeded = () => { const db = r.result;
+            for (const [n, k, idx] of [['cards', 'id'], ['chats', 'id', 'cardId'], ['messages', 'id', 'chatId'], ['experience', 'id', 'owner'], ['settings', 'key'], ['images', 'id', 'chatId'], ['assist', 'id'], ['worldPacks', 'id']]) {
+              const st = db.createObjectStore(n, { keyPath: k }); if (idx) st.createIndex(idx, idx); }
+            const l = db.createObjectStore('worldLenses', { keyPath: 'id' }); l.createIndex('cardId', 'cardId', { unique: true }); l.createIndex('packId', 'packId'); };
+          r.onsuccess = () => { const db = r.result; const t = db.transaction(['cards', 'chats', 'worldPacks', 'worldLenses'], 'readwrite');
+            t.objectStore('cards').put({ id: 'v4-card', name: 'ЧетвёртаяВерсия', description: 'd', lore: [], updatedAt: 1 });
+            t.objectStore('chats').put({ id: 'v4-chat', cardId: 'v4-card', mode: 'rp', title: 'Сцена', leafId: null, sceneInit: '' });
+            t.objectStore('worldPacks').put({ id: 'v4-pack', schema: 1, name: 'Пак v4', facts: [{ id: 'f', text: 'V4-FACT' }] });
+            t.objectStore('worldLenses').put({ id: 'v4-lens', cardId: 'v4-card', packId: 'v4-pack', overrides: [], additions: [], disabledFactIds: [] });
+            t.oncomplete = () => { window.__db = db; ok(); }; t.onerror = () => fail(t.error); };
+          r.onerror = () => fail(r.error); })"""
+        cD = b.new_context(); hd = cD.new_page(); hd.goto("http://127.0.0.1:8765/web/version.json"); hd.evaluate(SEED_V4)
+        ad = cD.new_page(); ad.goto("http://127.0.0.1:8765/standalone/index.html")
+        try:
+            ad.wait_for_selector(".storage-error", timeout=10000)
+            dcode = ad.get_attribute(".storage-error", "data-code")
+        except Exception:
+            dcode = None
+        check("W2 v4→v5: старая вкладка v4 держит базу — видимое DB_BLOCKED", dcode == "DB_BLOCKED")
+        hd.evaluate("window.__db.close()")
+        ad.click("[data-act=reload-page]")
+        ad.wait_for_selector(".tile")
+        v5 = ad.evaluate("""async () => { const DB = PRP.app.ctx.DB;
+          const v = await new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result; ok({ v: db.version, names: [...db.objectStoreNames] }); db.close(); }; });
+          return Object.assign(v, { cards: (await DB.all('cards')).map((c) => c.id), packs: (await DB.all('worldPacks')).map((p) => p.facts[0].text), lenses: (await DB.all('worldLenses')).map((l) => l.id), ovs: (await DB.all('worldOverlays')).length }); }""")
+        check("W2 v4→v5: обновление только добавляет worldOverlays; карточки, пак и линза целы",
+              v5["v"] == 5 and "worldOverlays" in v5["names"] and v5["cards"] == ["v4-card"] and v5["packs"] == ["V4-FACT"] and v5["lenses"] == ["v4-lens"] and v5["ovs"] == 0)
+        cD.close()
 
         # Сборка для Perchance с заглушкой плагина
         p2 = b.new_context(viewport={"width": 1440, "height": 900}).new_page()

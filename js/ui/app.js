@@ -14,7 +14,7 @@
   const { util: U, store: DB, settings: ST, perchance: PC, imgBackends: IB, imgCompile: ICP } = PRP;
 
   /* ── Состояние сессии ────────────────────────────────────────────────
-     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), assistList.
+     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), worldOverlay (мир текущего чата), assistList.
      Навигация: view, cardId, chatId, assist (открытый разговор).
      Генерация (временное): gen, drawing (id картинок в работе).
      Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, expDraft.
@@ -28,6 +28,7 @@
     imgUrls: {}, imgLists: {}, drawing: new Set(),
     assist: null, assistList: [],
     worldPacks: [], worldLenses: [], worldDraft: null,
+    worldOverlay: null, worldEdit: null, // наложение мира текущего чата; черновик действия во вкладке «Мир чата»
   };
 
   /* ── Контекст зависимостей ───────────────────────────────────────────
@@ -56,11 +57,13 @@
   ctx.svc.cards = PRP.cardService.create(ctx);
   ctx.svc.assist = PRP.assistService.create(ctx);
   ctx.svc.world = PRP.worldService.create(ctx);
+  ctx.svc.worldChat = PRP.worldOverlayService.create(ctx);
   const { ui, svc } = ctx;
   const { $ } = ui;
 
   /* ── Загрузка ─────────────────────────────────────────────────────── */
   async function loadAll() {
+    S.worldOverlay = null; S.worldEdit = null;
     const saved = await DB.getSetting("app", null);
     S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
@@ -85,8 +88,9 @@
     S.view = "chat";
     S.messages = await svc.chat.loadMessages(chatId);
     S.experience = await svc.exp.loadForCard(c.cardId);
+    await svc.worldChat.load(chatId);
     await svc.images.loadForChat(chatId);
-    S.editingMsg = null; S.expDraft = null; S.find = null;
+    S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); }
