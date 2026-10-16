@@ -1,17 +1,43 @@
 /* Prism RP — хранилище в IndexedDB. Всё хранится локально в браузере;
-   бэкап — один JSON со всеми коллекциями. */
+   бэкап — один JSON со всеми коллекциями.
+
+   Жизненный цикл соединения (без удаления и сброса данных):
+     • открытое соединение уступает обновлению схемы: на versionchange (другая вкладка открывает
+       более новую версию) оно сразу закрывается, а кэш соединения сбрасывается — старая вкладка
+       не держит базу;
+     • обновление, которое держит другая вкладка, завершается ошибкой с кодом DB_BLOCKED;
+     • если открытие не ответило ни успехом, ни ошибкой, ни «занято» за OPEN_TIMEOUT_MS —
+       ошибка DB_OPEN_TIMEOUT; прочие ошибки — DB_OPEN_FAILED;
+     • неудачное открытие не кэшируется: следующая попытка открывает базу заново;
+       соединение, открывшееся уже после отказа, сразу закрывается (лишних соединений нет). */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
   const DB_VERSION = 4;
   const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses"];
+  // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
+  const OPEN_TIMEOUT_MS = 7000;
   let dbPromise = null;
+
+  function dbError(code, message, cause) {
+    const e = new Error(message);
+    e.code = code;
+    if (cause) e.cause = cause;
+    return e;
+  }
+  const BUSY = "База Prism RP занята другой вкладкой. Закройте другие вкладки Prism RP и обновите эту страницу.";
 
   function open() {
     if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const timeoutMs = Number(root.__PRP_DB_OPEN_TIMEOUT_MS) > 0 ? Number(root.__PRP_DB_OPEN_TIMEOUT_MS) : OPEN_TIMEOUT_MS;
+    const p = new Promise((resolve, reject) => {
+      let settled = false, timer = null;
+      const finish = (fn, v) => { if (settled) return false; settled = true; clearTimeout(timer); fn(v); return true; };
+      let req;
+      try { req = indexedDB.open(DB_NAME, DB_VERSION); }
+      catch (e) { finish(reject, dbError("DB_OPEN_FAILED", "Не удалось открыть базу Prism RP: " + (e.message || e), e)); return; }
+      timer = setTimeout(() => finish(reject, dbError("DB_OPEN_TIMEOUT", "Не удалось открыть базу Prism RP: браузер не ответил. " + BUSY)), timeoutMs);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains("cards")) db.createObjectStore("cards", { keyPath: "id" });
@@ -32,11 +58,24 @@
           l.createIndex("packId", "packId");
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error("База занята другой вкладкой"));
+      req.onsuccess = () => {
+        const db = req.result;
+        // Старая вкладка уступает обновлению схемы в другой вкладке: закрыть соединение и забыть кэш.
+        db.onversionchange = () => {
+          db.close();
+          if (dbPromise === p) dbPromise = null;
+          if (typeof api.onVersionChange === "function") { try { api.onVersionChange(); } catch (e) { /* только уведомление */ } }
+        };
+        // Открылось уже после отказа (DB_BLOCKED / DB_OPEN_TIMEOUT) — не оставлять лишнее соединение.
+        if (!finish(resolve, db)) db.close();
+      };
+      req.onerror = () => finish(reject, dbError("DB_OPEN_FAILED", "Не удалось открыть базу Prism RP: " + ((req.error && req.error.message) || "ошибка браузера"), req.error));
+      req.onblocked = () => finish(reject, dbError("DB_BLOCKED", BUSY));
     });
-    return dbPromise;
+    dbPromise = p;
+    // Отказ не кэшируется: следующая попытка (например, после закрытия другой вкладки) откроет базу заново.
+    p.catch(() => { if (dbPromise === p) dbPromise = null; });
+    return p;
   }
 
   function wrap(req) {
@@ -56,6 +95,8 @@
   }
 
   const api = {
+    // Уведомление для интерфейса: соединение закрыто, потому что другая вкладка обновляет базу.
+    onVersionChange: null,
     get: (store, id) => tx(store, "readonly", (s) => wrap(s.get(id))),
     all: (store) => tx(store, "readonly", (s) => wrap(s.getAll())),
     byIndex: (store, index, value) => tx(store, "readonly", (s) => wrap(s.index(index).getAll(value))),

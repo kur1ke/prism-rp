@@ -612,6 +612,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .eff-world s { color: var(--muted); margin-left: 6px; }
 @media (max-width: 760px) { .world-layout { grid-template-columns: minmax(0, 1fr); } }
 
+/* ── База не открылась ───────────────────────────────────────────────── */
+.storage-error { max-width: 620px; margin: 40px auto 0; padding: 24px; border: 1px solid var(--warn); border-radius: var(--r-l); background: var(--raised); }
+.storage-error h1 { display: flex; align-items: center; gap: 10px; font-size: 22px; margin: 0 0 12px; }
+.storage-error h1 svg { width: 24px; height: 24px; color: var(--warn); flex: none; }
+.storage-error p { margin: 0 0 10px; line-height: 1.5; }
+
 </style>
 </head>
 <body>
@@ -697,19 +703,45 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 </script>
 <script>/* js/core/store.js */
 /* Prism RP — хранилище в IndexedDB. Всё хранится локально в браузере;
-   бэкап — один JSON со всеми коллекциями. */
+   бэкап — один JSON со всеми коллекциями.
+
+   Жизненный цикл соединения (без удаления и сброса данных):
+     • открытое соединение уступает обновлению схемы: на versionchange (другая вкладка открывает
+       более новую версию) оно сразу закрывается, а кэш соединения сбрасывается — старая вкладка
+       не держит базу;
+     • обновление, которое держит другая вкладка, завершается ошибкой с кодом DB_BLOCKED;
+     • если открытие не ответило ни успехом, ни ошибкой, ни «занято» за OPEN_TIMEOUT_MS —
+       ошибка DB_OPEN_TIMEOUT; прочие ошибки — DB_OPEN_FAILED;
+     • неудачное открытие не кэшируется: следующая попытка открывает базу заново;
+       соединение, открывшееся уже после отказа, сразу закрывается (лишних соединений нет). */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
   const DB_VERSION = 4;
   const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses"];
+  // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
+  const OPEN_TIMEOUT_MS = 7000;
   let dbPromise = null;
+
+  function dbError(code, message, cause) {
+    const e = new Error(message);
+    e.code = code;
+    if (cause) e.cause = cause;
+    return e;
+  }
+  const BUSY = "База Prism RP занята другой вкладкой. Закройте другие вкладки Prism RP и обновите эту страницу.";
 
   function open() {
     if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const timeoutMs = Number(root.__PRP_DB_OPEN_TIMEOUT_MS) > 0 ? Number(root.__PRP_DB_OPEN_TIMEOUT_MS) : OPEN_TIMEOUT_MS;
+    const p = new Promise((resolve, reject) => {
+      let settled = false, timer = null;
+      const finish = (fn, v) => { if (settled) return false; settled = true; clearTimeout(timer); fn(v); return true; };
+      let req;
+      try { req = indexedDB.open(DB_NAME, DB_VERSION); }
+      catch (e) { finish(reject, dbError("DB_OPEN_FAILED", "Не удалось открыть базу Prism RP: " + (e.message || e), e)); return; }
+      timer = setTimeout(() => finish(reject, dbError("DB_OPEN_TIMEOUT", "Не удалось открыть базу Prism RP: браузер не ответил. " + BUSY)), timeoutMs);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains("cards")) db.createObjectStore("cards", { keyPath: "id" });
@@ -730,11 +762,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           l.createIndex("packId", "packId");
         }
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error("База занята другой вкладкой"));
+      req.onsuccess = () => {
+        const db = req.result;
+        // Старая вкладка уступает обновлению схемы в другой вкладке: закрыть соединение и забыть кэш.
+        db.onversionchange = () => {
+          db.close();
+          if (dbPromise === p) dbPromise = null;
+          if (typeof api.onVersionChange === "function") { try { api.onVersionChange(); } catch (e) { /* только уведомление */ } }
+        };
+        // Открылось уже после отказа (DB_BLOCKED / DB_OPEN_TIMEOUT) — не оставлять лишнее соединение.
+        if (!finish(resolve, db)) db.close();
+      };
+      req.onerror = () => finish(reject, dbError("DB_OPEN_FAILED", "Не удалось открыть базу Prism RP: " + ((req.error && req.error.message) || "ошибка браузера"), req.error));
+      req.onblocked = () => finish(reject, dbError("DB_BLOCKED", BUSY));
     });
-    return dbPromise;
+    dbPromise = p;
+    // Отказ не кэшируется: следующая попытка (например, после закрытия другой вкладки) откроет базу заново.
+    p.catch(() => { if (dbPromise === p) dbPromise = null; });
+    return p;
   }
 
   function wrap(req) {
@@ -754,6 +799,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
 
   const api = {
+    // Уведомление для интерфейса: соединение закрыто, потому что другая вкладка обновляет базу.
+    onVersionChange: null,
     get: (store, id) => tx(store, "readonly", (s) => wrap(s.get(id))),
     all: (store) => tx(store, "readonly", (s) => wrap(s.getAll())),
     byIndex: (store, index, value) => tx(store, "readonly", (s) => wrap(s.index(index).getAll(value))),
@@ -4491,7 +4538,18 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     </div></div>`;
   }
 
-  Object.assign((PRP.views = PRP.views || {}), { rail, home });
+  // База браузера не открылась. Ничего не удалено: сообщение только объясняет, что сделать.
+  function storageError(e) {
+    const busy = e.code === "DB_BLOCKED" || e.code === "DB_OPEN_TIMEOUT";
+    return `<div class="home"><div class="home-inner"><div class="storage-error" data-code="${esc(e.code || "")}" role="alert">
+      <h1>${icon("alert")} Не удалось открыть базу Prism RP</h1>
+      ${busy ? `<p>Возможно, её держит другая вкладка Prism RP — например, редактор генератора или старая вкладка, открытая до обновления.</p>
+        <p><b>Закройте другие вкладки Prism RP и обновите эту страницу.</b> Если не поможет — перезапустите браузер.</p>`
+        : `<p>${esc(e.message || String(e))}</p><p>Обновите страницу. Если ошибка повторяется, перезапустите браузер.</p>`}
+      <p class="hint">Ваши персонажи и чаты не удалены: они остаются в браузере и откроются, когда база станет доступна.</p>
+      <button class="btn btn-primary" data-act="reload-page">Обновить страницу</button></div></div></div>`;
+  }
+  Object.assign((PRP.views = PRP.views || {}), { rail, home, storageError });
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -7592,6 +7650,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     home: goHome,
     "open-chat": (t) => openChat(t.dataset.id),
     rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
+    "reload-page": () => location.reload(),
     "modal-bg": (t, e) => { if (e.target === t) { S.modal = null; ui.renderModal(); } },
     "modal-close": () => { S.modal = null; ui.renderModal(); },
   }, ...controllers.map((c) => c.actions));
@@ -7661,9 +7720,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       console.error(e);
       S.settings = S.settings || U.clone(ST.DEFAULTS);
       ui.renderAll();
-      ui.toast("Не удалось открыть хранилище браузера: " + e.message, true);
+      // База не открылась (занята другой вкладкой, не ответила или ошибка браузера): постоянное сообщение
+      // вместо пустого экрана. Данные не трогаются; помогает закрыть другие вкладки и обновить страницу.
+      if (e && /^DB_/.test(e.code || "")) $("#stage").innerHTML = PRP.views.storageError(e);
+      else ui.toast("Не удалось открыть хранилище браузера: " + e.message, true);
     }
   }
+  // Другая вкладка обновляет базу — это соединение уже закрыто; работать дальше можно только после обновления страницы.
+  DB.onVersionChange = () => ui.toast("Prism RP открыт в другой вкладке с более новой версией. Обновите эту страницу, чтобы продолжить.", true);
 
   PRP.app = { S, ctx, generate: (...a) => svc.gen.generate(...a), refreshPrism: () => svc.prism.refresh() };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
