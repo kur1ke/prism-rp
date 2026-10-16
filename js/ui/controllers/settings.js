@@ -105,13 +105,14 @@
       if (t.id === "file-backup" && t.files[0]) {
         const data = JSON.parse(await ctx.files.readFile(t.files[0], "text"));
         const replace = confirm("Заменить текущие данные бэкапом?\n\nОК — заменить, Отмена — добавить к существующим.");
-        // Проверка до записи: наложение мира без чата сохранить нельзя — отбрасывается (svc.worldChat.checkBackup).
-        const chk = svc.worldChat.checkBackup(data);
+        // Проверка до записи (правила — в svc.worldChat.checkBackup): запись мира чата принимается, только если её чат
+        // есть в бэкапе (замена) или в бэкапе либо уже здесь (добавление). Контроллер даёт только режим и id чатов.
+        const chk = svc.worldChat.checkBackup(data, { replace, existingChatIds: replace ? [] : (await DB.all("chats")).map((c) => c.id) });
         await DB.importAll(chk.data, replace);
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();
-        ui.toast(chk.rejected ? `Бэкап загружен; повреждённых записей мира чата пропущено: ${chk.rejected}.` : "Бэкап загружен.", !!chk.rejected);
+        ui.toast(chk.rejected ? `Бэкап загружен. Некоторые записи мира чата пропущены при восстановлении: ${chk.rejected}.` : "Бэкап загружен.", !!chk.rejected);
         return true;
       }
       if (t.dataset.imgcfg !== undefined) { collectImgForm(); await save(); return true; }

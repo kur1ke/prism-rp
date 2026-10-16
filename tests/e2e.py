@@ -916,6 +916,34 @@ try:
         check("W2-33: удаление чата удаляет его мир, пак остаётся", dl["before"] and not dl["after"] and dl["packs"] == 1)
         p3.context.close()
 
+        # W2 fix: восстановление бэкапа через настоящий путь интерфейса (файл → подтверждение → проверка → importAll):
+        # запись мира без своего чата отбрасывается ДО записи и в базу не попадает.
+        cR = b.new_context(); pr = cR.new_page()
+        pr.on("pageerror", lambda e: errors.append(str(e)))
+        pr.goto("http://127.0.0.1:8765/standalone/index.html"); pr.wait_for_selector(".home")
+        ovrec = lambda cid, text: {"schema": 1, "chatId": cid, "timeline": "", "variant": "", "entries": [{"id": "we_" + text, "op": "assert", "scope": "chat", "targetFactId": None, "fact": {"id": "wc_" + text, "text": text}, "provenance": None, "createdAt": 1}]}
+        bk_file = os.path.join(OUT, "w2-backup.json")
+        with open(bk_file, "w", encoding="utf-8") as f:
+            json.dump({"app": "prism-rp", "version": 5, "cards": [{"id": "r-card", "name": "Восстановленная", "description": "d", "lore": []}],
+                       "chats": [{"id": "r-chat", "cardId": "r-card", "mode": "rp", "title": "Сцена", "leafId": None, "sceneInit": ""}],
+                       "worldOverlays": [ovrec("r-chat", "REAL-OV"), ovrec("ghost-chat", "GHOST-OV")]}, f, ensure_ascii=False)
+        pr.once("dialog", lambda d: d.accept())  # «ОК — заменить»
+        pr.set_input_files("#file-backup", bk_file)
+        pr.wait_for_function("document.querySelector('#toast') && document.querySelector('#toast').innerText.includes('Бэкап загружен')")
+        rs = pr.evaluate("async () => (await PRP.app.ctx.DB.all('worldOverlays')).map((o) => o.chatId)")
+        check("W2 fix: восстановление (замена) — запись мира без своего чата не записана, остальные восстановлены",
+              rs == ["r-chat"] and "пропущены при восстановлении: 1" in pr.inner_text("#toast") and "ghost-chat" not in pr.inner_text("#toast"))
+        # добавление: запись для уже существующего здесь чата принимается, даже если самого чата в бэкапе нет
+        with open(bk_file, "w", encoding="utf-8") as f:
+            json.dump({"app": "prism-rp", "version": 5, "chats": [], "worldOverlays": [ovrec("r-chat", "ADD-OV"), ovrec("ghost-2", "GHOST2")]}, f, ensure_ascii=False)
+        pr.evaluate("PRP.app.ctx.DB.del('worldOverlays', 'r-chat')")
+        pr.once("dialog", lambda d: d.dismiss())  # «Отмена — добавить»
+        pr.set_input_files("#file-backup", bk_file)
+        pr.wait_for_function("document.querySelector('#toast') && document.querySelector('#toast').innerText.includes('пропущены при восстановлении')")
+        ra = pr.evaluate("async () => (await PRP.app.ctx.DB.all('worldOverlays')).map((o) => [o.chatId, o.entries[0].fact.text])")
+        check("W2 fix: восстановление (добавление) — запись для существующего чата принята, сирота — нет", ra == [["r-chat", "ADD-OV"]])
+        cR.close()
+
         # IndexedDB: старое соединение уступает обновлению; занятая база и зависшее открытие — видимая ошибка, данные целы
         SEED_V3 = """() => new Promise((ok, fail) => {
           const r = indexedDB.open('prism-rp', 3);

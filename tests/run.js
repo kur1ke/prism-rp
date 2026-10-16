@@ -1981,7 +1981,8 @@ async function w2Services() {
     await W(h).commit({ op: "override", scope: "chat", targetFactId: "F1", fact: { text: "BK-CHAT" } });
     await W(h).setSelectors({ timeline: "canon", variant: "" });
     const want = { d1: W(h).canon().facts, sel: W(h).current().timeline };
-    const backup = { app: "prism-rp", worldOverlays: [...h.store.worldOverlays.values()].concat([{ entries: [] }, null]) };
+    // Настоящий бэкап содержит и чаты (DB.exportAll): запись мира принимается только вместе со своим чатом.
+    const backup = { app: "prism-rp", chats: [...h.store.chats.values()], worldOverlays: [...h.store.worldOverlays.values()].concat([{ entries: [] }, null]) };
     const chk = W(h).checkBackup(JSON.parse(JSON.stringify(backup)));
     assert.strictEqual(chk.rejected, 2, "записи без чата отброшены до записи"); assert.strictEqual(chk.data.worldOverlays.length, 1);
     h.store.worldOverlays.clear();
@@ -1994,8 +1995,57 @@ async function w2Services() {
   });
 }
 
+/* ── FOUNDATION-W2 fix: ссылочная целостность бэкапа мира чата ── */
+async function w2BackupIntegrity() {
+  const svc = () => PRP.worldOverlayService.create({ S: {}, DB: {}, svc: {} });
+  const OVREC = (chatId, text) => ({ schema: 1, chatId, timeline: "", variant: "", entries: [{ id: "we_" + text, op: "assert", scope: "chat", targetFactId: null, fact: { id: "wc_" + text, text }, provenance: null, createdAt: 1 }] });
+  const codesOf = (r) => r.issues.filter((x) => x.level === "error").map((x) => [x.code, x.chatId]);
+
+  await ta("W2 fix-9: замена — запись мира для чата, которого нет в бэкапе, отклоняется до записи", async () => {
+    const data = { app: "prism-rp", chats: [{ id: "chat-real", cardId: "c" }], worldOverlays: [OVREC("chat-real", "REAL"), OVREC("ghost-chat", "GHOST")] };
+    const before = JSON.stringify(data);
+    const r = svc().checkBackup(data, { replace: true, existingChatIds: ["ghost-chat"] });
+    assert.deepStrictEqual(r.data.worldOverlays.map((o) => o.chatId), ["chat-real"]);
+    assert.strictEqual(r.rejected, 1);
+    assert.deepStrictEqual(codesOf(r), [["overlay-orphan-chat", "ghost-chat"]]);
+    assert.ok(!JSON.stringify(r.data).includes("ghost-chat"), "ни под каким именем");
+    assert.strictEqual(JSON.stringify(data), before, "вход не изменён");
+    assert.deepStrictEqual(svc().checkBackup(JSON.parse(before)).data.worldOverlays.map((o) => o.chatId), ["chat-real"], "без параметров — строгий режим замены");
+  });
+
+  await ta("W2 fix-10: добавление — запись для уже существующего локального чата принимается; при замене — нет", async () => {
+    const data = () => ({ app: "prism-rp", chats: [], worldOverlays: [OVREC("chat-existing", "EX")] });
+    const add = svc().checkBackup(data(), { replace: false, existingChatIds: ["chat-existing"] });
+    assert.deepStrictEqual([add.rejected, add.data.worldOverlays.map((o) => o.chatId)], [0, ["chat-existing"]]);
+    const add2 = svc().checkBackup(data(), { replace: false, existingChatIds: ["other"] });
+    assert.deepStrictEqual(codesOf(add2), [["overlay-orphan-chat", "chat-existing"]], "нет ни в бэкапе, ни здесь — отклоняется");
+    const rep = svc().checkBackup(data(), { replace: true, existingChatIds: ["chat-existing"] });
+    assert.deepStrictEqual([rep.rejected, rep.data.worldOverlays.length], [1, 0], "замена не опирается на локальные чаты");
+    assert.deepStrictEqual(codesOf(rep), [["overlay-orphan-chat", "chat-existing"]]);
+  });
+
+  await ta("W2 fix-11: несколько записей мира для одного чата — отклоняются все записи этого чата, без слияния", async () => {
+    const data = { app: "prism-rp", chats: [{ id: "chat-a" }, { id: "chat-b" }], worldOverlays: [OVREC("chat-a", "A1"), OVREC("chat-b", "B"), OVREC("chat-a", "A2")] };
+    const r = svc().checkBackup(data, { replace: true });
+    assert.deepStrictEqual(r.data.worldOverlays.map((o) => o.chatId), ["chat-b"]);
+    assert.strictEqual(r.rejected, 2);
+    assert.deepStrictEqual(codesOf(r), [["overlay-duplicate-chat", "chat-a"], ["overlay-duplicate-chat", "chat-a"]]);
+    // порядок записей во входе не влияет на результат
+    const rev = svc().checkBackup(Object.assign({}, data, { worldOverlays: data.worldOverlays.slice().reverse() }), { replace: true });
+    assert.deepStrictEqual(rev.data.worldOverlays.map((o) => o.chatId), ["chat-b"]);
+  });
+
+  await ta("W2 fix: форма записи по-прежнему проверяется; битые события принятой записи — предупреждения", async () => {
+    const bad = Object.assign(OVREC("chat-a", "OK"), {}); bad.entries.push({ id: "x", op: "boom", scope: "chat" });
+    const r = svc().checkBackup({ chats: [{ id: "chat-a" }], worldOverlays: [bad, { entries: [] }, { chatId: "chat-a2", entries: "x" }] }, { replace: false, existingChatIds: ["chat-a2"] });
+    assert.deepStrictEqual(r.data.worldOverlays.map((o) => o.chatId), ["chat-a"]);
+    assert.strictEqual(r.rejected, 2); assert.ok(r.warnings > 0);
+    assert.ok(codesOf(r).some((c) => c[0] === "overlay-no-chat") && codesOf(r).some((c) => c[0] === "overlay-entries"));
+  });
+}
+
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
-foundationB().then(w2Services).then(() => {
+foundationB().then(w2Services).then(w2BackupIntegrity).then(() => {
   console.log(`\n${passed} пройдено, ${failed} с ошибками`);
   process.exit(failed ? 1 : 0);
 });

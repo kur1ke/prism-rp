@@ -6370,19 +6370,50 @@
       await DB.del(STORE, chatId);
       if (S.worldOverlay && S.worldOverlay.chatId === chatId) S.worldOverlay = null;
     }
-    /* Восстановление бэкапа: запись без чата сохранить нельзя — отбрасывается до записи; битые события
-       остаются в записи (видны в отчёте и не применяются). → { data, rejected, warnings } */
-    function checkBackup(data) {
-      if (!data || !Array.isArray(data[STORE])) return { data, rejected: 0, warnings: 0 };
+    /* Восстановление бэкапа: проверка ДО записи. Запись мира чата принимается, только если:
+         • сама запись проходит проверку (OV.validateOverlay: объект, есть chatId, entries — список);
+         • её чат существует там, куда восстанавливаем:
+             замена (replace: true, по умолчанию) — только чаты из самого бэкапа (data.chats);
+             добавление (replace: false) — чаты из бэкапа ∪ уже существующие (existingChatIds);
+         • в бэкапе это единственная запись для этого чата. Если записей для одного chatId несколько —
+           отбрасываются ВСЕ записи этого чата: какая из них верна, неизвестно, истории не сливаются.
+       Ничего не переназначается и не подбирается: запись без своего чата не пишется.
+       Битые события внутри принятой записи остаются (видны в отчёте и не применяются).
+       opts: { replace, existingChatIds } — режим и id локальных чатов даёт вызывающий (DOM здесь нет).
+       → { data, rejected, warnings, issues: [{ level, code, message, chatId? }] } */
+    function checkBackup(data, opts) {
+      if (!data || !Array.isArray(data[STORE])) return { data, rejected: 0, warnings: 0, issues: [] };
+      const o = opts || {};
+      const replace = o.replace !== false;
+      const valid = new Set((Array.isArray(data.chats) ? data.chats : []).filter((c) => c && c.id).map((c) => String(c.id)));
+      if (!replace) for (const id of o.existingChatIds || []) valid.add(String(id));
+      const issues = [];
       let rejected = 0, warnings = 0;
-      const ok = [];
-      for (const o of data[STORE]) {
-        const iss = OV.validateOverlay(o);
-        if (OV.hasErrors(iss)) { rejected++; continue; }
-        warnings += iss.length;
-        ok.push(OV.normalize(o));
+      const perChat = new Map();
+      for (const rec of data[STORE]) {
+        const id = rec && typeof rec === "object" ? String(rec.chatId || "").trim() : "";
+        if (id) perChat.set(id, (perChat.get(id) || 0) + 1);
       }
-      return { data: Object.assign({}, data, { [STORE]: ok }), rejected, warnings };
+      const ok = [];
+      for (const rec of data[STORE]) {
+        const iss = OV.validateOverlay(rec);
+        if (OV.hasErrors(iss)) { rejected++; issues.push(...iss.filter((x) => x.level === "error")); continue; }
+        const chatId = String(rec.chatId).trim();
+        if (perChat.get(chatId) > 1) {
+          rejected++;
+          issues.push({ level: "error", code: "overlay-duplicate-chat", message: "В бэкапе несколько записей мира для одного чата — ни одна не восстановлена.", chatId });
+          continue;
+        }
+        if (!valid.has(chatId)) {
+          rejected++;
+          issues.push({ level: "error", code: "overlay-orphan-chat", message: "Запись мира относится к чату, которого нет" + (replace ? " в бэкапе." : " ни в бэкапе, ни здесь."), chatId });
+          continue;
+        }
+        warnings += iss.length;
+        issues.push(...iss.map((x) => Object.assign({ chatId }, x)));
+        ok.push(OV.normalize(rec));
+      }
+      return { data: Object.assign({}, data, { [STORE]: ok }), rejected, warnings, issues };
     }
 
     // Для вкладки «Мир чата»: канон активной ветки, исключения и история событий.
@@ -7288,13 +7319,14 @@
       if (t.id === "file-backup" && t.files[0]) {
         const data = JSON.parse(await ctx.files.readFile(t.files[0], "text"));
         const replace = confirm("Заменить текущие данные бэкапом?\n\nОК — заменить, Отмена — добавить к существующим.");
-        // Проверка до записи: наложение мира без чата сохранить нельзя — отбрасывается (svc.worldChat.checkBackup).
-        const chk = svc.worldChat.checkBackup(data);
+        // Проверка до записи (правила — в svc.worldChat.checkBackup): запись мира чата принимается, только если её чат
+        // есть в бэкапе (замена) или в бэкапе либо уже здесь (добавление). Контроллер даёт только режим и id чатов.
+        const chk = svc.worldChat.checkBackup(data, { replace, existingChatIds: replace ? [] : (await DB.all("chats")).map((c) => c.id) });
         await DB.importAll(chk.data, replace);
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();
-        ui.toast(chk.rejected ? `Бэкап загружен; повреждённых записей мира чата пропущено: ${chk.rejected}.` : "Бэкап загружен.", !!chk.rejected);
+        ui.toast(chk.rejected ? `Бэкап загружен. Некоторые записи мира чата пропущены при восстановлении: ${chk.rejected}.` : "Бэкап загружен.", !!chk.rejected);
         return true;
       }
       if (t.dataset.imgcfg !== undefined) { collectImgForm(); await save(); return true; }
