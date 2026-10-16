@@ -1,6 +1,8 @@
 /* Prism RP — сборка Prism для текущего чата (прикладной уровень).
    Связывает активную ветку, сцену, опыт и настройки с чистым сборщиком (prism/assembler.js):
-   отбор опыта (EX.rank) → сборка контекста (AS.build) → отчёт для вкладки Prism.
+   отбор опыта (EX.rank) и фактов мира (world/overlay-service: канон чата с учётом ветки → отбор по
+   релевантности; только чтение) → сборка контекста (AS.build) → отчёт для вкладки Prism.
+   Мир не зависит от режима: одни и те же факты получает и сцена, и переписка.
    Хранилище, сеть и DOM не трогает. */
 (function (root) {
   "use strict";
@@ -29,14 +31,16 @@
         chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
         text: recent, names: [cd.name, ctx.persona().name].concat(st.present), limit: s.expLimit,
       });
+      const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, st) : { facts: [], report: null };
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
-        sceneState: st, experiences: ex.ranked, history, extraPost,
+        sceneState: st, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
       }, extra));
       built.report.expDebug = ex.debug;
+      built.report.world = wctx.report;
       built.report.experienceVisible = ex.visibleCount;
       built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
       return built;

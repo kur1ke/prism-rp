@@ -1,4 +1,4 @@
-/* Prism RP — выдвижная панель: сцена, опыт, Prism (что ушло в модель). */
+/* Prism RP — выдвижная панель: сцена, опыт, мир чата, Prism (что ушло в модель). */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -8,11 +8,12 @@
 
   /* ── Выдвижная панель ─────────────────────────────────────────────── */
   function drawer(m) {
-    const tabs = [["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["prism", "Prism", "prism"]];
+    const tabs = [["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"], ["prism", "Prism", "prism"]];
     let body = "";
     if (!m.chat) body = `<p class="empty-note">Откройте чат.</p>`;
     else if (m.tab === "scene") body = sceneTab(m);
     else if (m.tab === "memory") body = memoryTab(m);
+    else if (m.tab === "world") body = worldTab(m);
     else body = prismTab(m);
     return `<div class="drawer-head"><nav class="drawer-tabs">${tabs.map(([id, name, ic]) => `<button class="dtab ${m.tab === id ? "on" : ""}" data-act="tab" data-tab="${id}">${icon(ic)}${name}</button>`).join("")}</nav>
       <button class="icon-btn" data-act="drawer-close" title="Закрыть панель">${icon("x")}</button></div>
@@ -112,8 +113,67 @@
           <div class="mt"><span class="tag">не привязана</span><span style="flex:1"></span><button class="btn btn-sm" data-act="exp-assign" data-id="${r.id}">Привязать к этому чату</button></div></div>`).join("")}</div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
-  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
+  /* ── Мир чата ─────────────────────────────────────────────────────────
+     Только разметка: канон, отбор и проверки — в world/canon, world/overlay и сервисе мира чата. */
+  const ORIGIN = { pack: "пак", "lens-override": "линза: замена", "lens-addition": "линза: свой факт", "chat-overlay": "чат", "branch-overlay": "ветка" };
+  const OPS = { assert: "новый факт", override: "замена", retract: "убрано" };
+  const FILTER = { "timeline-unselected": "таймлайн не выбран", "timeline-mismatch": "другой таймлайн", "variant-unselected": "вариант не выбран", "variant-mismatch": "другой вариант" };
+  const metaLine = (f) => [(f.entities || []).join(", "), (f.topics || []).join(", "), (f.locations || []).join(", "), f.timeline ? "таймлайн: " + f.timeline : "", f.variant ? "вариант: " + f.variant : ""].filter(Boolean).join(" · ");
+  function worldTab(m) {
+    const w = m.worldChat;
+    if (!w) return `<p class="empty-note">Откройте чат.</p>`;
+    const ov = w.overlay || {};
+    const head = `<div class="block"><div class="block-title">Мир чата</div>
+      <p class="hint">Канон этого чата: ${w.pack ? `пак «${esc(w.pack.name)}» с линзой персонажа` : "у персонажа нет пака мира"} и то, что вы явно закрепили здесь. Текст ответов, сцена и опыт сами в мир не попадают. Факт ветки виден только в своей ветке; факт на весь чат — во всех.</p>
+      <div class="row"><div class="field"><label>Таймлайн</label><input id="wc-timeline" value="${esc(ov.timeline || "")}" placeholder="не выбран"></div>
+        <div class="field"><label>Вариант</label><input id="wc-variant" value="${esc(ov.variant || "")}" placeholder="не выбран"></div>
+        <button class="btn btn-sm" data-act="wc-sel-save" style="margin-bottom:12px">Применить</button></div>
+      <p class="hint">Факт с меткой таймлайна или варианта подаётся, только если здесь выбрана точно такая же метка.${w.lens && w.lens.timelineVariant ? ` В линзе персонажа указано «${esc(w.lens.timelineVariant)}» — это пометка линзы, сама она не выбирается.` : ""}</p></div>`;
+    const d = m.worldEdit;
+    let form = "";
+    if (d) {
+      const target = d.targetFactId ? (w.facts.find((f) => f.id === d.targetFactId) || w.excluded.find((x) => x.id === d.targetFactId)) : null;
+      const val = d.fact || {};
+      const list = (k) => esc((val[k] || []).join(", "));
+      form = `<div class="block world-edit"><div class="block-title">${{ assert: "Новый факт мира", override: "Заменить факт", retract: "Убрать факт из мира" }[d.op]}</div>
+        ${target ? `<p class="hint">Факт: «${esc(target.text)}»</p>` : ""}
+        ${d.op !== "retract" ? `<div class="field"><label>Текст факта</label><textarea id="wc-text" placeholder="Утверждение о мире: «Кафе у кампуса закрылось на ремонт»">${esc(val.text || "")}</textarea></div>` : ""}
+        ${d.op === "assert" ? `<div class="row"><div class="field"><label>Сущности</label><input id="wc-ent" value="${list("entities")}" placeholder="Тацуки, Ичиго"></div>
+          <div class="field"><label>Темы</label><input id="wc-top" value="${list("topics")}" placeholder="учёба"></div></div>
+          <div class="row"><div class="field"><label>Места</label><input id="wc-loc" value="${list("locations")}" placeholder="Каракура"></div>
+          <div class="field"><label>Таймлайн</label><input id="wc-tl" value="${esc(val.timeline || "")}"></div><div class="field"><label>Вариант</label><input id="wc-vr" value="${esc(val.variant || "")}"></div></div>` : ""}
+        ${d.op === "override" ? `<span class="help">Метки (сущности, темы, места, таймлайн) остаются как у факта.</span>` : ""}
+        <div class="field"><label>Где действует</label>
+          <label class="check"><input type="radio" name="wc-scope" value="branch" ${d.scope === "branch" ? "checked" : ""} ${w.canBranch ? "" : "disabled"}><span>В этой ветке${w.canBranch ? "" : "<small>Пока нет сообщений — привязать не к чему.</small>"}</span></label>
+          <label class="check"><input type="radio" name="wc-scope" value="chat" ${d.scope === "chat" ? "checked" : ""}><span>Во всём чате<small>Во всех ветках этого чата. Другие чаты не затрагиваются.</small></span></label></div>
+        <div class="row"><button class="btn btn-primary btn-sm" data-act="wc-save">${d.op === "retract" ? "Убрать" : "Сохранить"}</button><button class="btn btn-sm btn-ghost" data-act="wc-cancel">Отмена</button></div></div>`;
+    }
+    const facts = w.facts.map((f) => {
+      const off = w.filteredIds.has(f.id) ? (w.filtered.find((x) => x.id === f.id) || {}).reason : "";
+      return `<li class="${off ? "off" : ""}" data-wc-fact="${esc(f.id)}"><div>${esc(f.text)}</div>
+        <div class="mt"><span class="tag">${esc(ORIGIN[f.origin] || f.origin)}</span>${f.reestablished ? `<span class="tag">возвращён</span>` : ""}${off ? `<span class="tag">${esc(FILTER[off] || off)}</span>` : ""}
+          ${metaLine(f) ? `<small>${esc(metaLine(f))}</small>` : ""}<span style="flex:1"></span>
+          <button class="tool" data-act="wc-override" data-id="${esc(f.id)}">Заменить</button><button class="tool" data-act="wc-retract" data-id="${esc(f.id)}">Убрать</button></div></li>`;
+    }).join("");
+    const retracted = w.excluded.filter((x) => x.reason === "retracted");
+    const w1off = w.excluded.filter((x) => x.reason !== "retracted");
+    const evs = w.events.slice().reverse().map((e) => `<li class="${e.active && e.applied ? "" : "off"}"><div><b>${esc(OPS[e.op] || e.op || "?")}</b> ${esc(e.text || "")}${e.targetFactId ? ` <small>→ ${esc(e.targetFactId)}</small>` : ""}</div>
+      <div class="mt"><span class="tag">${e.scope === "chat" ? "весь чат" : e.scope === "branch" ? "ветка" : esc(e.scope || "?")}</span>
+        <span class="tag">${e.active ? (e.applied ? "действует" : esc(e.reason)) : esc(e.reason || "не действует")}</span></div></li>`).join("");
+    return head + form + `<div class="block"><div class="block-title">Действует сейчас <small>${w.facts.length}</small></div>
+        <button class="btn btn-sm" data-act="wc-new">${icon("plus")}Добавить факт</button>
+        <ul class="wc-list">${facts || `<li class="empty-note">Фактов нет.</li>`}</ul></div>
+      ${retracted.length || w1off.length ? `<div class="block"><div class="block-title">Не действует</div><ul class="wc-list">
+        ${retracted.map((x) => `<li class="off"><div>${esc(x.text)}</div><div class="mt"><span class="tag">убрано${x.scope === "chat" ? " во всём чате" : " в ветке"}</span><span style="flex:1"></span><button class="tool" data-act="wc-override" data-id="${esc(x.id)}">Вернуть с текстом</button></div></li>`).join("")}
+        ${w1off.map((x) => `<li class="off"><div>${esc(x.text || x.id)}</div><div class="mt"><span class="tag">${esc({ "pack-disabled": "выключено в паке", "lens-disabled": "выключено линзой", "addition-id-collides": "повтор id" }[x.reason] || x.reason)}</span></div></li>`).join("")}</ul></div>` : ""}
+      <details class="block"><summary class="block-title" style="cursor:pointer">История мира чата <small>${w.events.length}</small></summary>
+        <p class="hint">События не переписываются: исправление — новая замена или убирание. События другой ветки или другого варианта ответа хранятся и снова действуют, когда вы туда вернётесь.</p>
+        <ul class="wc-list wc-history">${evs || `<li class="empty-note">Пока пусто.</li>`}</ul></details>
+      ${w.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${w.warnings.map((x) => `<li class="off">${esc(x.message)}</li>`).join("")}</ul></div>` : ""}`;
+  }
+
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
+  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
     if (!p) return `<p class="hint">Здесь видно, что получает модель: карточку как склонности, опыт как свидетельства, сцену как факты.</p>
@@ -130,6 +190,7 @@
         <dt>Опыт</dt><dd>${r.experienceKept} ${R.plural(r.experienceKept, "запись", "записи", "записей")}${r.experienceDropped ? `, не поместилось ${r.experienceDropped}` : ""}${r.experienceVisible != null ? `; видно в ветке ${r.experienceVisible}` : ""}</dd>
         ${r.legacyUnscoped ? `<dt>Без привязки</dt><dd>${r.legacyUnscoped} — в контекст не идут</dd>` : ""}
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
+        ${r.world ? `<dt>Мир</dt><dd>${r.worldKept} ${R.plural(r.worldKept, "факт", "факта", "фактов")} из ${r.world.relevant} релевантных${r.worldDropped ? `, не поместилось ${r.worldDropped}` : ""}; действует ${r.world.effective}, проходит отбор по таймлайну ${r.world.eligible}</dd>` : ""}
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
         ${r.scenarioState && r.scenarioState !== "none" ? `<dt>Сценарий</dt><dd>${{ included: "в контексте — исходные обстоятельства, до первого ответа на вашу реплику", "past-first-turn": "больше не подаётся: первый ответ на вашу реплику уже прозвучал", budget: "не поместился" }[r.scenarioState]}</dd>` : ""}
         ${r.postHistoryDisabled ? `<dt>После истории</dt><dd>указания автора выключены в настройках</dd>` : ""}
@@ -138,6 +199,10 @@
       ${(r.expDebug || []).length ? `<details class="block exp-debug"><summary>Отбор опыта</summary>
         <table><thead><tr><th>Событие</th><th title="совпадение по темам">тема</th><th title="о присутствующих">участ.</th><th title="важность">важн.</th><th title="ранг свежести, только при равенстве">свеж.</th><th>итог</th></tr></thead><tbody>
         ${r.expDebug.map((x) => `<tr class="${x.selected ? "sel" : ""}"><td>${esc((x.event || "").slice(0, 60))}</td><td>${x.topic}</td><td>${x.participant}</td><td>${x.weight}</td><td>${x.recencyRank}</td><td>${x.selected ? "в контексте" : !x.visible ? esc(x.reason) : !x.active ? "не действует" : "не выбрано"}</td></tr>`).join("")}
+        </tbody></table></details>` : ""}
+      ${r.world && r.world.rows.length ? `<details class="block exp-debug world-debug"><summary>Отбор мира</summary>
+        <table><thead><tr><th>Факт</th><th>почему</th><th>итог</th></tr></thead><tbody>
+        ${r.world.rows.map((x) => { const kept = (r.worldIds || []).includes(x.id); return `<tr class="${kept ? "sel" : ""}"><td>${esc((x.text || "").slice(0, 60))}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${kept ? "в контексте" : x.selected ? "не поместилось" : x.omitted === "limit" ? "сверх лимита" : "не относится"}</td></tr>`; }).join("")}
         </tbody></table></details>` : ""}
       <div class="block"><div class="block-title">Что ушло в модель <button class="btn btn-sm btn-ghost" data-act="prism-preview">${icon("regen")}Обновить</button></div>
         <div class="code">${p.messages.map((x) => `<span class="role">${esc(x.role)}</span>\n${esc(x.content)}`).join("\n\n")}</div></div>`;

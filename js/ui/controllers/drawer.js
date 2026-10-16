@@ -1,4 +1,4 @@
-/* Prism RP — контроллер выдвижной панели: сцена (ручные правки), опыт (форма записи), Prism (предпросмотр). */
+/* Prism RP — контроллер выдвижной панели: сцена (ручные правки), опыт (форма записи), мир чата (явные действия), Prism (предпросмотр). */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -32,10 +32,31 @@
       return d;
     }
 
+    // Форма «Мир чата» → черновик действия (S.worldEdit). Область — только явный выбор пользователя.
+    const csv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
+    function collectWorld() {
+      const d = S.worldEdit;
+      if (!d) return d;
+      const sc = document.querySelector("input[name=wc-scope]:checked");
+      d.scope = sc ? sc.value : d.scope;
+      if (d.op !== "retract" && $("#wc-text")) d.fact = Object.assign({}, d.fact, { text: $("#wc-text").value });
+      if (d.op === "assert" && $("#wc-ent")) Object.assign(d.fact, { entities: csv($("#wc-ent").value), topics: csv($("#wc-top").value), locations: csv($("#wc-loc").value), timeline: $("#wc-tl").value, variant: $("#wc-vr").value });
+      return d;
+    }
+    function worldDraft(op, id) {
+      // По умолчанию — текущая ветка, если к ней есть привязка; иначе область не выбрана (пользователь выбирает «весь чат» сам).
+      const scope = svc.chat.path().length ? "branch" : "";
+      const f = id ? (svc.worldChat.view().facts.find((x) => x.id === id) || null) : null;
+      S.worldEdit = { op, targetFactId: id || null, scope, fact: op === "override" ? { text: f ? f.text : "" } : op === "assert" ? { text: "" } : null };
+      S.tab = "world"; S.drawerOpen = true;
+      ui.renderDrawer();
+      setTimeout(() => { const e = $("#wc-text"); if (e) e.focus(); }, 30);
+    }
+
     const actions = {
       drawer: () => { S.drawerOpen = !S.drawerOpen; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       "drawer-close": () => { S.drawerOpen = false; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
-      tab: (t) => { collectExp(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
+      tab: (t) => { collectExp(); collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
       "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
       "prism-preview": () => { svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
       // Сцена
@@ -80,6 +101,27 @@
         await svc.exp.assign(t.dataset.id);
         svc.prism.refresh(); ui.renderDrawer();
         ui.toast("Запись привязана к этому чату.");
+      },
+      // Мир чата: только явные действия; ничего не извлекается из текста ответов.
+      "wc-new": () => worldDraft("assert"),
+      "wc-override": (t) => worldDraft("override", t.dataset.id),
+      "wc-retract": (t) => worldDraft("retract", t.dataset.id),
+      "wc-cancel": () => { S.worldEdit = null; ui.renderDrawer(); },
+      "wc-save": async () => {
+        const d = collectWorld();
+        if (!d.scope) { ui.toast("Выберите, где действует факт: в этой ветке или во всём чате.", true); return; }
+        const r = await svc.worldChat.commit(d);
+        if (r.error) { ui.toast(r.error, true); return; }
+        S.worldEdit = null;
+        svc.prism.refresh();
+        ui.renderDrawer();
+        ui.toast(d.op === "retract" ? "Факт убран из мира чата." : "Факт закреплён в мире чата.");
+      },
+      "wc-sel-save": async () => {
+        await svc.worldChat.setSelectors({ timeline: $("#wc-timeline").value, variant: $("#wc-variant").value });
+        svc.prism.refresh();
+        ui.renderDrawer();
+        ui.toast("Таймлайн и вариант чата сохранены.");
       },
       "x-val": (t) => { collectExp().valence = +t.dataset.v; ui.renderDrawer(); },
       "x-weight": (t) => { collectExp().weight = +t.dataset.v; ui.renderDrawer(); },

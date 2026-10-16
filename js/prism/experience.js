@@ -19,6 +19,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
+  const BR = PRP.branch || (typeof require !== "undefined" ? require("../chat/branch.js") : null);
 
   function blank(ownerId, chatId) {
     return {
@@ -57,13 +58,9 @@
     if (scope === "legacy") return { visible: false, reason: "не привязана к чату" };
     if (r.chatId !== c.chatId) return { visible: false, reason: "другой чат" };
     if (scope === "chat") return { visible: true, reason: "на весь чат" };
-    const onPath = new Map((c.path || []).map((p) => [p.id, p.swipeIdx || 0]));
-    const sw = (r.source && r.source.swipes) || {};
-    for (const id of r.source.messageIds) {
-      if (!onPath.has(id)) return { visible: false, reason: "другая ветка" };
-      if (sw[id] != null && onPath.get(id) !== sw[id]) return { visible: false, reason: "другой вариант ответа" };
-    }
-    return { visible: true, reason: "в этой ветке" };
+    // Правило ветки — общее с наложением мира на чат (chat/branch.js).
+    const v = BR.visibleOnPath(r.source, c.path);
+    return { visible: v.visible, reason: v.reason };
   }
 
   /* Миграция старых записей. Чистая функция, идемпотентна.

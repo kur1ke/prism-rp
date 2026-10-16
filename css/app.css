@@ -606,3 +606,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .storage-error h1 { display: flex; align-items: center; gap: 10px; font-size: 22px; margin: 0 0 12px; }
 .storage-error h1 svg { width: 24px; height: 24px; color: var(--warn); flex: none; }
 .storage-error p { margin: 0 0 10px; line-height: 1.5; }
+
+/* Мир чата (FOUNDATION-W2) */
+.wc-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.wc-list li { border-left: 3px solid var(--accent); padding: 4px 10px; overflow-wrap: anywhere; }
+.wc-list li.off { border-left-color: var(--line); color: var(--muted); }
+.wc-list .mt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.wc-list .mt small { color: var(--muted); }
+.world-edit textarea { min-height: 70px; }

@@ -16,6 +16,7 @@
     sceneProtocol: true,
     noPostHistory: false,
     expLimit: 8,
+    worldLimit: 8, // фактов мира за ход (наибольшее число; входят только релевантные)
     theme: "dusk",
     proseSize: 17,
     persona: { name: "Пользователь", description: "" },

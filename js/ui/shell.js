@@ -32,7 +32,9 @@
         S, view: S.view, cards: S.cards, chats: S.chats, card: ctx.card(), chat: ctx.chat(), persona: ctx.persona(), path,
         scene: ctx.chat() ? svc().chat.sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
-        exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
+        exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft,
+        // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
+        worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
         drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
         stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
         imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
