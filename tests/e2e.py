@@ -791,6 +791,9 @@ try:
         page.fill("#input", "А как дела у Тацуки?")
         page.keyboard.press("Enter")
         page.wait_for_function(f"PRP.app.S.messages.length >= {nm + 2}")
+        for _ in range(100):  # дождаться, пока запрос дойдёт до мок-сервера (иначе /v1/last — предыдущий запрос)
+            if json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"] > n0: break
+            page.wait_for_timeout(100)
         idle(page)
         req = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last"))
         sysmsg = "\n".join(m["content"] for m in req["messages"] if m["role"] == "system")
