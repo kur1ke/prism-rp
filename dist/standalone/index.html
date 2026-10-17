@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Prism RP</title>
-<!-- Prism RP 0.5.0 · собрано 2026-10-16 · исходники: index.html, css/, js/ -->
+<!-- Prism RP 0.5.0 · собрано 2026-10-17 · исходники: index.html, css/, js/ -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap">
@@ -626,6 +626,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .wc-list .mt small { color: var(--muted); }
 .world-edit textarea { min-height: 70px; }
 
+/* Переписка (FOUNDATION-C): значок режима и вкладка «Среда» */
+.mode-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 13px; white-space: nowrap; }
+.mode-badge svg { width: 15px; height: 15px; }
+.env-world dd { overflow-wrap: anywhere; }
+.env-edit .check.sm { font-size: 12px; margin-top: 2px; }
+.env-edit .check.sm span { font-size: 12px; }
+#drawer-body .row select, #drawer-body .row input { min-width: 0; flex: 1; }
+/* Переключатели внутри поля (область «ветка / вся переписка», режим времени) — не растягиваются на всю ширину */
+.field .check input[type=radio], .field .check input[type=checkbox] { width: auto; flex: none; height: auto; padding: 0; }
+
 </style>
 </head>
 <body>
@@ -726,8 +736,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const DB_NAME = "prism-rp";
-  const DB_VERSION = 5;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays"];
+  const DB_VERSION = 6;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
   const OPEN_TIMEOUT_MS = 7000;
   let dbPromise = null;
@@ -771,6 +781,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         }
         // v5: наложение мира на чат (FOUNDATION-W2), одна запись на чат. Только добавление коллекции — данные W1 и прочие не трогаются.
         if (!db.objectStoreNames.contains("worldOverlays")) db.createObjectStore("worldOverlays", { keyPath: "chatId" });
+        // v6: среда переписки (FOUNDATION-C), одна запись на чат-переписку. Только добавление коллекции.
+        if (!db.objectStoreNames.contains("messengerEnvironments")) db.createObjectStore("messengerEnvironments", { keyPath: "chatId" });
       };
       req.onsuccess = () => {
         const db = req.result;
@@ -829,7 +841,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 5, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 6, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
@@ -3177,17 +3189,397 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
-<script>/* js/prism/assembler.js */
-/* Prism RP — сборщик контекста.
-   Prism не хранится: на каждом ходе он собирается из Card + Scene + релевантного
-   Experience. Каждый слой подаётся своей формулировкой, чтобы модель читала
-   склонности и воспоминания как контекст восприятия, а не как приказы. */
+<script>/* js/messenger/time.js */
+/* Prism RP — время переписки (TEMPORAL). Чистый модуль.
+
+   • Моменты хранятся как ISO-строки в UTC (неизменяемы после записи сообщения);
+     часовой пояс чата (IANA, например "Asia/Tokyo") влияет только на показ и на ввод «местного» времени.
+   • «Сейчас» переписки: live — переданные часы (функция clock, в приложении — Date.now; в тестах — подставные);
+     manual — сохранённое manualNow; само по себе не идёт и никогда не тикает.
+   • Прошедшее время считается только между известными моментами; неизвестное остаётся неизвестным.
+   Без DOM, хранилища, сети, таймеров и S. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util || (typeof require !== "undefined" ? require("../core/util.js") : null);
-  const SCENE = PRP.scene || (typeof require !== "undefined" ? require("./scene.js") : null);
-  const EXP = PRP.experience || (typeof require !== "undefined" ? require("./experience.js") : null);
+
+  const DEFAULT_TZ = "UTC";
+
+  function validTimeZone(tz) {
+    if (!tz || typeof tz !== "string") return false;
+    try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return true; } catch (e) { return false; }
+  }
+  function systemTimeZone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TZ; } catch (e) { return DEFAULT_TZ; }
+  }
+  const toMs = (iso) => { if (iso == null || iso === "") return null; const t = typeof iso === "number" ? iso : Date.parse(iso); return Number.isFinite(t) ? t : null; };
+  const toIso = (ms) => (Number.isFinite(ms) ? new Date(ms).toISOString() : null);
+
+  // Части местного времени в поясе tz.
+  function parts(ms, tz) {
+    const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const o = {};
+    for (const p of f.formatToParts(new Date(ms))) if (p.type !== "literal") o[p.type] = +p.value;
+    return o;
+  }
+  // Смещение пояса (мс) в момент ms.
+  function offset(ms, tz) {
+    const p = parts(ms, tz);
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - Math.floor(ms / 1000) * 1000;
+  }
+  /* Местное «стенное» время "YYYY-MM-DDTHH:mm" в поясе tz → момент (мс UTC). null — неразборчиво. */
+  function fromLocal(wall, tz) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(String(wall || "").trim());
+    if (!m || !validTimeZone(tz)) return null;
+    const guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+    let t = guess - offset(guess, tz);
+    t = guess - offset(t, tz); // уточнение у границы перехода на летнее время
+    return t;
+  }
+  // Момент → местное "YYYY-MM-DDTHH:mm" (для полей ввода).
+  function toLocalInput(ms, tz) {
+    if (!Number.isFinite(ms) || !validTimeZone(tz)) return "";
+    const p = parts(ms, tz), z = (n) => String(n).padStart(2, "0");
+    return `${p.year}-${z(p.month)}-${z(p.day)}T${z(p.hour)}:${z(p.minute)}`;
+  }
+  // Для людей и модели: "17.10.2026, 09:20".
+  function format(ms, tz) {
+    if (!Number.isFinite(ms)) return "";
+    const p = parts(ms, validTimeZone(tz) ? tz : DEFAULT_TZ), z = (n) => String(n).padStart(2, "0");
+    return `${z(p.day)}.${z(p.month)}.${p.year}, ${z(p.hour)}:${z(p.minute)}`;
+  }
+  // Прошедшее время словами: "20 мин", "3 ч 5 мин", "2 дн 4 ч", "меньше минуты".
+  function elapsedWords(ms) {
+    if (!Number.isFinite(ms)) return "";
+    if (ms < 0) return "";
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "меньше минуты";
+    const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), mm = min % 60;
+    if (d) return `${d} дн${h ? " " + h + " ч" : ""}`;
+    if (h) return `${h} ч${mm ? " " + mm + " мин" : ""}`;
+    return `${mm} мин`;
+  }
+
+  /* «Сейчас» переписки. env: { timeMode, manualNow }; clock: () => мс. → мс | null (manual без времени) */
+  function nowOf(env, clock) {
+    const e = env || {};
+    if (e.timeMode === "manual") return toMs(e.manualNow);
+    const c = typeof clock === "function" ? clock() : Date.now();
+    return Number.isFinite(c) ? c : null;
+  }
+
+  PRP.messengerTime = { DEFAULT_TZ, validTimeZone, systemTimeZone, toMs, toIso, fromLocal, toLocalInput, format, elapsedWords, nowOf, offset };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.messengerTime;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/messenger/environment.js */
+/* Prism RP — среда переписки (Messenger Environment): текущее положение персонажа (WORLD). Чистый модуль.
+
+   Одна запись на чат-переписку:
+     { schema, chatId, timeZone, timeMode: "live" | "manual", manualNow, events, conversationEvents, createdAt, updatedAt }
+   events — только добавляемые события среды; итоговое «текущее положение» не хранится, а каждый раз
+   собирается по активной ветке (resolveWorld). conversationEvents — явные договорённости (messenger/conversation).
+
+   Событие среды: { id, scope: "chat" | "branch", patch, provenance, effectiveAt, note, createdAt }
+     patch: { location?, activity?, nearby?, ongoing?, availability? }
+       ключ не указан — значение не меняется; null, "" или [] — очищается (становится неизвестным/пустым).
+     availability: "available" | "busy" | "away" | "unknown" — контекст для Prism, не запрет отвечать.
+     provenance ветки — chat/branch.anchorOf (все сообщения ветки и их варианты); у события «на весь чат» — null.
+     effectiveAt — с какого момента времени переписки событие действует (ISO); позже «сейчас» — ещё не наступило.
+   Среда — текущие обстоятельства, а не факт мира, не сцена RP и не опыт. Из текста ответов она не выводится.
+   Время само ничего не меняет: без событий положение остаётся неизвестным.
+   Без DOM, хранилища, сети, таймеров и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const BR = PRP.branch || (typeof require !== "undefined" ? require("../chat/branch.js") : null);
+  const MT = PRP.messengerTime || (typeof require !== "undefined" ? require("./time.js") : null);
+
+  const SCHEMA = 1;
+  const AVAIL = ["available", "busy", "away", "unknown"];
+  const STR_KEYS = ["location", "activity"];
+  const LIST_KEYS = ["nearby", "ongoing"];
+  const KEYS = STR_KEYS.concat(LIST_KEYS, ["availability"]);
+
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+  const strList = (v) => (Array.isArray(v) ? v.map((x) => str(x).trim()).filter(Boolean) : []);
+  const uid = (p) => p + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
+
+  function emptyWorld() { return { location: null, activity: null, nearby: [], ongoing: [], availability: "unknown" }; }
+
+  function blank(chatId, setup) {
+    const s = setup || {};
+    const now = Date.now();
+    const tz = MT.validTimeZone(s.timeZone) ? s.timeZone : MT.systemTimeZone();
+    const manual = s.timeMode === "manual";
+    return { schema: SCHEMA, chatId: str(chatId), timeZone: tz, timeMode: manual ? "manual" : "live",
+      manualNow: manual ? (MT.toIso(MT.toMs(s.manualNow)) || null) : null, events: [], conversationEvents: [], createdAt: now, updatedAt: now };
+  }
+  // Канонический вид записи. События копируются как есть: битые видны в отчёте и не применяются.
+  function normalize(o, chatId) {
+    const x = isObj(o) ? o : {};
+    return {
+      schema: SCHEMA, chatId: str(x.chatId || chatId),
+      timeZone: MT.validTimeZone(x.timeZone) ? x.timeZone : MT.DEFAULT_TZ,
+      timeMode: x.timeMode === "manual" ? "manual" : "live",
+      manualNow: x.timeMode === "manual" ? (MT.toIso(MT.toMs(x.manualNow)) || null) : null,
+      events: Array.isArray(x.events) ? clone(x.events) : [],
+      conversationEvents: Array.isArray(x.conversationEvents) ? clone(x.conversationEvents) : [],
+      createdAt: x.createdAt || Date.now(), updatedAt: x.updatedAt || Date.now(),
+    };
+  }
+
+  /* Черновик правки → патч: только явно указанные ключи; null/""/[] — очистить. */
+  function makePatch(p) {
+    const x = isObj(p) ? p : {};
+    const out = {};
+    for (const k of STR_KEYS) if (k in x) out[k] = x[k] == null || !str(x[k]).trim() ? null : str(x[k]).trim();
+    for (const k of LIST_KEYS) if (k in x) { const l = x[k] == null ? [] : strList(x[k]); out[k] = l.length ? l : null; }
+    if ("availability" in x) out.availability = x.availability == null || x.availability === "" ? null : str(x.availability);
+    return out;
+  }
+  function makeEvent(d) {
+    const x = isObj(d) ? d : {};
+    const scope = str(x.scope);
+    const a = isObj(x.anchor) ? x.anchor : null;
+    return {
+      id: str(x.id).trim() || uid("me"), scope, patch: makePatch(x.patch),
+      provenance: scope === "branch" && a ? { anchorId: str(a.anchorId), messageIds: strList(a.messageIds), swipes: Object.assign({}, a.swipes || {}) } : null,
+      effectiveAt: MT.toIso(MT.toMs(x.effectiveAt)) || null, note: str(x.note).trim(), createdAt: Number(x.createdAt) || Date.now(),
+    };
+  }
+
+  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref != null ? { ref: String(ref) } : {});
+  const hasErrors = (xs) => (xs || []).some((x) => x.level === "error");
+
+  // Привязка: ветка — непустой список сообщений; весь чат — без привязки. Общая проверка для событий среды и договорённостей.
+  function checkScope(e, out, id) {
+    if (!["chat", "branch"].includes(e.scope)) out.push(issue("error", "scope", `Неизвестная область: ${str(e.scope) || "(пусто)"}.`, id));
+    if (e.scope === "branch") {
+      const p = e.provenance;
+      if (!isObj(p) || !Array.isArray(p.messageIds) || !p.messageIds.length || (p.swipes != null && !isObj(p.swipes)))
+        out.push(issue("error", "branch-no-provenance", "Нельзя привязать к ветке: в переписке ещё нет сообщений или привязка повреждена. Выберите «во всей переписке» явно.", id));
+    }
+    if (e.scope === "chat" && e.provenance != null) out.push(issue("error", "chat-provenance", "Событие на всю переписку не привязывается к сообщениям.", id));
+  }
+
+  function validateEvent(e) {
+    const out = [];
+    if (!isObj(e)) return [issue("error", "event-malformed", "Событие среды не является объектом.")];
+    const id = str(e.id).trim();
+    if (!id) out.push(issue("error", "event-no-id", "У события среды нет id."));
+    checkScope(e, out, id);
+    const p = e.patch;
+    if (!isObj(p) || !Object.keys(p).length) out.push(issue("error", "event-empty", "Событие ничего не меняет.", id));
+    else {
+      for (const k of Object.keys(p)) if (!KEYS.includes(k)) out.push(issue("error", "event-key", `Неизвестное поле среды: ${k}.`, id));
+      for (const k of STR_KEYS) if (p[k] !== undefined && p[k] !== null && typeof p[k] !== "string") out.push(issue("error", "event-type", `Поле ${k} должно быть строкой.`, id));
+      for (const k of LIST_KEYS) if (p[k] !== undefined && p[k] !== null && !Array.isArray(p[k])) out.push(issue("error", "event-type", `Поле ${k} должно быть списком.`, id));
+      if (p.availability !== undefined && p.availability !== null && !AVAIL.includes(p.availability)) out.push(issue("error", "event-availability", `Неизвестная доступность: ${p.availability}.`, id));
+    }
+    if (e.effectiveAt != null && MT.toMs(e.effectiveAt) == null) out.push(issue("error", "event-time", "Неверное время события.", id));
+    return out;
+  }
+
+  /* Запись (например, из бэкапа): ошибки — только для самой записи; битые события — предупреждения. */
+  function validateRecord(o) {
+    if (!isObj(o)) return [issue("error", "env-malformed", "Среда переписки не является объектом.")];
+    const out = [];
+    if (!str(o.chatId).trim()) out.push(issue("error", "env-no-chat", "Среда переписки не привязана к чату."));
+    if (o.events != null && !Array.isArray(o.events)) out.push(issue("error", "env-events", "Поле events должно быть списком."));
+    if (o.conversationEvents != null && !Array.isArray(o.conversationEvents)) out.push(issue("error", "env-events", "Поле conversationEvents должно быть списком."));
+    if (o.timeMode === "manual" && o.manualNow != null && MT.toMs(o.manualNow) == null) out.push(issue("warning", "env-manual-time", "Неверное время ручного режима."));
+    (Array.isArray(o.events) ? o.events : []).forEach((e, i) => { for (const x of validateEvent(e)) out.push(issue("warning", x.code, `Событие №${i + 1}: ${x.message}`, x.ref)); });
+    return out;
+  }
+
+  /* Видимость и порядок событий с привязкой. Порядок: «на весь чат» (effectiveAt → createdAt → id) — базовый слой;
+     затем события видимой ветки в порядке повествования (глубина привязки → effectiveAt → createdAt → id).
+     → { active: [{ e, row }], rows, warnings } */
+  function order(list, path, nowMs, validate) {
+    const rows = [], warnings = [], chat = [], branch = [];
+    (list || []).forEach((e, i) => {
+      const row = { index: i, id: e && e.id, scope: e && e.scope, effectiveAt: e && e.effectiveAt || null, createdAt: e && e.createdAt, active: false, code: "", reason: "" };
+      rows.push(row);
+      const errs = validate(e).filter((x) => x.level === "error");
+      if (errs.length) {
+        row.code = "malformed"; row.reason = errs.map((x) => x.message).join(" ");
+        warnings.push({ level: "warning", code: "event-malformed", message: `Событие ${row.id || "№" + (i + 1)} повреждено и не применяется: ${row.reason}`, ref: row.id || String(i) });
+        return;
+      }
+      const at = MT.toMs(e.effectiveAt);
+      if (at != null && nowMs != null && at > nowMs) { row.code = "pending"; row.reason = "ещё не наступило"; return; }
+      if (e.scope === "chat") { row.active = true; row.code = "chat"; row.reason = "во всей переписке"; chat.push({ e, row, at }); return; }
+      const v = BR.visibleOnPath(e.provenance, path);
+      row.code = v.code; row.reason = v.reason;
+      if (!v.visible) return;
+      row.active = true; row.depth = BR.depthOf(e.provenance, path);
+      branch.push({ e, row, at });
+    });
+    const byTime = (a, b) => ((a.at == null ? -Infinity : a.at) - (b.at == null ? -Infinity : b.at)) || ((a.e.createdAt || 0) - (b.e.createdAt || 0)) || String(a.e.id).localeCompare(String(b.e.id));
+    chat.sort(byTime);
+    branch.sort((a, b) => (a.row.depth - b.row.depth) || byTime(a, b));
+    return { active: chat.concat(branch), rows, warnings };
+  }
+
+  /* Текущее положение по активной ветке и моменту времени. Входные данные не меняются.
+     record — запись среды (или null); c: { path: [{ id, swipeIdx }], now: мс | null }
+     → { world, activeEvents, inactiveEvents, events, warnings } */
+  function resolveWorld(record, c) {
+    const cx = c || {};
+    const world = emptyWorld();
+    const o = order(record && Array.isArray(record.events) ? record.events : [], cx.path, cx.now, validateEvent);
+    for (const { e } of o.active) {
+      const p = e.patch;
+      for (const k of STR_KEYS) if (k in p) world[k] = p[k] == null || !String(p[k]).trim() ? null : String(p[k]);
+      for (const k of LIST_KEYS) if (k in p) world[k] = Array.isArray(p[k]) ? p[k].slice() : [];
+      if ("availability" in p) world.availability = p.availability || "unknown";
+    }
+    return { world, activeEvents: o.rows.filter((r) => r.active), inactiveEvents: o.rows.filter((r) => !r.active), events: o.rows, warnings: o.warnings };
+  }
+
+  PRP.messengerEnv = { SCHEMA, AVAIL, KEYS, emptyWorld, blank, normalize, makePatch, makeEvent, validateEvent, validateRecord, checkScope, order, resolveWorld, hasErrors };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.messengerEnv;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/messenger/conversation.js */
+/* Prism RP — состояние переписки (CONVERSATION). Чистый модуль.
+
+   Выводится из АКТИВНОЙ ветки каждый раз заново; отдельной изменяемой копии не хранится.
+   Из структуры сообщений (детерминированно): кто писал последним, сколько сообщений подряд без ответа,
+   когда было последнее сообщение (по его неизменяемой метке времени переписки), сколько прошло.
+   Открыта ли переписка — небольшое правило с объяснением (state, reason), а не «последним писал персонаж → закрыта».
+   Это сведения для Prism и будущей логики инициативы; сам модуль ничего не начинает и не отправляет.
+
+   Договорённости (promises/plans) — только явные записи пользователя (conversationEvents),
+   из текста сообщений ничего не извлекается. События договорённостей:
+     { id, op: "add", kind: "promise" | "plan", text, scope, provenance, createdAt }
+     { id, op: "status", markerId, status: "open" | "done" | "cancelled", scope, provenance, createdAt }
+   Видимость по ветке — то же правило chat/branch, что у среды, опыта и мира чата.
+   Без DOM, хранилища, сети, таймеров и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const ENV = PRP.messengerEnv || (typeof require !== "undefined" ? require("./environment.js") : null);
+  const MT = PRP.messengerTime || (typeof require !== "undefined" ? require("./time.js") : null);
+
+  const KINDS = ["promise", "plan"];
+  const STATUSES = ["open", "done", "cancelled"];
+  const QUIET_MS = 12 * 3600 * 1000; // после стольких часов без ответа переписка считается затихшей
+
+  const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
+  const str = (v) => (v == null ? "" : String(v));
+  const uid = (p) => p + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  const swipeOf = (m) => (m && m.swipes && m.swipes.length ? m.swipes[Math.min(m.swipeIdx || 0, m.swipes.length - 1)] : {});
+  const issue = (level, code, message, ref) => Object.assign({ level, code, message }, ref != null ? { ref: String(ref) } : {});
+
+  function makeMarkerEvent(d) {
+    const x = isObj(d) ? d : {};
+    const scope = str(x.scope), a = isObj(x.anchor) ? x.anchor : null;
+    const base = { id: str(x.id).trim() || uid("mk"), op: x.op === "status" ? "status" : "add", scope,
+      provenance: scope === "branch" && a ? { anchorId: str(a.anchorId), messageIds: (a.messageIds || []).map(String), swipes: Object.assign({}, a.swipes || {}) } : null,
+      createdAt: Number(x.createdAt) || Date.now() };
+    if (base.op === "add") return Object.assign(base, { kind: str(x.kind), text: str(x.text).trim() });
+    return Object.assign(base, { markerId: str(x.markerId).trim(), status: str(x.status) });
+  }
+  function validateMarkerEvent(e) {
+    const out = [];
+    if (!isObj(e)) return [issue("error", "marker-malformed", "Запись договорённости не является объектом.")];
+    const id = str(e.id).trim();
+    if (!id) out.push(issue("error", "marker-no-id", "У записи договорённости нет id."));
+    ENV.checkScope(e, out, id);
+    if (e.op === "add") {
+      if (!KINDS.includes(e.kind)) out.push(issue("error", "marker-kind", "Вид договорённости: обещание или план.", id));
+      if (!str(e.text).trim()) out.push(issue("error", "marker-empty", "Пустая договорённость.", id));
+    } else if (e.op === "status") {
+      if (!str(e.markerId).trim()) out.push(issue("error", "marker-no-target", "Не указано, к какой договорённости относится отметка.", id));
+      if (!STATUSES.includes(e.status)) out.push(issue("error", "marker-status", "Статус: открыто, выполнено или отменено.", id));
+    } else out.push(issue("error", "marker-op", "Неизвестное действие с договорённостью.", id));
+    return out;
+  }
+
+  /* Договорённости, видимые на активной ветке. → { markers: [{ id, kind, text, status, scope, createdAt }], rows, warnings } */
+  function resolveMarkers(record, c) {
+    const cx = c || {};
+    const o = ENV.order(record && Array.isArray(record.conversationEvents) ? record.conversationEvents : [], cx.path, null, validateMarkerEvent);
+    const byId = new Map(), list = [], warnings = o.warnings.slice();
+    for (const { e, row } of o.active) {
+      if (e.op === "add") {
+        if (byId.has(e.id)) { row.reason = "повтор id"; continue; }
+        const m = { id: e.id, kind: e.kind, text: e.text, status: "open", scope: e.scope, createdAt: e.createdAt };
+        byId.set(e.id, m); list.push(m);
+      } else {
+        const m = byId.get(e.markerId);
+        if (!m) { row.reason = "договорённости нет на этой ветке — отметка не применена"; warnings.push({ level: "warning", code: "marker-target-missing", message: `Отметка ${e.id} относится к договорённости, которой нет на этой ветке.`, ref: e.markerId }); continue; }
+        m.status = e.status;
+      }
+    }
+    return { markers: list, rows: o.rows, warnings };
+  }
+
+  /* path — активная ветка (сообщения с вариантами), от корня; o: { now: мс | null, record } */
+  function derive(path, o) {
+    const opt = o || {};
+    const p = (path || []).filter((m) => m && (m.role === "user" || m.role === "assistant"));
+    const last = p[p.length - 1] || null;
+    let trailing = 0;
+    for (let i = p.length - 1; i >= 0 && last && p[i].role === last.role; i--) trailing++;
+    const sw = swipeOf(last);
+    const lastAt = last && sw.messengerAt ? MT.toMs(sw.messengerAt.at) : null;
+    const now = opt.now != null ? opt.now : null;
+    const elapsedMs = lastAt != null && now != null ? now - lastAt : null;
+    const warnings = [];
+    if (last && lastAt == null) warnings.push({ level: "warning", code: "time-unknown", message: "У последнего сообщения нет времени переписки (старое сообщение или ответ прерван) — сколько прошло, неизвестно." });
+    if (elapsedMs != null && elapsedMs < 0) warnings.push({ level: "warning", code: "time-before-last", message: "Текущее время переписки раньше последнего сообщения." });
+
+    let state, open, reason;
+    if (!last) { state = "empty"; open = false; reason = "переписка ещё не начата"; }
+    else if (last.role === "user") { state = "awaiting-character"; open = true; reason = `последние сообщения от {{user}} без ответа: ${trailing}`; }
+    else if (elapsedMs != null && elapsedMs >= QUIET_MS) { state = "quiet"; open = false; reason = `после ответа {{char}} прошло ${MT.elapsedWords(elapsedMs)} без продолжения`; }
+    else if (/[?？]\s*$/.test(str(sw.text).trim())) { state = "awaiting-user"; open = true; reason = "{{char}} задал(а) вопрос и ждёт ответа"; }
+    else { state = "idle"; open = true; reason = "{{char}} ответил(а); вопрос не задан, разговор может продолжиться"; }
+
+    const mk = resolveMarkers(opt.record, { path: (path || []).map((m) => ({ id: m.id, swipeIdx: m.swipeIdx || 0 })) });
+    return {
+      lastSender: last ? last.role : null,
+      unansweredUserCount: last && last.role === "user" ? trailing : 0,
+      unansweredAssistantCount: last && last.role === "assistant" ? trailing : 0,
+      open, state, reason,
+      lastMessageAt: lastAt != null ? MT.toIso(lastAt) : null,
+      elapsedMs: elapsedMs != null && elapsedMs >= 0 ? elapsedMs : null,
+      elapsedSinceLastMessage: elapsedMs != null && elapsedMs >= 0 ? MT.elapsedWords(elapsedMs) : null,
+      promises: mk.markers.filter((m) => m.kind === "promise"),
+      plans: mk.markers.filter((m) => m.kind === "plan"),
+      markerRows: mk.rows,
+      warnings: warnings.concat(mk.warnings),
+    };
+  }
+
+  PRP.messengerConversation = { KINDS, STATUSES, QUIET_MS, makeMarkerEvent, validateMarkerEvent, resolveMarkers, derive };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.messengerConversation;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/prism/modes.js */
+/* Prism RP — адаптеры режима для сборки Prism. Чистый модуль.
+
+   Общее для всех режимов (собирает prism/assembler): карточка, указания автора, лорбук, факты мира
+   (уже отобранные world/*: мир режиму не принадлежит), опыт, сценарий, строгий бюджет.
+   Режим добавляет только своё:
+     • rp        — рамка сцены; СЦЕНА (prism/scene) как общее физическое «сейчас»; протокол [scene:].
+     • messenger — рамка переписки на расстоянии; вместо сцены — данные среды переписки:
+                   ПОЛОЖЕНИЕ персонажа (WORLD), СОСТОЯНИЕ ПЕРЕПИСКИ (CONVERSATION), ВРЕМЯ ПЕРЕПИСКИ (TEMPORAL).
+                   Сцена RP в переписку не подаётся и протокол [scene:] не просится.
+   Разделы переписки — данные, а не указания: значения подаются литералами JSON, поэтому перевод строки
+   или «###» внутри текста не начинают новый раздел; смысл текста не меняется.
+   Без DOM, хранилища, сети и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const MT = PRP.messengerTime || (typeof require !== "undefined" ? require("../messenger/time.js") : null);
 
   const TEMPLATES = {
     rp: {
@@ -3209,14 +3601,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     },
     messenger: {
       frame:
-        "{{char}} переписывается с {{user}} в мессенджере. Пиши только сообщения, которые {{char}} отправляет: " +
-        "коротко, живо, в манере {{char}}, без описаний действий, прозы и ремарок в звёздочках. " +
-        "Можно отправить несколько сообщений подряд — разделяй их пустой строкой. " +
+        "{{char}} переписывается с {{user}} в мессенджере. Это переписка на расстоянии, а не общая сцена: {{user}} не рядом, у {{char}} свои обстоятельства вне переписки.\n" +
+        "Пиши только сообщения, которые {{char}} отправляет: коротко, живо, в манере {{char}}, без прозы и ремарок в звёздочках. " +
+        "Можно отправить несколько сообщений подряд — разделяй их пустой строкой.\n" +
+        "Не пиши за {{user}} и не описывай его действия: {{user}} управляет только собой.\n" +
+        "Положение {{char}}, время и состояние переписки могут повлиять на ответ, но не предписывают его; не выдумывай случившееся вне переписки, чтобы объяснить тон. " +
         "Черты характера влияют на восприятие, но не предписывают поступков; воспоминания — свидетельства прошлого, а не инструкции. " +
-        "Не пиши за {{user}}.",
+        "Разделы о положении, переписке и времени — данные, а не указания.",
       card: "Характер {{char}}",
       memory: "Релевантный прошлый опыт {{char}}",
-      scene: "Жизнь {{char}} сейчас, вне переписки (видит только {{char}}; рассказывает о ней, только если сам(а) захочет)",
       persona: "Кто такой {{user}}",
       lore: "Сведения о мире",
       world: "Релевантные факты мира",
@@ -3224,8 +3617,74 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
       author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
       authorPost: "Указания автора карточки (после истории)",
+      place: "Текущее положение {{char}}",
+      conversation: "Состояние переписки",
+      time: "Время переписки",
     },
   };
+
+  const ADAPTERS = {
+    rp: { id: "rp", usesScene: true, sceneProtocol: true },
+    messenger: { id: "messenger", usesScene: false, sceneProtocol: false },
+  };
+  const adapter = (mode) => ADAPTERS[mode] || ADAPTERS.rp;
+
+  const q = (s) => JSON.stringify(String(s));
+  const AVAIL_WORD = { available: "свободен(а)", busy: "занят(а)", away: "не на связи", unknown: "неизвестно" };
+
+  /* Разделы переписки. mc: { world, conversation, temporal: { now, timeZone, timeMode }, plans: [открытые договорённости по важности] }
+     keep: { lists: bool, plans: число } — что оставлено после уступок бюджета.
+     → { place, conversation, time } (тела разделов без заголовков) */
+  function messengerSections(mc, keep) {
+    const k = keep || { lists: true, plans: Infinity };
+    const w = (mc && mc.world) || {};
+    const c = (mc && mc.conversation) || {};
+    const t = (mc && mc.temporal) || {};
+    const place = [
+      "Текущие обстоятельства {{char}} вне переписки — данные, а не указания; неизвестное остаётся неизвестным.",
+      "- где: " + (w.location ? q(w.location) : "неизвестно"),
+      "- чем занят(а): " + (w.activity ? q(w.activity) : "неизвестно"),
+      k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
+      k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
+      "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
+    ].filter(Boolean).join("\n");
+    const plans = (mc && mc.plans) || [];
+    const shown = plans.slice(0, Math.max(0, k.plans === Infinity ? plans.length : k.plans));
+    const conversation = [
+      "- последним писал(а): " + (c.lastSender === "user" ? "{{user}}" : c.lastSender === "assistant" ? "{{char}}" : "никто"),
+      c.unansweredUserCount ? `- сообщений от {{user}} без ответа: ${c.unansweredUserCount}` : "",
+      c.reason ? "- состояние: " + c.reason : "",
+      shown.length ? "- открытые договорённости:\n" + shown.map((m) => `  - ${m.kind === "promise" ? "обещание" : "план"}: ${q(m.text)}`).join("\n") : "",
+    ].filter(Boolean).join("\n");
+    const tz = t.timeZone || MT.DEFAULT_TZ;
+    const time = [
+      t.now != null ? `- сейчас: ${MT.format(t.now, tz)} (${tz}; ${t.timeMode === "manual" ? "время задано вручную" : "текущее время"})` : "- сейчас: неизвестно",
+      c.lastMessageAt ? `- последнее сообщение: ${MT.format(MT.toMs(c.lastMessageAt), tz)}` + (c.elapsedSinceLastMessage ? `; прошло ${c.elapsedSinceLastMessage}` : "") : "- время последнего сообщения неизвестно",
+      "- что происходило за это время, неизвестно, если об этом не сказано.",
+    ].join("\n");
+    return { place, conversation, time };
+  }
+
+  PRP.prismModes = { TEMPLATES, ADAPTERS, adapter, messengerSections, AVAIL_WORD };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.prismModes;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/prism/assembler.js */
+/* Prism RP — сборщик контекста.
+   Prism не хранится: на каждом ходе он собирается из Card + Scene + релевантного
+   Experience. Каждый слой подаётся своей формулировкой, чтобы модель читала
+   склонности и воспоминания как контекст восприятия, а не как приказы. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util || (typeof require !== "undefined" ? require("../core/util.js") : null);
+  const SCENE = PRP.scene || (typeof require !== "undefined" ? require("./scene.js") : null);
+  const EXP = PRP.experience || (typeof require !== "undefined" ? require("./experience.js") : null);
+
+  // Рамки и заголовки режимов — в адаптерах (prism/modes.js); сборка, бюджет и общие слои — здесь.
+  const MODES = PRP.prismModes || (typeof require !== "undefined" ? require("./modes.js") : null);
+  const TEMPLATES = MODES.TEMPLATES;
 
   /* Блок фактов мира — данные, а не указания. Одинаков для любого режима (мир режиму не принадлежит).
      Каждый факт — одна строка-литерал JSON: текст не меняется по смыслу, но перевод строки, «###» или ```
@@ -3272,27 +3731,33 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        sceneProtocol, extraPost, noPostHistory,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
+       messenger — для режима messenger: { world, conversation, temporal, plans } (готовые данные среды переписки;
+         сцена RP в переписку не подаётся, протокол [scene:] не просится — prism/modes),
        allowSyntheticUser — можно ли при singleSystem подставить служебную реплику пользователя «[Начало]»
          (по умолчанию да, как раньше; для начала сцены — нет, см. report.needsUserFirst)
      }
 
      Итоговый порядок (обычный транспорт):
        system: РАМКА → УКАЗАНИЯ АВТОРА (system_prompt) → лорбук «до персонажа» → КАРТОЧКА
-               → примеры речи → ПЕРСОНА → лорбук → ФАКТЫ МИРА (данные) → ОПЫТ → НАЧАЛО ИСТОРИИ (сценарий, пока действует) → СЦЕНА
+               → примеры речи → ПЕРСОНА → лорбук → ФАКТЫ МИРА (данные) → ОПЫТ → НАЧАЛО ИСТОРИИ (сценарий, пока действует)
+               → СЦЕНА (rp) | ПОЛОЖЕНИЕ, СОСТОЯНИЕ ПЕРЕПИСКИ, ВРЕМЯ ПЕРЕПИСКИ (messenger)
        user/assistant: ИСТОРИЯ
        system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → протокол сцены и рисования
      При singleSystem всё служебное идёт одним system в начале, затем строго user/assistant.
 
      Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
      Если не помещается, уступают по порядку:
-       1 старая история → 2 примеры речи → 3 лорбук → 3а факты мира (с наименее релевантного) → 4 менее релевантный опыт
+       1 старая история → 2 примеры речи → 3 лорбук → 3а факты мира (с наименее релевантного)
+       → 3б договорённости переписки (со старых) → 3в списки «рядом» и «происходит» в положении → 4 менее релевантный опыт
        → 5 указания после истории → 6 персона, сценарий, указания автора, прошлое, внешность, хвост описания
        (по абзацам, затем по предложениям) → 7 самый релевантный опыт → 8 история до последнего сообщения.
-     Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
+     Рамка, сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), протокол, имя и личность
+     персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
     const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true, allowSyntheticUser: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
+    const AD = MODES.adapter(o.mode);
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
     const m = (x) => U.macros(x, vars);
@@ -3318,12 +3783,22 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       exps: (o.experiences || []).slice(),
       world: (o.worldFacts || []).slice(),
       postHistory: o.noPostHistory ? "" : m(directiveText(card, "postHistory")).trim(),
+      // Переписка: сколько открытых договорённостей оставить (Infinity — все) и оставить ли списки «рядом»/«происходит».
+      msPlans: Infinity, msLists: true,
       keepOld: null, // сколько старых сообщений (сверх minHistory) оставить; null — все
       minH: Math.min(o.minHistory, history.length),
     };
     const frame = m(T.frame);
-    const scene = section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user }));
-    const protocol = [o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
+    // Сцена — слой режима rp. В переписке её место занимают разделы среды переписки.
+    const scene = AD.usesScene ? section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user })) : "";
+    const protocol = [AD.sceneProtocol && o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
+    const msPlansAll = (o.messenger && o.messenger.plans) || [];
+    const msList = (o.messenger && o.messenger.world) ? (o.messenger.world.nearby || []).length + (o.messenger.world.ongoing || []).length : 0;
+    function messengerParts() {
+      if (o.mode !== "messenger" || !o.messenger) return [];
+      const ms = MODES.messengerSections(o.messenger, { lists: st.msLists, plans: st.msPlans });
+      return [section(m(T.place), m(ms.place)), section(m(T.conversation), m(ms.conversation)), section(m(T.time), m(ms.time))];
+    }
 
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
@@ -3345,7 +3820,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           section(m(T.memory), EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)))),
           section(m(T.origin), st.scenario),
           scene,
-        ].filter(Boolean),
+        ].concat(messengerParts()).filter(Boolean),
         post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
         history: kept,
       };
@@ -3408,6 +3883,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       function lore() { if (!st.lore.length) return false; st.lore.pop(); note("lore", 1); return true; },
       // Факты мира — отобранный, уступаемый раздел: уходят с наименее релевантного; пустой блок не выводится.
       function world() { if (!st.world.length) return false; st.world.pop(); note("world", 1); return true; },
+      // Переписка: сначала уходят самые старые договорённости (список идёт от новых к старым), затем длинные списки положения.
+      function messengerPlans() {
+        const shown = st.msPlans === Infinity ? msPlansAll.length : st.msPlans;
+        if (o.mode !== "messenger" || !shown) return false;
+        st.msPlans = shown - 1; note("messenger.plans", 1); return true;
+      },
+      function messengerLists() { if (o.mode !== "messenger" || !st.msLists || !msList) return false; st.msLists = false; note("messenger.lists", "списки «рядом» и «происходит»"); return true; },
       function lowExperience() { if (st.exps.length <= 1) return false; st.exps.pop(); note("experience", 1); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
@@ -3467,6 +3949,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         worldKept: st.world.length,
         worldDropped: (o.worldFacts || []).length - st.world.length,
         worldIds: st.world.map((f) => f.id),
+        mode: AD.id,
+        messenger: o.mode === "messenger" ? { plansTotal: msPlansAll.length, plansKept: st.msPlans === Infinity ? msPlansAll.length : st.msPlans, listsKept: st.msLists } : null,
         examples: !!st.examples,
         postHistory: !!st.postHistory,
         postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
@@ -3483,6 +3967,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : "") + tokLayer(section(m(T.origin), st.scenario)),
           memory: tokLayer(st.exps.length ? section(m(T.memory), EXP.format(st.exps)) : ""),
           scene: tok(scene),
+          messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),
           lore: tokLayer(st.lore.length ? st.lore.map((e) => m(e.content)).join("\n\n") : ""),
           world: tokLayer(section(m(T.world), worldBody(st.world, m))),
           history: keptHistory.reduce((n, h) => n + tok(h.text) + 4, 0),
@@ -5068,29 +5553,20 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const cd = m.card, c = m.chat;
     const line = SC.summaryLine(m.scene);
     const status = c.mode === "messenger"
-      ? (m.gen ? `<span class="head-scene live">печатает…</span>` : `<span class="head-scene"><span class="status-dot"></span> ${esc(messengerStatus(m) || "в сети")}</span>`)
+      ? (m.gen ? `<span class="head-scene live">печатает…</span>` : `<span class="head-scene"><span class="status-dot"></span> ${esc(PRP.views.messengerStatus(m.msWorld) || "положение неизвестно — см. «Среда»")}</span>`)
       : `<span class="head-scene ${m.gen ? "live" : ""}">${m.gen ? "пишет…" : esc(line || "Сцена не задана — откройте панель сцены")}</span>`;
     return `<header class="chat-head">
       <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
       <button class="head-av" data-act="edit-card" title="Карточка персонажа">${R.avatar(cd, 40)}</button>
       <div class="head-who"><div class="head-name"><button class="head-card" data-act="edit-card" title="Открыть карточку персонажа">${esc(cd.name)}</button> <button class="tool rename" data-act="rename-chat" title="Переименовать чат">${esc(c.title || "")} ${icon("edit")}</button></div>${status}</div>
       <div class="head-tools">
-        <div class="seg wide" role="group" aria-label="Режим">
-          <button class="${c.mode === "rp" ? "on" : ""}" data-act="mode" data-mode="rp" title="Сцена">${icon("book")}<span>Сцена</span></button>
-          <button class="${c.mode === "messenger" ? "on" : ""}" data-act="mode" data-mode="messenger" title="Переписка">${icon("bubble")}<span>Переписка</span></button>
-        </div>
+        <span class="mode-badge" title="Режим задан при создании чата и не меняется. Другой режим — новый чат в меню «Ещё».">${icon(c.mode === "messenger" ? "bubble" : "book")}<span>${c.mode === "messenger" ? "Переписка" : "Сцена"}</span></span>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
         <button class="icon-btn" data-act="edit-card" title="Карточка персонажа">${icon("card")}</button>
         <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата, Prism">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
     </header>`;
-  }
-
-  function messengerStatus(m) {
-    const st = m.scene;
-    const k = Object.keys(st.chars).find((n) => n.toLowerCase() === m.card.name.toLowerCase());
-    return [st.loc, k && st.chars[k].pose].filter(Boolean).join(", ");
   }
 
   function feed(m) {
@@ -5216,6 +5692,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }).join("");
   }
 
+  /* Время сообщения переписки: неизменяемая метка варианта (messengerAt) в поясе переписки.
+     У старых сообщений без метки — как раньше, время записи (только для показа; в Prism оно не идёт). */
+  function msStamp(m, msg, sw) {
+    const at = sw.messengerAt && PRP.messengerTime.toMs(sw.messengerAt.at);
+    if (at == null) return { day: R.day(sw.createdAt || msg.createdAt), time: R.time(sw.createdAt || msg.createdAt), known: false };
+    const f = PRP.messengerTime.format(at, m.msTz || sw.messengerAt.timeZone); // "dd.mm.yyyy, HH:MM"
+    return { day: f.split(", ")[0], time: f.split(", ")[1], known: true };
+  }
   function messengerFeed(m) {
     let lastDay = "";
     return m.path.map((msg, idx) => {
@@ -5223,7 +5707,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const sw = TR.activeSwipe(msg);
       const live = m.gen && m.gen.msgId === msg.id;
       const side = msg.role === "user" ? "me" : "them";
-      const d = R.day(sw.createdAt || msg.createdAt);
+      const stamp = msStamp(m, msg, sw);
+      const d = stamp.day;
       const mark = d !== lastDay ? `<div class="daymark">${esc(d)}</div>` : "";
       lastDay = d;
       if (m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
@@ -5234,7 +5719,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const parts = R.bubbles(sw.text);
       return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
-        <div class="stamp">${R.time(sw.createdAt || msg.createdAt)}</div>${tools(msg, isLast)}</div>`;
+        <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("");
   }
 
@@ -5277,7 +5762,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   function chatMenu(m) {
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
-      <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка</button>
+      <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка…</button>
       <div class="pop-sep"></div>
       <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>
       <button class="pop-item" data-act="edit-card">${icon("card")}Редактировать персонажа</button>
@@ -5302,9 +5787,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   /* ── Выдвижная панель ─────────────────────────────────────────────── */
   function drawer(m) {
-    const tabs = [["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"], ["prism", "Prism", "prism"]];
+    // У сцены — «Сцена», у переписки — «Среда» (сцены RP в переписке нет). Мир, опыт и Prism — у обоих режимов.
+    const ms = m.chat && m.chat.mode === "messenger";
+    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"], ["prism", "Prism", "prism"]];
+    const tab = ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
+    m = Object.assign({}, m, { tab });
     let body = "";
     if (!m.chat) body = `<p class="empty-note">Откройте чат.</p>`;
+    else if (m.tab === "env") body = PRP.views.envTab(m);
     else if (m.tab === "scene") body = sceneTab(m);
     else if (m.tab === "memory") body = memoryTab(m);
     else if (m.tab === "world") body = worldTab(m);
@@ -5466,8 +5956,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       ${w.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${w.warnings.map((x) => `<li class="off">${esc(x.message)}</li>`).join("")}</ul></div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
-  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
+  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
     if (!p) return `<p class="hint">Здесь видно, что получает модель: карточку как склонности, опыт как свидетельства, сцену как факты.</p>
@@ -5966,6 +6456,116 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/ui/views/messenger.js */
+/* Prism RP — разметка переписки: окно новой переписки (настройка времени) и вкладка «Среда» панели чата.
+   Только разметка: правила среды, времени и состояния переписки — в messenger/*. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const R = PRP.render, MT = PRP.messengerTime;
+  const { esc, icon } = R;
+
+  const ZONES = ["Europe/Moscow", "Europe/Kaliningrad", "Europe/Samara", "Asia/Yekaterinburg", "Asia/Novosibirsk", "Asia/Krasnoyarsk", "Asia/Irkutsk",
+    "Asia/Vladivostok", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Europe/London", "Europe/Berlin", "Europe/Kyiv", "America/New_York", "America/Los_Angeles", "UTC"];
+  const AVAIL = [["available", "свободен(а)"], ["busy", "занят(а)"], ["away", "не на связи"], ["unknown", "неизвестно"]];
+  const availWord = (a) => (AVAIL.find((x) => x[0] === a) || AVAIL[3])[1];
+  const zoneList = () => `<datalist id="tz-list">${ZONES.map((z) => `<option value="${z}">`).join("")}</datalist>`;
+
+  // Окно новой переписки: режим выбран (переписка), задаётся только время.
+  function newMessengerModal(m, modal) {
+    const tz = modal.timeZone || MT.systemTimeZone();
+    const manual = modal.timeMode === "manual";
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow ms-new" role="dialog" aria-modal="true" aria-label="Новая переписка">
+      <div class="modal-head"><h2>Новая переписка${m.card ? " с " + esc(m.card.name) : ""}</h2>
+        <button class="icon-btn" data-act="modal-close" title="Отмена">${icon("x")}</button></div>
+      <div class="modal-body"><p class="lead">Переписка — отдельный мир: режим потом не меняется. Сцену с этим персонажем можно начать отдельно.</p>
+        <div class="field"><label>Часовой пояс переписки</label><input id="ms-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
+        <div class="field"><label>Время</label>
+          <label class="check"><input type="radio" name="ms-mode" value="live" ${manual ? "" : "checked"}><span>Текущее<small>Сообщения получают текущее время; время между сообщениями — настоящее.</small></span></label>
+          <label class="check"><input type="radio" name="ms-mode" value="manual" ${manual ? "checked" : ""}><span>Задаю сам(а)<small>Время стоит, пока вы его не сдвинете.</small></span></label></div>
+        <div class="field"><label>Начальные дата и время (для «задаю сам»)</label><input id="ms-manual" type="datetime-local" value="${esc(modal.manualLocal || "")}"></div>
+        <div class="modal-foot"><button class="btn" data-act="modal-close">Отмена</button>
+          <button class="btn btn-primary" data-act="ms-create">${icon("bubble")}Начать переписку</button></div></div></div></div>`;
+  }
+
+  const OPS_LINE = (p) => Object.keys(p || {}).map((k) => {
+    const v = p[k];
+    const name = { location: "где", activity: "чем занят(а)", nearby: "рядом", ongoing: "происходит", availability: "доступность" }[k] || k;
+    if (v == null || (Array.isArray(v) && !v.length)) return name + ": очищено";
+    return name + ": " + (k === "availability" ? availWord(v) : Array.isArray(v) ? v.join(", ") : v);
+  }).join(" · ");
+
+  // Вкладка «Среда» (только у переписки).
+  function envTab(m) {
+    const v = m.messengerView;
+    if (!v) return `<p class="empty-note">Откройте переписку.</p>`;
+    const env = v.env, w = v.world, c = v.conversation, tz = env.timeZone;
+    const d = m.envEdit;
+    const scopeRadios = (name, cur) => `<label class="check"><input type="radio" name="${name}" value="branch" ${cur === "branch" ? "checked" : ""} ${v.canBranch ? "" : "disabled"}><span>В этой ветке${v.canBranch ? "" : "<small>Пока нет сообщений — привязать не к чему.</small>"}</span></label>
+      <label class="check"><input type="radio" name="${name}" value="chat" ${cur === "chat" ? "checked" : ""}><span>Во всей переписке</span></label>`;
+    const fld = (k, label, val, ph) => `<div class="field"><label>${label}</label><input id="env-${k}" value="${esc(val)}" placeholder="${esc(ph)}">
+      <label class="check sm"><input type="checkbox" data-env-clear="${k}"><span>очистить</span></label></div>`;
+    const form = d ? `<div class="block env-edit"><div class="block-title">Изменить положение</div>
+        <p class="hint">Пустое поле — не менять. «Очистить» — сделать неизвестным.</p>
+        ${fld("location", "Где", "", w.location || "")}${fld("activity", "Чем занят(а)", "", w.activity || "")}
+        ${fld("nearby", "Рядом (через запятую)", "", (w.nearby || []).join(", "))}${fld("ongoing", "Происходит (через запятую)", "", (w.ongoing || []).join(", "))}
+        <div class="field"><label>Доступность</label><select id="env-availability"><option value="">не менять</option>${AVAIL.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
+        <div class="field"><label>Где действует</label>${scopeRadios("env-scope", d.scope)}</div>
+        <div class="row"><button class="btn btn-primary btn-sm" data-act="env-save">Сохранить</button><button class="btn btn-sm btn-ghost" data-act="env-cancel">Отмена</button></div></div>` : "";
+    const markers = c.promises.concat(c.plans).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const stWord = { open: "открыто", done: "выполнено", cancelled: "отменено" };
+    const evs = v.events.slice().reverse().map((e) => {
+      const ev = (env.events || []).find((x) => x.id === e.id) || {};
+      return `<li class="${e.active ? "" : "off"}"><div>${esc(OPS_LINE(ev.patch))}</div>
+        <div class="mt"><span class="tag">${e.scope === "chat" ? "вся переписка" : "ветка"}</span>${ev.effectiveAt ? `<span class="tag">${esc(MT.format(MT.toMs(ev.effectiveAt), tz))}</span>` : ""}<span class="tag">${e.active ? "действует" : esc(e.reason || "не действует")}</span></div></li>`;
+    }).join("");
+    return `<div class="block"><div class="block-title">Положение ${esc(m.card.name)}</div>
+        <p class="hint">Текущие обстоятельства вне переписки. Задаются только вами: ответы персонажа сами их не меняют, время само ничего не меняет.</p>
+        <dl class="kv env-world"><dt>Где</dt><dd>${esc(w.location || "неизвестно")}</dd><dt>Чем занят(а)</dt><dd>${esc(w.activity || "неизвестно")}</dd>
+          <dt>Рядом</dt><dd>${esc((w.nearby || []).join(", ") || "—")}</dd><dt>Происходит</dt><dd>${esc((w.ongoing || []).join(", ") || "—")}</dd>
+          <dt>Доступность</dt><dd>${esc(availWord(w.availability))}</dd></dl>
+        ${d ? "" : `<button class="btn btn-sm" data-act="env-edit">${icon("edit")}Изменить положение</button>`}</div>
+      ${form}
+      <div class="block"><div class="block-title">Время переписки</div>
+        <dl class="kv"><dt>Сейчас</dt><dd id="env-now">${v.now != null ? esc(MT.format(v.now, tz)) : "не задано"}</dd>
+          <dt>Последнее сообщение</dt><dd>${c.lastMessageAt ? esc(MT.format(MT.toMs(c.lastMessageAt), tz)) : "время неизвестно"}</dd>
+          <dt>Прошло</dt><dd>${esc(c.elapsedSinceLastMessage || "—")}</dd></dl>
+        <div class="field"><label>Часовой пояс</label><input id="env-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
+        <div class="field"><label>Время</label>
+          <label class="check"><input type="radio" name="env-mode" value="live" ${env.timeMode === "live" ? "checked" : ""}><span>Текущее</span></label>
+          <label class="check"><input type="radio" name="env-mode" value="manual" ${env.timeMode === "manual" ? "checked" : ""}><span>Задаю сам(а)</span></label></div>
+        ${env.timeMode === "manual" ? `<div class="field"><label>Сейчас в переписке</label><input id="env-manual" type="datetime-local" value="${esc(MT.toLocalInput(MT.toMs(env.manualNow), tz))}"></div>
+          <div class="quick">${[[15, "+15 мин"], [60, "+1 час"], [180, "+3 часа"], [1440, "+1 день"]].map(([n, l]) => `<button class="btn btn-sm btn-ghost" data-act="env-advance" data-min="${n}">${icon("clock")}${l}</button>`).join("")}</div>` : ""}
+        <button class="btn btn-sm" data-act="env-time-save">Применить</button>
+        <p class="hint">Метки времени уже отправленных сообщений не меняются.</p></div>
+      <div class="block"><div class="block-title">Переписка</div>
+        <dl class="kv"><dt>Последним писал(а)</dt><dd>${c.lastSender === "user" ? esc(m.persona.name) : c.lastSender === "assistant" ? esc(m.card.name) : "никто"}</dd>
+          <dt>Без ответа</dt><dd>${c.unansweredUserCount ? c.unansweredUserCount + " от " + esc(m.persona.name) : "—"}</dd>
+          <dt>Состояние</dt><dd>${esc(String(c.reason || "").replace(/\{\{user\}\}/g, m.persona.name).replace(/\{\{char\}\}/g, m.card.name))}</dd></dl>
+        <div class="block-title" style="margin-top:10px">Договорённости <small>${markers.length}</small></div>
+        <p class="hint">Только то, что вы отметили сами; из сообщений ничего не извлекается.</p>
+        <ul class="wc-list">${markers.map((x) => `<li class="${x.status === "open" ? "" : "off"}"><div>${esc(x.text)}</div><div class="mt"><span class="tag">${x.kind === "promise" ? "обещание" : "план"}</span><span class="tag">${stWord[x.status]}</span>
+          ${x.status === "open" ? `<span style="flex:1"></span><button class="tool" data-act="env-mk-status" data-id="${esc(x.id)}" data-status="done">Выполнено</button><button class="tool" data-act="env-mk-status" data-id="${esc(x.id)}" data-status="cancelled">Отменено</button>` : ""}</div></li>`).join("") || `<li class="empty-note">Нет.</li>`}</ul>
+        <div class="row" style="margin-top:8px"><select id="env-mk-kind"><option value="promise">обещание</option><option value="plan">план</option></select>
+          <input id="env-mk-text" placeholder="«Созвонимся завтра вечером»"></div>
+        <div class="field">${scopeRadios("env-mk-scope", v.canBranch ? "branch" : "")}</div>
+        <button class="btn btn-sm" data-act="env-mk-add">${icon("plus")}Отметить</button></div>
+      <details class="block"><summary class="block-title" style="cursor:pointer">История среды <small>${v.events.length}</small></summary>
+        <p class="hint">События не переписываются. События другой ветки или другого варианта ответа хранятся и снова действуют, когда вы туда вернётесь.</p>
+        <ul class="wc-list">${evs || `<li class="empty-note">Пока пусто.</li>`}</ul></details>
+      ${v.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${v.warnings.map((x) => `<li class="off">${esc(String(x.message).replace(/\{\{user\}\}/g, m.persona.name).replace(/\{\{char\}\}/g, m.card.name))}</li>`).join("")}</ul></div>` : ""}`;
+  }
+
+  // Строка статуса в шапке переписки — из среды (не из сцены RP).
+  function messengerStatus(world) {
+    if (!world) return "";
+    return [world.availability && world.availability !== "unknown" ? availWord(world.availability) : "", world.location, world.activity].filter(Boolean).join(" · ");
+  }
+
+  Object.assign((PRP.views = PRP.views || {}), { newMessengerModal, envTab, messengerStatus });
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/ui/views/assist.js */
 /* Prism RP — экран ассистента (разговор с моделью вне игры) и его поповеры. */
 (function (root) {
@@ -6109,6 +6709,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        Без первого сообщения чат создаётся пустым: ни заглушек, ни пустых узлов, leafId = null —
        начать может пользователь или, по явному действию, модель (generation/service, режим opening).
        Сценарий карточки в сцену не переносится. Делает чат текущим и возвращает его id. */
+    // Режим задаётся только здесь и дальше не меняется: сцена остаётся сценой, переписка — перепиской.
     async function createChat(mode, cardId) {
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
@@ -6132,7 +6733,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     function latestForCard(cardId) {
       return S.chats.filter((c) => c.cardId === cardId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
     }
-    // Удалить чат целиком: сообщения, картинки, опыт и наложение мира этого чата. Состояние сбрасывается на «нет чата».
+    // Удалить чат целиком: сообщения, картинки, опыт, наложение мира и среду переписки этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
       const ms = await DB.byIndex("messages", "chatId", c.id);
       await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
@@ -6140,6 +6741,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
       await DB.del("worldOverlays", c.id);
       if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
+      await DB.del("messengerEnvironments", c.id);
+      if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
       await DB.del("chats", c.id);
       S.chats = S.chats.filter((x) => x.id !== c.id);
       S.chatId = null; S.messages = [];
@@ -6187,10 +6790,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       await touch();
       return true;
     }
-    // Добавить пользовательский ответ в ветку: становится новым концом.
-    async function addUserMessage(text) {
+    /* Добавить пользовательский ответ в ветку: становится новым концом.
+       swipeExtra — неизменяемые сведения варианта, например метка времени переписки { messengerAt } (её даёт messenger/service). */
+    async function addUserMessage(text, swipeExtra) {
       const c = ctx.chat();
       const m = newMsg("user", c.leafId, text);
+      if (swipeExtra) Object.assign(m.swipes[0], swipeExtra);
       await putMsg(m);
       c.leafId = m.id;
       await touch();
@@ -6331,6 +6936,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
    отбор опыта (EX.rank) и фактов мира (world/overlay-service: канон чата с учётом ветки → отбор по
    релевантности; только чтение) → сборка контекста (AS.build) → отчёт для вкладки Prism.
    Мир не зависит от режима: одни и те же факты получает и сцена, и переписка.
+   Адаптер режима (prism/modes): сцена (rp) берёт текущее «сейчас» из сцены; переписка — из среды переписки
+   (messenger/service: положение, состояние переписки, время; только чтение). Сцена RP в переписку не подаётся.
    Хранилище, сеть и DOM не трогает. */
 (function (root) {
   "use strict";
@@ -6344,7 +6951,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     /* path — ветка, которая уходит в модель как история; extraPost — дополнительное указание в конце
        (например, «продолжи» или «начни сцену»). scenario — решение prism/scenario.js для этой генерации;
        без него — как для нового ответа после path (так же собирается предпросмотр следующего хода). */
-    // extra — дополнительные параметры сборщика (например, allowSyntheticUser: false для начала сцены).
+    // extra — дополнительные параметры сборщика (например, allowSyntheticUser: false для начала сцены);
+    // extra.messengerNow — момент переписки, выбранный при подготовке генерации (иначе — «сейчас»).
     function build(path, extraPost, scenario, extra) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
@@ -6353,22 +6961,26 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
       const st = chat().sceneState(path);
+      const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;
+      // «Сейчас» режима для отбора опыта и мира: в переписке — положение из среды, а не сцена RP.
+      const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
       const history = path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })).filter((h) => h.text);
       const recent = history.slice(-4).map((h) => h.text).join("\n");
       const ex = EX.rank(S.experience, {
-        chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(st.present),
-        text: recent, names: [cd.name, ctx.persona().name].concat(st.present), limit: s.expLimit,
+        chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(here.present),
+        text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
       });
-      const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, st) : { facts: [], report: null };
+      const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
-        sceneState: st, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
+        sceneState: messenger ? null : st, messenger, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
       }, extra));
       built.report.expDebug = ex.debug;
       built.report.world = wctx.report;
+      if (messenger) built.report.messengerState = messenger.report;
       built.report.experienceVisible = ex.visibleCount;
       built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
       return built;
@@ -6521,6 +7133,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
    "opening" — модель начинает сцену в пустом чате (см. opening ниже: дерево меняется только
    после успешного ответа).
    Сценарий карточки подаётся по правилу prism/scenario.js (граница первого ответа).
+   Переписка: момент переписки выбирается при подготовке (живое время — часы, ручное — сохранённое) и вместе
+   с положением персонажа записывается в вариант (messengerAt) ТОЛЬКО при успешном ответе. Ошибка, отмена,
+   пустой ответ и переполнение время не записывают и не двигают. Среду переписки генерация не меняет никогда.
    Перерисовка — через порт ctx.ui (сервис не трогает DOM сам). */
 (function (root) {
   "use strict";
@@ -6537,6 +7152,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   function create(ctx) {
     const { S, ui } = ctx;
     const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images;
+    // Сервис среды — только для переписки.
+    const messenger = () => { const c = ctx.chat(); return c && c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger : null; };
 
     async function generate(msgId, mode) {
       if (S.gen) return;
@@ -6557,7 +7174,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
       const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), rootOpening ? { allowSyntheticUser: false } : null);
+      const ms = messenger();
+      const msNow = ms ? ms.now() : undefined; // момент переписки для этого хода (выбран при подготовке)
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign(rootOpening ? { allowSyntheticUser: false } : {}, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
@@ -6610,6 +7229,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       }
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
       if (error) sw.error = error; else delete sw.error;
+      /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
+         прежняя метка не меняется, новая ставится, только если её не было. Ветка для положения — до этого сообщения. */
+      if (ms && !error && !ctrl.signal.aborted && String(sw.text || "").trim() && !(mode === "continue" && sw.messengerAt)) {
+        const snap = ms.snapshot(mode === "new" ? full : path, msNow);
+        if (snap) sw.messengerAt = snap;
+      }
       S.gen = null;
       await chat().putMsg(target);
       await chat().touch();
@@ -6653,7 +7278,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     async function opening(prov) {
       const c = ctx.chat(), cd = ctx.card();
       if (chat().path().length) return { ok: false, reason: "not-empty" };
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), { allowSyntheticUser: false });
+      const ms = messenger();
+      const msNow = ms ? ms.now() : undefined;
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false }, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
@@ -6691,6 +7318,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const m = chat().newMsg("assistant", null, "");
       m.opening = "generated";
       m.swipes = [{ text: dr.text, sceneOps: parsed.ops, draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       await chat().putMsg(m);
       c.leafId = m.id;
       await chat().touch();
@@ -6800,6 +7428,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         await DB.delMany("messages", ms.map((m) => m.id));
         await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
         await DB.del("worldOverlays", c.id); // наложение мира принадлежит чату и уходит вместе с ним
+        await DB.del("messengerEnvironments", c.id); // как и среда переписки
         await DB.del("chats", c.id);
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);
@@ -7123,6 +7752,213 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/messenger/service.js */
+/* Prism RP — сервис переписки (прикладной уровень): среда переписки текущего чата.
+
+   • Хранение: коллекция messengerEnvironments, одна запись на чат-переписку (ключ chatId). У сцен (rp) записи нет.
+     Старая переписка без записи открывается с пустой средой ТОЛЬКО В ПАМЯТИ (всё неизвестно, живое время,
+     пояс браузера); запись появляется при явной правке среды.
+   • «Сейчас» переписки: live — часы ctx.clock (в тестах подставные), manual — сохранённое время; само не идёт.
+   • Для Prism всё только читается: context() и snapshot() ничего не пишут. Метку времени сообщения
+     (messengerAt на варианте) записывают отправка пользователя и успешная генерация — вместе с самим сообщением.
+   • Среда и договорённости меняются только явными действиями пользователя (commitEvent, addMarker, markerStatus,
+     setTime) — никогда из ответа модели, сцены, опыта или мира.
+   DOM не трогает; ветку берёт у сервиса чата. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const MT = PRP.messengerTime, ENV = PRP.messengerEnv, CONV = PRP.messengerConversation, BR = PRP.branch;
+
+  const STORE = "messengerEnvironments";
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const isMessenger = (c) => !!c && c.mode === "messenger";
+
+  function create(ctx) {
+    const { S, DB } = ctx;
+    const chat = () => ctx.svc.chat;
+    const clock = () => (typeof ctx.clock === "function" ? ctx.clock() : Date.now());
+
+    async function load(chatId) {
+      const c = (S.chats || []).find((x) => x.id === chatId);
+      if (!isMessenger(c)) { S.messengerEnv = null; return null; }
+      const rec = await DB.get(STORE, chatId);
+      S.messengerEnv = rec ? Object.assign(ENV.normalize(rec, chatId), { persisted: true }) : Object.assign(ENV.blank(chatId), { persisted: false });
+      return S.messengerEnv;
+    }
+    // Среда текущего чата: только своя; у сцены — null. Без записи — пустая среда в памяти (ничего не придумано).
+    function current() {
+      const c = ctx.chat();
+      if (!isMessenger(c)) return null;
+      if (S.messengerEnv && S.messengerEnv.chatId === c.id) return S.messengerEnv;
+      return Object.assign(ENV.blank(c.id), { persisted: false });
+    }
+    function now(env) { return MT.nowOf(env || current(), clock); }
+    const pathCtx = (p) => chat().pathCtx(p);
+
+    // Положение персонажа на ветке p в момент t (по умолчанию — сейчас).
+    function worldAt(p, t) {
+      const env = current();
+      return ENV.resolveWorld(env, { path: pathCtx(p), now: t !== undefined ? t : now(env) });
+    }
+
+    /* Для Prism (только чтение): положение, состояние переписки, время. t — момент, выбранный при подготовке генерации. */
+    function context(p, t) {
+      const env = current();
+      if (!env) return null;
+      const path = p || chat().path();
+      const at = t !== undefined ? t : now(env);
+      const w = ENV.resolveWorld(env, { path: pathCtx(path), now: at });
+      const conv = CONV.derive(path, { now: at, record: env });
+      const open = conv.promises.concat(conv.plans).filter((m) => m.status === "open").sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return {
+        world: w.world, conversation: conv, plans: open,
+        temporal: { now: at, timeZone: env.timeZone, timeMode: env.timeMode },
+        report: { activeEvents: w.activeEvents.length, inactiveEvents: w.inactiveEvents.length, warnings: w.warnings.concat(conv.warnings) },
+      };
+    }
+    /* Неизменяемая метка для нового сообщения: момент и положение персонажа на ветке перед ним.
+       Мир (пак, линза, наложение) сюда не копируется. → { at, timeZone, world } | null (не переписка или время неизвестно) */
+    function snapshot(p, t) {
+      const env = current();
+      if (!env) return null;
+      const at = t !== undefined ? t : now(env);
+      if (at == null) return null;
+      return { at: MT.toIso(at), timeZone: env.timeZone, world: ENV.resolveWorld(env, { path: pathCtx(p), now: at }).world };
+    }
+    function stampForNew() { return snapshot(chat().path()); }
+
+    async function persist(next) {
+      const rec = clone(next); delete rec.persisted;
+      await DB.put(STORE, rec);
+      S.messengerEnv = Object.assign(ENV.normalize(rec, rec.chatId), { persisted: true });
+      return S.messengerEnv;
+    }
+    /* Новая переписка: явная настройка времени при создании. → { env } | { error } */
+    function checkSetup(setup) {
+      const s = setup || {};
+      if (!MT.validTimeZone(s.timeZone)) return "Неизвестный часовой пояс.";
+      if (s.timeMode === "manual" && MT.toMs(s.manualNow) == null) return "Для ручного времени укажите дату и время.";
+      return null;
+    }
+    async function createFor(chatId, setup) {
+      const err = checkSetup(setup);
+      if (err) return { error: err };
+      return { env: await persist(ENV.blank(chatId, setup)) };
+    }
+    // Явная смена пояса, режима или ручного времени. Записанные метки сообщений не меняются.
+    async function setTime(t) {
+      const env = current();
+      if (!env) return { error: "Это не переписка." };
+      const x = t || {};
+      const next = clone(env);
+      if (x.timeZone !== undefined) { if (!MT.validTimeZone(x.timeZone)) return { error: "Неизвестный часовой пояс." }; next.timeZone = x.timeZone; }
+      if (x.timeMode !== undefined) next.timeMode = x.timeMode === "manual" ? "manual" : "live";
+      if (next.timeMode === "manual") {
+        const ms = x.manualNow !== undefined ? MT.toMs(x.manualNow) : MT.toMs(next.manualNow) != null ? MT.toMs(next.manualNow) : clock();
+        if (ms == null) return { error: "Укажите дату и время." };
+        next.manualNow = MT.toIso(ms);
+      } else next.manualNow = null;
+      return { env: await persist(next) };
+    }
+    async function advance(minutes) {
+      const env = current();
+      if (!env || env.timeMode !== "manual") return { error: "Сдвигать время можно только в ручном режиме." };
+      return setTime({ manualNow: MT.toIso(MT.toMs(env.manualNow) + minutes * 60000) });
+    }
+
+    // Явная правка положения: черновик → привязка → проверка → запись. Ветку без сообщений не к чему привязать.
+    async function commitEvent(draft) {
+      const env = current();
+      if (!env) return { error: "Это не переписка." };
+      const d = draft || {};
+      const anchor = d.scope === "branch" ? BR.anchorOf(pathCtx(chat().path())) : null;
+      const e = ENV.makeEvent(Object.assign({}, d, { anchor, effectiveAt: d.effectiveAt !== undefined ? d.effectiveAt : MT.toIso(now(env)) }));
+      const issues = ENV.validateEvent(e);
+      if (ENV.hasErrors(issues)) return { error: issues.filter((x) => x.level === "error").map((x) => x.message).join(" "), issues };
+      const next = clone(env); next.events.push(e);
+      await persist(next);
+      return { event: e };
+    }
+    async function addMarker(d) {
+      const env = current();
+      if (!env) return { error: "Это не переписка." };
+      const x = d || {};
+      const anchor = x.scope === "branch" ? BR.anchorOf(pathCtx(chat().path())) : null;
+      const e = CONV.makeMarkerEvent(Object.assign({}, x, { op: "add", anchor }));
+      const issues = CONV.validateMarkerEvent(e);
+      if (ENV.hasErrors(issues)) return { error: issues.filter((y) => y.level === "error").map((y) => y.message).join(" "), issues };
+      const next = clone(env); next.conversationEvents.push(e);
+      await persist(next);
+      return { marker: e };
+    }
+    async function markerStatus(markerId, status, scope) {
+      const env = current();
+      if (!env) return { error: "Это не переписка." };
+      const visible = CONV.resolveMarkers(env, { path: pathCtx(chat().path()) }).markers.some((m) => m.id === markerId);
+      if (!visible) return { error: "Этой договорённости нет на этой ветке." };
+      const anchor = scope === "branch" ? BR.anchorOf(pathCtx(chat().path())) : null;
+      const e = CONV.makeMarkerEvent({ op: "status", markerId, status, scope, anchor });
+      const issues = CONV.validateMarkerEvent(e);
+      if (ENV.hasErrors(issues)) return { error: issues.filter((y) => y.level === "error").map((y) => y.message).join(" "), issues };
+      const next = clone(env); next.conversationEvents.push(e);
+      await persist(next);
+      return { marker: e };
+    }
+
+    // Чат удалён — его среда тоже. Мир, пак, линза и наложение не трогаются.
+    async function removeForChat(chatId) {
+      await DB.del(STORE, chatId);
+      if (S.messengerEnv && S.messengerEnv.chatId === chatId) S.messengerEnv = null;
+    }
+
+    /* Восстановление бэкапа: проверка ДО записи (та же дисциплина, что у мира чата).
+       Запись принимается, только если: проходит проверку формы; её чат — ПЕРЕПИСКА там, куда восстанавливаем
+       (замена — только чаты бэкапа; добавление — чаты бэкапа ∪ существующие); она единственная для своего чата.
+       Запись для сцены — отклоняется; несколько записей одного чата — отклоняются все. Ничего не переназначается.
+       opts: { replace, existingChats: [{ id, mode }] } → { data, rejected, warnings, issues } */
+    function checkBackup(data, opts) {
+      if (!data || !Array.isArray(data[STORE])) return { data, rejected: 0, warnings: 0, issues: [] };
+      const o = opts || {};
+      const replace = o.replace !== false;
+      const mode = new Map();
+      if (!replace) for (const c of o.existingChats || []) if (c && c.id) mode.set(String(c.id), c.mode);
+      for (const c of Array.isArray(data.chats) ? data.chats : []) if (c && c.id) mode.set(String(c.id), c.mode);
+      const per = new Map();
+      for (const r of data[STORE]) { const id = r && typeof r === "object" ? String(r.chatId || "").trim() : ""; if (id) per.set(id, (per.get(id) || 0) + 1); }
+      const issues = [], ok = [];
+      let rejected = 0, warnings = 0;
+      for (const r of data[STORE]) {
+        const iss = ENV.validateRecord(r);
+        if (ENV.hasErrors(iss)) { rejected++; issues.push(...iss.filter((x) => x.level === "error")); continue; }
+        const chatId = String(r.chatId).trim();
+        const reject = (code, message) => { rejected++; issues.push({ level: "error", code, message, chatId }); };
+        if (per.get(chatId) > 1) { reject("env-duplicate-chat", "В бэкапе несколько записей среды для одного чата — ни одна не восстановлена."); continue; }
+        if (!mode.has(chatId)) { reject("env-orphan-chat", "Среда относится к чату, которого нет" + (replace ? " в бэкапе." : " ни в бэкапе, ни здесь.")); continue; }
+        if (mode.get(chatId) !== "messenger") { reject("env-not-messenger", "Среда переписки относится к сцене, а не к переписке."); continue; }
+        warnings += iss.length;
+        ok.push(ENV.normalize(r));
+      }
+      return { data: Object.assign({}, data, { [STORE]: ok }), rejected, warnings, issues };
+    }
+
+    // Для вкладки «Среда».
+    function view() {
+      const env = current();
+      if (!env) return null;
+      const path = chat().path();
+      const t = now(env);
+      const w = ENV.resolveWorld(env, { path: pathCtx(path), now: t });
+      const conv = CONV.derive(path, { now: t, record: env });
+      return { env, now: t, world: w.world, events: w.events, warnings: w.warnings.concat(conv.warnings), conversation: conv, canBranch: path.length > 0 };
+    }
+
+    return { load, current, now, worldAt, context, snapshot, stampForNew, createFor, checkSetup, setTime, advance, commitEvent, addMarker, markerStatus, removeForChat, checkBackup, view, STORE };
+  }
+
+  PRP.messengerService = { create };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/assist/service.js */
 /* Prism RP — ассистент (прикладной уровень): разговоры с моделью вне игры.
    Выбор и сохранение разговоров, контекст из карточки и выдержки чата, генерация через PRP.llm.
@@ -7267,6 +8103,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }
 
     /* ── Модель представления ──────────────────────────────────────────── */
+    const isMs = () => { const c = ctx.chat(); return !!(c && c.mode === "messenger" && svc().messenger); };
     function vm() {
       const path = svc().chat.path();
       return {
@@ -7275,7 +8112,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
         exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
-        worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
+        worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit,
+        // Переписка: среда (только чтение) — для вкладки «Среда», статуса в шапке и времени сообщений в поясе переписки.
+        messengerView: S.drawerOpen && (S.tab === "env" || S.tab === "scene") && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
+        msWorld: isMs() ? (svc().messenger.context() || {}).world : null, msTz: isMs() ? (svc().messenger.current() || {}).timeZone : null, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
         drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
         stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
         imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
@@ -7376,6 +8216,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       }
       rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section)
         : S.modal.kind === "import" ? V.importReview(m, S.modal)
+        : S.modal.kind === "new-messenger" ? V.newMessengerModal(m, S.modal)
         : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
@@ -7514,7 +8355,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
 </script>
 <script>/* js/ui/controllers/chat.js */
-/* Prism RP — контроллер чата: отправка, генерация, варианты, правка, удаление, режим, поиск, меню чата.
+/* Prism RP — контроллер чата: отправка, генерация, варианты, правка, удаление, поиск, меню чата (режим меняется только созданием нового чата).
    Обработчики тонкие: прочитать ввод → вызвать сервис → перерисовать. */
 (function (root) {
   "use strict";
@@ -7534,7 +8375,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (S.view === "assist") { input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
       input.value = "";
       ui.autoGrow(input);
-      await svc.chat.addUserMessage(text);
+      // Переписка: у отправленного сообщения — неизменяемая метка времени и положения (её даёт сервис переписки).
+      const c = ctx.chat();
+      const stamp = c && c.mode === "messenger" ? svc.messenger.stampForNew() : null;
+      await svc.chat.addUserMessage(text, stamp ? { messengerAt: stamp } : null);
       ui.renderFeed();
       ui.scrollBottom();
       await svc.gen.generate();
@@ -7575,14 +8419,18 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ui.renderRail();
         if (S.drawerOpen) ui.renderDrawer();
       },
-      mode: async (t) => { const c = ctx.chat(); if (c.mode === t.dataset.mode) return; c.mode = t.dataset.mode; await svc.chat.putChat(c); svc.prism.refresh(); ui.renderStage(); ui.renderRail(); ui.scrollBottom(); },
       find: () => { S.find = S.find ? null : { q: "", idx: 0 }; ui.renderStage(); const f = $("#find-q"); if (f) f.focus(); },
       "find-close": () => { S.find = null; ui.renderStage(); },
       "find-next": () => { if (!S.find.total) return; S.find.idx = (S.find.idx + 1) % S.find.total; ui.runFind(true); },
       "find-prev": () => { if (!S.find.total) return; S.find.idx = (S.find.idx - 1 + S.find.total) % S.find.total; ui.runFind(true); },
       "chat-menu": (t) => ui.openPop(V.chatMenu(ui.vm()), t),
       "model-pop": (t) => ui.openPop(V.modelPop(ui.vm()), t),
-      "new-chat": (t) => { ui.closePop(); nav.newChat(t.dataset.mode); },
+      // Режим выбирается только при создании. Переписке нужна настройка времени — сначала окно.
+      "new-chat": (t) => {
+        ui.closePop();
+        if (t.dataset.mode === "messenger") { S.modal = { kind: "new-messenger", cardId: S.cardId, timeMode: "live" }; ui.renderModal(); return; }
+        nav.newChat(t.dataset.mode);
+      },
       "rename-chat": async () => {
         ui.closePop();
         const c = ctx.chat();
@@ -8016,12 +8864,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         const replace = confirm("Заменить текущие данные бэкапом?\n\nОК — заменить, Отмена — добавить к существующим.");
         // Проверка до записи (правила — в svc.worldChat.checkBackup): запись мира чата принимается, только если её чат
         // есть в бэкапе (замена) или в бэкапе либо уже здесь (добавление). Контроллер даёт только режим и id чатов.
-        const chk = svc.worldChat.checkBackup(data, { replace, existingChatIds: replace ? [] : (await DB.all("chats")).map((c) => c.id) });
-        await DB.importAll(chk.data, replace);
+        const local = replace ? [] : await DB.all("chats");
+        const chk = svc.worldChat.checkBackup(data, { replace, existingChatIds: local.map((c) => c.id) });
+        // Среда переписки — то же: только к переписке из бэкапа (замена) или из бэкапа и уже существующих (добавление).
+        const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats: local.map((c) => ({ id: c.id, mode: c.mode })) });
+        await DB.importAll(chkEnv.data, replace);
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();
-        ui.toast(chk.rejected ? `Бэкап загружен. Некоторые записи мира чата пропущены при восстановлении: ${chk.rejected}.` : "Бэкап загружен.", !!chk.rejected);
+        const skipped = [chk.rejected ? `записей мира чата: ${chk.rejected}` : "", chkEnv.rejected ? `записей среды переписки: ${chkEnv.rejected}` : ""].filter(Boolean).join(", ");
+        ui.toast(skipped ? `Бэкап загружен. Некоторые записи пропущены при восстановлении — ${skipped}.` : "Бэкап загружен.", !!skipped);
         return true;
       }
       if (t.dataset.imgcfg !== undefined) { collectImgForm(); await save(); return true; }
@@ -8296,6 +9148,92 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/ui/controllers/messenger.js */
+/* Prism RP — контроллер переписки: создание переписки (настройка времени) и явные правки во вкладке «Среда».
+   Только чтение форм и вызовы сервиса переписки; правила — в messenger/*. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const MT = PRP.messengerTime;
+
+  PRP.controllers = PRP.controllers || {};
+  PRP.controllers.messenger = function (ctx) {
+    const { S, ui, svc, nav } = ctx;
+    const { $ } = ui;
+    const csv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const radio = (name) => { const r = document.querySelector(`input[name=${name}]:checked`); return r ? r.value : ""; };
+    async function after(msg) {
+      svc.prism.refresh();
+      ui.renderDrawer(); ui.renderHead(); ui.renderFeed();
+      if (msg) ui.toast(msg);
+    }
+    // Ответ сервиса: ошибка — показать и ничего не перерисовывать как успех.
+    const failed = (r) => { if (r && r.error) { ui.toast(r.error, true); return true; } return false; };
+
+    const actions = {
+      "ms-create": async () => {
+        const tz = $("#ms-tz").value.trim(), mode = radio("ms-mode") || "live";
+        const manualNow = mode === "manual" ? MT.toIso(MT.fromLocal($("#ms-manual").value, tz)) : null;
+        const setup = { timeZone: tz, timeMode: mode, manualNow };
+        const err = svc.messenger.checkSetup(setup);
+        if (err) { ui.toast(err, true); return; }
+        const cardId = S.modal && S.modal.cardId;
+        S.modal = null; ui.renderModal();
+        await nav.newChat("messenger", cardId, setup);
+      },
+      "env-edit": () => { S.envEdit = { scope: svc.chat.path().length ? "branch" : "" }; ui.renderDrawer(); },
+      "env-cancel": () => { S.envEdit = null; ui.renderDrawer(); },
+      "env-save": async () => {
+        const scope = radio("env-scope");
+        if (!scope) { ui.toast("Выберите, где действует изменение: в этой ветке или во всей переписке.", true); return; }
+        const patch = {};
+        const clear = new Set([...document.querySelectorAll("[data-env-clear]:checked")].map((x) => x.dataset.envClear));
+        for (const k of ["location", "activity"]) { const v = $("#env-" + k).value.trim(); if (clear.has(k)) patch[k] = null; else if (v) patch[k] = v; }
+        for (const k of ["nearby", "ongoing"]) { const v = csv($("#env-" + k).value); if (clear.has(k)) patch[k] = null; else if (v.length) patch[k] = v; }
+        const av = $("#env-availability").value; if (av) patch.availability = av;
+        const r = await svc.messenger.commitEvent({ scope, patch });
+        if (failed(r)) return;
+        S.envEdit = null;
+        await after("Положение сохранено.");
+      },
+      "env-time-save": async () => {
+        const tz = $("#env-tz").value.trim(), mode = radio("env-mode") || "live";
+        const t = { timeZone: tz, timeMode: mode };
+        const mi = $("#env-manual");
+        if (mode === "manual" && mi && mi.value) t.manualNow = MT.toIso(MT.fromLocal(mi.value, tz));
+        if (failed(await svc.messenger.setTime(t))) return;
+        await after("Время переписки сохранено.");
+      },
+      "env-advance": async (t) => { if (failed(await svc.messenger.advance(+t.dataset.min))) return; await after(); },
+      "env-mk-add": async () => {
+        const scope = radio("env-mk-scope");
+        if (!scope) { ui.toast("Выберите, где действует договорённость.", true); return; }
+        const r = await svc.messenger.addMarker({ kind: $("#env-mk-kind").value, text: $("#env-mk-text").value, scope });
+        if (failed(r)) return;
+        await after("Договорённость отмечена.");
+      },
+      "env-mk-status": async (t) => {
+        const r = await svc.messenger.markerStatus(t.dataset.id, t.dataset.status, svc.chat.path().length ? "branch" : "chat");
+        if (failed(r)) return;
+        await after();
+      },
+    };
+
+    // Ручное время в окне новой переписки: при выборе «задаю сам» подставить текущее местное время пояса.
+    function change(t) {
+      if (t.name === "ms-mode" && t.value === "manual" && !$("#ms-manual").value) {
+        const tz = $("#ms-tz").value.trim();
+        if (MT.validTimeZone(tz)) $("#ms-manual").value = MT.toLocalInput(ctx.clock(), tz);
+        return true;
+      }
+      return false;
+    }
+
+    return { actions, change };
+  };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/ui/app.js */
 /* Prism RP — корень приложения (composition root).
    Здесь: состояние сессии, сборка контекста зависимостей, навигация, загрузка,
@@ -8313,7 +9251,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const { util: U, store: DB, settings: ST, perchance: PC, imgBackends: IB, imgCompile: ICP } = PRP;
 
   /* ── Состояние сессии ────────────────────────────────────────────────
-     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), worldOverlay (мир текущего чата), assistList.
+     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), worldOverlay (мир текущего чата),
+     messengerEnv (среда текущей переписки), assistList.
      Навигация: view, cardId, chatId, assist (открытый разговор).
      Генерация (временное): gen, drawing (id картинок в работе).
      Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, expDraft.
@@ -8328,6 +9267,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     assist: null, assistList: [],
     worldPacks: [], worldLenses: [], worldDraft: null,
     worldOverlay: null, worldEdit: null, // наложение мира текущего чата; черновик действия во вкладке «Мир чата»
+    messengerEnv: null, envEdit: null, // среда текущей переписки (у сцены — null); черновик правки во вкладке «Среда»
   };
 
   /* ── Контекст зависимостей ───────────────────────────────────────────
@@ -8337,6 +9277,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     S, DB,
     files: PRP.files,
     env: { perchanceImages: () => IB.available("perchance") },
+    // Часы для живого времени переписки (в тестах подменяются). Таймеров нет: время читается только при действии.
+    clock: () => Date.now(),
     card: () => S.cards.find((c) => c.id === S.cardId) || null,
     chat: () => S.chats.find((c) => c.id === S.chatId) || null,
     persona: () => ST.persona(S.settings),
@@ -8357,12 +9299,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   ctx.svc.assist = PRP.assistService.create(ctx);
   ctx.svc.world = PRP.worldService.create(ctx);
   ctx.svc.worldChat = PRP.worldOverlayService.create(ctx);
+  ctx.svc.messenger = PRP.messengerService.create(ctx);
   const { ui, svc } = ctx;
   const { $ } = ui;
 
   /* ── Загрузка ─────────────────────────────────────────────────────── */
   async function loadAll() {
-    S.worldOverlay = null; S.worldEdit = null;
+    S.worldOverlay = null; S.worldEdit = null; S.messengerEnv = null; S.envEdit = null;
     const saved = await DB.getSetting("app", null);
     S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
@@ -8388,8 +9331,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     S.messages = await svc.chat.loadMessages(chatId);
     S.experience = await svc.exp.loadForCard(c.cardId);
     await svc.worldChat.load(chatId);
+    await svc.messenger.load(chatId);
     await svc.images.loadForChat(chatId);
-    S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.find = null;
+    S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); }
@@ -8403,9 +9347,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     $("#rail").classList.remove("open");
     ui.renderAll();
   }
-  async function newChat(mode, cardId) {
+  /* Новый чат. Режим выбирается здесь и потом не меняется. Для переписки — явная настройка времени (setup:
+     { timeZone, timeMode, manualNow }); она проверяется до создания чата. */
+  async function newChat(mode, cardId, setup) {
+    if (mode === "messenger") {
+      const err = svc.messenger.checkSetup(setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" });
+      if (err) { ui.toast(err, true); return null; }
+    }
     const id = await svc.chat.createChat(mode, cardId);
+    if (id && mode === "messenger") await svc.messenger.createFor(id, setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" });
     if (id) await openChat(id);
+    return id;
   }
   async function openCard(cardId) {
     const latest = svc.chat.latestForCard(cardId);
@@ -8435,7 +9387,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   /* ── Контроллеры и разбор событий ─────────────────────────────────── */
   const C = PRP.controllers;
-  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world].map((make) => make(ctx));
+  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world, C.messenger].map((make) => make(ctx));
   const ACTS = Object.assign({
     home: goHome,
     "open-chat": (t) => openChat(t.dataset.id),

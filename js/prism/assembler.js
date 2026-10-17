@@ -9,43 +9,9 @@
   const SCENE = PRP.scene || (typeof require !== "undefined" ? require("./scene.js") : null);
   const EXP = PRP.experience || (typeof require !== "undefined" ? require("./experience.js") : null);
 
-  const TEMPLATES = {
-    rp: {
-      frame:
-        "Ты играешь за {{char}}. {{user}} управляет только собой.\n" +
-        "Реагируй естественно, исходя из текущей сцены, характера {{char}} и релевантного прошлого опыта. " +
-        "Характер и прошлый опыт влияют на решения, но не являются жёстким сценарием.\n" +
-        "Не пиши мысли, действия или реплики за {{user}}.",
-      card: "Характер {{char}}",
-      memory: "Релевантный прошлый опыт {{char}}",
-      scene: "Сейчас (факты)",
-      persona: "Кто такой {{user}}",
-      lore: "Сведения о мире",
-      world: "Релевантные факты мира",
-      examples: "Примеры манеры речи {{char}} (стиль, не сюжет)",
-      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
-      author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
-      authorPost: "Указания автора карточки (после истории)",
-    },
-    messenger: {
-      frame:
-        "{{char}} переписывается с {{user}} в мессенджере. Пиши только сообщения, которые {{char}} отправляет: " +
-        "коротко, живо, в манере {{char}}, без описаний действий, прозы и ремарок в звёздочках. " +
-        "Можно отправить несколько сообщений подряд — разделяй их пустой строкой. " +
-        "Черты характера влияют на восприятие, но не предписывают поступков; воспоминания — свидетельства прошлого, а не инструкции. " +
-        "Не пиши за {{user}}.",
-      card: "Характер {{char}}",
-      memory: "Релевантный прошлый опыт {{char}}",
-      scene: "Жизнь {{char}} сейчас, вне переписки (видит только {{char}}; рассказывает о ней, только если сам(а) захочет)",
-      persona: "Кто такой {{user}}",
-      lore: "Сведения о мире",
-      world: "Релевантные факты мира",
-      examples: "Примеры манеры {{char}} (стиль, не сюжет)",
-      origin: "С чего начинается история (исходные обстоятельства, а не сценарий, который нужно разыграть)",
-      author: "Указания автора карточки (правила игры от автора, а не черты персонажа)",
-      authorPost: "Указания автора карточки (после истории)",
-    },
-  };
+  // Рамки и заголовки режимов — в адаптерах (prism/modes.js); сборка, бюджет и общие слои — здесь.
+  const MODES = PRP.prismModes || (typeof require !== "undefined" ? require("./modes.js") : null);
+  const TEMPLATES = MODES.TEMPLATES;
 
   /* Блок фактов мира — данные, а не указания. Одинаков для любого режима (мир режиму не принадлежит).
      Каждый факт — одна строка-литерал JSON: текст не меняется по смыслу, но перевод строки, «###» или ```
@@ -92,27 +58,33 @@
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        sceneProtocol, extraPost, noPostHistory,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
+       messenger — для режима messenger: { world, conversation, temporal, plans } (готовые данные среды переписки;
+         сцена RP в переписку не подаётся, протокол [scene:] не просится — prism/modes),
        allowSyntheticUser — можно ли при singleSystem подставить служебную реплику пользователя «[Начало]»
          (по умолчанию да, как раньше; для начала сцены — нет, см. report.needsUserFirst)
      }
 
      Итоговый порядок (обычный транспорт):
        system: РАМКА → УКАЗАНИЯ АВТОРА (system_prompt) → лорбук «до персонажа» → КАРТОЧКА
-               → примеры речи → ПЕРСОНА → лорбук → ФАКТЫ МИРА (данные) → ОПЫТ → НАЧАЛО ИСТОРИИ (сценарий, пока действует) → СЦЕНА
+               → примеры речи → ПЕРСОНА → лорбук → ФАКТЫ МИРА (данные) → ОПЫТ → НАЧАЛО ИСТОРИИ (сценарий, пока действует)
+               → СЦЕНА (rp) | ПОЛОЖЕНИЕ, СОСТОЯНИЕ ПЕРЕПИСКИ, ВРЕМЯ ПЕРЕПИСКИ (messenger)
        user/assistant: ИСТОРИЯ
        system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → протокол сцены и рисования
      При singleSystem всё служебное идёт одним system в начале, затем строго user/assistant.
 
      Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
      Если не помещается, уступают по порядку:
-       1 старая история → 2 примеры речи → 3 лорбук → 3а факты мира (с наименее релевантного) → 4 менее релевантный опыт
+       1 старая история → 2 примеры речи → 3 лорбук → 3а факты мира (с наименее релевантного)
+       → 3б договорённости переписки (со старых) → 3в списки «рядом» и «происходит» в положении → 4 менее релевантный опыт
        → 5 указания после истории → 6 персона, сценарий, указания автора, прошлое, внешность, хвост описания
        (по абзацам, затем по предложениям) → 7 самый релевантный опыт → 8 история до последнего сообщения.
-     Рамка, сцена, протокол, имя и личность персонажа не режутся никогда. Если и они
+     Рамка, сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), протокол, имя и личность
+     персонажа не режутся никогда. Если и они
      не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
     const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true, allowSyntheticUser: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
+    const AD = MODES.adapter(o.mode);
     const card = o.card || {};
     const vars = { char: card.name || "Персонаж", user: o.userName || "Пользователь" };
     const m = (x) => U.macros(x, vars);
@@ -138,12 +110,22 @@
       exps: (o.experiences || []).slice(),
       world: (o.worldFacts || []).slice(),
       postHistory: o.noPostHistory ? "" : m(directiveText(card, "postHistory")).trim(),
+      // Переписка: сколько открытых договорённостей оставить (Infinity — все) и оставить ли списки «рядом»/«происходит».
+      msPlans: Infinity, msLists: true,
       keepOld: null, // сколько старых сообщений (сверх minHistory) оставить; null — все
       minH: Math.min(o.minHistory, history.length),
     };
     const frame = m(T.frame);
-    const scene = section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user }));
-    const protocol = [o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
+    // Сцена — слой режима rp. В переписке её место занимают разделы среды переписки.
+    const scene = AD.usesScene ? section(m(T.scene), SCENE.describe(o.sceneState, { userName: vars.user })) : "";
+    const protocol = [AD.sceneProtocol && o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
+    const msPlansAll = (o.messenger && o.messenger.plans) || [];
+    const msList = (o.messenger && o.messenger.world) ? (o.messenger.world.nearby || []).length + (o.messenger.world.ongoing || []).length : 0;
+    function messengerParts() {
+      if (o.mode !== "messenger" || !o.messenger) return [];
+      const ms = MODES.messengerSections(o.messenger, { lists: st.msLists, plans: st.msPlans });
+      return [section(m(T.place), m(ms.place)), section(m(T.conversation), m(ms.conversation)), section(m(T.time), m(ms.time))];
+    }
 
     function parts() {
       const loreText = (pos) => st.lore.filter((e) => (e.position === "before_char") === (pos === "before")).map((e) => m(e.content)).join("\n\n");
@@ -165,7 +147,7 @@
           section(m(T.memory), EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)))),
           section(m(T.origin), st.scenario),
           scene,
-        ].filter(Boolean),
+        ].concat(messengerParts()).filter(Boolean),
         post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
         history: kept,
       };
@@ -228,6 +210,13 @@
       function lore() { if (!st.lore.length) return false; st.lore.pop(); note("lore", 1); return true; },
       // Факты мира — отобранный, уступаемый раздел: уходят с наименее релевантного; пустой блок не выводится.
       function world() { if (!st.world.length) return false; st.world.pop(); note("world", 1); return true; },
+      // Переписка: сначала уходят самые старые договорённости (список идёт от новых к старым), затем длинные списки положения.
+      function messengerPlans() {
+        const shown = st.msPlans === Infinity ? msPlansAll.length : st.msPlans;
+        if (o.mode !== "messenger" || !shown) return false;
+        st.msPlans = shown - 1; note("messenger.plans", 1); return true;
+      },
+      function messengerLists() { if (o.mode !== "messenger" || !st.msLists || !msList) return false; st.msLists = false; note("messenger.lists", "списки «рядом» и «происходит»"); return true; },
       function lowExperience() { if (st.exps.length <= 1) return false; st.exps.pop(); note("experience", 1); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
@@ -287,6 +276,8 @@
         worldKept: st.world.length,
         worldDropped: (o.worldFacts || []).length - st.world.length,
         worldIds: st.world.map((f) => f.id),
+        mode: AD.id,
+        messenger: o.mode === "messenger" ? { plansTotal: msPlansAll.length, plansKept: st.msPlans === Infinity ? msPlansAll.length : st.msPlans, listsKept: st.msLists } : null,
         examples: !!st.examples,
         postHistory: !!st.postHistory,
         postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
@@ -303,6 +294,7 @@
           card: tokLayer(p.head.find((x) => x.startsWith("### " + m(T.card))) || "") + tokLayer(st.examples ? section(m(T.examples), st.examples) : "") + tokLayer(st.persona ? section(m(T.persona), st.persona) : "") + tokLayer(section(m(T.origin), st.scenario)),
           memory: tokLayer(st.exps.length ? section(m(T.memory), EXP.format(st.exps)) : ""),
           scene: tok(scene),
+          messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),
           lore: tokLayer(st.lore.length ? st.lore.map((e) => m(e.content)).join("\n\n") : ""),
           world: tokLayer(section(m(T.world), worldBody(st.world, m))),
           history: keptHistory.reduce((n, h) => n + tok(h.text) + 4, 0),

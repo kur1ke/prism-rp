@@ -84,6 +84,7 @@
         await DB.delMany("messages", ms.map((m) => m.id));
         await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
         await DB.del("worldOverlays", c.id); // наложение мира принадлежит чату и уходит вместе с ним
+        await DB.del("messengerEnvironments", c.id); // как и среда переписки
         await DB.del("chats", c.id);
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);

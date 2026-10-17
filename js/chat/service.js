@@ -57,6 +57,7 @@
        Без первого сообщения чат создаётся пустым: ни заглушек, ни пустых узлов, leafId = null —
        начать может пользователь или, по явному действию, модель (generation/service, режим opening).
        Сценарий карточки в сцену не переносится. Делает чат текущим и возвращает его id. */
+    // Режим задаётся только здесь и дальше не меняется: сцена остаётся сценой, переписка — перепиской.
     async function createChat(mode, cardId) {
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
@@ -80,7 +81,7 @@
     function latestForCard(cardId) {
       return S.chats.filter((c) => c.cardId === cardId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
     }
-    // Удалить чат целиком: сообщения, картинки, опыт и наложение мира этого чата. Состояние сбрасывается на «нет чата».
+    // Удалить чат целиком: сообщения, картинки, опыт, наложение мира и среду переписки этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
       const ms = await DB.byIndex("messages", "chatId", c.id);
       await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
@@ -88,6 +89,8 @@
       await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
       await DB.del("worldOverlays", c.id);
       if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
+      await DB.del("messengerEnvironments", c.id);
+      if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
       await DB.del("chats", c.id);
       S.chats = S.chats.filter((x) => x.id !== c.id);
       S.chatId = null; S.messages = [];
@@ -135,10 +138,12 @@
       await touch();
       return true;
     }
-    // Добавить пользовательский ответ в ветку: становится новым концом.
-    async function addUserMessage(text) {
+    /* Добавить пользовательский ответ в ветку: становится новым концом.
+       swipeExtra — неизменяемые сведения варианта, например метка времени переписки { messengerAt } (её даёт messenger/service). */
+    async function addUserMessage(text, swipeExtra) {
       const c = ctx.chat();
       const m = newMsg("user", c.leafId, text);
+      if (swipeExtra) Object.assign(m.swipes[0], swipeExtra);
       await putMsg(m);
       c.leafId = m.id;
       await touch();

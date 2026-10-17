@@ -335,20 +335,38 @@ try:
         # Переписка
         page.click("[data-act=chat-menu]")
         page.click(".pop [data-act=new-chat][data-mode=messenger]")
+        page.wait_for_selector(".ms-new")
+        check("FC: новая переписка — окно настройки времени, пояс по умолчанию", page.input_value("#ms-tz") != "" and page.is_checked("input[name=ms-mode][value=live]"))
+        page.click("[data-act=ms-create]")
         page.wait_for_selector(".app.messenger")
+        check("FC: режим показан и не переключается", page.locator(".chat-head .mode-badge", has_text="Переписка").count() == 1 and page.locator("[data-act=mode]").count() == 0)
         page.fill("#input", "привет, ты где?")
         page.keyboard.press("Enter")
         page.wait_for_function("document.querySelectorAll('.msg-row.them .bub').length >= 2")
         idle(page)
         check("переписка: пузыри", page.locator(".msg-row.them .bub").count() == 2)
-        check("переписка: статус из сцены", wait_text(page, ".chat-head", "идёт к метро"))
+        # FOUNDATION-C: статус переписки — из среды, а не из сцены; [scene:] из ответа среду не меняет
+        check("FC: статус не берётся из [scene:] ответа", not wait_text(page, ".chat-head", "идёт к метро", timeout=800) and wait_text(page, ".chat-head", "положение неизвестно"))
         req = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last"))
+        sysm = "\n".join(m["content"] for m in req["messages"] if m["role"] == "system")
         check("переписка: рамка", "переписывается с Пользователь" in req["messages"][0]["content"])
+        check("FC: переписке — разделы среды вместо сцены и без протокола [scene:]",
+              "### Текущее положение Химэ" in sysm and "### Состояние переписки" in sysm and "### Время переписки" in sysm and "### Сейчас (факты)" not in sysm and "[scene:" not in sysm)
+        stamps = page.evaluate("PRP.app.S.messages.map((m) => [m.role, !!(m.swipes[m.swipeIdx || 0].messengerAt && m.swipes[m.swipeIdx || 0].messengerAt.at)])")
+        check("FC: у отправленного и полученного сообщения — метка времени переписки", stamps == [["user", True], ["assistant", True]])
         check("PRISM1-1: опыт другого чата не попадает в модель", "соврал Химэ" not in json.dumps(req["messages"], ensure_ascii=False))
         page.click("[data-act=drawer]") if not page.locator(".drawer.open").count() else None
         page.click("[data-act=tab][data-tab=memory]")
         check("PRISM1-1: вкладка опыта другого чата пуста", "соврал Химэ" not in page.inner_text("#drawer-body"))
-        page.click("[data-act=tab][data-tab=scene]")
+        check("FC: у переписки вкладка «Среда» вместо «Сцена»", page.locator("[data-act=tab][data-tab=env]").count() == 1 and page.locator("[data-act=tab][data-tab=scene]").count() == 0)
+        page.click("[data-act=tab][data-tab=env]")
+        page.click("[data-act=env-edit]")
+        page.fill("#env-location", "Метро, вагон")
+        page.fill("#env-activity", "едет домой после пар")
+        page.select_option("#env-availability", "busy")
+        page.click("[data-act=env-save]")
+        page.wait_for_timeout(300)
+        check("FC: явная правка положения — в шапке и во вкладке", wait_text(page, ".chat-head", "Метро, вагон") and "едет домой после пар" in page.inner_text("#drawer-body"))
         shot(page, "07-messenger.png")
 
         # Модель из композера
@@ -443,6 +461,11 @@ try:
         }""")
         page.reload()
         page.wait_for_selector(".chat-head")
+        # Дальнейшие проверки (сцена, переполнение по месту сцены) — про сцену RP: открыть сцену этого персонажа.
+        # Режим чата больше не переключается, поэтому выбирается чат нужного режима.
+        if page.evaluate("PRP.app.ctx.chat().mode") != "rp":
+            page.evaluate("PRP.app.ctx.nav.openChat(PRP.app.S.chats.filter((c) => c.cardId === PRP.app.S.cardId && c.mode === 'rp').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0].id)")
+            page.wait_for_selector(".turn")
         if not page.locator(".drawer.open").count(): page.click("[data-act=drawer]")
         page.click("[data-act=tab][data-tab=memory]")
         check("миграция: непривязанная запись в отдельном разделе", wait_text(page, "#drawer-body", "Без привязки к чату"))
@@ -815,6 +838,45 @@ try:
         check("W2: после перезагрузки мир чата на месте", page.evaluate("PRP.app.ctx.svc.worldChat.canon().facts.some((f) => f.text.startsWith('WF-BRANCH'))") and page.evaluate("PRP.app.S.worldOverlay.timeline") == "canon")
         shot(page, "15-foundation-w2.png")
 
+        # FOUNDATION-C: переписка с ручным временем (Токио) через интерфейс — метки времени, сдвиг времени, «Среда»
+        page.click("[data-act=chat-menu]")
+        page.click(".pop [data-act=new-chat][data-mode=messenger]")
+        page.wait_for_selector(".ms-new")
+        page.fill("#ms-tz", "Asia/Tokyo")
+        page.check("input[name=ms-mode][value=manual]")
+        page.fill("#ms-manual", "2026-10-17T09:00")
+        prev_chat = page.evaluate("PRP.app.S.chatId")
+        page.click("[data-act=ms-create]")
+        # предыдущий чат тоже переписка — ждать именно новый чат
+        page.wait_for_function(f"PRP.app.S.chatId !== '{prev_chat}' && PRP.app.ctx.chat() && PRP.app.S.messengerEnv && PRP.app.S.messengerEnv.chatId === PRP.app.S.chatId && !!document.querySelector('.app.messenger .empty-note')")
+        env0 = page.evaluate("PRP.app.S.messengerEnv")
+        check("FC: ручное время и пояс сохранены при создании", env0["timeZone"] == "Asia/Tokyo" and env0["timeMode"] == "manual" and env0["manualNow"] == "2026-10-17T00:00:00.000Z")
+        n0 = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"]
+        page.fill("#input", "доброе утро")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.msg-row.them').length >= 1")
+        for _ in range(100):
+            if json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/count"))["chat"] > n0: break
+            page.wait_for_timeout(100)
+        idle(page)
+        req = json.load(urllib.request.urlopen("http://127.0.0.1:8766/v1/last"))
+        sysm = "\n".join(m["content"] for m in req["messages"] if m["role"] == "system")
+        check("FC: в модель — время переписки в поясе чата", "сейчас: 17.10.2026, 09:00 (Asia/Tokyo; время задано вручную)" in sysm)
+        stamps = page.locator(".msg-row .stamp").all_inner_texts()
+        check("FC: время сообщений — метки переписки (09:00 по Токио)", len(stamps) == 2 and all(x.strip() == "09:00" for x in stamps))
+        if not page.evaluate("PRP.app.S.drawerOpen"): page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=env]")
+        page.click("[data-act=env-advance][data-min='15']")
+        page.wait_for_timeout(300)
+        check("FC: сдвиг ручного времени — явный; метки отправленных не меняются",
+              "17.10.2026, 09:15" in page.inner_text("#env-now") and all(x.strip() == "09:00" for x in page.locator(".msg-row .stamp").all_inner_texts())
+              and "15 мин" in page.inner_text("#drawer-body"))
+        page.fill("#env-mk-text", "Созвониться вечером")
+        page.click("[data-act=env-mk-add]")
+        page.wait_for_timeout(300)
+        check("FC: договорённость отмечена вручную и видна в «Среде»", "Созвониться вечером" in page.inner_text("#drawer-body") and len(page.evaluate("PRP.app.S.messengerEnv.conversationEvents")) == 1)
+        shot(page, "16-messenger-env.png")
+
         # Узкий экран: все разделы редактора персонажа нажимаются (лента разделов не перекрыта телом окна)
         page.set_viewport_size({"width": 390, "height": 820})
         page.wait_for_timeout(300)
@@ -824,6 +886,16 @@ try:
         page.wait_for_selector("#wc-timeline")
         shot(page, "16-w2-world-narrow.png")
         check("W2-UI узкий экран: «Мир чата» открывается без горизонтальной прокрутки", page.locator("[data-act=wc-new]").count() == 1 and page.evaluate("document.documentElement.scrollWidth") <= 390)
+        if page.evaluate("PRP.app.ctx.chat().mode") == "messenger":
+            page.click("[data-act=tab][data-tab=env]")
+            page.click("[data-act=env-edit]")
+            page.wait_for_selector("#env-location")
+            check("FC узкий экран: «Среда» и форма положения без горизонтальной прокрутки", page.evaluate("document.documentElement.scrollWidth") <= 390
+                  and page.evaluate("(() => { const d = document.querySelector('#drawer-body'); return d.scrollWidth <= d.clientWidth + 1; })()"))
+            shot(page, "17-messenger-env-narrow.png")
+            page.click("[data-act=env-cancel]")
+        else:
+            check("FC узкий экран: «Среда» и форма положения без горизонтальной прокрутки", False)
         page.click("[data-act=drawer-close]")
         page.evaluate("PRP.app.ctx.nav.goHome()")
         page.wait_for_selector(".home")
@@ -888,7 +960,7 @@ try:
           const c = { cards: (await DB.all('cards')).length, chats: (await DB.all('chats')).length, messages: (await DB.all('messages')).length, experience: (await DB.all('experience')).length, packs: (await DB.all('worldPacks')).length };
           const v = await new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result; ok({ v: db.version, stores: [...db.objectStoreNames] }); db.close(); }; });
           return Object.assign(c, v); }""")
-        check("W1-13: база v3 → v5 без потерь, новые коллекции на месте", up["v"] == 5 and "worldOverlays" in up["stores"] and up["cards"] == 1 and up["chats"] == 1 and up["messages"] == 1 and up["experience"] == 1
+        check("W1-13: база v3 → v6 без потерь, новые коллекции на месте", up["v"] == 6 and "worldOverlays" in up["stores"] and "messengerEnvironments" in up["stores"] and up["cards"] == 1 and up["chats"] == 1 and up["messages"] == 1 and up["experience"] == 1
               and "worldPacks" in up["stores"] and "worldLenses" in up["stores"] and up["packs"] == 0 and "Старая" in p3.inner_text(".gallery"))
         uq = p3.evaluate("""async () => { const DB = PRP.app.ctx.DB;
           await DB.put('worldLenses', { id: 'l-a', cardId: 'old-card', packId: 'p' });
@@ -922,24 +994,36 @@ try:
         pr.on("pageerror", lambda e: errors.append(str(e)))
         pr.goto("http://127.0.0.1:8765/standalone/index.html"); pr.wait_for_selector(".home")
         ovrec = lambda cid, text: {"schema": 1, "chatId": cid, "timeline": "", "variant": "", "entries": [{"id": "we_" + text, "op": "assert", "scope": "chat", "targetFactId": None, "fact": {"id": "wc_" + text, "text": text}, "provenance": None, "createdAt": 1}]}
+        envrec = lambda cid, loc: {"schema": 1, "chatId": cid, "timeZone": "Asia/Tokyo", "timeMode": "live", "manualNow": None, "events": [{"id": "me_" + loc, "scope": "chat", "patch": {"location": loc}, "provenance": None, "effectiveAt": None, "createdAt": 1}], "conversationEvents": []}
         bk_file = os.path.join(OUT, "w2-backup.json")
         with open(bk_file, "w", encoding="utf-8") as f:
             json.dump({"app": "prism-rp", "version": 5, "cards": [{"id": "r-card", "name": "Восстановленная", "description": "d", "lore": []}],
-                       "chats": [{"id": "r-chat", "cardId": "r-card", "mode": "rp", "title": "Сцена", "leafId": None, "sceneInit": ""}],
-                       "worldOverlays": [ovrec("r-chat", "REAL-OV"), ovrec("ghost-chat", "GHOST-OV")]}, f, ensure_ascii=False)
+                       "chats": [{"id": "r-chat", "cardId": "r-card", "mode": "rp", "title": "Сцена", "leafId": None, "sceneInit": ""},
+                                 {"id": "r-ms", "cardId": "r-card", "mode": "messenger", "title": "Переписка", "leafId": None, "sceneInit": ""}],
+                       "worldOverlays": [ovrec("r-chat", "REAL-OV"), ovrec("ghost-chat", "GHOST-OV")],
+                       "messengerEnvironments": [envrec("r-ms", "ENV-OK"), envrec("r-chat", "ENV-RP"), envrec("ghost-ms", "ENV-GHOST")]}, f, ensure_ascii=False)
         pr.once("dialog", lambda d: d.accept())  # «ОК — заменить»
         pr.set_input_files("#file-backup", bk_file)
         pr.wait_for_function("document.querySelector('#toast') && document.querySelector('#toast').innerText.includes('Бэкап загружен')")
         rs = pr.evaluate("async () => (await PRP.app.ctx.DB.all('worldOverlays')).map((o) => o.chatId)")
+        renv = pr.evaluate("async () => (await PRP.app.ctx.DB.all('messengerEnvironments')).map((o) => o.chatId)")
+        check("FC: восстановление (замена) — среда только для переписки из бэкапа; для сцены и сироты отброшена до записи",
+              renv == ["r-ms"] and "записей среды переписки: 2" in pr.inner_text("#toast"))
         check("W2 fix: восстановление (замена) — запись мира без своего чата не записана, остальные восстановлены",
-              rs == ["r-chat"] and "пропущены при восстановлении: 1" in pr.inner_text("#toast") and "ghost-chat" not in pr.inner_text("#toast"))
+              rs == ["r-chat"] and "пропущены при восстановлении — записей мира чата: 1" in pr.inner_text("#toast") and "ghost-chat" not in pr.inner_text("#toast"))
         # добавление: запись для уже существующего здесь чата принимается, даже если самого чата в бэкапе нет
         with open(bk_file, "w", encoding="utf-8") as f:
             json.dump({"app": "prism-rp", "version": 5, "chats": [], "worldOverlays": [ovrec("r-chat", "ADD-OV"), ovrec("ghost-2", "GHOST2")]}, f, ensure_ascii=False)
         pr.evaluate("PRP.app.ctx.DB.del('worldOverlays', 'r-chat')")
         pr.once("dialog", lambda d: d.dismiss())  # «Отмена — добавить»
         pr.set_input_files("#file-backup", bk_file)
-        pr.wait_for_function("document.querySelector('#toast') && document.querySelector('#toast').innerText.includes('пропущены при восстановлении')")
+        # первое восстановление тоже показывало «пропущены…» — ждать результат в базе, а не текст уведомления
+        ra = []
+        for _ in range(100):
+            ra = pr.evaluate("async () => (await PRP.app.ctx.DB.all('worldOverlays')).map((o) => [o.chatId, o.entries[0].fact.text])")
+            if ra: break
+            pr.wait_for_timeout(100)
+        pr.wait_for_timeout(300)
         ra = pr.evaluate("async () => (await PRP.app.ctx.DB.all('worldOverlays')).map((o) => [o.chatId, o.entries[0].fact.text])")
         check("W2 fix: восстановление (добавление) — запись для существующего чата принята, сирота — нет", ra == [["r-chat", "ADD-OV"]])
         cR.close()
@@ -962,18 +1046,18 @@ try:
         COUNT = """() => new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result;
           const names = [...db.objectStoreNames]; if (!names.includes('cards')) { ok({ v: db.version, cards: -1, names }); db.close(); return; }
           const q = db.transaction('cards').objectStore('cards').getAll(); q.onsuccess = () => { ok({ v: db.version, cards: q.result.map((c) => c.id), names }); db.close(); }; }; })"""
-        # A. versionchange: открытое приложение (v5) уступает более новой версии из другой вкладки
+        # A. versionchange: открытое приложение (v6) уступает более новой версии из другой вкладки
         cA = b.new_context(); a1 = cA.new_page()
         a1.goto("http://127.0.0.1:8765/standalone/index.html"); a1.wait_for_selector(".home")
         a1.evaluate("PRP.app.ctx.DB.put('cards', { id: 'vc-card', name: 'ВерсияТест', description: 'd', lore: [] })")
         a2 = cA.new_page(); a2.goto("http://127.0.0.1:8765/web/version.json")
-        up = a2.evaluate("""() => new Promise((ok) => { let blocked = false; const r = indexedDB.open('prism-rp', 6);
+        up = a2.evaluate("""() => new Promise((ok) => { let blocked = false; const r = indexedDB.open('prism-rp', 7);
           r.onblocked = () => { blocked = true; }; r.onsuccess = () => { const db = r.result; const v = db.version, names = [...db.objectStoreNames]; db.close(); ok({ ok: true, blocked, v, names }); };
           r.onerror = () => ok({ ok: false, blocked, err: String(r.error) }); setTimeout(() => ok({ ok: false, blocked, err: 'hang' }), 5000); })""")
         after = a2.evaluate(COUNT)
         a1.wait_for_timeout(200)
         check("IndexedDB: открытое соединение уступает обновлению (versionchange) — без зависания и «занято»",
-              up.get("ok") and not up.get("blocked") and up.get("v") == 6 and "vc-card" in after["cards"] and "worldOverlays" in after["names"])
+              up.get("ok") and not up.get("blocked") and up.get("v") == 7 and "vc-card" in after["cards"] and "messengerEnvironments" in after["names"])
         check("IndexedDB: вкладка, уступившая базу, предупреждает обновить страницу", "Обновите эту страницу" in a1.inner_text("#toast"))
         cA.close()
         # B. база занята соединением, которое не закрывается (старая вкладка без versionchange) → DB_BLOCKED, данные целы
@@ -990,8 +1074,8 @@ try:
         ap.click("[data-act=reload-page]")
         ap.wait_for_selector(".tile")
         st = ap.evaluate(COUNT)
-        check("IndexedDB: после закрытия другой вкладки — обычный запуск, данные на месте, база v5",
-              st["v"] == 5 and "worldOverlays" in st["names"] and st["cards"] == ["keep-card"] and "worldPacks" in st["names"] and "Сохранная" in ap.inner_text(".gallery"))
+        check("IndexedDB: после закрытия другой вкладки — обычный запуск, данные на месте, база v6",
+              st["v"] == 6 and "messengerEnvironments" in st["names"] and st["cards"] == ["keep-card"] and "worldPacks" in st["names"] and "Сохранная" in ap.inner_text(".gallery"))
         cB.close()
         # C. открытие не отвечает вовсе → DB_OPEN_TIMEOUT; база не изменена
         cC = b.new_context(); s0 = cC.new_page(); s0.goto("http://127.0.0.1:8765/web/version.json"); s0.evaluate(SEED_V3); s0.evaluate("window.__db.close()")
@@ -1027,16 +1111,50 @@ try:
             dcode = ad.get_attribute(".storage-error", "data-code")
         except Exception:
             dcode = None
-        check("W2 v4→v5: старая вкладка v4 держит базу — видимое DB_BLOCKED", dcode == "DB_BLOCKED")
+        check("v4→v6: старая вкладка v4 держит базу — видимое DB_BLOCKED", dcode == "DB_BLOCKED")
         hd.evaluate("window.__db.close()")
         ad.click("[data-act=reload-page]")
         ad.wait_for_selector(".tile")
         v5 = ad.evaluate("""async () => { const DB = PRP.app.ctx.DB;
           const v = await new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result; ok({ v: db.version, names: [...db.objectStoreNames] }); db.close(); }; });
           return Object.assign(v, { cards: (await DB.all('cards')).map((c) => c.id), packs: (await DB.all('worldPacks')).map((p) => p.facts[0].text), lenses: (await DB.all('worldLenses')).map((l) => l.id), ovs: (await DB.all('worldOverlays')).length }); }""")
-        check("W2 v4→v5: обновление только добавляет worldOverlays; карточки, пак и линза целы",
-              v5["v"] == 5 and "worldOverlays" in v5["names"] and v5["cards"] == ["v4-card"] and v5["packs"] == ["V4-FACT"] and v5["lenses"] == ["v4-lens"] and v5["ovs"] == 0)
+        check("v4→v6: обновление только добавляет worldOverlays и messengerEnvironments; карточки, пак и линза целы",
+              v5["v"] == 6 and "worldOverlays" in v5["names"] and "messengerEnvironments" in v5["names"] and v5["cards"] == ["v4-card"] and v5["packs"] == ["V4-FACT"] and v5["lenses"] == ["v4-lens"] and v5["ovs"] == 0)
         cD.close()
+        # E. FOUNDATION-C: v5 (W2) → v6. Вкладка v5 с защитой PR #8 уступает; данные всех коллекций целы, среда переписки пуста.
+        SEED_V5 = """() => new Promise((ok, fail) => {
+          const r = indexedDB.open('prism-rp', 5);
+          r.onupgradeneeded = () => { const db = r.result;
+            for (const [n, k, idx] of [['cards', 'id'], ['chats', 'id', 'cardId'], ['messages', 'id', 'chatId'], ['experience', 'id', 'owner'], ['settings', 'key'], ['images', 'id', 'chatId'], ['assist', 'id'], ['worldPacks', 'id']]) {
+              const st = db.createObjectStore(n, { keyPath: k }); if (idx) st.createIndex(idx, idx); }
+            const l = db.createObjectStore('worldLenses', { keyPath: 'id' }); l.createIndex('cardId', 'cardId', { unique: true }); l.createIndex('packId', 'packId');
+            db.createObjectStore('worldOverlays', { keyPath: 'chatId' }); };
+          r.onsuccess = () => { const db = r.result; const t = db.transaction(['cards', 'chats', 'messages', 'experience', 'worldPacks', 'worldLenses', 'worldOverlays'], 'readwrite');
+            t.objectStore('cards').put({ id: 'v5-card', name: 'ПятаяВерсия', description: 'd', lore: [], updatedAt: 1 });
+            t.objectStore('chats').put({ id: 'v5-chat', cardId: 'v5-card', mode: 'messenger', title: 'Переписка', leafId: 'v5-m', sceneInit: '' });
+            t.objectStore('messages').put({ id: 'v5-m', chatId: 'v5-chat', parentId: null, role: 'user', swipes: [{ text: 'привет', sceneOps: [] }], swipeIdx: 0, createdAt: 1 });
+            t.objectStore('experience').put({ id: 'v5-x', owner: 'v5-card', chatId: 'v5-chat', event: 'опыт', createdAt: 1, source: { messageIds: [] } });
+            t.objectStore('worldPacks').put({ id: 'v5-pack', schema: 1, name: 'Пак v5', facts: [{ id: 'f', text: 'V5-FACT' }] });
+            t.objectStore('worldLenses').put({ id: 'v5-lens', cardId: 'v5-card', packId: 'v5-pack', overrides: [], additions: [], disabledFactIds: [] });
+            t.objectStore('worldOverlays').put({ schema: 1, chatId: 'v5-chat', timeline: '', variant: '', entries: [] });
+            t.oncomplete = () => { db.onversionchange = () => { window.__yielded = true; db.close(); }; window.__db = db; ok(); }; t.onerror = () => fail(t.error); };
+          r.onerror = () => fail(r.error); })"""
+        cE = b.new_context(); he = cE.new_page(); he.goto("http://127.0.0.1:8765/web/version.json"); he.evaluate(SEED_V5)
+        ae = cE.new_page(); ae.goto("http://127.0.0.1:8765/standalone/index.html")
+        ae.wait_for_selector(".tile", timeout=15000)
+        v6 = ae.evaluate("""async () => { const DB = PRP.app.ctx.DB;
+          const v = await new Promise((ok) => { const r = indexedDB.open('prism-rp'); r.onsuccess = () => { const db = r.result; ok({ v: db.version, names: [...db.objectStoreNames] }); db.close(); }; });
+          const n = {}; for (const s of ['cards', 'chats', 'messages', 'experience', 'worldPacks', 'worldLenses', 'worldOverlays', 'messengerEnvironments']) n[s] = (await DB.all(s)).length;
+          await PRP.app.ctx.nav.openChat('v5-chat');
+          const env = PRP.app.S.messengerEnv;
+          return Object.assign(v, { n, envInMemory: !!env && env.persisted === false && env.events.length === 0, world: PRP.app.ctx.svc.messenger.context().world }); }""")
+        check("FC v5→v6: вкладка v5 уступила, обновление без DB_BLOCKED", he.evaluate("!!window.__yielded") and ae.locator(".storage-error").count() == 0)
+        check("FC v5→v6: только добавлена messengerEnvironments; все прежние коллекции целы",
+              v6["v"] == 6 and "messengerEnvironments" in v6["names"] and all(v6["n"][k] == 1 for k in ["cards", "chats", "messages", "experience", "worldPacks", "worldLenses", "worldOverlays"]) and v6["n"]["messengerEnvironments"] == 0)
+        check("FC: старая переписка без среды открывается — пустая среда в памяти, ничего не придумано, в базу не записано",
+              v6["envInMemory"] and v6["world"] == {"location": None, "activity": None, "nearby": [], "ongoing": [], "availability": "unknown"}
+              and ae.evaluate("PRP.app.ctx.DB.all('messengerEnvironments').then((x) => x.length)") == 0 and ae.locator(".chat-head .mode-badge", has_text="Переписка").count() == 1)
+        cE.close()
 
         # Сборка для Perchance с заглушкой плагина
         p2 = b.new_context(viewport={"width": 1440, "height": 900}).new_page()
