@@ -78,7 +78,9 @@
          сцена RP в переписку не подаётся, протокол [scene:] не просится — prism/modes),
        allowSyntheticUser — можно ли при singleSystem подставить служебную реплику пользователя «[Начало]»
          (по умолчанию да, как раньше; для начала сцены — нет, см. report.needsUserFirst),
-       operation — "opening" для начала сцены моделью (подробности о внешности получают зрительную опору)
+       operation — "opening" для начала сцены моделью (подробности о внешности получают зрительную опору),
+       initiative — только переписка, проверка инициативы: { reasons: [...] } (messenger/initiative.reasons);
+         раздел «Возможные поводы написать первым» — данные; указание проверки приходит в extraPost (служебные указания)
      }
 
      Итоговый порядок (обычный транспорт):
@@ -157,7 +159,9 @@
     function messengerParts() {
       if (o.mode !== "messenger" || !o.messenger) return [];
       const ms = MODES.messengerSections(o.messenger, { lists: st.msLists, plans: st.msPlans });
-      return [section(m(T.place), m(ms.place)), section(m(T.conversation), m(ms.conversation)), section(m(T.time), m(ms.time))];
+      // Проверка инициативы (FOUNDATION-D): возможные поводы — раздел-данные, неуступаемый (он мал: ≤ 5 договорённостей + молчание).
+      const ini = o.initiative ? [section(m(T.initiative), m(MODES.initiativeSection(o.initiative.reasons)))] : [];
+      return [section(m(T.place), m(ms.place)), section(m(T.conversation), m(ms.conversation)), section(m(T.time), m(ms.time))].concat(ini);
     }
 
     // Тела разделов-данных.
@@ -333,6 +337,7 @@
         worldIds: st.world.map((f) => f.id),
         mode: AD.id,
         messenger: o.mode === "messenger" ? { plansTotal: msPlansAll.length, plansKept: st.msPlans === Infinity ? msPlansAll.length : st.msPlans, listsKept: st.msLists } : null,
+        initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
           core: { source: core.source, reason: core.reason, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },

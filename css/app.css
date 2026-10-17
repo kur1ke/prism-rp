@@ -341,6 +341,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .pill:hover { border-color: var(--accent); color: var(--text); }
 .pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill svg { width: 15px; height: 15px; flex: none; }
+/* Проверка инициативы (переписка): отдельное действие рядом с отправкой, не похожее на неё. */
+.initiative-btn { border-style: dashed; color: var(--accent); flex: none; }
+.initiative-btn:disabled { opacity: .45; cursor: default; }
+.ini-tag { color: var(--accent); }
+@media (max-width: 480px) { .composer-bar { flex-wrap: wrap; } .composer-bar .pill { max-width: 160px; } .composer-bar .initiative-btn { max-width: none; } }
 .meter { width: 22px; height: 22px; flex: none; }
 .meter circle { fill: none; stroke-width: 3; }
 .meter .bg { stroke: var(--line); }

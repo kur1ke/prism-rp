@@ -22,8 +22,10 @@
     try { return ai({ getMetaObject: true }); } catch (e) { return null; }
   }
 
-  // messages из сборщика → { instruction, startWith, stop }
-  function toPrompt(messages, names) {
+  /* messages из сборщика → { instruction, startWith, stop }
+     closing — последняя строка инструкции вместо «Напиши следующее сообщение…» (проверка инициативы: персонаж
+     может промолчать). Это часть инструкции, а не строка стенограммы: новой реплики пользователя не появляется. */
+  function toPrompt(messages, names, closing) {
     const char = names.char || "Персонаж";
     const user = names.user || "Пользователь";
     const sys = [], post = [], lines = [];
@@ -40,7 +42,7 @@
       "### Переписка до этого момента",
       lines.join("\n\n") || "(пока пусто)",
       post.join("\n\n"),
-      `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
+      closing ? String(closing) : `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
     ].filter(Boolean).join("\n\n");
     return {
       instruction,
@@ -55,7 +57,7 @@
     const o = opts || {};
     const ai = plugin();
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
-    const p = toPrompt(messages, names);
+    const p = toPrompt(messages, names, o.closing);
     if (o.continueFrom) p.startWith = `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
     const handle = ai({

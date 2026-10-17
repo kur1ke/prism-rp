@@ -191,6 +191,7 @@ try:
         sys0 = req["messages"][0]["content"]
         check("Prism: склонности, сцена, лорбук", "Ты играешь за" in sys0 and "### Характер Химэ" in sys0 and '- место (установлено): "Кафе у кампуса"' in sys0 and "до полуночи" in sys0)
         check("пресет «Живой» ушёл в запрос", req.get("temperature") == 1.1)
+        check("D: в сцене (RP) нет кнопки инициативы", page.locator("[data-act=initiative]").count() == 0)
         check("строка сцены обновилась", wait_text(page, ".chat-head", "Кафе, терраса"))
 
         # Продолжение
@@ -911,6 +912,80 @@ try:
         check("FC: договорённость отмечена вручную и видна в «Среде»", "Созвониться вечером" in page.inner_text("#drawer-body") and len(page.evaluate("PRP.app.S.messengerEnv.conversationEvents")) == 1)
         shot(page, "16-messenger-env.png")
 
+        # FOUNDATION-D: проверка инициативы — только по кнопке, детерминированный мок-ответ (без настоящей модели)
+        MOCK = "http://127.0.0.1:8766"
+        set_ini = lambda mode: urllib.request.urlopen(MOCK + "/initiative?mode=" + mode).read()
+        calls = lambda: json.load(urllib.request.urlopen(MOCK + "/v1/count"))["chat"]
+        ms_chat = page.evaluate("PRP.app.S.chatId")
+        db_state = lambda: page.evaluate("""async () => { const DB = PRP.app.ctx.DB, id = PRP.app.S.chatId;
+          return JSON.stringify({ msgs: (await DB.byIndex('messages', 'chatId', id)).map((m) => JSON.stringify(m)).sort(), env: await DB.get('messengerEnvironments', id),
+            chat: await DB.get('chats', id).then((c) => c.leafId), exp: (await DB.all('experience')).length, ov: (await DB.all('worldOverlays')).length }); }""")
+        def toast_has(sub, timeout=8000):
+            try:
+                page.wait_for_function("(s) => document.querySelector('#toast') && !document.querySelector('#toast').hidden && document.querySelector('#toast').innerText.includes(s)", arg=sub, timeout=timeout)
+                return True
+            except Exception:
+                return False
+        check("D: кнопка «Проверить инициативу» в переписке, отдельно от отправки", page.locator(".composer [data-act=initiative]").count() == 1
+              and "Проверить инициативу" in page.inner_text(".composer [data-act=initiative]") and page.locator(".composer [data-act=send]").count() == 1)
+        # отказ: ничего не записано
+        set_ini("decline"); before = db_state(); c0 = calls()
+        page.click("[data-act=initiative]")
+        check("D: отказ [no-message] — «Персонаж решил пока не писать», ничего не сохранено", toast_has("Персонаж решил пока не писать") and calls() == c0 + 1
+              and db_state() == before and "[no-message]" not in page.inner_text("#feed"))
+        # ошибка провайдера: отличима от молчания, ничего не сохранено
+        set_ini("error"); c0 = calls()
+        page.click("[data-act=initiative]")
+        check("D: ошибка провайдера — своё сообщение об ошибке, ничего не сохранено", toast_has("Проверка инициативы не удалась") and db_state() == before)
+        # ответ 500 мок-сервера вызван этой проверкой намеренно — браузер пишет его в консоль; это не ошибка приложения
+        errors[:] = [e for e in errors if "status of 500" not in e]
+        # строгий шаблон: отказ до вызова
+        page.evaluate("() => { PRP.app.S.settings.singleSystem = true; }"); c0 = calls()
+        page.click("[data-act=initiative]")
+        check("D: строгий шаблон (одно системное сообщение) — отказ до вызова модели", toast_has("Одно системное сообщение") and calls() == c0 and db_state() == before)
+        page.evaluate("() => { PRP.app.S.settings.singleSystem = false; }")
+        # успех: одно сообщение, метка — ручное «сейчас», происхождение; поводы — данные; среда не тронута
+        set_ini("message"); c0 = calls(); env_before = page.evaluate("JSON.stringify(PRP.app.S.messengerEnv)")
+        page.click("[data-act=initiative]")
+        page.wait_for_function("document.querySelector('#feed').innerText.includes('INI-OK')", timeout=10000)
+        idle(page)
+        reqi = json.load(urllib.request.urlopen(MOCK + "/v1/last"))
+        sysi = "\n".join(m["content"] for m in reqi["messages"] if m["role"] == "system")
+        lasti = page.evaluate("""(() => { const p = PRP.app.ctx.svc.chat.path(), m = p[p.length - 1], sw = m.swipes[m.swipeIdx || 0];
+          return { role: m.role, at: sw.messengerAt && sw.messengerAt.at, ini: sw.initiative, n: p.length }; })()""")
+        check("D: успешная инициатива — одно сообщение персонажа с меткой ручного «сейчас» (09:15) и происхождением «по проверке»",
+              lasti["role"] == "assistant" and lasti["at"] == "2026-10-17T00:15:00.000Z" and lasti["ini"]["trigger"] == "user-check" and any(x.startswith("marker:") for x in lasti["ini"]["reasonIds"])
+              and calls() == c0 + 1 and page.locator(".msg-row.last .ini-tag").count() == 1)
+        check("D: в модель — поводы как данные и указание проверки; реплики пользователя не подделано",
+              "### Возможные поводы написать первым" in sysi and '- открытое обещание (установлено): "Созвониться вечером"' in sysi and "Проверка инициативы" in reqi["messages"][-1]["content"]
+              and reqi["messages"][-2]["role"] == "assistant" and not any(m["role"] == "user" and "Проверка" in m["content"] for m in reqi["messages"]))
+        check("D: среда, договорённости и время не изменились", page.evaluate("JSON.stringify(PRP.app.S.messengerEnv)") == env_before)
+        # одна инициатива подряд
+        c0 = calls(); n_rows = page.locator(".msg-row.them").count()
+        page.click("[data-act=initiative]")
+        check("D: вторая инициатива подряд не создаётся — «дождитесь вашего ответа»", toast_has("дождитесь вашего ответа") and calls() == c0 and page.locator(".msg-row.them").count() == n_rows)
+        # смена чата во время проверки — ответ не дописывается ни туда, ни сюда
+        page.fill("#input", "ага, привет")
+        page.keyboard.press("Enter")
+        page.wait_for_function(f"document.querySelectorAll('.msg-row.them').length > {n_rows}")
+        idle(page)
+        set_ini("slow"); before = db_state()
+        other = page.evaluate(f"PRP.app.S.chats.find((c) => c.id !== '{ms_chat}' && c.mode === 'messenger').id")
+        other_before = page.evaluate(f"async () => (await PRP.app.ctx.DB.byIndex('messages', 'chatId', '{other}')).length")
+        page.click("[data-act=initiative]")
+        page.wait_for_function("!!PRP.app.S.gen && PRP.app.S.gen.initiative")
+        page.evaluate(f"PRP.app.ctx.nav.openChat('{other}')")
+        page.wait_for_function("!PRP.app.S.gen", timeout=10000)
+        page.wait_for_timeout(300)
+        stale_ok = toast_has("ответ не сохранён", 3000)
+        page.evaluate(f"PRP.app.ctx.nav.openChat('{ms_chat}')")
+        page.wait_for_function(f"PRP.app.S.chatId === '{ms_chat}'")
+        page.wait_for_timeout(300)
+        check("D: смена чата во время проверки — ответ не сохранён ни в одном чате", stale_ok and db_state() == before
+              and page.evaluate(f"async () => (await PRP.app.ctx.DB.byIndex('messages', 'chatId', '{other}')).length") == other_before)
+        set_ini("message")
+        shot(page, "17-initiative.png")
+
         # Узкий экран: все разделы редактора персонажа нажимаются (лента разделов не перекрыта телом окна)
         page.set_viewport_size({"width": 390, "height": 820})
         page.wait_for_timeout(300)
@@ -928,6 +1003,12 @@ try:
                   and page.evaluate("(() => { const d = document.querySelector('#drawer-body'); return d.scrollWidth <= d.clientWidth + 1; })()"))
             shot(page, "17-messenger-env-narrow.png")
             page.click("[data-act=env-cancel]")
+            page.click("[data-act=drawer-close]")
+            page.wait_for_timeout(300)
+            ib = page.evaluate("(() => { const b = document.querySelector('.composer [data-act=initiative]').getBoundingClientRect(); return [b.left, b.right, b.width]; })()")
+            check("D 390 px: кнопка инициативы видна целиком, без горизонтальной прокрутки", ib[0] >= 0 and ib[1] <= 390 and ib[2] > 40 and page.evaluate("document.documentElement.scrollWidth") <= 390)
+            shot(page, "18-initiative-narrow.png")
+            page.click("[data-act=drawer]")
         else:
             check("FC узкий экран: «Среда» и форма положения без горизонтальной прокрутки", False)
         page.click("[data-act=drawer-close]")
@@ -1361,6 +1442,19 @@ try:
         check("Perchance: разрешение и без LoRA", ic["resolution"] == "768x768" and "<lora:" not in ic["prompt"])
         p2.click("[data-act=open-prism]")
         check("Perchance: контекст из плагина", wait_text(p2, "#drawer-body", "из 5300"))
+        # FOUNDATION-D: инициатива через Perchance — указание проверки последней строкой инструкции, без новой реплики пользователя
+        p2.evaluate("""async () => { const A = PRP.app; await A.ctx.nav.newChat('messenger', A.S.cardId, { timeZone: 'Asia/Tokyo', timeMode: 'live' }); }""")
+        p2.wait_for_selector(".composer [data-act=initiative]")
+        n_ai = p2.evaluate("window.__aiCalls.length")
+        p2.click("[data-act=initiative]")
+        p2.wait_for_function(f"window.__aiCalls.length > {n_ai} && !PRP.app.S.gen", timeout=10000)
+        pc = p2.evaluate("window.__aiCalls[window.__aiCalls.length - 1]")
+        ins = pc["instruction"]
+        saved = p2.evaluate("(() => { const p = PRP.app.ctx.svc.chat.path(); return p.map((m) => [m.role, m.swipes[0].text, !!m.swipes[0].initiative]); })()")
+        check("D Perchance: инициатива — решение последней строкой инструкции, без строк пользователя; ответ сохранён как сообщение-инициатива",
+              ins.rstrip().endswith("ответь ровно [no-message]. Если да — только сообщение Химэ, без пометок и без текста за Пользователь.") and "Проверка инициативы" in ins
+              and "\nПользователь:" not in ins and "Напиши следующее сообщение" not in ins and pc["startWith"] == "Химэ:"
+              and len(saved) == 1 and saved[0][0] == "assistant" and "Привет из Perchance!" in saved[0][1] and saved[0][2] and "[scene:" not in saved[0][1])
         check("нет ошибок JS (perchance)", not errors2)
         if errors2: print("   ", errors2[:5])
         os.remove(os.path.join(ROOT, "dist/perchance/_test.html"))

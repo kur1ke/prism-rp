@@ -8,12 +8,13 @@
   const PC = PRP.perchance, OA = PRP.openai;
 
   /* prov — элемент settings.providerList; messages — [{role, content}].
-     opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom }
+     opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
+             closing (Perchance: последняя строка инструкции, текст готовит вызывающий) }
      → { text, reasoning } (контракт PRP.openai.chat / PRP.perchance.chat) */
   function chat(prov, messages, opts) {
     const o = opts || {};
     return prov.kind === "perchance"
-      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null })
+      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null })
       : OA.chat(prov, messages, o.sampler, { signal: o.signal, onDelta: o.onDelta });
   }
 

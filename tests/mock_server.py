@@ -4,6 +4,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 LOG = []
 IMG_LOG = []
+# Детерминированный ответ на проверку инициативы (FOUNDATION-D): message | decline | error | slow — задаётся GET /initiative?mode=…
+INITIATIVE = {"mode": "message"}
 # 2×3 PNG (серый) — достаточно, чтобы браузер его показал
 import base64, struct, zlib
 def tiny_png(w=2, h=3):
@@ -40,6 +42,9 @@ class H(BaseHTTPRequestHandler):
         for k, v in LISTS.items():
             if self.path.endswith("/sdapi/v1/" + k):
                 return self.json(v)
+        if "/initiative?mode=" in self.path:
+            INITIATIVE["mode"] = self.path.split("mode=", 1)[1]
+            return self.json(INITIATIVE)
         if self.path.endswith("/count"):
             return self.json({"chat": len(LOG), "img": len(IMG_LOG)})
         if self.path.endswith("/img-last"):
@@ -69,7 +74,15 @@ class H(BaseHTTPRequestHandler):
             self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": text}}]}) + "\n\ndata: [DONE]\n\n").encode()); self.wfile.flush()
             return
         system = " ".join(m["content"] for m in req.get("messages", []) if m["role"] == "system")
-        if "ассистент внутри Prism RP" in system:
+        if "Проверка инициативы" in system:
+            mode = INITIATIVE["mode"]
+            if mode == "error":
+                return self.json({"error": {"message": "mock initiative failure"}}, 500)
+            if mode == "slow":
+                time.sleep(1.5)
+            text = "[no-message]" if mode == "decline" else "INI-OK: привет! давно не писал(а)\n\nскучаю немного"
+            reasoning = ""
+        elif "ассистент внутри Prism RP" in system:
             card = "карточка: да" if "### Карточка персонажа" in system else "карточка: нет"
             chat = "чат: да" if "### Выдержка из ролевого чата" in system else "чат: нет"
             text = "## Совет\n\n**Коротко:** " + card + ", " + chat + ".\n\n- первый пункт\n- второй пункт\n\n```\nописание: тихая\n```"
