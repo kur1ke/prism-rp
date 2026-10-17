@@ -23,29 +23,20 @@
     const cd = m.card, c = m.chat;
     const line = SC.summaryLine(m.scene);
     const status = c.mode === "messenger"
-      ? (m.gen ? `<span class="head-scene live">печатает…</span>` : `<span class="head-scene"><span class="status-dot"></span> ${esc(messengerStatus(m) || "в сети")}</span>`)
+      ? (m.gen ? `<span class="head-scene live">печатает…</span>` : `<span class="head-scene"><span class="status-dot"></span> ${esc(PRP.views.messengerStatus(m.msWorld) || "положение неизвестно — см. «Среда»")}</span>`)
       : `<span class="head-scene ${m.gen ? "live" : ""}">${m.gen ? "пишет…" : esc(line || "Сцена не задана — откройте панель сцены")}</span>`;
     return `<header class="chat-head">
       <button class="icon-btn only-narrow" data-act="rail" title="Меню">${icon("menu")}</button>
       <button class="head-av" data-act="edit-card" title="Карточка персонажа">${R.avatar(cd, 40)}</button>
       <div class="head-who"><div class="head-name"><button class="head-card" data-act="edit-card" title="Открыть карточку персонажа">${esc(cd.name)}</button> <button class="tool rename" data-act="rename-chat" title="Переименовать чат">${esc(c.title || "")} ${icon("edit")}</button></div>${status}</div>
       <div class="head-tools">
-        <div class="seg wide" role="group" aria-label="Режим">
-          <button class="${c.mode === "rp" ? "on" : ""}" data-act="mode" data-mode="rp" title="Сцена">${icon("book")}<span>Сцена</span></button>
-          <button class="${c.mode === "messenger" ? "on" : ""}" data-act="mode" data-mode="messenger" title="Переписка">${icon("bubble")}<span>Переписка</span></button>
-        </div>
+        <span class="mode-badge" title="Режим задан при создании чата и не меняется. Другой режим — новый чат в меню «Ещё».">${icon(c.mode === "messenger" ? "bubble" : "book")}<span>${c.mode === "messenger" ? "Переписка" : "Сцена"}</span></span>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
         <button class="icon-btn" data-act="edit-card" title="Карточка персонажа">${icon("card")}</button>
         <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата, Prism">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
     </header>`;
-  }
-
-  function messengerStatus(m) {
-    const st = m.scene;
-    const k = Object.keys(st.chars).find((n) => n.toLowerCase() === m.card.name.toLowerCase());
-    return [st.loc, k && st.chars[k].pose].filter(Boolean).join(", ");
   }
 
   function feed(m) {
@@ -171,6 +162,14 @@
     }).join("");
   }
 
+  /* Время сообщения переписки: неизменяемая метка варианта (messengerAt) в поясе переписки.
+     У старых сообщений без метки — как раньше, время записи (только для показа; в Prism оно не идёт). */
+  function msStamp(m, msg, sw) {
+    const at = sw.messengerAt && PRP.messengerTime.toMs(sw.messengerAt.at);
+    if (at == null) return { day: R.day(sw.createdAt || msg.createdAt), time: R.time(sw.createdAt || msg.createdAt), known: false };
+    const f = PRP.messengerTime.format(at, m.msTz || sw.messengerAt.timeZone); // "dd.mm.yyyy, HH:MM"
+    return { day: f.split(", ")[0], time: f.split(", ")[1], known: true };
+  }
   function messengerFeed(m) {
     let lastDay = "";
     return m.path.map((msg, idx) => {
@@ -178,7 +177,8 @@
       const sw = TR.activeSwipe(msg);
       const live = m.gen && m.gen.msgId === msg.id;
       const side = msg.role === "user" ? "me" : "them";
-      const d = R.day(sw.createdAt || msg.createdAt);
+      const stamp = msStamp(m, msg, sw);
+      const d = stamp.day;
       const mark = d !== lastDay ? `<div class="daymark">${esc(d)}</div>` : "";
       lastDay = d;
       if (m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
@@ -189,7 +189,7 @@
       const parts = R.bubbles(sw.text);
       return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
-        <div class="stamp">${R.time(sw.createdAt || msg.createdAt)}</div>${tools(msg, isLast)}</div>`;
+        <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("");
   }
 
@@ -232,7 +232,7 @@
 
   function chatMenu(m) {
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
-      <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка</button>
+      <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка…</button>
       <div class="pop-sep"></div>
       <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>
       <button class="pop-item" data-act="edit-card">${icon("card")}Редактировать персонажа</button>

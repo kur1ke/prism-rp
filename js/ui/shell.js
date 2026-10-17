@@ -26,6 +26,7 @@
     }
 
     /* ── Модель представления ──────────────────────────────────────────── */
+    const isMs = () => { const c = ctx.chat(); return !!(c && c.mode === "messenger" && svc().messenger); };
     function vm() {
       const path = svc().chat.path();
       return {
@@ -34,7 +35,10 @@
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
         exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
-        worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
+        worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit,
+        // Переписка: среда (только чтение) — для вкладки «Среда», статуса в шапке и времени сообщений в поясе переписки.
+        messengerView: S.drawerOpen && (S.tab === "env" || S.tab === "scene") && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
+        msWorld: isMs() ? (svc().messenger.context() || {}).world : null, msTz: isMs() ? (svc().messenger.current() || {}).timeZone : null, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
         drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
         stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
         imgUrls: S.imgUrls, imgLists: S.imgLists, perchanceImages: IB.available("perchance"),
@@ -135,6 +139,7 @@
       }
       rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section)
         : S.modal.kind === "import" ? V.importReview(m, S.modal)
+        : S.modal.kind === "new-messenger" ? V.newMessengerModal(m, S.modal)
         : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —

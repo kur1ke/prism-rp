@@ -14,7 +14,8 @@
   const { util: U, store: DB, settings: ST, perchance: PC, imgBackends: IB, imgCompile: ICP } = PRP;
 
   /* ── Состояние сессии ────────────────────────────────────────────────
-     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), worldOverlay (мир текущего чата), assistList.
+     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), worldOverlay (мир текущего чата),
+     messengerEnv (среда текущей переписки), assistList.
      Навигация: view, cardId, chatId, assist (открытый разговор).
      Генерация (временное): gen, drawing (id картинок в работе).
      Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, expDraft.
@@ -29,6 +30,7 @@
     assist: null, assistList: [],
     worldPacks: [], worldLenses: [], worldDraft: null,
     worldOverlay: null, worldEdit: null, // наложение мира текущего чата; черновик действия во вкладке «Мир чата»
+    messengerEnv: null, envEdit: null, // среда текущей переписки (у сцены — null); черновик правки во вкладке «Среда»
   };
 
   /* ── Контекст зависимостей ───────────────────────────────────────────
@@ -38,6 +40,8 @@
     S, DB,
     files: PRP.files,
     env: { perchanceImages: () => IB.available("perchance") },
+    // Часы для живого времени переписки (в тестах подменяются). Таймеров нет: время читается только при действии.
+    clock: () => Date.now(),
     card: () => S.cards.find((c) => c.id === S.cardId) || null,
     chat: () => S.chats.find((c) => c.id === S.chatId) || null,
     persona: () => ST.persona(S.settings),
@@ -58,12 +62,13 @@
   ctx.svc.assist = PRP.assistService.create(ctx);
   ctx.svc.world = PRP.worldService.create(ctx);
   ctx.svc.worldChat = PRP.worldOverlayService.create(ctx);
+  ctx.svc.messenger = PRP.messengerService.create(ctx);
   const { ui, svc } = ctx;
   const { $ } = ui;
 
   /* ── Загрузка ─────────────────────────────────────────────────────── */
   async function loadAll() {
-    S.worldOverlay = null; S.worldEdit = null;
+    S.worldOverlay = null; S.worldEdit = null; S.messengerEnv = null; S.envEdit = null;
     const saved = await DB.getSetting("app", null);
     S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
@@ -89,8 +94,9 @@
     S.messages = await svc.chat.loadMessages(chatId);
     S.experience = await svc.exp.loadForCard(c.cardId);
     await svc.worldChat.load(chatId);
+    await svc.messenger.load(chatId);
     await svc.images.loadForChat(chatId);
-    S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.find = null;
+    S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); }
@@ -104,9 +110,17 @@
     $("#rail").classList.remove("open");
     ui.renderAll();
   }
-  async function newChat(mode, cardId) {
+  /* Новый чат. Режим выбирается здесь и потом не меняется. Для переписки — явная настройка времени (setup:
+     { timeZone, timeMode, manualNow }); она проверяется до создания чата. */
+  async function newChat(mode, cardId, setup) {
+    if (mode === "messenger") {
+      const err = svc.messenger.checkSetup(setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" });
+      if (err) { ui.toast(err, true); return null; }
+    }
     const id = await svc.chat.createChat(mode, cardId);
+    if (id && mode === "messenger") await svc.messenger.createFor(id, setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" });
     if (id) await openChat(id);
+    return id;
   }
   async function openCard(cardId) {
     const latest = svc.chat.latestForCard(cardId);
@@ -136,7 +150,7 @@
 
   /* ── Контроллеры и разбор событий ─────────────────────────────────── */
   const C = PRP.controllers;
-  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world].map((make) => make(ctx));
+  const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world, C.messenger].map((make) => make(ctx));
   const ACTS = Object.assign({
     home: goHome,
     "open-chat": (t) => openChat(t.dataset.id),

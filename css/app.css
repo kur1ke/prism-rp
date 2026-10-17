@@ -614,3 +614,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .wc-list .mt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .wc-list .mt small { color: var(--muted); }
 .world-edit textarea { min-height: 70px; }
+
+/* Переписка (FOUNDATION-C): значок режима и вкладка «Среда» */
+.mode-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 13px; white-space: nowrap; }
+.mode-badge svg { width: 15px; height: 15px; }
+.env-world dd { overflow-wrap: anywhere; }
+.env-edit .check.sm { font-size: 12px; margin-top: 2px; }
+.env-edit .check.sm span { font-size: 12px; }
+#drawer-body .row select, #drawer-body .row input { min-width: 0; flex: 1; }
+/* Переключатели внутри поля (область «ветка / вся переписка», режим времени) — не растягиваются на всю ширину */
+.field .check input[type=radio], .field .check input[type=checkbox] { width: auto; flex: none; height: auto; padding: 0; }

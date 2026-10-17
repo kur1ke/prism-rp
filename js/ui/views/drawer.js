@@ -8,9 +8,14 @@
 
   /* ── Выдвижная панель ─────────────────────────────────────────────── */
   function drawer(m) {
-    const tabs = [["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"], ["prism", "Prism", "prism"]];
+    // У сцены — «Сцена», у переписки — «Среда» (сцены RP в переписке нет). Мир, опыт и Prism — у обоих режимов.
+    const ms = m.chat && m.chat.mode === "messenger";
+    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"], ["prism", "Prism", "prism"]];
+    const tab = ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
+    m = Object.assign({}, m, { tab });
     let body = "";
     if (!m.chat) body = `<p class="empty-note">Откройте чат.</p>`;
+    else if (m.tab === "env") body = PRP.views.envTab(m);
     else if (m.tab === "scene") body = sceneTab(m);
     else if (m.tab === "memory") body = memoryTab(m);
     else if (m.tab === "world") body = worldTab(m);
@@ -172,8 +177,8 @@
       ${w.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${w.warnings.map((x) => `<li class="off">${esc(x.message)}</li>`).join("")}</ul></div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
-  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
+  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
     if (!p) return `<p class="hint">Здесь видно, что получает модель: карточку как склонности, опыт как свидетельства, сцену как факты.</p>

@@ -57,6 +57,7 @@
        Без первого сообщения чат создаётся пустым: ни заглушек, ни пустых узлов, leafId = null —
        начать может пользователь или, по явному действию, модель (generation/service, режим opening).
        Сценарий карточки в сцену не переносится. Делает чат текущим и возвращает его id. */
+    // Режим задаётся только здесь и дальше не меняется: сцена остаётся сценой, переписка — перепиской.
     async function createChat(mode, cardId) {
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
@@ -80,7 +81,7 @@
     function latestForCard(cardId) {
       return S.chats.filter((c) => c.cardId === cardId).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
     }
-    // Удалить чат целиком: сообщения, картинки, опыт и наложение мира этого чата. Состояние сбрасывается на «нет чата».
+    // Удалить чат целиком: сообщения, картинки, опыт, наложение мира и среду переписки этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
       const ms = await DB.byIndex("messages", "chatId", c.id);
       await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
@@ -88,6 +89,8 @@
       await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
       await DB.del("worldOverlays", c.id);
       if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
+      await DB.del("messengerEnvironments", c.id);
+      if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
       await DB.del("chats", c.id);
       S.chats = S.chats.filter((x) => x.id !== c.id);
       S.chatId = null; S.messages = [];
@@ -135,10 +138,12 @@
       await touch();
       return true;
     }
-    // Добавить пользовательский ответ в ветку: становится новым концом.
-    async function addUserMessage(text) {
+    /* Добавить пользовательский ответ в ветку: становится новым концом.
+       swipeExtra — неизменяемые сведения варианта, например метка времени переписки { messengerAt } (её даёт messenger/service). */
+    async function addUserMessage(text, swipeExtra) {
       const c = ctx.chat();
       const m = newMsg("user", c.leafId, text);
+      if (swipeExtra) Object.assign(m.swipes[0], swipeExtra);
       await putMsg(m);
       c.leafId = m.id;
       await touch();
@@ -165,6 +170,32 @@
       return true;
     }
 
+    /* ── Бэкап ─────────────────────────────────────────────────────────── */
+    /* Восстановление ДОБАВЛЕНИЕМ: локальный чат главнее входящего с тем же id в вопросе режима (режим фиксирован).
+       Входящий чат с тем же id, но другим режимом отклоняется до записи вместе со всем, что к нему привязано
+       (сообщения, картинки, опыт, наложение мира, среда переписки): иначе чужие сообщения попали бы в местный чат
+       или режим переключился бы молча. При замене локальных чатов не остаётся — конфликтов нет.
+       opts: { replace, existingChats: [{ id, mode }] } → { data, rejected, issues } */
+    const CHAT_BOUND = [["messages", "chatId"], ["images", "chatId"], ["experience", "chatId"], ["worldOverlays", "chatId"], ["messengerEnvironments", "chatId"]];
+    function checkBackupChats(data, opts) {
+      const o = opts || {};
+      if (!data || o.replace !== false || !Array.isArray(data.chats)) return { data, rejected: 0, issues: [] };
+      const local = new Map((o.existingChats || []).filter((c) => c && c.id).map((c) => [String(c.id), c.mode || "rp"]));
+      const conflict = new Set(), issues = [];
+      for (const c of data.chats) {
+        if (!c || !c.id || !local.has(String(c.id))) continue;
+        const incoming = c.mode || "rp", here = local.get(String(c.id));
+        if (incoming !== here) {
+          conflict.add(String(c.id));
+          issues.push({ level: "error", code: "chat-mode-conflict", message: `Чат в бэкапе — ${incoming === "messenger" ? "переписка" : "сцена"}, а здесь с тем же id — ${here === "messenger" ? "переписка" : "сцена"}: режим не меняется, чат из бэкапа не восстановлен.`, chatId: String(c.id) });
+        }
+      }
+      if (!conflict.size) return { data, rejected: 0, issues };
+      const out = Object.assign({}, data, { chats: data.chats.filter((c) => !(c && conflict.has(String(c.id)))) });
+      for (const [store, key] of CHAT_BOUND) if (Array.isArray(data[store])) out[store] = data[store].filter((x) => !(x && conflict.has(String(x[key]))));
+      return { data: out, rejected: conflict.size, issues };
+    }
+
     /* ── Прочее ────────────────────────────────────────────────────────── */
     function exportText() {
       const c = ctx.chat(), cd = ctx.card();
@@ -172,7 +203,7 @@
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText };
+    return { path, sceneState, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };

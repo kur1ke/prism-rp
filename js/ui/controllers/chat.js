@@ -1,4 +1,4 @@
-/* Prism RP — контроллер чата: отправка, генерация, варианты, правка, удаление, режим, поиск, меню чата.
+/* Prism RP — контроллер чата: отправка, генерация, варианты, правка, удаление, поиск, меню чата (режим меняется только созданием нового чата).
    Обработчики тонкие: прочитать ввод → вызвать сервис → перерисовать. */
 (function (root) {
   "use strict";
@@ -18,7 +18,10 @@
       if (S.view === "assist") { input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
       input.value = "";
       ui.autoGrow(input);
-      await svc.chat.addUserMessage(text);
+      // Переписка: у отправленного сообщения — неизменяемая метка времени и положения (её даёт сервис переписки).
+      const c = ctx.chat();
+      const stamp = c && c.mode === "messenger" ? svc.messenger.stampForNew() : null;
+      await svc.chat.addUserMessage(text, stamp ? { messengerAt: stamp } : null);
       ui.renderFeed();
       ui.scrollBottom();
       await svc.gen.generate();
@@ -59,14 +62,18 @@
         ui.renderRail();
         if (S.drawerOpen) ui.renderDrawer();
       },
-      mode: async (t) => { const c = ctx.chat(); if (c.mode === t.dataset.mode) return; c.mode = t.dataset.mode; await svc.chat.putChat(c); svc.prism.refresh(); ui.renderStage(); ui.renderRail(); ui.scrollBottom(); },
       find: () => { S.find = S.find ? null : { q: "", idx: 0 }; ui.renderStage(); const f = $("#find-q"); if (f) f.focus(); },
       "find-close": () => { S.find = null; ui.renderStage(); },
       "find-next": () => { if (!S.find.total) return; S.find.idx = (S.find.idx + 1) % S.find.total; ui.runFind(true); },
       "find-prev": () => { if (!S.find.total) return; S.find.idx = (S.find.idx - 1 + S.find.total) % S.find.total; ui.runFind(true); },
       "chat-menu": (t) => ui.openPop(V.chatMenu(ui.vm()), t),
       "model-pop": (t) => ui.openPop(V.modelPop(ui.vm()), t),
-      "new-chat": (t) => { ui.closePop(); nav.newChat(t.dataset.mode); },
+      // Режим выбирается только при создании. Переписке нужна настройка времени — сначала окно.
+      "new-chat": (t) => {
+        ui.closePop();
+        if (t.dataset.mode === "messenger") { S.modal = { kind: "new-messenger", cardId: S.cardId, timeMode: "live" }; ui.renderModal(); return; }
+        nav.newChat(t.dataset.mode);
+      },
       "rename-chat": async () => {
         ui.closePop();
         const c = ctx.chat();

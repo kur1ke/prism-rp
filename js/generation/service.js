@@ -6,6 +6,9 @@
    "opening" — модель начинает сцену в пустом чате (см. opening ниже: дерево меняется только
    после успешного ответа).
    Сценарий карточки подаётся по правилу prism/scenario.js (граница первого ответа).
+   Переписка: момент переписки выбирается при подготовке (живое время — часы, ручное — сохранённое) и вместе
+   с положением персонажа записывается в вариант (messengerAt) ТОЛЬКО при успешном ответе. Ошибка, отмена,
+   пустой ответ и переполнение время не записывают и не двигают. Среду переписки генерация не меняет никогда.
    Перерисовка — через порт ctx.ui (сервис не трогает DOM сам). */
 (function (root) {
   "use strict";
@@ -22,6 +25,8 @@
   function create(ctx) {
     const { S, ui } = ctx;
     const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images;
+    // Сервис среды — только для переписки.
+    const messenger = () => { const c = ctx.chat(); return c && c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger : null; };
 
     async function generate(msgId, mode) {
       if (S.gen) return;
@@ -42,7 +47,9 @@
       // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
       const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), rootOpening ? { allowSyntheticUser: false } : null);
+      const ms = messenger();
+      const msNow = ms ? ms.now() : undefined; // момент переписки для этого хода (выбран при подготовке)
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign(rootOpening ? { allowSyntheticUser: false } : {}, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
@@ -95,6 +102,12 @@
       }
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
       if (error) sw.error = error; else delete sw.error;
+      /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
+         прежняя метка не меняется, новая ставится, только если её не было. Ветка для положения — до этого сообщения. */
+      if (ms && !error && !ctrl.signal.aborted && String(sw.text || "").trim() && !(mode === "continue" && sw.messengerAt)) {
+        const snap = ms.snapshot(mode === "new" ? full : path, msNow);
+        if (snap) sw.messengerAt = snap;
+      }
       S.gen = null;
       await chat().putMsg(target);
       await chat().touch();
@@ -138,7 +151,9 @@
     async function opening(prov) {
       const c = ctx.chat(), cd = ctx.card();
       if (chat().path().length) return { ok: false, reason: "not-empty" };
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), { allowSyntheticUser: false });
+      const ms = messenger();
+      const msNow = ms ? ms.now() : undefined;
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false }, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
@@ -176,6 +191,7 @@
       const m = chat().newMsg("assistant", null, "");
       m.opening = "generated";
       m.swipes = [{ text: dr.text, sceneOps: parsed.ops, draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       await chat().putMsg(m);
       c.leafId = m.id;
       await chat().touch();
