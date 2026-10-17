@@ -49,7 +49,7 @@
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined; // момент переписки для этого хода (выбран при подготовке)
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign(rootOpening ? { allowSyntheticUser: false } : {}, ms ? { messengerNow: msNow } : {}));
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign(rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
@@ -91,13 +91,17 @@
       const th = OA.splitThink(raw || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
+      // Переписка: [scene:] вырезается из текста, но сцену не пишет (chat/service.sceneFields — только неактивная копия).
+      const sf = chat().sceneFields(parsed.ops);
       if (mode === "continue") {
         if (dr.text) sw.text = S.gen.prefix + dr.text;
-        sw.sceneOps = (sw.sceneOps || []).concat(parsed.ops);
+        sw.sceneOps = (sw.sceneOps || []).concat(sf.sceneOps);
+        if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = (sw.ignoredSceneOps || []).concat(sf.ignoredSceneOps);
         sw.draws = (sw.draws || []).concat(dr.draws);
       } else {
         sw.text = dr.text;
-        sw.sceneOps = parsed.ops;
+        sw.sceneOps = sf.sceneOps;
+        if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = sf.ignoredSceneOps; else delete sw.ignoredSceneOps;
         sw.draws = dr.draws;
       }
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
@@ -153,7 +157,7 @@
       if (chat().path().length) return { ok: false, reason: "not-empty" };
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined;
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false }, ms ? { messengerNow: msNow } : {}));
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening" }, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
@@ -190,7 +194,7 @@
 
       const m = chat().newMsg("assistant", null, "");
       m.opening = "generated";
-      m.swipes = [{ text: dr.text, sceneOps: parsed.ops, draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       await chat().putMsg(m);
       c.leafId = m.id;

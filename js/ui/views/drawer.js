@@ -36,7 +36,7 @@
     Object.keys(st.chars).forEach(add);
     const people = names.map((n) => {
       const key = Object.keys(st.chars).find((k) => k.toLowerCase() === n.toLowerCase());
-      const ch = key ? st.chars[key] : { wear: [], pose: "", mood: "", rel: 0, relLog: [] };
+      const ch = key ? st.chars[key] : { wear: [], pose: "", mood: "" };
       const isMain = n.toLowerCase() === m.card.name.toLowerCase();
       return `<div class="panel" data-person="${esc(n)}">
         <div class="who">${R.avatar(isMain ? m.card : { name: n }, 34)}<b>${esc(n)}</b>
@@ -45,12 +45,8 @@
           <div class="chips">${ch.wear.map((w) => `<span class="chip"><span>${esc(w)}</span><button data-act="sc-remove" data-name="${esc(n)}" data-item="${esc(w)}" title="Снять">${icon("x")}</button></span>`).join("")}
             <input class="chip-add" data-sc-add="${esc(n)}" placeholder="+ надеть…"></div></div>
         <div class="row"><div class="field"><label>Поза, где</label><input data-sc-field="pose" data-name="${esc(n)}" value="${esc(ch.pose)}" placeholder="сидит у окна"></div>
-          <div class="field"><label>Настроение</label><input data-sc-field="mood" data-name="${esc(n)}" value="${esc(ch.mood)}" placeholder="спокойна"></div></div>
-        ${isMain ? `<div class="field"><label>Как относится к вам</label>
-          <div class="rel"><input type="range" min="-10" max="10" step="1" value="${ch.rel}" data-sc-rel="${esc(n)}" aria-label="Отношение">
-          <output id="rel-out">${esc(SC.relWord(ch.rel))} (${ch.rel > 0 ? "+" : ""}${ch.rel})</output>
-          ${ch.relLog.length ? `<div class="rel-log">${ch.relLog.slice(-3).reverse().map((r) => esc(`${r.delta > 0 ? "+" : ""}${r.delta} — ${r.why || "без причины"}`)).join("<br>")}</div>` : ""}</div>
-          <span class="help">Это рабочая оценка: модель видит её словом и с причиной, а не как приказ.</span></div>` : ""}
+          <div class="field"><label>Настроение (оценка)</label><input data-sc-field="mood" data-name="${esc(n)}" value="${esc(ch.mood)}" placeholder="спокойна"></div></div>
+        ${isMain && ch.mood ? `<span class="help">Модель видит настроение как предполагаемую оценку, а не как факт.</span>` : ""}
       </div>`;
     }).join("");
     return `
@@ -66,6 +62,7 @@
         <div class="chips">${st.present.map((p) => `<span class="chip"><span>${esc(p)}</span><button data-act="sc-leave" data-name="${esc(p)}" title="Ушёл из сцены">${icon("x")}</button></span>`).join("")}
           <input class="chip-add" id="sc-enter-new" placeholder="+ добавить…"></div></div>
       <div class="block"><div class="block-title">Персонажи</div>${people}</div>
+      ${st.legacyIgnored ? `<p class="hint legacy-note">На этой ветке есть устаревшие отметки сцены (отношение, отметки сюжета): ${st.legacyIgnored}. Они сохранены в сообщениях, но больше не действуют и в модель не подаются.</p>` : ""}
       <div class="block"><div class="block-title">Как модель ведёт сцену</div>
         <label class="check"><input type="checkbox" data-set="sceneProtocol" ${m.settings.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сама<small>В конце ответа она пишет короткую служебную строку; приложение применяет её и прячет из текста.</small></span></label>
         <details><summary class="hint" style="cursor:pointer">Начальная сцена в текстовом виде</summary>
@@ -177,11 +174,23 @@
       ${w.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${w.warnings.map((x) => `<li class="off">${esc(x.message)}</li>`).join("")}</ul></div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.background": "прошлое", "card.appearance": "внешность", "card.description": "описание" };
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.chunks": "подробности карточки", "card.core": "вторичное ядро карточки" };
+  const CHUNK_STATE = { selected: "в контексте", budget: "не поместилось", limit: "сверх лимита", "no-relation": "не относится" };
+  // Карточка в Prism: ядро (явное или запасное), кандидаты подробностей, примеры речи.
+  function cardDebug(c) {
+    if (!c) return "";
+    const tr = (c.core.truncated || []).map((x) => `${{ description: "описание", personality: "личность" }[x.field] || x.field} ${x.kept} из ${x.total} симв.`).join(", ");
+    return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
+      <dl class="kv"><dt>Ядро</dt><dd>${c.core.source === "explicit" ? "задано в карточке" : "запасное — " + esc(c.core.reason)}; ${c.core.tokens} ток.${tr ? `; сокращено: ${esc(tr)} (остаток — в подробностях)` : ""}</dd>
+        <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>
+        <dt>Подробности</dt><dd>${c.selected.length ? esc(c.selected.join(", ")) : "нет"}${c.dropped.length ? `; не поместилось: ${esc(c.dropped.join(", "))}` : ""}</dd></dl>
+      ${c.candidates.length ? `<table><thead><tr><th>Кусок</th><th>почему</th><th>итог</th></tr></thead><tbody>
+      ${c.candidates.map((x) => `<tr class="${x.state === "selected" ? "sel" : ""}"><td>${esc(x.id)}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${CHUNK_STATE[x.state]}</td></tr>`).join("")}</tbody></table>` : ""}</details>`;
+  }
   const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
-    if (!p) return `<p class="hint">Здесь видно, что получает модель: карточку как склонности, опыт как свидетельства, сцену как факты.</p>
+    if (!p) return `<p class="hint">Здесь видно, что получает модель: указания отдельно, а карточку, опыт, сцену и мир — как данные с пометками.</p>
       <button class="btn btn-sm" data-act="prism-preview">${icon("prism")}Собрать для следующего хода</button>`;
     const r = p.report;
     const total = Object.values(r.layers).reduce((a, b) => a + b, 0) || 1;
@@ -197,10 +206,12 @@
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
         ${r.world ? `<dt>Мир</dt><dd>${r.worldKept} ${R.plural(r.worldKept, "факт", "факта", "фактов")} из ${r.world.relevant} релевантных${r.worldDropped ? `, не поместилось ${r.worldDropped}` : ""}; действует ${r.world.effective}, проходит отбор по таймлайну ${r.world.eligible}</dd>` : ""}
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
+        ${r.sceneLegacyIgnored ? `<dt>Устаревшее в сцене</dt><dd>${r.sceneLegacyIgnored} — не действует (отношение, отметки сюжета)</dd>` : ""}
         ${r.scenarioState && r.scenarioState !== "none" ? `<dt>Сценарий</dt><dd>${{ included: "в контексте — исходные обстоятельства, до первого ответа на вашу реплику", "past-first-turn": "больше не подаётся: первый ответ на вашу реплику уже прозвучал", budget: "не поместился" }[r.scenarioState]}</dd>` : ""}
         ${r.postHistoryDisabled ? `<dt>После истории</dt><dd>указания автора выключены в настройках</dd>` : ""}
-        ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "") + (t.detail && t.layer === "card.description" ? ` (${esc(t.detail)})` : "")).join(", ")}</dd>` : ""}
+        ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "")).join(", ")}</dd>` : ""}
         </dl></div>
+      ${cardDebug(r.card)}
       ${(r.expDebug || []).length ? `<details class="block exp-debug"><summary>Отбор опыта</summary>
         <table><thead><tr><th>Событие</th><th title="совпадение по темам">тема</th><th title="о присутствующих">участ.</th><th title="важность">важн.</th><th title="ранг свежести, только при равенстве">свеж.</th><th>итог</th></tr></thead><tbody>
         ${r.expDebug.map((x) => `<tr class="${x.selected ? "sel" : ""}"><td>${esc((x.event || "").slice(0, 60))}</td><td>${x.topic}</td><td>${x.participant}</td><td>${x.weight}</td><td>${x.recencyRank}</td><td>${x.selected ? "в контексте" : !x.visible ? esc(x.reason) : !x.active ? "не действует" : "не выбрано"}</td></tr>`).join("")}

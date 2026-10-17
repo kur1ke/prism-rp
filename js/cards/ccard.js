@@ -195,9 +195,12 @@
     // Пространство Prism в extensions: картинки, раздельные поля, выключенные указания.
     const ext = Object.assign({}, data.extensions);
     const pr = Object.assign({}, ext.prism_rp);
-    delete pr.image; delete pr.fields; delete pr.disabledDirectives;
+    delete pr.image; delete pr.fields; delete pr.disabledDirectives; delete pr.prismCore;
     const im = card.image && Object.keys(card.image).length ? card.image : null;
     if (im) pr.image = JSON.parse(JSON.stringify(im));
+    // Ядро Prism — только данные в своём расширении (никогда не в system_prompt): при импорте оно непроверенное.
+    const core = PRP.cardContext && PRP.cardContext.normCore(card.prismCore);
+    if (core) pr.prismCore = { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext };
     if (card.appearance || card.background) pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
     const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
     const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};

@@ -17,9 +17,19 @@
       const c = ctx.chat();
       return c ? TR.path(TR.index(S.messages), c.leafId) : [];
     }
+    /* Сцена RP активной ветки. У переписки сцены нет (FOUNDATION-H): пустое состояние — служебные строки
+       [scene:] в переписке (в том числе старые, сохранённые до разделения режимов) сцену не создают
+       и не попадают ни в Prism, ни в картинки, ни в ассистента. */
     function sceneState(p) {
       const c = ctx.chat();
+      if (c && c.mode === "messenger") return SC.fold("", []);
       return SC.fold(c ? c.sceneInit : "", (p || path()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
+    }
+    /* Служебная строка [scene:] из текста ответа: в сцене — операции сцены; в переписке — вырезается из текста,
+       а операции хранятся в варианте только как неактивные (ignoredSceneOps, для совместимости и отладки). */
+    function sceneFields(ops) {
+      const c = ctx.chat();
+      return c && c.mode === "messenger" ? { sceneOps: [], ignoredSceneOps: ops || [] } : { sceneOps: ops || [] };
     }
     // Путь в виде, который понимают модули Prism: [{id, swipeIdx}].
     function pathCtx(p) { return (p || path()).map((m) => ({ id: m.id, swipeIdx: m.swipeIdx || 0 })); }
@@ -119,7 +129,7 @@
       const sw = TR.activeSwipe(m);
       const parsed = SC.parse(text);
       sw.text = m.role === "assistant" ? parsed.text : text.trim();
-      if (m.role === "assistant") sw.sceneOps = parsed.ops;
+      if (m.role === "assistant") { delete sw.ignoredSceneOps; Object.assign(sw, sceneFields(parsed.ops)); }
       await putMsg(m);
       await touch();
       return true;
@@ -158,6 +168,7 @@
     async function applySceneOps(ops) {
       if (!ops.length) return false;
       const c = ctx.chat();
+      if (!c || c.mode === "messenger") return false; // у переписки сцены нет
       const leaf = path().slice(-1)[0];
       if (leaf) {
         const sw = TR.activeSwipe(leaf);
@@ -203,7 +214,7 @@
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
+    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };

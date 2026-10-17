@@ -123,15 +123,20 @@
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
-    // replace=true очищает коллекции перед загрузкой
+    /* Восстановление (данные уже проверены: core/backup и проверки сервисов).
+       replace=true — ЗАМЕНА всего набора данных Prism RP (FOUNDATION-H): сначала очищаются ВСЕ известные коллекции
+       (STORES), затем пишется бэкап. Коллекции нет в бэкапе — после замены она пустая (в том числе настройки:
+       после перезагрузки — значения по умолчанию). Сама база не удаляется, жизненный цикл соединения прежний.
+       replace=false — добавление: пишется только то, что есть в бэкапе. */
     async importAll(data, replace) {
       if (!data || data.app !== "prism-rp") throw new Error("Это не бэкап Prism RP");
+      if (replace) for (const s of STORES) await tx(s, "readwrite", (st) => wrap(st.clear()));
       for (const s of STORES) {
-        if (!Array.isArray(data[s])) continue;
-        if (replace) await tx(s, "readwrite", (st) => wrap(st.clear()));
+        if (!Array.isArray(data[s]) || !data[s].length) continue;
         await api.putMany(s, data[s]);
       }
     },
+    STORES: STORES.slice(),
   };
 
   PRP.store = api;

@@ -43,6 +43,17 @@
     const book = isObj(data.character_book) ? data.character_book : null;
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
     if (isObj(prism.image)) d.image = clone(prism.image);
+    // Ядро Prism из нашего расширения — данные, а не указание; приходит непроверенным и не используется,
+    // пока пользователь не сохранит его в редакторе (до этого Prism собирает запасное ядро из полей).
+    if (isObj(prism.prismCore)) {
+      const pc = prism.prismCore;
+      const list = (v) => (Array.isArray(v) ? v.map((x) => str(x).trim()).filter(Boolean) : []);
+      const core = { schema: 1, identity: str(pc.identity).trim(), traits: list(pc.traits), voice: list(pc.voice), durableContext: list(pc.durableContext), source: "imported", reviewed: false };
+      if (core.identity || core.traits.length || core.voice.length || core.durableContext.length) {
+        d.prismCore = core;
+        notes.push(note("info", "prism-core", "Ядро Prism из карточки перенесено как данные, непроверенным: оно начнёт использоваться после сохранения в редакторе."));
+      }
+    }
 
     // Указания автора: только из стандартных полей, импортированные и выключенные.
     // Пустое стандартное поле = указания нет. Расширения (в т. ч. prism_rp.disabledDirectives) указаниями не становятся.

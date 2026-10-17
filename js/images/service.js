@@ -51,6 +51,9 @@
       try {
         const path = chat().path();
         const upto = path.indexOf(msg) >= 0 ? path.slice(0, path.indexOf(msg) + 1) : path;
+        /* Зрительное состояние: у сцены RP — одежда и поза из сцены; у переписки сцены нет (chat/service.sceneState —
+           пустое состояние), поэтому картинка строится только из [draw:], карточки и персоны: одежду и место «вне кадра»
+           ничто не придумывает. Картинка — производное: её данные в Prism не возвращаются. */
         const st = chat().sceneState(upto);
         const pers = ctx.persona();
         const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers });

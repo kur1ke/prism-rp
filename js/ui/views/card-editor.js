@@ -32,7 +32,8 @@
           ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
           ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
-          ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>`;
+          ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>
+        ${coreBlock(d)}`;
     } else if (section === "greet") {
       const alts = d.altGreetings || [];
       body = `${f("cf-first", "Первое сообщение", "first_mes", d.firstMes, 7, "С него начинается новый чат. В конце можно добавить строку [scene: …] с начальным местом и одеждой.")}
@@ -93,6 +94,29 @@
         <button class="icon-btn" data-act="modal-close" title="Закрыть без сохранения">${icon("x")}</button></div>
       <nav class="modal-nav">${nav.map(([id, n, ic]) => `<button class="rail-item ${section === id ? "active" : ""}" data-act="card-section" data-section="${id}">${icon(ic)}${n}</button>`).join("")}</nav>
       <div class="modal-body">${body}</div></div></div>`;
+  }
+  /* Ядро для Prism: что модель получает о персонаже на каждом ходе. Явное ядро правится здесь;
+     без него показывается запасное, собранное из полей (без модели). Остальное из карточки подаётся по ходу разговора. */
+  function coreBlock(d) {
+    const CC = PRP.cardContext;
+    const ex = CC.normCore(d.prismCore);
+    const fb = CC.core(Object.assign({}, d, { prismCore: null }));
+    const state = !ex ? "Запасное — собрано из описания и личности" : ex.source === "imported" && !ex.reviewed ? "Из файла, не проверено — пока используется запасное" : "Задано явно";
+    const lines = (a) => esc((a || []).join("\n"));
+    const ta = (id, label, val, rows, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="${rows}" data-core="${id}" placeholder="${esc(ph)}">${val}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
+    const preview = !ex || !ex.reviewed ? `<div class="core-preview"><span class="label">Сейчас Prism использует</span>
+        <p class="hint"><b>Описание:</b> ${esc(fb.identity || "—")}</p><p class="hint"><b>Личность:</b> ${esc(fb.personality || "—")}</p>
+        ${fb.truncated.length ? `<p class="hint">Сокращено по предложениям: ${fb.truncated.map((x) => `${x.field === "description" ? "описание" : "личность"} ${x.kept} из ${x.total} симв.`).join(", ")}. Остальное подаётся, когда относится к разговору.</p>` : ""}</div>` : "";
+    return `<div class="block core-block" id="prism-core"><div class="block-title" style="margin-top:22px">Ядро для Prism <span class="tag" id="core-state">${esc(state)}</span></div>
+      <p class="hint">Коротко о том, кто это: подаётся модели на каждом ходе. Прошлое, внешность и подробности описания подаются, только когда относятся к разговору. Поля карточки не меняются; модель ядро не пишет.</p>
+      ${preview}
+      ${ta("core-identity", "Кто это", esc(ex ? ex.identity : ""), 3, "Студентка второго курса, живёт одна в Каракуре…")}
+      ${ta("core-traits", "Черты", ex ? lines(ex.traits) : "", 3, "по одной на строку", "По одной на строку.")}
+      ${ta("core-voice", "Манера речи", ex ? lines(ex.voice) : "", 2, "по одной на строку")}
+      ${ta("core-durable", "Устойчивое", ex ? lines(ex.durableContext) : "", 2, "постоянные обстоятельства, по одному на строку")}
+      ${ex && ex.source === "imported" && !ex.reviewed ? `<label class="check"><input type="checkbox" data-core-reviewed><span>Проверено — использовать это ядро</span></label>` : ""}
+      <div class="row wrap"><button class="btn btn-sm" data-act="core-derive">Собрать из карточки</button>
+        ${ex ? `<button class="btn btn-sm btn-ghost" data-act="core-clear">Сбросить — собирать автоматически</button>` : ""}</div></div>`;
   }
   // Откуда карточка: формат исходника и то, что сохранено без использования. Только показ.
   function sourceBlock(s) {

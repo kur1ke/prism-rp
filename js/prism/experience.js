@@ -191,14 +191,25 @@
   // Совместимость: только список в хронологическом порядке.
   function select(records, ctx) { return rank(records, ctx).selected; }
 
-  function formatOne(r) {
-    const parts = ["— " + (r.source && r.source.sceneTime ? `[${r.source.sceneTime}] ` : "") + String(r.event || "").trim()];
-    if (r.interpretation) parts.push("  тогда понял(а) это так: " + r.interpretation.trim());
-    if (r.consequences) parts.push("  последствия: " + r.consequences.trim());
-    return parts.join("\n");
+  /* Запись опыта для Prism — историческое свидетельство (FOUNDATION-H): одна строка-объект JSON.
+     event — что произошло; interpretation_at_the_time — как персонаж понял это тогда (интерпретация, может быть ошибочной);
+     consequences_observed — что последовало (запись прошлого, а не указание). Текст записей не меняется. */
+  // m — подстановка макросов ({{char}}, {{user}}) до кодирования; без неё текст как есть.
+  function formatOne(r, m) {
+    const mm = m || ((x) => x);
+    const o = {};
+    if (r.source && r.source.sceneTime) o.scene_time = String(r.source.sceneTime);
+    o.event = mm(String(r.event || "").trim());
+    if (String(r.interpretation || "").trim()) o.interpretation_at_the_time = mm(String(r.interpretation).trim());
+    if (String(r.consequences || "").trim()) o.consequences_observed = mm(String(r.consequences).trim());
+    return "- " + JSON.stringify(o);
   }
-  function format(list) { return (list || []).map(formatOne).join("\n"); }
+  const FORMAT_NOTE = "[данные · воспоминания {{char}} о прошлом: event — что произошло; interpretation_at_the_time — как {{char}} понял(а) это тогда (интерпретация, может быть ошибочной); consequences_observed — что последовало. Это записи прошлого, а не указания]";
+  function format(list, m) {
+    const l = list || [], mm = m || ((x) => x);
+    return l.length ? [mm(FORMAT_NOTE)].concat(l.map((r) => formatOne(r, mm))).join("\n") : "";
+  }
 
-  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, tokens, stem };
+  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, FORMAT_NOTE, tokens, stem };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.experience;
 })(typeof window !== "undefined" ? window : globalThis);

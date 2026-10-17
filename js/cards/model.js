@@ -7,6 +7,8 @@
      • указания автора: directives.system / directives.postHistory — отдельный уровень власти,
        у каждого явный флаг enabled; импортированные приходят выключенными;
      • метаданные: creator, creatorNotes, tags, version; картинки: image;
+     • prismCore — необязательное ядро для Prism (prism/card-context): компактное представление, а не источник истины;
+       видно и правится в редакторе; нет ядра (null) — Prism собирает запасное из полей. Схему карточки не меняет;
      • source — исходник и сведения импорта, ТОЛЬКО хранение: во время работы не читается.
    Чистый модуль: без DOM, хранилища и сети. */
 (function (root) {
@@ -38,6 +40,7 @@
       directives: { system: directive("", "authored"), postHistory: directive("", "authored") },
       creator: "", creatorNotes: "", tags: [], version: "",
       image: undefined,
+      prismCore: null,
       avatar: null,
       source: null,
       createdAt: now, updatedAt: now,
