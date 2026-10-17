@@ -6815,6 +6815,32 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return true;
     }
 
+    /* ── Бэкап ─────────────────────────────────────────────────────────── */
+    /* Восстановление ДОБАВЛЕНИЕМ: локальный чат главнее входящего с тем же id в вопросе режима (режим фиксирован).
+       Входящий чат с тем же id, но другим режимом отклоняется до записи вместе со всем, что к нему привязано
+       (сообщения, картинки, опыт, наложение мира, среда переписки): иначе чужие сообщения попали бы в местный чат
+       или режим переключился бы молча. При замене локальных чатов не остаётся — конфликтов нет.
+       opts: { replace, existingChats: [{ id, mode }] } → { data, rejected, issues } */
+    const CHAT_BOUND = [["messages", "chatId"], ["images", "chatId"], ["experience", "chatId"], ["worldOverlays", "chatId"], ["messengerEnvironments", "chatId"]];
+    function checkBackupChats(data, opts) {
+      const o = opts || {};
+      if (!data || o.replace !== false || !Array.isArray(data.chats)) return { data, rejected: 0, issues: [] };
+      const local = new Map((o.existingChats || []).filter((c) => c && c.id).map((c) => [String(c.id), c.mode || "rp"]));
+      const conflict = new Set(), issues = [];
+      for (const c of data.chats) {
+        if (!c || !c.id || !local.has(String(c.id))) continue;
+        const incoming = c.mode || "rp", here = local.get(String(c.id));
+        if (incoming !== here) {
+          conflict.add(String(c.id));
+          issues.push({ level: "error", code: "chat-mode-conflict", message: `Чат в бэкапе — ${incoming === "messenger" ? "переписка" : "сцена"}, а здесь с тем же id — ${here === "messenger" ? "переписка" : "сцена"}: режим не меняется, чат из бэкапа не восстановлен.`, chatId: String(c.id) });
+        }
+      }
+      if (!conflict.size) return { data, rejected: 0, issues };
+      const out = Object.assign({}, data, { chats: data.chats.filter((c) => !(c && conflict.has(String(c.id)))) });
+      for (const [store, key] of CHAT_BOUND) if (Array.isArray(data[store])) out[store] = data[store].filter((x) => !(x && conflict.has(String(x[key]))));
+      return { data: out, rejected: conflict.size, issues };
+    }
+
     /* ── Прочее ────────────────────────────────────────────────────────── */
     function exportText() {
       const c = ctx.chat(), cd = ctx.card();
@@ -6822,7 +6848,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText };
+    return { path, sceneState, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };
@@ -7908,14 +7934,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        Запись принимается, только если: проходит проверку формы; её чат — ПЕРЕПИСКА там, куда восстанавливаем
        (замена — только чаты бэкапа; добавление — чаты бэкапа ∪ существующие); она единственная для своего чата.
        Запись для сцены — отклоняется; несколько записей одного чата — отклоняются все. Ничего не переназначается.
+       При добавлении режим уже существующего чата берётся ЛОКАЛЬНЫЙ (он главнее входящего чата с тем же id).
        opts: { replace, existingChats: [{ id, mode }] } → { data, rejected, warnings, issues } */
     function checkBackup(data, opts) {
       if (!data || !Array.isArray(data[STORE])) return { data, rejected: 0, warnings: 0, issues: [] };
       const o = opts || {};
       const replace = o.replace !== false;
       const mode = new Map();
-      if (!replace) for (const c of o.existingChats || []) if (c && c.id) mode.set(String(c.id), c.mode);
       for (const c of Array.isArray(data.chats) ? data.chats : []) if (c && c.id) mode.set(String(c.id), c.mode);
+      if (!replace) for (const c of o.existingChats || []) if (c && c.id) mode.set(String(c.id), c.mode); // локальный режим главнее
       const per = new Map();
       for (const r of data[STORE]) { const id = r && typeof r === "object" ? String(r.chatId || "").trim() : ""; if (id) per.set(id, (per.get(id) || 0) + 1); }
       const issues = [], ok = [];
@@ -8858,14 +8885,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         // Проверка до записи (правила — в svc.worldChat.checkBackup): запись мира чата принимается, только если её чат
         // есть в бэкапе (замена) или в бэкапе либо уже здесь (добавление). Контроллер даёт только режим и id чатов.
         const local = replace ? [] : await DB.all("chats");
-        const chk = svc.worldChat.checkBackup(data, { replace, existingChatIds: local.map((c) => c.id) });
+        const existingChats = local.map((c) => ({ id: c.id, mode: c.mode }));
+        // Добавление: входящий чат с тем же id, но другим режимом — отклоняется вместе со своими записями (svc.chat.checkBackupChats).
+        const chkChats = svc.chat.checkBackupChats(data, { replace, existingChats });
+        const chk = svc.worldChat.checkBackup(chkChats.data, { replace, existingChatIds: local.map((c) => c.id) });
         // Среда переписки — то же: только к переписке из бэкапа (замена) или из бэкапа и уже существующих (добавление).
-        const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats: local.map((c) => ({ id: c.id, mode: c.mode })) });
+        const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats });
         await DB.importAll(chkEnv.data, replace);
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();
-        const skipped = [chk.rejected ? `записей мира чата: ${chk.rejected}` : "", chkEnv.rejected ? `записей среды переписки: ${chkEnv.rejected}` : ""].filter(Boolean).join(", ");
+        const skipped = [chkChats.rejected ? `чатов с другим режимом: ${chkChats.rejected}` : "", chk.rejected ? `записей мира чата: ${chk.rejected}` : "", chkEnv.rejected ? `записей среды переписки: ${chkEnv.rejected}` : ""].filter(Boolean).join(", ");
         ui.toast(skipped ? `Бэкап загружен. Некоторые записи пропущены при восстановлении — ${skipped}.` : "Бэкап загружен.", !!skipped);
         return true;
       }

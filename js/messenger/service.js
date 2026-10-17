@@ -160,14 +160,15 @@
        Запись принимается, только если: проходит проверку формы; её чат — ПЕРЕПИСКА там, куда восстанавливаем
        (замена — только чаты бэкапа; добавление — чаты бэкапа ∪ существующие); она единственная для своего чата.
        Запись для сцены — отклоняется; несколько записей одного чата — отклоняются все. Ничего не переназначается.
+       При добавлении режим уже существующего чата берётся ЛОКАЛЬНЫЙ (он главнее входящего чата с тем же id).
        opts: { replace, existingChats: [{ id, mode }] } → { data, rejected, warnings, issues } */
     function checkBackup(data, opts) {
       if (!data || !Array.isArray(data[STORE])) return { data, rejected: 0, warnings: 0, issues: [] };
       const o = opts || {};
       const replace = o.replace !== false;
       const mode = new Map();
-      if (!replace) for (const c of o.existingChats || []) if (c && c.id) mode.set(String(c.id), c.mode);
       for (const c of Array.isArray(data.chats) ? data.chats : []) if (c && c.id) mode.set(String(c.id), c.mode);
+      if (!replace) for (const c of o.existingChats || []) if (c && c.id) mode.set(String(c.id), c.mode); // локальный режим главнее
       const per = new Map();
       for (const r of data[STORE]) { const id = r && typeof r === "object" ? String(r.chatId || "").trim() : ""; if (id) per.set(id, (per.get(id) || 0) + 1); }
       const issues = [], ok = [];

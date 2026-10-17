@@ -1026,6 +1026,23 @@ try:
         pr.wait_for_timeout(300)
         ra = pr.evaluate("async () => (await PRP.app.ctx.DB.all('worldOverlays')).map((o) => [o.chatId, o.entries[0].fact.text])")
         check("W2 fix: восстановление (добавление) — запись для существующего чата принята, сирота — нет", ra == [["r-chat", "ADD-OV"]])
+        # FC fix: добавление — входящий чат с тем же id и другим режимом не переключает местный чат и не попадает в него
+        with open(bk_file, "w", encoding="utf-8") as f:
+            json.dump({"app": "prism-rp", "version": 6,
+                       "chats": [{"id": "r-chat", "cardId": "r-card", "mode": "messenger", "title": "ПОДМЕНА", "leafId": "x-m", "sceneInit": ""}],
+                       "messages": [{"id": "x-m", "chatId": "r-chat", "parentId": None, "role": "user", "swipes": [{"text": "ЧУЖОЕ", "sceneOps": []}], "swipeIdx": 0, "createdAt": 1}],
+                       "messengerEnvironments": [envrec("r-chat", "ENV-CONFLICT")]}, f, ensure_ascii=False)
+        pr.once("dialog", lambda d: d.dismiss())  # «Отмена — добавить»
+        pr.set_input_files("#file-backup", bk_file)
+        mc = None
+        for _ in range(100):
+            pr.wait_for_timeout(100)
+            if "чатов с другим режимом: 1" in pr.inner_text("#toast"):
+                mc = pr.evaluate("""async () => { const DB = PRP.app.ctx.DB; const c = await DB.get('chats', 'r-chat');
+                  return { mode: c.mode, title: c.title, msgs: (await DB.byIndex('messages', 'chatId', 'r-chat')).length, env: !!(await DB.get('messengerEnvironments', 'r-chat')) }; }""")
+                break
+        check("FC fix: добавление — конфликт режима: местная сцена не стала перепиской, чужие сообщения и среда не записаны",
+              mc == {"mode": "rp", "title": "Сцена", "msgs": 0, "env": False})
         cR.close()
 
         # IndexedDB: старое соединение уступает обновлению; занятая база и зависшее открытие — видимая ошибка, данные целы

@@ -108,14 +108,17 @@
         // Проверка до записи (правила — в svc.worldChat.checkBackup): запись мира чата принимается, только если её чат
         // есть в бэкапе (замена) или в бэкапе либо уже здесь (добавление). Контроллер даёт только режим и id чатов.
         const local = replace ? [] : await DB.all("chats");
-        const chk = svc.worldChat.checkBackup(data, { replace, existingChatIds: local.map((c) => c.id) });
+        const existingChats = local.map((c) => ({ id: c.id, mode: c.mode }));
+        // Добавление: входящий чат с тем же id, но другим режимом — отклоняется вместе со своими записями (svc.chat.checkBackupChats).
+        const chkChats = svc.chat.checkBackupChats(data, { replace, existingChats });
+        const chk = svc.worldChat.checkBackup(chkChats.data, { replace, existingChatIds: local.map((c) => c.id) });
         // Среда переписки — то же: только к переписке из бэкапа (замена) или из бэкапа и уже существующих (добавление).
-        const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats: local.map((c) => ({ id: c.id, mode: c.mode })) });
+        const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats });
         await DB.importAll(chkEnv.data, replace);
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();
-        const skipped = [chk.rejected ? `записей мира чата: ${chk.rejected}` : "", chkEnv.rejected ? `записей среды переписки: ${chkEnv.rejected}` : ""].filter(Boolean).join(", ");
+        const skipped = [chkChats.rejected ? `чатов с другим режимом: ${chkChats.rejected}` : "", chk.rejected ? `записей мира чата: ${chk.rejected}` : "", chkEnv.rejected ? `записей среды переписки: ${chkEnv.rejected}` : ""].filter(Boolean).join(", ");
         ui.toast(skipped ? `Бэкап загружен. Некоторые записи пропущены при восстановлении — ${skipped}.` : "Бэкап загружен.", !!skipped);
         return true;
       }

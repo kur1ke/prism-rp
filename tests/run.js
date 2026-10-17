@@ -2418,6 +2418,31 @@ async function foundationC() {
     assert.deepStrictEqual(add.data.messengerEnvironments.map((x) => x.chatId), ["local-ms"]);
     assert.deepStrictEqual(errs(add), [["env-not-messenger", "local-rp"]]);
   });
+  await ta("C fix: добавление — локальный режим главнее; входящий чат с тем же id и другим режимом отклоняется вместе со своими записями", async () => {
+    const h = fbHarness(MCARD);
+    const errs = (r) => r.issues.filter((x) => x.level === "error").map((x) => [x.code, x.chatId]);
+    const REC2 = (chatId) => Object.assign(ENV.blank(chatId, { timeZone: TOKYO, timeMode: "live" }), { events: [] });
+    const incoming = () => ({ app: "prism-rp",
+      chats: [{ id: "same", mode: "messenger", cardId: "c1" }, { id: "ok-new", mode: "messenger", cardId: "c1" }, { id: "same-mode", mode: "rp", cardId: "c1" }],
+      messages: [{ id: "m1", chatId: "same" }, { id: "m2", chatId: "ok-new" }], images: [{ id: "i1", chatId: "same" }], experience: [{ id: "x1", chatId: "same", owner: "c1" }, { id: "x2", chatId: "ok-new", owner: "c1" }],
+      worldOverlays: [{ schema: 1, chatId: "same", entries: [] }], messengerEnvironments: [REC2("same"), REC2("ok-new")] });
+    const local = [{ id: "same", mode: "rp" }, { id: "same-mode", mode: "rp" }];
+    const inp = incoming(), before = JSON.stringify(inp);
+    const r = h.chat.checkBackupChats(inp, { replace: false, existingChats: local });
+    assert.strictEqual(r.rejected, 1);
+    assert.deepStrictEqual(errs(r), [["chat-mode-conflict", "same"]]);
+    assert.deepStrictEqual(r.data.chats.map((c) => c.id), ["ok-new", "same-mode"], "конфликтный чат не восстановлен, тот же режим — как раньше");
+    for (const k of ["messages", "images", "experience", "worldOverlays", "messengerEnvironments"]) assert.ok(!r.data[k].some((x) => x.chatId === "same"), k + ": записи конфликтного чата не попадают в местный чат");
+    assert.deepStrictEqual(r.data.messages.map((m) => m.id), ["m2"]);
+    assert.strictEqual(JSON.stringify(inp), before, "вход не изменён");
+    assert.strictEqual(h.chat.checkBackupChats(incoming(), { replace: true, existingChats: local }).rejected, 0, "при замене локальных чатов нет — конфликта нет");
+    // среда проверяется по ЛОКАЛЬНОМУ режиму, если чат уже есть здесь (даже если бэкап говорит иное)
+    const svc = PRP.messengerService.create({ S: {}, DB: {}, svc: {} });
+    const e = svc.checkBackup({ chats: [{ id: "same", mode: "messenger" }], messengerEnvironments: [REC2("same")] }, { replace: false, existingChats: local });
+    assert.deepStrictEqual(errs(e), [["env-not-messenger", "same"]]);
+    const e2 = svc.checkBackup({ chats: [{ id: "loc-ms", mode: "rp" }], messengerEnvironments: [REC2("loc-ms")] }, { replace: false, existingChats: [{ id: "loc-ms", mode: "messenger" }] });
+    assert.deepStrictEqual([e2.rejected, e2.data.messengerEnvironments.length], [0, 1], "локальная переписка — среда принимается");
+  });
 }
 
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
