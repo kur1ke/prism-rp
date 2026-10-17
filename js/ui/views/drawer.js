@@ -179,7 +179,8 @@
   // Карточка в Prism: ядро (явное или запасное), кандидаты подробностей, примеры речи.
   function cardDebug(c) {
     if (!c) return "";
-    const tr = (c.core.truncated || []).map((x) => `${{ description: "описание", personality: "личность" }[x.field] || x.field} ${x.kept} из ${x.total} симв.`).join(", ");
+    const CUT = { sentence: "по предложениям", word: "длинное предложение обрезано по слову", hard: "текст без пробелов обрезан по символам" };
+    const tr = (c.core.truncated || []).map((x) => `${{ description: "описание", personality: "личность" }[x.field] || x.field} ${x.kept} из ${x.total} симв. (${CUT[x.cut] || "по предложениям"})`).join(", ");
     return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
       <dl class="kv"><dt>Ядро</dt><dd>${c.core.source === "explicit" ? "задано в карточке" : "запасное — " + esc(c.core.reason)}; ${c.core.tokens} ток.${tr ? `; сокращено: ${esc(tr)} (остаток — в подробностях)` : ""}</dd>
         <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>

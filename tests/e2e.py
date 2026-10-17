@@ -112,6 +112,11 @@ try:
         # Создание персонажа через редактор
         page.click(".home-tools [data-act=new-card]")
         page.wait_for_selector(".modal")
+        # Окно редактора может перерисоваться сразу после открытия (отложенная перерисовка после импорта) — тогда
+        # набранное до неё имя терялось и «Юки» не создавалась (гонка теста, воспроизводилась и на main). Ждём фокус
+        # поля имени (ставится после отрисовки) и короткую паузу, затем проверяем, что значение удержалось.
+        page.wait_for_function("document.activeElement && document.activeElement.id === 'cf-name'", timeout=5000)
+        page.wait_for_timeout(250)
         page.fill("#cf-name", "Юки")
         page.fill("#cf-desc", "Тихая библиотекарша.")
         check("редактор: подписи полей по CCv2", all(k in page.inner_text(".modal-body") for k in ["description", "personality", "scenario"]))
@@ -1125,6 +1130,69 @@ try:
         check("H: замена бэкапом без настроек — настройки по умолчанию после перезагрузки", rep is not None and rep["settings"] == [])
         pr.reload(); pr.wait_for_selector(".home")
         check("H: после замены приложение открывается с данными бэкапа", "Новая" in pr.inner_text(".gallery") and "Восстановленная" not in pr.inner_text(".gallery"))
+
+        # FOUNDATION-H (исправление): замена — одна транзакция на настоящем IndexedDB. Отказ посреди замены — откат всего.
+        atomic = pr.evaluate("""async () => {
+          const DB = PRP.app.ctx.DB;
+          const OLD = { app: 'prism-rp',
+            cards: [{ id: 'old-card', name: 'Старая', description: 'd', lore: [] }],
+            chats: [{ id: 'old-chat', cardId: 'old-card', mode: 'messenger', title: 'Переписка', leafId: 'old-m', sceneInit: '' }],
+            messages: [{ id: 'old-m', chatId: 'old-chat', parentId: null, role: 'user', swipes: [{ text: 'СТАРОЕ', sceneOps: [] }], swipeIdx: 0, createdAt: 1 }],
+            experience: [{ id: 'old-x', owner: 'old-card', chatId: 'old-chat', event: 'старое событие', status: 'active' }],
+            worldPacks: [{ id: 'old-pack', name: 'P', facts: [] }],
+            worldOverlays: [{ schema: 1, chatId: 'old-chat', timeline: '', variant: '', entries: [] }],
+            messengerEnvironments: [{ schema: 1, chatId: 'old-chat', timeZone: 'UTC', timeMode: 'live', manualNow: null, events: [], conversationEvents: [] }],
+            settings: [{ key: 'old-setting', value: 1 }] };
+          await DB.importAll(OLD, true);
+          const snap = async () => { const o = {}; for (const s of DB.STORES) o[s] = (await DB.all(s)).map((x) => JSON.stringify(x)).sort(); return JSON.stringify(o); };
+          const before = await snap();
+          const NEW = (extra) => Object.assign({ app: 'prism-rp',
+            cards: [{ id: 'new-card', name: 'Новая2', description: 'd', lore: [] }],
+            chats: [{ id: 'new-chat', cardId: 'new-card', mode: 'rp', title: 'Сцена', leafId: null, sceneInit: '' }],
+            messages: [{ id: 'new-m', chatId: 'new-chat', parentId: null, role: 'user', swipes: [{ text: 'НОВОЕ', sceneOps: [] }], swipeIdx: 0, createdAt: 2 }],
+            worldPacks: [{ id: 'new-pack', name: 'P2', facts: [] }],
+            settings: [{ key: 'new-setting', value: 2 }] }, extra);
+          // 1) ошибка запроса ПОСЛЕ очистки и части записей: две линзы одного персонажа нарушают уникальный индекс cardId
+          let e1 = null; try { await DB.importAll(NEW({ worldLenses: [{ id: 'l1', cardId: 'new-card', packId: 'new-pack' }, { id: 'l2', cardId: 'new-card', packId: 'new-pack' }] }), true); } catch (e) { e1 = e.name || e.message || 'error'; }
+          const after1 = await snap();
+          // 2) синхронная ошибка постановки в очередь: запись без ключа
+          let e2 = null; try { await DB.importAll(NEW({ messengerEnvironments: [{ schema: 1, timeZone: 'UTC' }] }), true); } catch (e) { e2 = e.name || e.message || 'error'; }
+          const after2 = await snap();
+          // 3) успешная замена: всё из бэкапа, старого нет, отсутствующие коллекции пусты
+          await DB.importAll(NEW({}), true);
+          const ok = {}; for (const s of DB.STORES) ok[s] = (await DB.all(s)).map((x) => x.id || x.chatId || x.key);
+          return { e1, e2, same1: after1 === before, same2: after2 === before, leaked: after1.includes('new-') || after2.includes('new-'), ok };
+        }""")
+        check("H-FIX: отказ запроса посреди замены — отказ промиса, все старые данные целы, ни одной новой записи",
+              atomic["e1"] == "ConstraintError" and atomic["same1"] and not atomic["leaked"])
+        check("H-FIX: синхронная ошибка постановки в очередь — откат, старые данные целы", atomic["e2"] is not None and atomic["same2"])
+        okr = atomic["ok"]
+        check("H-FIX: успешная замена на настоящем IndexedDB — данные бэкапа на месте, старых нет, отсутствующие коллекции пусты",
+              okr["cards"] == ["new-card"] and okr["chats"] == ["new-chat"] and okr["messages"] == ["new-m"] and okr["worldPacks"] == ["new-pack"] and okr["settings"] == ["new-setting"]
+              and all(okr[s] == [] for s in ["experience", "images", "assist", "worldLenses", "worldOverlays", "messengerEnvironments"]))
+        # Отказ в интерфейсе: запись падает внутри транзакции → «Бэкап не загружен», данные не изменены, можно повторить тем же файлом.
+        with open(bk_file, "w", encoding="utf-8") as f:
+            json.dump({"app": "prism-rp", "version": 6, "cards": [{"id": "boom-card", "name": "Бум", "description": "d", "lore": []}]}, f, ensure_ascii=False)
+        before_ui = pr.evaluate("async () => (await PRP.app.ctx.DB.all('cards')).map((c) => c.id)")
+        pr.evaluate("""() => { const orig = IDBObjectStore.prototype.put; window.__origPut = orig;
+          IDBObjectStore.prototype.put = function (v, k) { if (v && v.id === 'boom-card') throw new DOMException('Сбой записи (тест)', 'UnknownError'); return orig.call(this, v, k); }; }""")
+        pr.once("dialog", lambda d: d.accept())
+        pr.set_input_files("#file-backup", bk_file)
+        pr.wait_for_function("document.querySelector('#toast') && document.querySelector('#toast').innerText.includes('Бэкап не загружен')", timeout=8000)
+        after_ui = pr.evaluate("async () => (await PRP.app.ctx.DB.all('cards')).map((c) => c.id)")
+        check("H-FIX UI: ошибка записи — «Бэкап не загружен», без сообщения об успехе, данные не изменены",
+              after_ui == before_ui and "Бэкап загружен" not in pr.inner_text("#toast").replace("Бэкап не загружен", "") and "Данные не изменены" in pr.inner_text("#toast")
+              and pr.evaluate("document.querySelector('#file-backup').value") == "")
+        pr.evaluate("() => { IDBObjectStore.prototype.put = window.__origPut; }")
+        pr.once("dialog", lambda d: d.accept())
+        pr.set_input_files("#file-backup", bk_file)
+        retry = None
+        for _ in range(80):
+            pr.wait_for_timeout(100)
+            ids = pr.evaluate("async () => (await PRP.app.ctx.DB.all('cards')).map((c) => c.id)")
+            if ids == ["boom-card"]:
+                retry = ids; break
+        check("H-FIX UI: повтор тем же файлом после ошибки проходит", retry == ["boom-card"])
         cR.close()
 
         # IndexedDB: старое соединение уступает обновлению; занятая база и зависшее открытие — видимая ошибка, данные целы

@@ -123,18 +123,42 @@
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
-    /* Восстановление (данные уже проверены: core/backup и проверки сервисов).
-       replace=true — ЗАМЕНА всего набора данных Prism RP (FOUNDATION-H): сначала очищаются ВСЕ известные коллекции
-       (STORES), затем пишется бэкап. Коллекции нет в бэкапе — после замены она пустая (в том числе настройки:
-       после перезагрузки — значения по умолчанию). Сама база не удаляется, жизненный цикл соединения прежний.
-       replace=false — добавление: пишется только то, что есть в бэкапе. */
+    /* Восстановление (данные уже проверены ДО вызова: chat.checkBackupChats → core/backup.check →
+       worldChat.checkBackup → messenger.checkBackup). ОДНА транзакция readwrite на ВСЕ известные коллекции:
+         replace=true  — ЗАМЕНА всего набора данных Prism RP: clear() каждой коллекции и put() каждой записи бэкапа;
+                         коллекции нет в бэкапе — после замены она пустая (настройки — значения по умолчанию после перезагрузки);
+         replace=false — добавление: только put() записей бэкапа (поверх существующих с тем же ключом).
+       Все запросы ставятся в очередь синхронно, пока транзакция активна (без await между ними — иначе она
+       завершилась бы раньше времени). Успех — только по oncomplete всей транзакции. Ошибка любого запроса,
+       исключение при постановке в очередь или прерывание — abort: ни одна коллекция не меняется (старые данные целы),
+       промис отклоняется. Сама база не удаляется; открытие базы — тот же open() с DB_BLOCKED / таймаутом / versionchange. */
     async importAll(data, replace) {
       if (!data || data.app !== "prism-rp") throw new Error("Это не бэкап Prism RP");
-      if (replace) for (const s of STORES) await tx(s, "readwrite", (st) => wrap(st.clear()));
-      for (const s of STORES) {
-        if (!Array.isArray(data[s]) || !data[s].length) continue;
-        await api.putMany(s, data[s]);
-      }
+      const db = await open();
+      return new Promise((ok, fail) => {
+        let t;
+        try { t = db.transaction(STORES, "readwrite"); }
+        catch (e) { fail(e); return; }
+        let failure = null;
+        t.oncomplete = () => ok();
+        t.onerror = (ev) => { if (!failure) failure = t.error || (ev && ev.target && ev.target.error) || new Error("Ошибка записи бэкапа"); };
+        t.onabort = () => fail(failure || t.error || new Error("Восстановление прервано — данные не изменены"));
+        try {
+          for (const s of STORES) {
+            const st = t.objectStore(s);
+            if (replace) st.clear();
+            const list = Array.isArray(data[s]) ? data[s] : [];
+            for (const o of list) {
+              const req = st.put(o);
+              // Ошибку не гасим (без preventDefault): IndexedDB прерывает всю транзакцию, затем onabort → reject.
+              req.onerror = () => { failure = failure || req.error; };
+            }
+          }
+        } catch (e) {
+          failure = e;
+          try { t.abort(); } catch (_) { /* уже прервана */ }
+        }
+      });
     },
     STORES: STORES.slice(),
   };

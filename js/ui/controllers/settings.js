@@ -103,7 +103,10 @@
 
     async function change(t) {
       if (t.id === "file-backup" && t.files[0]) {
-        const data = JSON.parse(await ctx.files.readFile(t.files[0], "text"));
+        let data;
+        try { data = JSON.parse(await ctx.files.readFile(t.files[0], "text")); }
+        catch (e) { t.value = ""; ui.toast("Бэкап не загружен: файл не читается как JSON. Данные не изменены.", true); return true; }
+        if (!data || data.app !== "prism-rp") { t.value = ""; ui.toast("Бэкап не загружен: это не бэкап Prism RP. Данные не изменены.", true); return true; }
         const replace = confirm("Заменить ВСЕ данные Prism RP бэкапом?\n\nОК — заменить: всё, чего нет в бэкапе (персонажи, чаты, картинки, миры, настройки), будет удалено.\nОтмена — добавить к существующим.");
         // Проверка до записи. Контроллер даёт только id и режимы существующих записей; правила — в сервисах и core/backup.
         const local = replace ? [] : await DB.all("chats");
@@ -116,7 +119,15 @@
         const chk = svc.worldChat.checkBackup(chkRefs.data, { replace, existingChatIds: local.map((c) => c.id) });
         // Среда переписки — то же: только к переписке из бэкапа (замена) или из бэкапа и уже существующих (добавление).
         const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats });
-        await DB.importAll(chkEnv.data, replace);
+        // Запись — одной транзакцией (core/store): при ошибке ничего не изменено, окно настроек остаётся открытым,
+        // поле файла очищается, чтобы тот же файл можно было выбрать ещё раз.
+        try {
+          await DB.importAll(chkEnv.data, replace);
+        } catch (e) {
+          t.value = "";
+          ui.toast(`Бэкап не загружен: ${(e && (e.message || e.name)) || "ошибка записи"}. Данные не изменены — можно попробовать ещё раз.`, true);
+          return true;
+        }
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();

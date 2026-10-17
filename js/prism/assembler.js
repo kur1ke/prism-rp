@@ -285,6 +285,12 @@
         if (p != null) { c.personality = p; note("card.core", "вторичное ядро"); return true; }
         const i = dropSentence(c.identity);
         if (i != null) { c.identity = i; note("card.core", "вторичное ядро"); return true; }
+        // Последнее: одно оставшееся предложение длиннее CAP (в том числе в явном ядре или первая черта) —
+        // явная обрезка по слову (prism/card-context.capText), видна в отчёте; иначе — честное переполнение.
+        for (const k of ["personality", "identity"]) {
+          if (c[k].length > CC.CAP) { c[k] = CC.capText(c[k], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
+        }
+        if (c.traits.length && c.traits[0].length > CC.CAP) { c.traits[0] = CC.capText(c.traits[0], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
         return false;
       },
       function topExperience() { if (!st.exps.length) return false; st.exps.pop(); note("experience", 1); return true; },

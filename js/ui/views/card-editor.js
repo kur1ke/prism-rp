@@ -106,7 +106,7 @@
     const ta = (id, label, val, rows, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="${rows}" data-core="${id}" placeholder="${esc(ph)}">${val}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
     const preview = !ex || !ex.reviewed ? `<div class="core-preview"><span class="label">Сейчас Prism использует</span>
         <p class="hint"><b>Описание:</b> ${esc(fb.identity || "—")}</p><p class="hint"><b>Личность:</b> ${esc(fb.personality || "—")}</p>
-        ${fb.truncated.length ? `<p class="hint">Сокращено по предложениям: ${fb.truncated.map((x) => `${x.field === "description" ? "описание" : "личность"} ${x.kept} из ${x.total} симв.`).join(", ")}. Остальное подаётся, когда относится к разговору.</p>` : ""}</div>` : "";
+        ${fb.truncated.length ? `<p class="hint">Сокращено: ${fb.truncated.map((x) => `${x.field === "description" ? "описание" : "личность"} ${x.kept} из ${x.total} симв.${x.cut === "word" || x.cut === "hard" ? " (первое предложение слишком длинное — обрезано, «…»)" : ""}`).join(", ")}. Остальное подаётся, когда относится к разговору.</p>` : ""}</div>` : "";
     return `<div class="block core-block" id="prism-core"><div class="block-title" style="margin-top:22px">Ядро для Prism <span class="tag" id="core-state">${esc(state)}</span></div>
       <p class="hint">Коротко о том, кто это: подаётся модели на каждом ходе. Прошлое, внешность и подробности описания подаются, только когда относятся к разговору. Поля карточки не меняются; модель ядро не пишет.</p>
       ${preview}

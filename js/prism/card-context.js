@@ -9,9 +9,10 @@
         вызовов модели для его сборки нет. Ядро из файла (extensions.prism_rp.prismCore) приходит
         непроверенным (reviewed: false) и не используется, пока пользователь не сохранит его сам.
       • Запасное ядро (нет явного) — детерминированно из полей карточки, без модели:
-        имя, начало описания и личность, каждое — по абзацам и предложениям не длиннее CAP символов
-        (предложение не режется посередине; одно длинное предложение берётся целиком). Что сокращено — в отчёте;
-        остаток не теряется, а становится выборочными подробностями.
+        имя, начало описания и личность, каждое — по абзацам и целым предложениям не длиннее CAP символов.
+        Жёсткий предел: если уже первое предложение длиннее CAP (или знаков препинания нет), берётся начало
+        до последнего пробела (или ровно CAP символов) с «…» — явно и с пометкой в отчёте (cut: word | hard).
+        Что сокращено — в отчёте; остаток не теряется, а становится выборочными подробностями.
    2. ВЫБОРОЧНЫЕ ПОДРОБНОСТИ — остаток описания и личности, прошлое, внешность, разбитые на куски по абзацам
       (длинный абзац — по предложениям до CHUNK_MAX символов). Кусок входит только при положительной связи
       с текущим ходом: имя или термин из куска прозвучал в разговоре, сцене или среде переписки; или не меньше
@@ -55,11 +56,23 @@
   const paragraphs = (t) => str(t).split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const sentences = (t) => (str(t).match(/[^.!?…]+[.!?…]+[»")\]]*\s*|[^.!?…]+$/g) || [str(t)]).map((s) => s.trim()).filter(Boolean);
 
-  /* Начало текста не длиннее cap по абзацам, затем по предложениям; не меньше одного предложения.
-     → { kept, rest, truncated } (rest — остаток, без потерь). */
+  /* Начало текста не длиннее cap: по абзацам и целым предложениям.
+     Жёсткий предел: если уже ПЕРВОЕ предложение длиннее cap (огромное предложение или текст без знаков препинания),
+     оно не входит в ядро целиком — берётся начало до последнего пробела в пределах cap (cut: "word"),
+     а если пробела нет — ровно cap символов (cut: "hard"); в конце ставится «…». Это явная, детерминированная
+     обрезка, видимая в отчёте; текст не пересказывается, остаток не теряется — он уходит в подробности.
+     → { kept, rest, truncated, cut: "" | "sentence" | "word" | "hard" } */
   function capText(text, cap) {
     const t = str(text).trim();
-    if (!t || t.length <= cap) return { kept: t, rest: "", truncated: false };
+    if (!t || t.length <= cap) return { kept: t, rest: "", truncated: false, cut: "" };
+    const first = sentences(paragraphs(t)[0])[0] || t;
+    if (first.length > cap) {
+      const lim = cap - 2; // место под « …»: итог не длиннее cap
+      const head = t.slice(0, lim);
+      const sp = head.search(/\s\S*$/);
+      const at = sp > lim * 0.5 ? sp : lim;
+      return { kept: t.slice(0, at).trimEnd() + " …", rest: t.slice(at).trim(), truncated: true, cut: at === lim ? "hard" : "word" };
+    }
     // Предложения по порядку с границами абзацев; берём, пока помещаются (первое — всегда целиком).
     const items = [];
     paragraphs(t).forEach((p) => sentences(p).forEach((s, i) => items.push({ s, para: i === 0 })));
@@ -72,7 +85,7 @@
     const join = (xs) => xs.map((x, i) => (i ? (x.para ? "\n\n" : " ") : "") + x.s).join("");
     const rest = items.slice(n);
     if (rest.length) rest[0] = Object.assign({}, rest[0], { para: true });
-    return { kept: join(items.slice(0, n)), rest: join(rest), truncated: rest.length > 0 };
+    return { kept: join(items.slice(0, n)), rest: join(rest), truncated: rest.length > 0, cut: rest.length ? "sentence" : "" };
   }
 
   /* Ядро для этой карточки. m — подстановка макросов ({{char}}, {{user}}).
@@ -88,8 +101,8 @@
     }
     const d = capText(desc, CAP), p = capText(pers, CAP);
     const truncated = [];
-    if (d.truncated) truncated.push({ field: "description", kept: d.kept.length, total: desc.length });
-    if (p.truncated) truncated.push({ field: "personality", kept: p.kept.length, total: pers.length });
+    if (d.truncated) truncated.push({ field: "description", kept: d.kept.length, total: desc.length, cut: d.cut });
+    if (p.truncated) truncated.push({ field: "personality", kept: p.kept.length, total: pers.length, cut: p.cut });
     return { source: "fallback", reason: ex && !ex.reviewed ? "ядро из файла не проверено — собрано из полей карточки" : "собрано из полей карточки",
       identity: d.kept, personality: p.kept, traits: [], voice: [], durableContext: [], truncated, rest: { description: d.rest, personality: p.rest } };
   }
@@ -126,14 +139,14 @@
   }
 
   const tokens = (t) => str(t).toLowerCase().replace(/ё/g, "е").match(/[\p{L}\p{N}]+/gu) || [];
-  /* Одно слово в разных формах: общий префикс не короче max(3, длина короткого − 2)
-     («Сора» / «Сорой», «волосы» / «волос», «школе» / «школа»). Слова короче 4 букв не сравниваются. */
+  /* Одно слово в разных формах: общий префикс не короче max(3, длина короткого − 2), для слов от 6 букв —
+     длина короткого − 3 («Сора» / «Сорой», «волосы» / «волос», «боится» / «боишься»). Слова короче 4 букв не сравниваются. */
   function near(a, b) {
     const n = Math.min(a.length, b.length);
     if (n < 4) return false;
     let p = 0;
     while (p < n && a[p] === b[p]) p++;
-    return p >= Math.max(3, n - 2);
+    return p >= Math.max(3, n - (n >= 6 ? 3 : 2));
   }
   const hits = (w, list) => list.some((x) => near(w, x));
   // Значимые слова: от 4 букв, без служебных и без имён участников (в любой форме).

@@ -196,18 +196,42 @@
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
-    /* Восстановление (данные уже проверены: core/backup и проверки сервисов).
-       replace=true — ЗАМЕНА всего набора данных Prism RP (FOUNDATION-H): сначала очищаются ВСЕ известные коллекции
-       (STORES), затем пишется бэкап. Коллекции нет в бэкапе — после замены она пустая (в том числе настройки:
-       после перезагрузки — значения по умолчанию). Сама база не удаляется, жизненный цикл соединения прежний.
-       replace=false — добавление: пишется только то, что есть в бэкапе. */
+    /* Восстановление (данные уже проверены ДО вызова: chat.checkBackupChats → core/backup.check →
+       worldChat.checkBackup → messenger.checkBackup). ОДНА транзакция readwrite на ВСЕ известные коллекции:
+         replace=true  — ЗАМЕНА всего набора данных Prism RP: clear() каждой коллекции и put() каждой записи бэкапа;
+                         коллекции нет в бэкапе — после замены она пустая (настройки — значения по умолчанию после перезагрузки);
+         replace=false — добавление: только put() записей бэкапа (поверх существующих с тем же ключом).
+       Все запросы ставятся в очередь синхронно, пока транзакция активна (без await между ними — иначе она
+       завершилась бы раньше времени). Успех — только по oncomplete всей транзакции. Ошибка любого запроса,
+       исключение при постановке в очередь или прерывание — abort: ни одна коллекция не меняется (старые данные целы),
+       промис отклоняется. Сама база не удаляется; открытие базы — тот же open() с DB_BLOCKED / таймаутом / versionchange. */
     async importAll(data, replace) {
       if (!data || data.app !== "prism-rp") throw new Error("Это не бэкап Prism RP");
-      if (replace) for (const s of STORES) await tx(s, "readwrite", (st) => wrap(st.clear()));
-      for (const s of STORES) {
-        if (!Array.isArray(data[s]) || !data[s].length) continue;
-        await api.putMany(s, data[s]);
-      }
+      const db = await open();
+      return new Promise((ok, fail) => {
+        let t;
+        try { t = db.transaction(STORES, "readwrite"); }
+        catch (e) { fail(e); return; }
+        let failure = null;
+        t.oncomplete = () => ok();
+        t.onerror = (ev) => { if (!failure) failure = t.error || (ev && ev.target && ev.target.error) || new Error("Ошибка записи бэкапа"); };
+        t.onabort = () => fail(failure || t.error || new Error("Восстановление прервано — данные не изменены"));
+        try {
+          for (const s of STORES) {
+            const st = t.objectStore(s);
+            if (replace) st.clear();
+            const list = Array.isArray(data[s]) ? data[s] : [];
+            for (const o of list) {
+              const req = st.put(o);
+              // Ошибку не гасим (без preventDefault): IndexedDB прерывает всю транзакцию, затем onabort → reject.
+              req.onerror = () => { failure = failure || req.error; };
+            }
+          }
+        } catch (e) {
+          failure = e;
+          try { t.abort(); } catch (_) { /* уже прервана */ }
+        }
+      });
     },
     STORES: STORES.slice(),
   };
@@ -3063,9 +3087,10 @@
         вызовов модели для его сборки нет. Ядро из файла (extensions.prism_rp.prismCore) приходит
         непроверенным (reviewed: false) и не используется, пока пользователь не сохранит его сам.
       • Запасное ядро (нет явного) — детерминированно из полей карточки, без модели:
-        имя, начало описания и личность, каждое — по абзацам и предложениям не длиннее CAP символов
-        (предложение не режется посередине; одно длинное предложение берётся целиком). Что сокращено — в отчёте;
-        остаток не теряется, а становится выборочными подробностями.
+        имя, начало описания и личность, каждое — по абзацам и целым предложениям не длиннее CAP символов.
+        Жёсткий предел: если уже первое предложение длиннее CAP (или знаков препинания нет), берётся начало
+        до последнего пробела (или ровно CAP символов) с «…» — явно и с пометкой в отчёте (cut: word | hard).
+        Что сокращено — в отчёте; остаток не теряется, а становится выборочными подробностями.
    2. ВЫБОРОЧНЫЕ ПОДРОБНОСТИ — остаток описания и личности, прошлое, внешность, разбитые на куски по абзацам
       (длинный абзац — по предложениям до CHUNK_MAX символов). Кусок входит только при положительной связи
       с текущим ходом: имя или термин из куска прозвучал в разговоре, сцене или среде переписки; или не меньше
@@ -3109,11 +3134,23 @@
   const paragraphs = (t) => str(t).split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const sentences = (t) => (str(t).match(/[^.!?…]+[.!?…]+[»")\]]*\s*|[^.!?…]+$/g) || [str(t)]).map((s) => s.trim()).filter(Boolean);
 
-  /* Начало текста не длиннее cap по абзацам, затем по предложениям; не меньше одного предложения.
-     → { kept, rest, truncated } (rest — остаток, без потерь). */
+  /* Начало текста не длиннее cap: по абзацам и целым предложениям.
+     Жёсткий предел: если уже ПЕРВОЕ предложение длиннее cap (огромное предложение или текст без знаков препинания),
+     оно не входит в ядро целиком — берётся начало до последнего пробела в пределах cap (cut: "word"),
+     а если пробела нет — ровно cap символов (cut: "hard"); в конце ставится «…». Это явная, детерминированная
+     обрезка, видимая в отчёте; текст не пересказывается, остаток не теряется — он уходит в подробности.
+     → { kept, rest, truncated, cut: "" | "sentence" | "word" | "hard" } */
   function capText(text, cap) {
     const t = str(text).trim();
-    if (!t || t.length <= cap) return { kept: t, rest: "", truncated: false };
+    if (!t || t.length <= cap) return { kept: t, rest: "", truncated: false, cut: "" };
+    const first = sentences(paragraphs(t)[0])[0] || t;
+    if (first.length > cap) {
+      const lim = cap - 2; // место под « …»: итог не длиннее cap
+      const head = t.slice(0, lim);
+      const sp = head.search(/\s\S*$/);
+      const at = sp > lim * 0.5 ? sp : lim;
+      return { kept: t.slice(0, at).trimEnd() + " …", rest: t.slice(at).trim(), truncated: true, cut: at === lim ? "hard" : "word" };
+    }
     // Предложения по порядку с границами абзацев; берём, пока помещаются (первое — всегда целиком).
     const items = [];
     paragraphs(t).forEach((p) => sentences(p).forEach((s, i) => items.push({ s, para: i === 0 })));
@@ -3126,7 +3163,7 @@
     const join = (xs) => xs.map((x, i) => (i ? (x.para ? "\n\n" : " ") : "") + x.s).join("");
     const rest = items.slice(n);
     if (rest.length) rest[0] = Object.assign({}, rest[0], { para: true });
-    return { kept: join(items.slice(0, n)), rest: join(rest), truncated: rest.length > 0 };
+    return { kept: join(items.slice(0, n)), rest: join(rest), truncated: rest.length > 0, cut: rest.length ? "sentence" : "" };
   }
 
   /* Ядро для этой карточки. m — подстановка макросов ({{char}}, {{user}}).
@@ -3142,8 +3179,8 @@
     }
     const d = capText(desc, CAP), p = capText(pers, CAP);
     const truncated = [];
-    if (d.truncated) truncated.push({ field: "description", kept: d.kept.length, total: desc.length });
-    if (p.truncated) truncated.push({ field: "personality", kept: p.kept.length, total: pers.length });
+    if (d.truncated) truncated.push({ field: "description", kept: d.kept.length, total: desc.length, cut: d.cut });
+    if (p.truncated) truncated.push({ field: "personality", kept: p.kept.length, total: pers.length, cut: p.cut });
     return { source: "fallback", reason: ex && !ex.reviewed ? "ядро из файла не проверено — собрано из полей карточки" : "собрано из полей карточки",
       identity: d.kept, personality: p.kept, traits: [], voice: [], durableContext: [], truncated, rest: { description: d.rest, personality: p.rest } };
   }
@@ -3180,14 +3217,14 @@
   }
 
   const tokens = (t) => str(t).toLowerCase().replace(/ё/g, "е").match(/[\p{L}\p{N}]+/gu) || [];
-  /* Одно слово в разных формах: общий префикс не короче max(3, длина короткого − 2)
-     («Сора» / «Сорой», «волосы» / «волос», «школе» / «школа»). Слова короче 4 букв не сравниваются. */
+  /* Одно слово в разных формах: общий префикс не короче max(3, длина короткого − 2), для слов от 6 букв —
+     длина короткого − 3 («Сора» / «Сорой», «волосы» / «волос», «боится» / «боишься»). Слова короче 4 букв не сравниваются. */
   function near(a, b) {
     const n = Math.min(a.length, b.length);
     if (n < 4) return false;
     let p = 0;
     while (p < n && a[p] === b[p]) p++;
-    return p >= Math.max(3, n - 2);
+    return p >= Math.max(3, n - (n >= 6 ? 3 : 2));
   }
   const hits = (w, list) => list.some((x) => near(w, x));
   // Значимые слова: от 4 букв, без служебных и без имён участников (в любой форме).
@@ -3654,6 +3691,12 @@
         if (p != null) { c.personality = p; note("card.core", "вторичное ядро"); return true; }
         const i = dropSentence(c.identity);
         if (i != null) { c.identity = i; note("card.core", "вторичное ядро"); return true; }
+        // Последнее: одно оставшееся предложение длиннее CAP (в том числе в явном ядре или первая черта) —
+        // явная обрезка по слову (prism/card-context.capText), видна в отчёте; иначе — честное переполнение.
+        for (const k of ["personality", "identity"]) {
+          if (c[k].length > CC.CAP) { c[k] = CC.capText(c[k], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
+        }
+        if (c.traits.length && c.traits[0].length > CC.CAP) { c.traits[0] = CC.capText(c.traits[0], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
         return false;
       },
       function topExperience() { if (!st.exps.length) return false; st.exps.pop(); note("experience", 1); return true; },
@@ -5699,7 +5742,8 @@
   // Карточка в Prism: ядро (явное или запасное), кандидаты подробностей, примеры речи.
   function cardDebug(c) {
     if (!c) return "";
-    const tr = (c.core.truncated || []).map((x) => `${{ description: "описание", personality: "личность" }[x.field] || x.field} ${x.kept} из ${x.total} симв.`).join(", ");
+    const CUT = { sentence: "по предложениям", word: "длинное предложение обрезано по слову", hard: "текст без пробелов обрезан по символам" };
+    const tr = (c.core.truncated || []).map((x) => `${{ description: "описание", personality: "личность" }[x.field] || x.field} ${x.kept} из ${x.total} симв. (${CUT[x.cut] || "по предложениям"})`).join(", ");
     return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
       <dl class="kv"><dt>Ядро</dt><dd>${c.core.source === "explicit" ? "задано в карточке" : "запасное — " + esc(c.core.reason)}; ${c.core.tokens} ток.${tr ? `; сокращено: ${esc(tr)} (остаток — в подробностях)` : ""}</dd>
         <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>
@@ -5985,7 +6029,7 @@
     const ta = (id, label, val, rows, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="${rows}" data-core="${id}" placeholder="${esc(ph)}">${val}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
     const preview = !ex || !ex.reviewed ? `<div class="core-preview"><span class="label">Сейчас Prism использует</span>
         <p class="hint"><b>Описание:</b> ${esc(fb.identity || "—")}</p><p class="hint"><b>Личность:</b> ${esc(fb.personality || "—")}</p>
-        ${fb.truncated.length ? `<p class="hint">Сокращено по предложениям: ${fb.truncated.map((x) => `${x.field === "description" ? "описание" : "личность"} ${x.kept} из ${x.total} симв.`).join(", ")}. Остальное подаётся, когда относится к разговору.</p>` : ""}</div>` : "";
+        ${fb.truncated.length ? `<p class="hint">Сокращено: ${fb.truncated.map((x) => `${x.field === "description" ? "описание" : "личность"} ${x.kept} из ${x.total} симв.${x.cut === "word" || x.cut === "hard" ? " (первое предложение слишком длинное — обрезано, «…»)" : ""}`).join(", ")}. Остальное подаётся, когда относится к разговору.</p>` : ""}</div>` : "";
     return `<div class="block core-block" id="prism-core"><div class="block-title" style="margin-top:22px">Ядро для Prism <span class="tag" id="core-state">${esc(state)}</span></div>
       <p class="hint">Коротко о том, кто это: подаётся модели на каждом ходе. Прошлое, внешность и подробности описания подаются, только когда относятся к разговору. Поля карточки не меняются; модель ядро не пишет.</p>
       ${preview}
@@ -8672,7 +8716,10 @@
 
     async function change(t) {
       if (t.id === "file-backup" && t.files[0]) {
-        const data = JSON.parse(await ctx.files.readFile(t.files[0], "text"));
+        let data;
+        try { data = JSON.parse(await ctx.files.readFile(t.files[0], "text")); }
+        catch (e) { t.value = ""; ui.toast("Бэкап не загружен: файл не читается как JSON. Данные не изменены.", true); return true; }
+        if (!data || data.app !== "prism-rp") { t.value = ""; ui.toast("Бэкап не загружен: это не бэкап Prism RP. Данные не изменены.", true); return true; }
         const replace = confirm("Заменить ВСЕ данные Prism RP бэкапом?\n\nОК — заменить: всё, чего нет в бэкапе (персонажи, чаты, картинки, миры, настройки), будет удалено.\nОтмена — добавить к существующим.");
         // Проверка до записи. Контроллер даёт только id и режимы существующих записей; правила — в сервисах и core/backup.
         const local = replace ? [] : await DB.all("chats");
@@ -8685,7 +8732,15 @@
         const chk = svc.worldChat.checkBackup(chkRefs.data, { replace, existingChatIds: local.map((c) => c.id) });
         // Среда переписки — то же: только к переписке из бэкапа (замена) или из бэкапа и уже существующих (добавление).
         const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats });
-        await DB.importAll(chkEnv.data, replace);
+        // Запись — одной транзакцией (core/store): при ошибке ничего не изменено, окно настроек остаётся открытым,
+        // поле файла очищается, чтобы тот же файл можно было выбрать ещё раз.
+        try {
+          await DB.importAll(chkEnv.data, replace);
+        } catch (e) {
+          t.value = "";
+          ui.toast(`Бэкап не загружен: ${(e && (e.message || e.name)) || "ошибка записи"}. Данные не изменены — можно попробовать ещё раз.`, true);
+          return true;
+        }
         t.value = "";
         S.modal = null; S.view = "home";
         await nav.loadAll(); ui.renderAll();
