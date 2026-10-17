@@ -131,12 +131,9 @@
     function change(t) {
       if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return true; }
       if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return true; }
-      if (t.dataset.scRel) { applySceneOps([op(t.dataset.scRel, "relset", t.value + " поправлено вручную")]); return true; }
       return false;
     }
-    function input(t) {
-      if (t.dataset.scRel) { const o = $("#rel-out"); if (o) o.textContent = `${SC.relWord(+t.value)} (${+t.value > 0 ? "+" : ""}${t.value})`; }
-    }
+    function input() { /* полей с живым обновлением на панели сцены нет */ }
     function key(e, t) {
       if (e.key === "Enter" && t.classList && t.classList.contains("chip-add")) {
         e.preventDefault();

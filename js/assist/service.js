@@ -40,6 +40,8 @@
       const path = TR.path(TR.index(msgs), c.leafId);
       const cd = S.cards.find((x) => x.id === c.cardId);
       const lines = path.map((m) => ({ name: m.role === "user" ? ctx.persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
+      // Строка сцены — только у сцены RP: у переписки сцены нет (служебные [scene:] в ней не действуют).
+      if (c.mode === "messenger") return { lines, scene: "" };
       const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
       return { lines, scene: SC.summaryLine(st) || "" };
     }

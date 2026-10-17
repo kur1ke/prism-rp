@@ -382,10 +382,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .who { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .who b { font-size: 15px; }
 .quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-.rel { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
-.rel input[type=range] { width: 100%; accent-color: var(--accent); }
-.rel output { font-size: 13.5px; color: var(--text-2); min-width: 104px; text-align: right; }
-.rel-log { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+.core-preview { border: 1px dashed var(--line); border-radius: var(--r-s); padding: 8px 12px; margin: 0 0 12px; }
+.core-preview .hint { margin: 4px 0; overflow-wrap: anywhere; }
+.core-block .tag { font-weight: 400; margin-left: 6px; }
 .pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }
 .pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }
 .pick button:last-child { border-right: 0; }

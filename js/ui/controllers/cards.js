@@ -49,6 +49,16 @@
         else if (k === "insertion_order") e[k] = el.value === "" ? 0 : Number(el.value) || 0;
         else e[k] = el.checked;
       });
+      // Ядро для Prism: явное, только если в полях что-то есть. Ядро из файла используется только после отметки «Проверено».
+      if ($("[data-core]")) {
+        const lines = (id) => String(($(`#${id}`) || {}).value || "").split("\n").map((s) => s.trim()).filter(Boolean);
+        const prev = d.prismCore || {};
+        const imported = prev.source === "imported" && prev.reviewed === false;
+        const rv = $("[data-core-reviewed]");
+        const core = { schema: 1, identity: String(($("#core-identity") || {}).value || "").trim(), traits: lines("core-traits"), voice: lines("core-voice"), durableContext: lines("core-durable"),
+          source: imported ? "imported" : prev.source === "derived" ? "derived" : "manual", reviewed: imported ? !!(rv && rv.checked) : true };
+        d.prismCore = core.identity || core.traits.length || core.voice.length || core.durableContext.length ? core : null;
+      }
       PRP.lensForm.collect(S.modal, $$);
       return d;
     }
@@ -88,6 +98,9 @@
       "avatar-pick": () => { collectCard(); $("#file-avatar").click(); },
       "lore-add": () => { const d = collectCard(); d.lore = (d.lore || []).concat([{ keys: [], secondary_keys: [], selective: false, content: "", comment: "", enabled: true, constant: false, case_sensitive: false, position: "after_char", insertion_order: (d.lore || []).length * 10 }]); keepScroll(); },
       "lore-del": (t) => { const d = collectCard(); d.lore.splice(+t.dataset.i, 1); keepScroll(); },
+      // Ядро для Prism: собрать из полей карточки (детерминированно, без модели) или сбросить к запасному.
+      "core-derive": () => { const d = collectCard(); d.prismCore = PRP.cardContext.deriveCore(d); keepScroll(); },
+      "core-clear": () => { const d = collectCard(); d.prismCore = null; keepScroll(); },
       "alt-add": () => { const d = collectCard(); d.altGreetings = (d.altGreetings || []).concat([""]); keepScroll(); setTimeout(() => { const el = $(`[data-alt="${d.altGreetings.length - 1}"]`); if (el) el.focus(); }, 30); },
       "alt-del": (t) => { const d = collectCard(); d.altGreetings.splice(+t.dataset.i, 1); keepScroll(); },
       "card-lora-add": () => { const d = collectCard(); d.image = d.image || {}; d.image.loras = (d.image.loras || []).concat([{ name: "", weight: 0.8 }]); keepScroll(); },
