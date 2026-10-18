@@ -4299,7 +4299,8 @@
       if (/^[a-z]+$/.test(g) && /^[a-z]+$/.test(w))
         return (w === g + "s" || w === g + "es" || g === w + "s");
       if (/^[а-яё]+$/u.test(g) && /^[а-яё]+$/u.test(w) && g.length >= 5)
-        return g.slice(0, -1) === w.slice(0, -1) && Math.abs(g.length - w.length) <= 1;
+        return (g.slice(0, -1) === w.slice(0, -1) && Math.abs(g.length - w.length) <= 1) ||
+          (w.startsWith(g) && w.length <= g.length + 2);
       return false;
     };
     return GARMENTS.filter((g) => {
