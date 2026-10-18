@@ -192,6 +192,27 @@
     return !inDraw.some((g) => known.has(g));
   }
 
+  /* Явная замена текущего наряда: не угадываем её по одному слову sweater/свитер.
+     Текст реплики используется лишь как уточнение к [draw:] и не становится каноном.
+     Неоднозначная комбинация одежды остаётся нетронутой. */
+  function outfitReplacement(draw, context) {
+    const speech = String(context || ""), scene = String(draw || "");
+    const explicit = /(?:на\\s+мне\\s+только|одет[а-яё]*\\s+только|wearing\\s+(?:only|just)|(?:only|just)\\s+wearing)/iu;
+    return !!(garmentWords(scene).length && (explicit.test(scene) || explicit.test(speech)));
+  }
+
+  // Из legacy-look удаляем только распознаваемые теги ОДЕЖДЫ при явно заменённом наряде.
+  // Тело, волосы, пирсинг, именные LoRA и неизвестные теги сохраняются.
+  function omitOldClothes(tags, current, omitted) {
+    const requested = new Set(garmentWords(current));
+    return splitTags(tags).filter((tag) => {
+      const items = garmentWords(tag);
+      if (!items.length || items.some((g) => requested.has(g))) return true;
+      omitted.push(tag);
+      return false;
+    }).join(", ");
+  }
+
   /* ── Кто в кадре ───────────────────────────────────────────────────── */
   function ownerKeys(card) {
     const im = card.image || {};
@@ -222,7 +243,14 @@
 
     let wardrobe = resolveWardrobe(im.wardrobe, outfit);
     const stale = wardrobeConflicts(draw, wardrobe, outfit);
-    if (stale) wardrobe = "";
+    const replacement = outfitReplacement(draw, o.outfitContext);
+    const omittedLook = [], omittedWardrobe = [];
+    // Явная замена одежды относится только к текущему изображению, не меняет Card/Scene.
+    // Гардероб из Scene при противоречии не превращается в установленный факт картинки.
+    if (replacement && wardrobe) {
+      omittedWardrobe.push(...splitTags(wardrobe));
+      wardrobe = "";
+    } else if (stale) wardrobe = "";
     const bits = [];
     if (outfit && !wardrobe && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
     if (ch && ch.pose && !draw) bits.push(ch.pose);
@@ -234,7 +262,8 @@
     for (const { key: k, tags } of parseMap(subVars(im.look))) {
       if (isSuffix(k)) { tail.push(tags); continue; }
       if (!isBase(k) && !bestVariant(k, hay).score) continue;
-      const fresh = splitTags(tags).filter((p) => !hay.includes(p.toLowerCase()));
+      const chosen = replacement ? omitOldClothes(tags, draw, omittedLook) : tags;
+      const fresh = splitTags(chosen).filter((p) => !hay.includes(p.toLowerCase()));
       if (fresh.length) look.push(fresh.join(", "));
     }
 
@@ -259,6 +288,14 @@
       tail: userTail,
       ownerPresent: ownerPresent(card, draw || sceneText),
       stale,
+      trace: {
+        sources: { draw, speech: String(o.outfitContext || ""), sceneOutfit: outfit, look: String(im.look || ""), wardrobe: String(im.wardrobe || "") },
+        replacement, omittedLook, omittedWardrobe,
+        warnings: [
+          ...(outfit && replacement && wardrobeConflicts(draw, outfit, outfit) ? ["rp-scene-vs-image-clothing"] : []),
+          ...(replacement && garmentWords(im.trigger).length ? ["trigger-contains-clothing-review-manually"] : []),
+        ],
+      },
     };
   }
 
@@ -304,7 +341,11 @@
     const pov = o.persona && o.persona.image && o.persona.image.view === "first";
     const povNeg = pov ? POV_NEG.concat(subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : []) : [];
     const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, povNeg.join(", "));
-    return { prompt, negative };
+    const trace = Object.assign({}, c.trace || {}, {
+      finalSources: { trigger, fixedPrompt: String(s.fixedPrompt || ""), style, loras },
+      warnings: ((c.trace && c.trace.warnings) || []).concat(pinned && garmentWords(s.fixedPrompt).length ? ["fixed-prompt-contains-clothing-review-manually"] : []),
+    });
+    return { prompt, negative, trace };
   }
 
   /* ── Размер кадра ──────────────────────────────────────────────────── */
