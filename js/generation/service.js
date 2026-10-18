@@ -294,20 +294,18 @@
       let msg;
       if (lock) lock.committing = true;
       try {
+        /* Сообщение (или новый вариант) и чат (leafId, превью) — одной транзакцией (chat/service.commitMessage):
+           либо записано всё, либо ничего; память меняется только после успеха. */
         if (regen) {
-          msg = target;
-          const prevIdx = msg.swipeIdx;
-          msg.swipes.push(sw);
-          msg.swipeIdx = msg.swipes.length - 1;
-          try { await chat().putMsg(msg); }
-          catch (e) { msg.swipes.pop(); msg.swipeIdx = prevIdx; throw e; } // в памяти — как было до попытки
+          const next = JSON.parse(JSON.stringify(target));
+          next.swipes.push(sw);
+          next.swipeIdx = next.swipes.length - 1;
+          msg = await chat().commitMessage(next);
         } else {
-          msg = chat().newMsg("assistant", c.leafId, "");
-          msg.swipes = [sw];
-          await chat().putMsg(msg);
-          c.leafId = msg.id;
+          const next = chat().newMsg("assistant", c.leafId, "");
+          next.swipes = [sw];
+          msg = await chat().commitMessage(next, next.id);
         }
-        await chat().touch();
       } catch (e) {
         return finish("error", `Не удалось сохранить сообщение: ${e && (e.message || e.name) || "ошибка хранилища"}.`, true);
       } finally {
@@ -318,7 +316,7 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(msg, sw, dr.draws[0]);
+      if (dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(msg, TR.activeSwipe(msg), dr.draws[0]);
       return Object.assign(done("sent"), { msgId: msg.id });
     }
 

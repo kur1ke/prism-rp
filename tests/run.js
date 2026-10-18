@@ -1488,6 +1488,8 @@ function fbHarness(card, opts) {
   const store = { messages: new Map(), chats: new Map() };
   const DB = {
     put: async (st, x) => { (store[st] = store[st] || new Map()).set(st === "worldOverlays" || st === "messengerEnvironments" ? x.chatId : x.id, JSON.parse(JSON.stringify(x))); },
+    // Как одна транзакция: все записи или ни одной (настоящая атомарность IndexedDB проверяется в E2E).
+    putAll: async (entries) => { for (const [st, x] of entries) await DB.put(st, x); },
     get: async (st, id) => { const v = (store[st] || new Map()).get(id); return v ? JSON.parse(JSON.stringify(v)) : undefined; },
     byIndex: async (st, idx, v) => [...((store[st] || new Map()).values())].filter((x) => x[idx] === v),
     all: async (st) => [...((store[st] || new Map()).values())].map((x) => JSON.parse(JSON.stringify(x))),
@@ -3075,10 +3077,10 @@ async function foundationD() {
   await ta("D-15: замок держится до конца записи — повторная проверка во время сохранения не вызывает модель второй раз", async () => {
     const h = fbHarness(CARD);
     await msChat(h);
-    const put0 = h.ctx.DB.put;
+    const put0 = h.ctx.DB.putAll;
     let releasePut, putStarted = false;
     const putGate = new Promise((r) => { releasePut = r; });
-    h.ctx.DB.put = async (st, x) => { if (st === "messages") { putStarted = true; await putGate; } return put0(st, x); };
+    h.ctx.DB.putAll = async (entries) => { putStarted = true; await putGate; return put0(entries); };
     let calls = 0; fbLLM = async () => { calls++; return { text: "Привет!" }; };
     const p1 = h.gen.initiative();
     for (let i = 0; i < 50 && !putStarted; i++) await new Promise((r) => setImmediate(r));
@@ -3093,26 +3095,36 @@ async function foundationD() {
     assert.strictEqual((await p1).outcome, "sent");
     assert.strictEqual(h.S.gen, null, "замок снят после записи");
     assert.strictEqual(h.chat.path().length, 1); assert.strictEqual([...h.store.messages.values()].length, 1);
-    h.ctx.DB.put = put0;
+    h.ctx.DB.putAll = put0;
   });
-  await ta("D-16: ошибка хранилища при записи — замок снят, сообщения нет, leafId прежний; вариант откатывается в памяти", async () => {
+  await ta("D-16: отказ транзакции «сообщение + чат» — замок снят; ни сообщения, ни варианта, ни leafId/превью — ни в базе, ни в памяти", async () => {
     const h = fbHarness(CARD);
     await msChat(h);
-    const put0 = h.ctx.DB.put;
-    h.ctx.DB.put = async (st, x) => { if (st === "messages") throw new Error("QuotaExceededError"); return put0(st, x); };
+    const put0 = h.ctx.DB.putAll;
+    const used = [];
+    h.ctx.DB.putAll = async (entries) => { used.push(entries.map((e) => e[0])); throw new Error("AbortError: chats write failed"); };
+    const chatBefore = JSON.stringify(h.ctx.chat()), storeBefore = snapStores(h);
     fbLLM = reply("Привет!");
     const r = await h.gen.initiative();
     assert.strictEqual(r.outcome, "error"); assert.strictEqual(h.S.gen, null, "приложение не осталось заблокированным");
-    assert.strictEqual(h.store.messages.size, 0); assert.strictEqual(h.ctx.chat().leafId, null);
+    assert.deepStrictEqual(used, [["messages", "chats"]], "сообщение и чат — одной транзакцией");
+    assert.strictEqual(snapStores(h), storeBefore); assert.strictEqual(JSON.stringify(h.ctx.chat()), chatBefore, "leafId и превью в памяти прежние");
+    assert.strictEqual(h.S.messages.length, 0);
     assert.ok(h.toasts.some((t) => /Не удалось сохранить сообщение/.test(t.t) && t.err));
-    h.ctx.DB.put = put0;
+    h.ctx.DB.putAll = put0;
     fbLLM = reply("Привет!"); await h.gen.initiative();
     const m = h.chat.path()[0];
-    h.ctx.DB.put = async (st, x) => { if (st === "messages") throw new Error("disk"); return put0(st, x); };
+    const mBefore = JSON.stringify(m), chat2 = JSON.stringify(h.ctx.chat()), store2 = snapStores(h);
+    h.ctx.DB.putAll = async () => { throw new Error("disk"); };
     fbLLM = reply("Другой вариант");
     assert.strictEqual((await h.gen.initiative(m.id)).outcome, "error");
-    assert.deepStrictEqual([m.swipes.length, m.swipeIdx, h.S.gen], [1, 0, null], "неудачный вариант не остался в памяти");
-    h.ctx.DB.put = put0;
+    assert.deepStrictEqual([JSON.stringify(m), JSON.stringify(h.ctx.chat()), snapStores(h), h.S.gen], [mBefore, chat2, store2, null], "неудачный вариант не остался ни в памяти, ни в базе");
+    h.ctx.DB.putAll = put0;
+    // успех: сообщение и чат записаны согласованно
+    fbLLM = reply("Ещё вариант");
+    await h.gen.initiative(m.id);
+    const c = h.store.chats.get(h.ctx.chat().id);
+    assert.deepStrictEqual([c.leafId, c.preview, h.store.messages.get(m.id).swipes.length], [m.id, "Ещё вариант", 2]);
   });
   await ta("D-17: другой вариант сообщения не на активной ветке — отказ до вызова модели", async () => {
     const h = fbHarness(CARD);

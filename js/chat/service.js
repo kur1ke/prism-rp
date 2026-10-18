@@ -54,6 +54,25 @@
       c.preview = (last && last.role === "user" ? "Вы: " : "") + t.replace(/\s+/g, " ").slice(0, 90);
       await putChat(c);
     }
+    /* Атомарная запись сообщения и состояния чата (leafId, превью) — ОДНОЙ транзакцией (DB.putAll).
+       Память (S.messages, текущий чат) меняется только после успеха; при отказе не меняется ничего — ни в базе, ни в памяти.
+       msg — полная новая версия сообщения (вызывающий передаёт копию; объект в памяти обновляется на месте).
+       leafId — новый конец ветки (undefined — прежний). → сообщение в памяти. */
+    async function commitMessage(msg, leafId) {
+      const c = ctx.chat();
+      const m = JSON.parse(JSON.stringify(msg));
+      const next = JSON.parse(JSON.stringify(c));
+      if (leafId !== undefined) next.leafId = leafId;
+      const p = TR.path(TR.index(S.messages.filter((x) => x.id !== m.id).concat([m])), next.leafId);
+      const last = p.slice(-1)[0];
+      next.preview = (last && last.role === "user" ? "Вы: " : "") + (last ? TR.activeSwipe(last).text : "").replace(/\s+/g, " ").slice(0, 90);
+      await DB.putAll([["messages", m], ["chats", next]]);
+      const i = S.messages.findIndex((x) => x.id === m.id);
+      if (i >= 0) { for (const k of Object.keys(S.messages[i])) if (!(k in m)) delete S.messages[i][k]; Object.assign(S.messages[i], m); }
+      else S.messages.push(m);
+      Object.assign(c, next);
+      return i >= 0 ? S.messages[i] : m;
+    }
     function newMsg(role, parentId, text) {
       const now = Date.now();
       return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null, role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
@@ -214,7 +233,7 @@
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
+    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };

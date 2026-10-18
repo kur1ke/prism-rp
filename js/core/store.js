@@ -109,6 +109,30 @@
       return tx(store, "readwrite", (s) => wrap(s.put(obj))).then(() => obj);
     },
     putMany: (store, list) => tx(store, "readwrite", (s) => Promise.all(list.map((o) => wrap(s.put(o))))),
+    /* Несколько записей в РАЗНЫЕ коллекции одной транзакцией: всё или ничего (FOUNDATION-D: сообщение + чат).
+       entries: [[store, obj], …]. Запросы ставятся синхронно; успех — по oncomplete; ошибка запроса или исключение
+       при постановке — abort, ни одна запись не остаётся. updatedAt — как у put (кроме настроек). */
+    async putAll(entries) {
+      const list = (entries || []).filter((e) => e && e[0] && e[1]);
+      if (!list.length) return;
+      const db = await open();
+      const names = [...new Set(list.map((e) => e[0]))];
+      return new Promise((ok, fail) => {
+        let t;
+        try { t = db.transaction(names, "readwrite"); } catch (e) { fail(e); return; }
+        let failure = null;
+        t.oncomplete = () => ok();
+        t.onerror = () => { if (!failure) failure = t.error; };
+        t.onabort = () => fail(failure || t.error || new Error("Запись прервана — ничего не сохранено"));
+        try {
+          for (const [st, obj] of list) {
+            if (st !== "settings") obj.updatedAt = Date.now();
+            const req = t.objectStore(st).put(obj);
+            req.onerror = () => { failure = failure || req.error; };
+          }
+        } catch (e) { failure = e; try { t.abort(); } catch (_) { /* уже прервана */ } }
+      });
+    },
     del: (store, id) => tx(store, "readwrite", (s) => wrap(s.delete(id))),
     delMany: (store, ids) => tx(store, "readwrite", (s) => Promise.all(ids.map((id) => wrap(s.delete(id))))),
 

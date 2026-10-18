@@ -944,6 +944,17 @@ try:
         page.click("[data-act=initiative]")
         check("D: строгий шаблон (одно системное сообщение) — отказ до вызова модели", toast_has("Одно системное сообщение") and calls() == c0 and db_state() == before)
         page.evaluate("() => { PRP.app.S.settings.singleSystem = false; }")
+        # настоящий IndexedDB: запись сообщения поставлена в транзакцию, запись чата падает — откатывается всё
+        set_ini("message")
+        page.evaluate("""() => { window.__origPutD = IDBObjectStore.prototype.put;
+          IDBObjectStore.prototype.put = function (v, k) { if (this.name === 'chats') throw new DOMException('Сбой записи чата (тест)', 'UnknownError'); return window.__origPutD.call(this, v, k); }; }""")
+        mem_before = page.evaluate("JSON.stringify({ leaf: PRP.app.ctx.chat().leafId, preview: PRP.app.ctx.chat().preview, n: PRP.app.S.messages.length })")
+        page.click("[data-act=initiative]")
+        atomic_ok = toast_has("Не удалось сохранить сообщение")
+        page.evaluate("() => { IDBObjectStore.prototype.put = window.__origPutD; }")
+        check("D: запись сообщения успешна, запись чата — отказ (настоящий IndexedDB): откат всего, в памяти и в базе прежнее, замок снят",
+              atomic_ok and db_state() == before and page.evaluate("JSON.stringify({ leaf: PRP.app.ctx.chat().leafId, preview: PRP.app.ctx.chat().preview, n: PRP.app.S.messages.length })") == mem_before
+              and page.evaluate("PRP.app.S.gen") is None and "INI-OK" not in page.inner_text("#feed"))
         # успех: одно сообщение, метка — ручное «сейчас», происхождение; поводы — данные; среда не тронута
         set_ini("message"); c0 = calls(); env_before = page.evaluate("JSON.stringify(PRP.app.S.messengerEnv)")
         page.click("[data-act=initiative]")
