@@ -50,7 +50,8 @@ jobs:
       - name: Verify generated distribution
         run: |
           node build.js
-          git diff --exit-code -- dist/
+          git diff --exit-code -- dist/ ':(exclude)dist/web/version.json'
+          node -e "const fs=require('fs'); const p=require('./package.json'); const v=JSON.parse(fs.readFileSync('dist/web/version.json')); if(v.version!==p.version || !Number.isFinite(Date.parse(v.builtAt))) process.exit(1)"
 
       - name: Browser E2E — first pass
         run: python tests/e2e.py ${{ runner.temp }}/prism-e2e-1
