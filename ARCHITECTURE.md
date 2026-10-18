@@ -324,3 +324,16 @@ All PrismRP pull requests should be reviewed against:
 
 The protocol defines protected invariants, architectural boundaries,
 review severity, regression expectations, and final review verdict format.
+
+
+## Image prompt hardening — current outfit vs legacy appearance
+
+The image pipeline remains `js/images/compose.js` → `js/images/compile.js` → `js/images/service.js` → provider. Card/image settings and current RP Scene are read-only sources; Messenger does not import RP Scene.
+
+An explicit outfit **replacement** (e.g. “wearing only a grey sweater”, or “на мне только …” in the current message, with a garment in the image description) suppresses identifiable *legacy garment tags* from Card image `look` (including `base` and `suffix`) and `wardrobe` in **this image only**. Stable appearance, accessories, unknown tags and LoRA tokens are preserved. Without explicit replacement, clothing may be layered; the composer does not guess whether “sweater” excludes “skirt”.
+
+This is deliberately conservative, not a semantic clothing parser. `trigger` and user `fixedPrompt` remain authoritative opaque strings; if they contain recognizable garments they are **not rewritten** and `trace.warnings` reports a possible unresolved conflict. If established RP Scene clothing conflicts with the explicit image request, the scene is not overwritten and the disagreement is reported. An image does not establish Scene, World or Experience facts.
+
+`compose().trace` and `finalise().trace` expose raw input sources, omitted garment tags and ambiguity warnings. Image service exposes the latest trace transiently as `S.lastImageTrace`; it is not persisted in image metadata or backups. These diagnostics contain Card/message text, so do not send them to analytics or provider logs.
+
+Known limitation: unrecognized garments, mixed clothing in opaque character `trigger`/fixed prompts, implicit substitutions and conflicting colors within the same garment type cannot be resolved reliably without explicit field separation or manual review.

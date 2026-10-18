@@ -180,16 +180,55 @@
   }
 
   const GARMENTS = ["dress", "skirt", "shirt", "blouse", "t-shirt", "hoodie", "sweater", "jacket", "coat", "jeans", "shorts", "pants", "trousers",
-    "uniform", "kimono", "yukata", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
+    "uniform", "kimono", "yukata", "boots", "shoes", "sneakers", "heels", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
     "платье", "юбка", "рубашка", "блузка", "футболка", "худи", "свитер", "куртка", "пальто", "джинсы", "шорты", "брюки", "форма",
-    "кимоно", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
-  function garmentWords(text) { return GARMENTS.filter((g) => mentions(g, text)); }
+    "кимоно", "ботинки", "сапоги", "туфли", "кроссовки", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
+  /* Классификация одежды должна быть строже поискового сопоставления карты тегов:
+     прежний приблизительный match принимал "skin" за "skirt" (общий префикс ski),
+     из-за чего при замене юбки пропадал тег "pale skin".
+     Английский: слово или простая форма множественного числа; русский: основа без
+     последней буквы (для юбка/юбку), но не произвольные совпадения по 3 буквам. */
+  function garmentWords(text) {
+    const hay = words(text);
+    const near = (g, w) => {
+      if (g === w) return true;
+      if (/^[a-z]+$/.test(g) && /^[a-z]+$/.test(w))
+        return (w === g + "s" || w === g + "es" || g === w + "s");
+      if (/^[а-яё]+$/u.test(g) && /^[а-яё]+$/u.test(w) && g.length >= 5)
+        return (g.slice(0, -1) === w.slice(0, -1) && Math.abs(g.length - w.length) <= 1) ||
+          (w.startsWith(g) && w.length <= g.length + 2);
+      return false;
+    };
+    return GARMENTS.filter((g) => {
+      const phrase = words(g);
+      return hay.some((_, i) => phrase.every((p, j) => hay[i + j] && near(p, hay[i + j])));
+    });
+  }
   // Сцена одевает персонажа иначе, чем записано в трекере/гардеробе → трекер устарел.
   function wardrobeConflicts(draw, wardrobeTags, outfitText) {
     const inDraw = garmentWords(draw);
     if (!inDraw.length) return false;
     const known = new Set(garmentWords(wardrobeTags + ", " + (outfitText || "")));
     return !inDraw.some((g) => known.has(g));
+  }
+
+  /* Явная замена текущего наряда: не угадываем её по одному слову sweater/свитер.
+     Текст реплики используется лишь как уточнение к [draw:] и не становится каноном.
+     Неоднозначная комбинация одежды остаётся нетронутой. */
+  function outfitReplacement(draw, context) {
+    const speech = String(context || ""), scene = String(draw || "");
+    const explicit = /(?:на\s+мне\s+только|одет[а-яё]*\s+только|wearing\s+(?:only|just)|(?:only|just)\s+wearing)/iu;
+    return !!(garmentWords(scene).length && (explicit.test(scene) || explicit.test(speech)));
+  }
+
+  // При явной замене гардероба legacy-одежда из look не имеет права возвращаться в картинку.
+  // Не трогаем токены LoRA, внешность, украшения и неподдающиеся классификации теги.
+  function omitOldClothes(tags, omitted) {
+    return splitTags(tags).filter((tag) => {
+      if (!garmentWords(tag).length) return true;
+      omitted.push(tag);
+      return false;
+    }).join(", ");
   }
 
   /* ── Кто в кадре ───────────────────────────────────────────────────── */
@@ -222,7 +261,14 @@
 
     let wardrobe = resolveWardrobe(im.wardrobe, outfit);
     const stale = wardrobeConflicts(draw, wardrobe, outfit);
-    if (stale) wardrobe = "";
+    const replacement = outfitReplacement(draw, o.outfitContext);
+    const omittedLook = [], omittedWardrobe = [];
+    // Явная замена одежды относится только к текущему изображению, не меняет Card/Scene.
+    // Гардероб из Scene при противоречии не превращается в установленный факт картинки.
+    if (replacement && wardrobe) {
+      // Подавляем только распознаваемые предметы одежды; идентификаторы и LoRA сохраняем.
+      wardrobe = omitOldClothes(wardrobe, omittedWardrobe);
+    } else if (stale) wardrobe = "";
     const bits = [];
     if (outfit && !wardrobe && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
     if (ch && ch.pose && !draw) bits.push(ch.pose);
@@ -232,9 +278,10 @@
     const hay = sceneText.toLowerCase();
     const look = [], tail = [];
     for (const { key: k, tags } of parseMap(subVars(im.look))) {
-      if (isSuffix(k)) { tail.push(tags); continue; }
+      if (isSuffix(k)) { const chosenTail = replacement ? omitOldClothes(tags, omittedLook) : tags; if (chosenTail) tail.push(chosenTail); continue; }
       if (!isBase(k) && !bestVariant(k, hay).score) continue;
-      const fresh = splitTags(tags).filter((p) => !hay.includes(p.toLowerCase()));
+      const chosen = replacement ? omitOldClothes(tags, omittedLook) : tags;
+      const fresh = splitTags(chosen).filter((p) => !hay.includes(p.toLowerCase()));
       if (fresh.length) look.push(fresh.join(", "));
     }
 
@@ -259,6 +306,14 @@
       tail: userTail,
       ownerPresent: ownerPresent(card, draw || sceneText),
       stale,
+      trace: {
+        sources: { draw, speech: String(o.outfitContext || ""), sceneOutfit: outfit, look: String(im.look || ""), wardrobe: String(im.wardrobe || "") },
+        replacement, omittedLook, omittedWardrobe,
+        warnings: [
+          ...(outfit && replacement && wardrobeConflicts(draw, outfit, outfit) ? ["rp-scene-vs-image-clothing"] : []),
+          ...(replacement && garmentWords(im.trigger).length ? ["trigger-contains-clothing-review-manually"] : []),
+        ],
+      },
     };
   }
 
@@ -304,7 +359,11 @@
     const pov = o.persona && o.persona.image && o.persona.image.view === "first";
     const povNeg = pov ? POV_NEG.concat(subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : []) : [];
     const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, povNeg.join(", "));
-    return { prompt, negative };
+    const trace = Object.assign({}, c.trace || {}, {
+      finalSources: { trigger, fixedPrompt: String(s.fixedPrompt || ""), style, loras },
+      warnings: ((c.trace && c.trace.warnings) || []).concat(pinned && garmentWords(s.fixedPrompt).length ? ["fixed-prompt-contains-clothing-review-manually"] : []),
+    });
+    return { prompt, negative, trace };
   }
 
   /* ── Размер кадра ──────────────────────────────────────────────────── */

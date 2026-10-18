@@ -1,0 +1,71 @@
+name: Image hardening checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/image-hardening.yml'
+      - 'js/images/**'
+      - 'tests/**'
+      - 'dist/**'
+      - 'build.js'
+      - 'ARCHITECTURE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-hardening-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-build-e2e:
+    name: Unit, reproducible build, E2E twice
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Playwright and Chromium
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Run Unit tests
+        run: node tests/run.js
+
+      - name: Verify generated distribution
+        run: |
+          node build.js
+          git diff --exit-code -- dist/ ':(exclude)dist/web/version.json'
+          node -e "const fs=require('fs'); const p=require('./package.json'); const v=JSON.parse(fs.readFileSync('dist/web/version.json')); if(v.version!==p.version || !Number.isFinite(Date.parse(v.builtAt))) process.exit(1)"
+
+      - name: Browser E2E — first pass
+        run: python tests/e2e.py ${{ runner.temp }}/prism-e2e-1
+
+      - name: Browser E2E — second pass
+        run: python tests/e2e.py ${{ runner.temp }}/prism-e2e-2
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-image-hardening-e2e
+          path: |
+            ${{ runner.temp }}/prism-e2e-1/
+            ${{ runner.temp }}/prism-e2e-2/
+          if-no-files-found: ignore
+          retention-days: 7

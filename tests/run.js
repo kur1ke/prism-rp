@@ -630,6 +630,59 @@ t("compose: сцена одевает иначе → устаревший гар
   assert.strictEqual(c.keep, "");
   assert.ok(c.stale);
 });
+t("IMAGE-H: явно только серый свитер подавляет старую одежду из look и wardrobe", () => {
+  const card = { name: "Лилит", image: {
+    trigger: "lilithx, dark red hair, black cat ears",
+    look: "base: pale skin, freckles, black pleated skirt, silver chains, dark boots, arm tattoos",
+    wardrobe: "base: black butterfly crop top, silver chains",
+    loras: [{ name: "lilithx_v2", weight: 0.8 }],
+  } };
+  const draw = "wearing oversized grey knitted sweater, sitting on fluffy blanket, bedroom";
+  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw, outfitContext: "Прямо сейчас на мне только один очень большой серый свитер." });
+  const fin = IC.finalise({ card, composed: c, backend: "a1111", settings: {} });
+  assert.ok(c.trace.replacement);
+  assert.ok(!/crop top|pleated skirt|dark boots/i.test(fin.prompt), fin.prompt);
+  for (const tag of ["grey knitted sweater", "silver chains", "arm tattoos", "freckles", "pale skin"]) assert.ok(fin.prompt.includes(tag), "Missing: " + tag);
+  assert.ok(fin.prompt.includes("<lora:lilithx_v2:0.8>"));
+  assert.ok(c.trace.omittedLook.some((x) => /skirt/i.test(x)));
+  assert.ok(c.trace.omittedWardrobe.some((x) => /crop top/i.test(x)));
+});
+t("IMAGE-H: свитер без указания «только» не стирает совместимую юбку", () => {
+  const card = { name: "A", image: { look: "base: grey eyes, black skirt", wardrobe: "base: dark boots" } };
+  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw: "wearing grey sweater, dark boots" });
+  assert.strictEqual(c.trace.replacement, false);
+  assert.ok(c.scene.includes("black skirt") && c.keep.includes("dark boots"));
+});
+t("IMAGE-H: русская форма «в свитере» и «на мне только свитер» заменяют прежнюю юбку", () => {
+  const card = { name: "Лилит", image: { look: "base: бледная кожа, юбка, кошачьи уши, ботинки" } };
+  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw: "в сером свитере", outfitContext: "На мне только свитер." });
+  assert.strictEqual(c.trace.replacement, true);
+  assert.ok(c.scene.includes("бледная кожа") && c.scene.includes("кошачьи уши"));
+  assert.ok(!c.scene.includes("юбка") && !c.scene.includes("ботинки"));
+});
+t("IMAGE-H: одежда сцены RP не переписывается и конфликт виден в trace", () => {
+  const card = { name: "Лилит", image: { look: "base: long red hair, black skirt" } };
+  const sc = { chars: { "Лилит": { wear: ["black skirt", "boots"], pose: "" } }, present: ["Лилит"] };
+  const before = JSON.stringify(sc);
+  const c = IC.compose({ card, scene: sc, draw: "wearing only a grey sweater" });
+  assert.strictEqual(JSON.stringify(sc), before);
+  assert.ok(c.trace.warnings.includes("rp-scene-vs-image-clothing"));
+  assert.ok(!c.scene.includes("black skirt"));
+});
+t("IMAGE-H: переписка не заимствует одежду из RP Scene", () => {
+  const card = { name: "Лилит", image: { look: "base: freckles" } };
+  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw: "wearing grey sweater", outfitContext: "На мне только свитер" });
+  assert.ok(!c.scene.includes("black skirt"));
+  assert.strictEqual(c.trace.sources.sceneOutfit, "");
+});
+t("IMAGE-H: одежда в trigger и fixedPrompt не удаляется молча; конфликт отмечен", () => {
+  const card = { name: "A", image: { trigger: "A, black skirt, black cat ears", look: "base: pale skin" } };
+  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw: "wearing only a grey sweater" });
+  const f = IC.finalise({ composed: c, card, backend: "perchance", settings: { fixedPrompt: "masterpiece, dark boots", promptMode: "append" } });
+  assert.ok(f.trace.warnings.includes("trigger-contains-clothing-review-manually"));
+  assert.ok(f.trace.warnings.includes("fixed-prompt-contains-clothing-review-manually"));
+  assert.ok(f.prompt.includes("black skirt") && f.prompt.includes("dark boots"));
+});
 t("compose: NSFW-теги только по сцене, а не по одежде", () => {
   assert.ok(!IC.compose({ draw: "1girl, smile", card: imgCard, scene: st0, persona: {} }).keep.includes("nude"));
   assert.ok(IC.compose({ draw: "1girl, nude, bed", card: imgCard, scene: st0, persona: {} }).keep.includes("nipples"));
