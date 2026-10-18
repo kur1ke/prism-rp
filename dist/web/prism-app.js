@@ -7334,6 +7334,8 @@
       const regen = !!(target && INI.isInitiative(target));
       const done = (outcome, extra) => Object.assign({ ok: outcome === "sent", outcome }, extra || {});
       if (regenId && !regen) return done("ineligible", { code: "not-initiative" });
+      // Другой вариант — только у сообщения на АКТИВНОЙ ветке; иначе контекст был бы неверным (indexOf = -1).
+      if (regen && full.indexOf(target) < 0) return done("ineligible", { code: "not-on-path" });
       const path = regen ? full.slice(0, full.indexOf(target)) : full;
       const el = INI.eligibility({ mode: c && c.mode, hasCard: !!cd, generating: !!S.gen, path, provider: prov, singleSystem: !!S.settings.singleSystem, regen });
       if (!el.eligible) {
@@ -7364,8 +7366,12 @@
         if (e.name !== "AbortError") error = e.message || String(e);
       }
       const aborted = ctrl.signal.aborted;
-      S.gen = null;
+      /* Замок генерации (S.gen) держится до конца записи: пока сообщение сохраняется и меняется leafId, повторная проверка
+         и любая другая генерация отклоняются как «busy». Снимается в finally — и при ошибке хранилища тоже, только если он наш. */
+      const lock = S.gen;
+      const release = () => { if (S.gen === lock) S.gen = null; };
       const finish = (outcome, msg, isErr) => {
+        release();
         if (msg) ui.toast(msg, !!isErr);
         prism().refresh();
         ui.renderFeed();
@@ -7389,18 +7395,27 @@
       const snap = ms.snapshot(path, msNow);
       if (snap) sw.messengerAt = snap;
       let msg;
-      if (regen) {
-        msg = target;
-        msg.swipes.push(sw);
-        msg.swipeIdx = msg.swipes.length - 1;
-        await chat().putMsg(msg);
-      } else {
-        msg = chat().newMsg("assistant", c.leafId, "");
-        msg.swipes = [sw];
-        await chat().putMsg(msg);
-        c.leafId = msg.id;
+      if (lock) lock.committing = true;
+      try {
+        if (regen) {
+          msg = target;
+          const prevIdx = msg.swipeIdx;
+          msg.swipes.push(sw);
+          msg.swipeIdx = msg.swipes.length - 1;
+          try { await chat().putMsg(msg); }
+          catch (e) { msg.swipes.pop(); msg.swipeIdx = prevIdx; throw e; } // в памяти — как было до попытки
+        } else {
+          msg = chat().newMsg("assistant", c.leafId, "");
+          msg.swipes = [sw];
+          await chat().putMsg(msg);
+          c.leafId = msg.id;
+        }
+        await chat().touch();
+      } catch (e) {
+        return finish("error", `Не удалось сохранить сообщение: ${e && (e.message || e.name) || "ошибка хранилища"}.`, true);
+      } finally {
+        release();
       }
-      await chat().touch();
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();

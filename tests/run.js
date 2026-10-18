@@ -3072,6 +3072,60 @@ async function foundationD() {
     assert.strictEqual(p.startWith, "Химэ:");
     assert.ok(PC.toPrompt(msgs, { char: "Химэ", user: "Кира" }).instruction.includes("Напиши следующее сообщение Химэ"), "без closing — прежнее поведение");
   });
+  await ta("D-15: замок держится до конца записи — повторная проверка во время сохранения не вызывает модель второй раз", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    const put0 = h.ctx.DB.put;
+    let releasePut, putStarted = false;
+    const putGate = new Promise((r) => { releasePut = r; });
+    h.ctx.DB.put = async (st, x) => { if (st === "messages") { putStarted = true; await putGate; } return put0(st, x); };
+    let calls = 0; fbLLM = async () => { calls++; return { text: "Привет!" }; };
+    const p1 = h.gen.initiative();
+    for (let i = 0; i < 50 && !putStarted; i++) await new Promise((r) => setImmediate(r));
+    assert.ok(putStarted, "ответ получен, идёт сохранение");
+    assert.ok(h.S.gen && h.S.gen.committing, "замок ещё держится");
+    const r2 = await h.gen.initiative();
+    assert.deepStrictEqual([r2.outcome, r2.code, calls], ["ineligible", "busy", 1], "вторая проверка не вызывает модель");
+    let genCalled = false; const realLLM = fbLLM; fbLLM = async (...a) => { genCalled = true; return realLLM(...a); };
+    await h.gen.generate(); // обычная генерация во время записи тоже отклоняется
+    assert.strictEqual(genCalled, false);
+    releasePut();
+    assert.strictEqual((await p1).outcome, "sent");
+    assert.strictEqual(h.S.gen, null, "замок снят после записи");
+    assert.strictEqual(h.chat.path().length, 1); assert.strictEqual([...h.store.messages.values()].length, 1);
+    h.ctx.DB.put = put0;
+  });
+  await ta("D-16: ошибка хранилища при записи — замок снят, сообщения нет, leafId прежний; вариант откатывается в памяти", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    const put0 = h.ctx.DB.put;
+    h.ctx.DB.put = async (st, x) => { if (st === "messages") throw new Error("QuotaExceededError"); return put0(st, x); };
+    fbLLM = reply("Привет!");
+    const r = await h.gen.initiative();
+    assert.strictEqual(r.outcome, "error"); assert.strictEqual(h.S.gen, null, "приложение не осталось заблокированным");
+    assert.strictEqual(h.store.messages.size, 0); assert.strictEqual(h.ctx.chat().leafId, null);
+    assert.ok(h.toasts.some((t) => /Не удалось сохранить сообщение/.test(t.t) && t.err));
+    h.ctx.DB.put = put0;
+    fbLLM = reply("Привет!"); await h.gen.initiative();
+    const m = h.chat.path()[0];
+    h.ctx.DB.put = async (st, x) => { if (st === "messages") throw new Error("disk"); return put0(st, x); };
+    fbLLM = reply("Другой вариант");
+    assert.strictEqual((await h.gen.initiative(m.id)).outcome, "error");
+    assert.deepStrictEqual([m.swipes.length, m.swipeIdx, h.S.gen], [1, 0, null], "неудачный вариант не остался в памяти");
+    h.ctx.DB.put = put0;
+  });
+  await ta("D-17: другой вариант сообщения не на активной ветке — отказ до вызова модели", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    fbLLM = reply("Привет!"); await h.gen.initiative();
+    const ini = h.chat.path()[0];
+    // уводим активную ветку от сообщения-инициативы: новый корень пользователя
+    const u = h.chat.newMsg("user", null, "другая ветка"); await h.chat.putMsg(u); h.ctx.chat().leafId = u.id;
+    assert.ok(!h.chat.path().includes(ini));
+    const f = reply("x"); fbLLM = f;
+    const r = await h.gen.initiative(ini.id);
+    assert.deepStrictEqual([r.outcome, r.code, f.calls, ini.swipes.length], ["ineligible", "not-on-path", 0, 1]);
+  });
   await ta("D-14: бэкап — сообщение-инициатива и его происхождение переживают круг; повторное восстановление не дублирует", async () => {
     const h = fbHarness(CARD);
     const id = await msChat(h);
