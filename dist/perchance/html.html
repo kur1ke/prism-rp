@@ -4967,7 +4967,26 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "uniform", "kimono", "yukata", "boots", "shoes", "sneakers", "heels", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
     "платье", "юбка", "рубашка", "блузка", "футболка", "худи", "свитер", "куртка", "пальто", "джинсы", "шорты", "брюки", "форма",
     "кимоно", "ботинки", "сапоги", "туфли", "кроссовки", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
-  function garmentWords(text) { return GARMENTS.filter((g) => mentions(g, text)); }
+  /* Классификация одежды должна быть строже поискового сопоставления карты тегов:
+     прежний приблизительный match принимал "skin" за "skirt" (общий префикс ski),
+     из-за чего при замене юбки пропадал тег "pale skin".
+     Английский: слово или простая форма множественного числа; русский: основа без
+     последней буквы (для юбка/юбку), но не произвольные совпадения по 3 буквам. */
+  function garmentWords(text) {
+    const hay = words(text);
+    const near = (g, w) => {
+      if (g === w) return true;
+      if (/^[a-z]+$/.test(g) && /^[a-z]+$/.test(w))
+        return (w === g + "s" || w === g + "es" || g === w + "s");
+      if (/^[а-яё]+$/u.test(g) && /^[а-яё]+$/u.test(w) && g.length >= 5)
+        return g.slice(0, -1) === w.slice(0, -1) && Math.abs(g.length - w.length) <= 1;
+      return false;
+    };
+    return GARMENTS.filter((g) => {
+      const phrase = words(g);
+      return hay.some((_, i) => phrase.every((p, j) => hay[i + j] && near(p, hay[i + j])));
+    });
+  }
   // Сцена одевает персонажа иначе, чем записано в трекере/гардеробе → трекер устарел.
   function wardrobeConflicts(draw, wardrobeTags, outfitText) {
     const inDraw = garmentWords(draw);
