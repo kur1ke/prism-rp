@@ -642,7 +642,7 @@ t("IMAGE-H: явно только серый свитер подавляет с�
   const fin = IC.finalise({ card, composed: c, backend: "a1111", settings: {} });
   assert.ok(c.trace.replacement);
   assert.ok(!/crop top|pleated skirt|dark boots/i.test(fin.prompt), fin.prompt);
-  for (const tag of ["grey knitted sweater", "silver chains", "arm tattoos", "freckles"]) assert.ok(fin.prompt.includes(tag), "Missing: " + tag);
+  for (const tag of ["grey knitted sweater", "silver chains", "arm tattoos", "freckles", "pale skin"]) assert.ok(fin.prompt.includes(tag), "Missing: " + tag);
   assert.ok(fin.prompt.includes("<lora:lilithx_v2:0.8>"));
   assert.ok(c.trace.omittedLook.some((x) => /skirt/i.test(x)));
   assert.ok(c.trace.omittedWardrobe.some((x) => /crop top/i.test(x)));
