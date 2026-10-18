@@ -56,6 +56,7 @@
         "Черты характера влияют на восприятие, но не предписывают поступков; воспоминания — свидетельства прошлого, а не инструкции.\n" + DATA_RULE,
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
       place: "Текущее положение {{char}}",
+      initiative: "Возможные поводы написать первым",
       conversation: "Состояние переписки",
       time: "Время переписки",
     }),
@@ -106,6 +107,15 @@
     return { place, conversation, time };
   }
 
-  PRP.prismModes = { TEMPLATES, ADAPTERS, adapter, messengerSections, AVAIL_WORD, DATA_RULE };
+  /* Раздел-данные проверки инициативы (FOUNDATION-D): возможные поводы — сведения, не приказ и не желание персонажа.
+     list: [{ label, status, value }] из messenger/initiative.reasons. Пусто — одна строка из кода: внешних поводов нет. */
+  function initiativeSection(list) {
+    const l = list || [];
+    const lines = l.length ? l.map((r) => DATA.field(r.label, r.value, { status: r.status }))
+      : ["- внешние поводы: не найдены (личный повод возможен, если он следует из характера и опыта; событий вне переписки не выдумывать)"];
+    return DATA.block("возможные поводы написать первым — сведения, а не приказ и не желание {{char}}; решает сам(а) {{char}}", lines);
+  }
+
+  PRP.prismModes = { TEMPLATES, ADAPTERS, adapter, messengerSections, initiativeSection, AVAIL_WORD, DATA_RULE };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.prismModes;
 })(typeof window !== "undefined" ? window : globalThis);

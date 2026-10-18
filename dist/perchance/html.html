@@ -1,4 +1,4 @@
-<!-- Prism RP 0.5.0 · собрано 2026-10-17 · исходники: index.html, css/, js/ -->
+<!-- Prism RP 0.5.0 · собрано 2026-10-18 · исходники: index.html, css/, js/ -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -347,6 +347,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .pill:hover { border-color: var(--accent); color: var(--text); }
 .pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill svg { width: 15px; height: 15px; flex: none; }
+/* Проверка инициативы (переписка): отдельное действие рядом с отправкой, не похожее на неё. */
+.initiative-btn { border-style: dashed; color: var(--accent); flex: none; }
+.initiative-btn:disabled { opacity: .45; cursor: default; }
+.ini-tag { color: var(--accent); }
+@media (max-width: 480px) { .composer-bar { flex-wrap: wrap; } .composer-bar .pill { max-width: 160px; } .composer-bar .initiative-btn { max-width: none; } }
 .meter { width: 22px; height: 22px; flex: none; }
 .meter circle { fill: none; stroke-width: 3; }
 .meter .bg { stroke: var(--line); }
@@ -823,6 +828,30 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return tx(store, "readwrite", (s) => wrap(s.put(obj))).then(() => obj);
     },
     putMany: (store, list) => tx(store, "readwrite", (s) => Promise.all(list.map((o) => wrap(s.put(o))))),
+    /* Несколько записей в РАЗНЫЕ коллекции одной транзакцией: всё или ничего (FOUNDATION-D: сообщение + чат).
+       entries: [[store, obj], …]. Запросы ставятся синхронно; успех — по oncomplete; ошибка запроса или исключение
+       при постановке — abort, ни одна запись не остаётся. updatedAt — как у put (кроме настроек). */
+    async putAll(entries) {
+      const list = (entries || []).filter((e) => e && e[0] && e[1]);
+      if (!list.length) return;
+      const db = await open();
+      const names = [...new Set(list.map((e) => e[0]))];
+      return new Promise((ok, fail) => {
+        let t;
+        try { t = db.transaction(names, "readwrite"); } catch (e) { fail(e); return; }
+        let failure = null;
+        t.oncomplete = () => ok();
+        t.onerror = () => { if (!failure) failure = t.error; };
+        t.onabort = () => fail(failure || t.error || new Error("Запись прервана — ничего не сохранено"));
+        try {
+          for (const [st, obj] of list) {
+            if (st !== "settings") obj.updatedAt = Date.now();
+            const req = t.objectStore(st).put(obj);
+            req.onerror = () => { failure = failure || req.error; };
+          }
+        } catch (e) { failure = e; try { t.abort(); } catch (_) { /* уже прервана */ } }
+      });
+    },
     del: (store, id) => tx(store, "readwrite", (s) => wrap(s.delete(id))),
     delMany: (store, ids) => tx(store, "readwrite", (s) => Promise.all(ids.map((id) => wrap(s.delete(id))))),
 
@@ -3744,6 +3773,109 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/messenger/initiative.js */
+/* Prism RP — инициатива персонажа в переписке (FOUNDATION-D). Чистый модуль.
+
+   Только по явному действию пользователя («Проверить инициативу»): ни таймеров, ни фона, ни расписаний.
+   Цепочка: СУЩЕСТВУЮЩЕЕ СОСТОЯНИЕ → ДОПУСТИМОСТЬ → ВОЗМОЖНЫЕ ПОВОДЫ → PRISM → РЕШЕНИЕ ПЕРСОНАЖА → СООБЩЕНИЕ ИЛИ НИЧЕГО.
+     • Допустимость (eligibility) — можно ли вообще проверять: структурные правила, а не желание персонажа.
+     • Возможные поводы (reasons) — уже известные обстоятельства: открытые договорённости пользователя
+       и долгое молчание (≥ 12 ч по времени переписки). Это возможность, не обязанность и не приказ.
+       Повод «внешних нет» тоже нормален: личный повод модель выводит из характера и опыта сама.
+       Срок договорённости не угадывается (в модели договорённостей нет времени) — «завтра» не становится датой.
+     • Решение — за моделью: сообщение или ровно [no-message].
+   Этот модуль ничего не пишет и не вызывает модель. Без DOM, хранилища, сети, таймеров и S. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const CONV = PRP.messengerConversation || (typeof require !== "undefined" ? require("./conversation.js") : null);
+  const MT = PRP.messengerTime || (typeof require !== "undefined" ? require("./time.js") : null);
+
+  const SCHEMA = 1;
+  const DECLINE = "[no-message]";
+  const QUIET_MS = CONV.QUIET_MS; // 12 ч — тот же порог «затихшей» переписки (FOUNDATION-C)
+  const MAX_MARKERS = 5;
+
+  const str = (v) => (v == null ? "" : String(v));
+  const swipeOf = (m) => (m && m.swipes && m.swipes.length ? m.swipes[Math.min(m.swipeIdx || 0, m.swipes.length - 1)] : {});
+
+  // Логическое сообщение — инициатива, если хоть один его вариант создан проверкой инициативы.
+  const isInitiative = (m) => !!(m && m.role === "assistant" && (m.swipes || []).some((s) => s && s.initiative && s.initiative.trigger === "user-check"));
+
+  /* Не больше одной инициативы подряд: среди сообщений после последней реплики пользователя на АКТИВНОМ пути
+     уже есть сообщение-инициатива. Только структура ветки — без времени и без скрытых счётчиков. */
+  function consecutiveBlocked(path) {
+    const p = path || [];
+    for (let i = p.length - 1; i >= 0 && p[i].role !== "user"; i--) if (isInitiative(p[i])) return true;
+    return false;
+  }
+
+  /* Допустимость проверки. o: { mode, hasCard, generating, path, provider: { kind }, singleSystem, regen }
+     regen — другой вариант уже существующего сообщения-инициативы: правила «ждёт ответа» и «подряд» к нему не применяются
+     (это та же логическая единица, второй инициативы не появляется).
+     → { eligible, code, reason } */
+  function eligibility(o) {
+    const x = o || {};
+    const no = (code, reason) => ({ eligible: false, code, reason });
+    if (x.mode !== "messenger") return no("not-messenger", "Инициатива есть только в переписке.");
+    if (!x.hasCard) return no("no-card", "Нет персонажа.");
+    if (x.generating) return no("busy", "Уже идёт генерация.");
+    if (!x.provider) return no("no-provider", "Модель не подключена.");
+    // Без фальшивой реплики пользователя: строгому шаблону (одно системное сообщение у OpenAI-совместимого сервера)
+    // нужен ход пользователя последним, а у проверки инициативы его по определению нет.
+    if (x.singleSystem && x.provider.kind !== "perchance") return no("needs-user-first", "В режиме «Одно системное сообщение» строгий шаблон модели требует, чтобы последним писал пользователь; подделывать реплику Prism не будет. Выключите этот режим в «Настройки → Генерация» или используйте Perchance.");
+    if (!x.regen) {
+      const p = x.path || [];
+      const last = p[p.length - 1];
+      if (last && last.role === "user") return no("reply-pending", "Последним писали вы — это обычный ответ, а не инициатива.");
+      if (consecutiveBlocked(p)) return no("already-initiated", "Персонаж уже написал первым — дождитесь вашего ответа.");
+    }
+    return { eligible: true, code: "ok", reason: "" };
+  }
+
+  /* Возможные поводы — детерминированно из уже известного. conv — messenger/conversation.derive(path, { now, record }).
+     → [{ id, kind, status, label, value }] (в порядке: договорённости, затем молчание) */
+  function reasons(conv, now) {
+    const c = conv || {};
+    const out = [];
+    const open = (c.promises || []).concat(c.plans || []).filter((m) => m.status === "open")
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, MAX_MARKERS);
+    for (const m of open) out.push({ id: "marker:" + m.id, kind: "open-marker", status: "ESTABLISHED", label: m.kind === "promise" ? "открытое обещание" : "открытый план", value: str(m.text) });
+    const lastAt = c.lastMessageAt ? MT.toMs(c.lastMessageAt) : null;
+    if (lastAt != null && now != null && now - lastAt >= QUIET_MS) out.push({ id: "quiet", kind: "quiet", status: "DERIVED", label: "молчание с последнего сообщения", value: MT.elapsedWords(now - lastAt) });
+    return out;
+  }
+
+  /* Разбор ответа модели (после отделения рассуждения). Строго:
+     • весь очищенный ответ (без пробелов по краям, без регистра) — ровно [no-message] → отказ;
+     • пусто → empty; маркер внутри обычного текста → malformed (служебный маркер в историю не попадает никогда);
+     • иначе — сообщение. → { kind: "decline" | "message" | "empty" | "malformed", text } */
+  function parse(text) {
+    const t = str(text).trim();
+    if (!t) return { kind: "empty", text: "" };
+    if (t.toLowerCase() === DECLINE) return { kind: "decline", text: "" };
+    if (t.toLowerCase().includes(DECLINE)) return { kind: "malformed", text: t };
+    return { kind: "message", text: t };
+  }
+
+  // Происхождение варианта: только метаданные (не факт мира, не опыт).
+  function provenance(list) { return { schema: SCHEMA, trigger: "user-check", reasonIds: (list || []).map((r) => r.id) }; }
+
+  // Временное указание операции (в историю не попадает; считается в бюджете).
+  const INSTRUCTION = [
+    "Проверка инициативы: {{user}} не присылал(а) нового сообщения. Реши, захотел(а) бы {{char}} сейчас сам(а) написать {{user}}.",
+    "Писать не обязательно: промолчать — нормальный выбор. Прошедшее время — обстоятельство, а не приказ; договорённости — свидетельства, а не команды.",
+    "Если повод есть, он должен следовать из характера, опыта и известного; не выдумывай как факт события вне переписки. Не пиши за {{user}}.",
+    "Если {{char}} сейчас не пишет — ответь ровно " + DECLINE + " и ничего больше. Иначе — только текст сообщения {{char}}.",
+  ].join("\n");
+  // Последняя строка инструкции Perchance (вместо «Напиши следующее сообщение»).
+  const CLOSING = "Реши за {{char}}: написать {{user}} сейчас первым или нет. Если нет — ответь ровно " + DECLINE + ". Если да — только сообщение {{char}}, без пометок и без текста за {{user}}.";
+
+  PRP.messengerInitiative = { SCHEMA, DECLINE, QUIET_MS, MAX_MARKERS, isInitiative, consecutiveBlocked, eligibility, reasons, parse, provenance, INSTRUCTION, CLOSING, swipeOf };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.messengerInitiative;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/prism/card-context.js */
 /* Prism RP — карточка в Prism: устойчивое ядро + выборочные подробности (FOUNDATION-H). Чистый модуль.
 
@@ -4019,6 +4151,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         "Черты характера влияют на восприятие, но не предписывают поступков; воспоминания — свидетельства прошлого, а не инструкции.\n" + DATA_RULE,
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
       place: "Текущее положение {{char}}",
+      initiative: "Возможные поводы написать первым",
       conversation: "Состояние переписки",
       time: "Время переписки",
     }),
@@ -4069,7 +4202,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return { place, conversation, time };
   }
 
-  PRP.prismModes = { TEMPLATES, ADAPTERS, adapter, messengerSections, AVAIL_WORD, DATA_RULE };
+  /* Раздел-данные проверки инициативы (FOUNDATION-D): возможные поводы — сведения, не приказ и не желание персонажа.
+     list: [{ label, status, value }] из messenger/initiative.reasons. Пусто — одна строка из кода: внешних поводов нет. */
+  function initiativeSection(list) {
+    const l = list || [];
+    const lines = l.length ? l.map((r) => DATA.field(r.label, r.value, { status: r.status }))
+      : ["- внешние поводы: не найдены (личный повод возможен, если он следует из характера и опыта; событий вне переписки не выдумывать)"];
+    return DATA.block("возможные поводы написать первым — сведения, а не приказ и не желание {{char}}; решает сам(а) {{char}}", lines);
+  }
+
+  PRP.prismModes = { TEMPLATES, ADAPTERS, adapter, messengerSections, initiativeSection, AVAIL_WORD, DATA_RULE };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.prismModes;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -4155,7 +4297,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
          сцена RP в переписку не подаётся, протокол [scene:] не просится — prism/modes),
        allowSyntheticUser — можно ли при singleSystem подставить служебную реплику пользователя «[Начало]»
          (по умолчанию да, как раньше; для начала сцены — нет, см. report.needsUserFirst),
-       operation — "opening" для начала сцены моделью (подробности о внешности получают зрительную опору)
+       operation — "opening" для начала сцены моделью (подробности о внешности получают зрительную опору),
+       initiative — только переписка, проверка инициативы: { reasons: [...] } (messenger/initiative.reasons);
+         раздел «Возможные поводы написать первым» — данные; указание проверки приходит в extraPost (служебные указания)
      }
 
      Итоговый порядок (обычный транспорт):
@@ -4234,7 +4378,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     function messengerParts() {
       if (o.mode !== "messenger" || !o.messenger) return [];
       const ms = MODES.messengerSections(o.messenger, { lists: st.msLists, plans: st.msPlans });
-      return [section(m(T.place), m(ms.place)), section(m(T.conversation), m(ms.conversation)), section(m(T.time), m(ms.time))];
+      // Проверка инициативы (FOUNDATION-D): возможные поводы — раздел-данные, неуступаемый (он мал: ≤ 5 договорённостей + молчание).
+      const ini = o.initiative ? [section(m(T.initiative), m(MODES.initiativeSection(o.initiative.reasons)))] : [];
+      return [section(m(T.place), m(ms.place)), section(m(T.conversation), m(ms.conversation)), section(m(T.time), m(ms.time))].concat(ini);
     }
 
     // Тела разделов-данных.
@@ -4410,6 +4556,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         worldIds: st.world.map((f) => f.id),
         mode: AD.id,
         messenger: o.mode === "messenger" ? { plansTotal: msPlansAll.length, plansKept: st.msPlans === Infinity ? msPlansAll.length : st.msPlans, listsKept: st.msLists } : null,
+        initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
           core: { source: core.source, reason: core.reason, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },
@@ -5509,8 +5656,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     try { return ai({ getMetaObject: true }); } catch (e) { return null; }
   }
 
-  // messages из сборщика → { instruction, startWith, stop }
-  function toPrompt(messages, names) {
+  /* messages из сборщика → { instruction, startWith, stop }
+     closing — последняя строка инструкции вместо «Напиши следующее сообщение…» (проверка инициативы: персонаж
+     может промолчать). Это часть инструкции, а не строка стенограммы: новой реплики пользователя не появляется. */
+  function toPrompt(messages, names, closing) {
     const char = names.char || "Персонаж";
     const user = names.user || "Пользователь";
     const sys = [], post = [], lines = [];
@@ -5527,7 +5676,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       "### Переписка до этого момента",
       lines.join("\n\n") || "(пока пусто)",
       post.join("\n\n"),
-      `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
+      closing ? String(closing) : `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
     ].filter(Boolean).join("\n\n");
     return {
       instruction,
@@ -5542,7 +5691,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const o = opts || {};
     const ai = plugin();
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
-    const p = toPrompt(messages, names);
+    const p = toPrompt(messages, names, o.closing);
     if (o.continueFrom) p.startWith = `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
     const handle = ai({
@@ -5597,12 +5746,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const PC = PRP.perchance, OA = PRP.openai;
 
   /* prov — элемент settings.providerList; messages — [{role, content}].
-     opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom }
+     opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
+             closing (Perchance: последняя строка инструкции, текст готовит вызывающий) }
      → { text, reasoning } (контракт PRP.openai.chat / PRP.perchance.chat) */
   function chat(prov, messages, opts) {
     const o = opts || {};
     return prov.kind === "perchance"
-      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null })
+      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null })
       : OA.chat(prov, messages, o.sampler, { signal: o.signal, onDelta: o.onDelta });
   }
 
@@ -6040,7 +6190,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   function feed(m) {
     if (!m.path.length) {
-      if (m.chat.mode === "messenger") return `<div class="empty-note">Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?»</div>`;
+      if (m.chat.mode === "messenger") return m.gen && m.gen.initiative ? initiativeLive(m) : `<div class="empty-note">Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?» — или нажмите «Проверить инициативу».</div>`;
       return m.gen && m.gen.opening ? openingLive(m) : openingStart(m);
     }
     return m.chat.mode === "messenger" ? messengerFeed(m) : rpFeed(m);
@@ -6186,10 +6336,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         return mark + `<div class="msg-row them" id="text-${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
       }
       const parts = R.bubbles(sw.text);
+      const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
       return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
-        <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
-    }).join("");
+        <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
+    }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
+  }
+  // Проверка инициативы в процессе: временный пузырь «печатает», в дереве сообщений его нет до успешного ответа.
+  function initiativeLive(m) {
+    const parts = R.bubbles(liveText(m));
+    return `<div class="msg-row them" id="text-${m.gen.msgId}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
   }
 
   function meter(m) {
@@ -6210,6 +6366,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}
         <span class="spacer"></span>
+        ${m.chat.mode === "messenger" ? `<button class="pill initiative-btn" data-act="initiative" ${m.gen ? "disabled" : ""} title="Спросить, написал(а) бы ${esc(m.card.name)} сейчас первым — персонаж может и промолчать. Ничего не запускается само.">${icon("bubble")}<span>Проверить инициативу</span></button>` : ""}
         ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>`
           : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
       </div></div></div>`;
@@ -7211,6 +7368,25 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       c.preview = (last && last.role === "user" ? "Вы: " : "") + t.replace(/\s+/g, " ").slice(0, 90);
       await putChat(c);
     }
+    /* Атомарная запись сообщения и состояния чата (leafId, превью) — ОДНОЙ транзакцией (DB.putAll).
+       Память (S.messages, текущий чат) меняется только после успеха; при отказе не меняется ничего — ни в базе, ни в памяти.
+       msg — полная новая версия сообщения (вызывающий передаёт копию; объект в памяти обновляется на месте).
+       leafId — новый конец ветки (undefined — прежний). → сообщение в памяти. */
+    async function commitMessage(msg, leafId) {
+      const c = ctx.chat();
+      const m = JSON.parse(JSON.stringify(msg));
+      const next = JSON.parse(JSON.stringify(c));
+      if (leafId !== undefined) next.leafId = leafId;
+      const p = TR.path(TR.index(S.messages.filter((x) => x.id !== m.id).concat([m])), next.leafId);
+      const last = p.slice(-1)[0];
+      next.preview = (last && last.role === "user" ? "Вы: " : "") + (last ? TR.activeSwipe(last).text : "").replace(/\s+/g, " ").slice(0, 90);
+      await DB.putAll([["messages", m], ["chats", next]]);
+      const i = S.messages.findIndex((x) => x.id === m.id);
+      if (i >= 0) { for (const k of Object.keys(S.messages[i])) if (!(k in m)) delete S.messages[i][k]; Object.assign(S.messages[i], m); }
+      else S.messages.push(m);
+      Object.assign(c, next);
+      return i >= 0 ? S.messages[i] : m;
+    }
     function newMsg(role, parentId, text) {
       const now = Date.now();
       return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null, role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
@@ -7371,7 +7547,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
+    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };
@@ -7693,6 +7869,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "начальных обстоятельств и текущей сцены; обстоятельства — отправная точка, а не сценарий, который нужно разыграть. " +
     "Не пиши действий, мыслей, реплик и решений {{user}} и оставь {{user}} место ответить.";
   const OPENING_ID = "opening"; // id временного пузыря начала сцены в ленте (в дереве такого узла нет)
+  const INITIATIVE_ID = "initiative"; // id временного пузыря проверки инициативы (в дереве такого узла нет до успешного ответа)
+  const INI = PRP.messengerInitiative, U = PRP.util;
+  // Ключ активного контекста: чат + сообщения пути и их выбранные варианты (сверка перед записью).
+  const pathKey = (p) => (p || []).map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">");
 
   function create(ctx) {
     const { S, ui } = ctx;
@@ -7707,6 +7887,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!c || !cd) return;
       if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return; }
       mode = mode || (msgId ? "regen" : "new");
+      // Другой вариант сообщения-инициативы — снова проверка инициативы (тот же смысл операции, та же логическая единица).
+      if (mode === "regen" && c.mode === "messenger" && INI.isInitiative(S.messages.find((m) => m.id === msgId))) return initiative(msgId);
       const full = chat().path();
       // Пустой чат: отвечать не на что — это начало сцены.
       if (mode === "opening" || (mode === "new" && !full.length)) return opening(prov);
@@ -7881,9 +8063,114 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return { ok: true, msgId: m.id };
     }
 
+    /* Проверка инициативы (FOUNDATION-D): только переписка и только по явному действию пользователя.
+       Транзакция, как у начала сцены: допустимость → поводы → сборка Prism (с разделом поводов и временным указанием)
+       → проверка бюджета → вызов модели (поток — только во временном S.gen, в дереве узла нет) → разбор →
+       сверка контекста (тот же чат, тот же путь и варианты) → ОДНА запись: новое сообщение (или новый вариант
+       сообщения-инициативы при regenId). Отказ [no-message], переполнение, ошибка, отмена, пустой или испорченный
+       ответ, смена чата/ветки — ничего не записывают (ни сообщения, ни варианта, ни метки времени).
+       Среда, договорённости, мир, опыт, сцена и карточка не меняются никогда.
+       → { ok, outcome: "sent" | "declined" | "ineligible" | "overflow" | "error" | "aborted" | "empty" | "malformed" | "stale", code?, msgId? } */
+    async function initiative(regenId) {
+      const c = ctx.chat(), cd = ctx.card(), prov = ctx.provider();
+      const ms = messenger();
+      const full = c ? chat().path() : [];
+      const target = regenId ? S.messages.find((m) => m.id === regenId) : null;
+      const regen = !!(target && INI.isInitiative(target));
+      const done = (outcome, extra) => Object.assign({ ok: outcome === "sent", outcome }, extra || {});
+      if (regenId && !regen) return done("ineligible", { code: "not-initiative" });
+      // Другой вариант — только у сообщения на АКТИВНОЙ ветке; иначе контекст был бы неверным (indexOf = -1).
+      if (regen && full.indexOf(target) < 0) return done("ineligible", { code: "not-on-path" });
+      const path = regen ? full.slice(0, full.indexOf(target)) : full;
+      const el = INI.eligibility({ mode: c && c.mode, hasCard: !!cd, generating: !!S.gen, path, provider: prov, singleSystem: !!S.settings.singleSystem, regen });
+      if (!el.eligible) {
+        if (el.code !== "busy") ui.toast(el.reason, el.code !== "already-initiated" && el.code !== "reply-pending");
+        return done("ineligible", { code: el.code });
+      }
+      // Момент переписки — один раз, при подготовке (живое время — часы, ручное — сохранённое); после ответа не пересчитывается.
+      const msNow = ms.now();
+      const conv = ms.context(path, msNow).conversation;
+      const reasons = INI.reasons(conv, msNow);
+      const built = prism().build(path, INI.INSTRUCTION, SCN.forGeneration(path, { mode: "new" }),
+        { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons } });
+      if (preflightFailed(built, prov)) return done("overflow");
+
+      const chatId = c.id, key = pathKey(full);
+      const ctrl = new AbortController();
+      S.gen = { ctrl, msgId: regen ? target.id : INITIATIVE_ID, initiative: true, raw: "", reasoning: "", prefix: "" };
+      ui.renderFeed();
+      if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
+      ui.scrollBottom();
+
+      const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
+      const vars = { char: cd.name, user: ctx.persona().name };
+      let res = null, error = null;
+      try {
+        res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, closing: U.macros(INI.CLOSING, vars) });
+      } catch (e) {
+        if (e.name !== "AbortError") error = e.message || String(e);
+      }
+      const aborted = ctrl.signal.aborted;
+      /* Замок генерации (S.gen) держится до конца записи: пока сообщение сохраняется и меняется leafId, повторная проверка
+         и любая другая генерация отклоняются как «busy». Снимается в finally — и при ошибке хранилища тоже, только если он наш. */
+      const lock = S.gen;
+      const release = () => { if (S.gen === lock) S.gen = null; };
+      const finish = (outcome, msg, isErr) => {
+        release();
+        if (msg) ui.toast(msg, !!isErr);
+        prism().refresh();
+        ui.renderFeed();
+        if (S.drawerOpen) ui.renderDrawer();
+        return done(outcome);
+      };
+      if (aborted) return finish("aborted");
+      if (error) return finish("error", `Проверка инициативы не удалась: ${error}. Ничего не изменилось — можно попробовать ещё раз.`, true);
+      const th = OA.splitThink((res && res.text) || "");
+      const parsed = SC.parse(th.text);
+      const dr = IC.parseDraws(parsed.text);
+      const r = INI.parse(dr.text);
+      // Ответ пришёл в другой контекст (чат, ветка или вариант сменились) — не дописываем не туда.
+      if (S.chatId !== chatId || !ctx.chat() || pathKey(chat().path()) !== key) return finish("stale", "Пока шла проверка, чат или ветка изменились — ответ не сохранён.", true);
+      if (r.kind === "decline") return finish("declined", "Персонаж решил пока не писать.");
+      if (r.kind === "empty") return finish("empty", "Модель вернула пустой ответ — ничего не сохранено.", true);
+      if (r.kind === "malformed") return finish("malformed", "Модель вернула служебный маркер вперемешку с текстом — ответ не сохранён, можно попробовать ещё раз.", true);
+
+      const sw = { text: r.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
+        reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now(), initiative: INI.provenance(reasons) };
+      const snap = ms.snapshot(path, msNow);
+      if (snap) sw.messengerAt = snap;
+      let msg;
+      if (lock) lock.committing = true;
+      try {
+        /* Сообщение (или новый вариант) и чат (leafId, превью) — одной транзакцией (chat/service.commitMessage):
+           либо записано всё, либо ничего; память меняется только после успеха. */
+        if (regen) {
+          const next = JSON.parse(JSON.stringify(target));
+          next.swipes.push(sw);
+          next.swipeIdx = next.swipes.length - 1;
+          msg = await chat().commitMessage(next);
+        } else {
+          const next = chat().newMsg("assistant", c.leafId, "");
+          next.swipes = [sw];
+          msg = await chat().commitMessage(next, next.id);
+        }
+      } catch (e) {
+        return finish("error", `Не удалось сохранить сообщение: ${e && (e.message || e.name) || "ошибка хранилища"}.`, true);
+      } finally {
+        release();
+      }
+      prism().refresh();
+      ui.renderFeed();
+      ui.renderRail();
+      if (S.drawerOpen) ui.renderDrawer();
+      ui.scrollBottom();
+      if (dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(msg, TR.activeSwipe(msg), dr.draws[0]);
+      return Object.assign(done("sent"), { msgId: msg.id });
+    }
+
     function stop() { if (S.gen) S.gen.ctrl.abort(); }
 
-    return { generate, stop, OPENING };
+    return { generate, initiative, stop, OPENING, INITIATIVE_ID };
   }
 
   PRP.generationService = { create };
@@ -8946,6 +9233,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       stop: () => svc.gen.stop(),
       // Модель начинает сцену — только по этой кнопке, никогда сама при открытии чата.
       opening: () => { if (!S.gen) return svc.gen.generate(null, "opening"); },
+      // Проверка инициативы (только переписка, только по этой кнопке): правила и сообщения — в сервисе генерации.
+      initiative: () => { if (!S.gen) return svc.gen.initiative(); },
       regen: (t) => svc.gen.generate(t.dataset.id, "regen"),
       continue: (t) => svc.gen.generate(t.dataset.id, "continue"),
       swipe: async (t) => {

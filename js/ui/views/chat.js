@@ -41,7 +41,7 @@
 
   function feed(m) {
     if (!m.path.length) {
-      if (m.chat.mode === "messenger") return `<div class="empty-note">Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?»</div>`;
+      if (m.chat.mode === "messenger") return m.gen && m.gen.initiative ? initiativeLive(m) : `<div class="empty-note">Напишите ${esc(m.card.name)} первым — например, «привет, чем занята?» — или нажмите «Проверить инициативу».</div>`;
       return m.gen && m.gen.opening ? openingLive(m) : openingStart(m);
     }
     return m.chat.mode === "messenger" ? messengerFeed(m) : rpFeed(m);
@@ -187,10 +187,16 @@
         return mark + `<div class="msg-row them" id="text-${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
       }
       const parts = R.bubbles(sw.text);
+      const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
       return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
-        <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
-    }).join("");
+        <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
+    }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
+  }
+  // Проверка инициативы в процессе: временный пузырь «печатает», в дереве сообщений его нет до успешного ответа.
+  function initiativeLive(m) {
+    const parts = R.bubbles(liveText(m));
+    return `<div class="msg-row them" id="text-${m.gen.msgId}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
   }
 
   function meter(m) {
@@ -211,6 +217,7 @@
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}
         <span class="spacer"></span>
+        ${m.chat.mode === "messenger" ? `<button class="pill initiative-btn" data-act="initiative" ${m.gen ? "disabled" : ""} title="Спросить, написал(а) бы ${esc(m.card.name)} сейчас первым — персонаж может и промолчать. Ничего не запускается само.">${icon("bubble")}<span>Проверить инициативу</span></button>` : ""}
         ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>`
           : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
       </div></div></div>`;

@@ -20,6 +20,7 @@ require(J("prism/scenario.js"));
 require(J("messenger/time.js"));
 require(J("messenger/environment.js"));
 require(J("messenger/conversation.js"));
+require(J("messenger/initiative.js"));
 require(J("prism/card-context.js"));
 require(J("prism/modes.js"));
 require(J("prism/assembler.js"));
@@ -1487,6 +1488,8 @@ function fbHarness(card, opts) {
   const store = { messages: new Map(), chats: new Map() };
   const DB = {
     put: async (st, x) => { (store[st] = store[st] || new Map()).set(st === "worldOverlays" || st === "messengerEnvironments" ? x.chatId : x.id, JSON.parse(JSON.stringify(x))); },
+    // Как одна транзакция: все записи или ни одной (настоящая атомарность IndexedDB проверяется в E2E).
+    putAll: async (entries) => { for (const [st, x] of entries) await DB.put(st, x); },
     get: async (st, id) => { const v = (store[st] || new Map()).get(id); return v ? JSON.parse(JSON.stringify(v)) : undefined; },
     byIndex: async (st, idx, v) => [...((store[st] || new Map()).values())].filter((x) => x[idx] === v),
     all: async (st) => [...((store[st] || new Map()).values())].map((x) => JSON.parse(JSON.stringify(x))),
@@ -2833,9 +2836,327 @@ async function foundationHFix() {
   });
 }
 
+/* ── FOUNDATION-D: проверка инициативы в переписке (только по явному действию пользователя) ── */
+async function foundationD() {
+  const PRP = globalThis.PRP, INI = PRP.messengerInitiative, MT = PRP.messengerTime, CONV = PRP.messengerConversation, ENV = PRP.messengerEnv, BK = PRP.backup;
+  const TOKYO = "Asia/Tokyo";
+  const tk = (hhmm, day) => MT.fromLocal(`2026-10-${day || 17}T` + hhmm, TOKYO);
+  const CARD = { name: "Химэ", description: "Добрая студентка. Любит писать первой, когда скучает." };
+  const msChat = async (h, setup) => {
+    const id = await h.chat.createChat("messenger");
+    await h.ctx.svc.messenger.createFor(id, setup || { timeZone: TOKYO, timeMode: "manual", manualNow: MT.toIso(tk("09:00")) });
+    await h.ctx.svc.messenger.load(id);
+    return id;
+  };
+  const M = (h) => h.ctx.svc.messenger;
+  const send = async (h, text) => { const st = M(h).stampForNew(); await h.chat.addUserMessage(text, st ? { messengerAt: st } : null); };
+  const reply = (text) => { const f = async (p, msgs, o) => { f.calls++; f.last = { msgs, o }; return { text, reasoning: "" }; }; f.calls = 0; return f; };
+  const snapStores = (h) => JSON.stringify(Object.keys(h.store).sort().map((k) => [k, [...h.store[k].entries()].sort()]));
+  const assistantNode = (h, text, extra) => { const m = h.chat.newMsg("assistant", h.ctx.chat().leafId, text); Object.assign(m.swipes[0], extra || {}); return m; };
+
+  await ta("D-1: допустимость — только переписка, не во время генерации, не вместо ответа, без подделки хода пользователя", async () => {
+    const base = { mode: "messenger", hasCard: true, generating: false, path: [], provider: { kind: "openai" }, singleSystem: false };
+    const e = (o) => INI.eligibility(Object.assign({}, base, o)).code;
+    assert.strictEqual(e({}), "ok", "пустая переписка — можно");
+    assert.strictEqual(e({ mode: "rp" }), "not-messenger");
+    assert.strictEqual(e({ generating: true }), "busy");
+    assert.strictEqual(e({ hasCard: false }), "no-card");
+    assert.strictEqual(e({ provider: null }), "no-provider");
+    assert.strictEqual(e({ path: [{ id: "u", role: "user", swipes: [{ text: "?" }] }] }), "reply-pending", "последним писал пользователь — это ответ, а не инициатива");
+    assert.strictEqual(e({ singleSystem: true }), "needs-user-first", "строгий шаблон — отказ до вызова");
+    assert.strictEqual(e({ singleSystem: true, provider: { kind: "perchance" } }), "ok", "Perchance принимает инструкцию без шаблона ролей");
+  });
+  await ta("D-2: одна инициатива подряд — по структуре активной ветки; другая ветка не блокирует; ответ пользователя снимает ограничение", async () => {
+    const u = { id: "u1", role: "user", swipes: [{ text: "hi" }] };
+    const a = { id: "a1", role: "assistant", swipes: [{ text: "ответ" }] };
+    const ini = { id: "i1", role: "assistant", swipes: [{ text: "привет!", initiative: INI.provenance([]) }] };
+    assert.strictEqual(INI.consecutiveBlocked([u, a]), false);
+    assert.strictEqual(INI.consecutiveBlocked([u, a, ini]), true);
+    assert.strictEqual(INI.consecutiveBlocked([ini, { id: "u2", role: "user", swipes: [{ text: "о" }] }]), false, "после ответа пользователя — снова можно (а сейчас последним он — это ответ)");
+    assert.strictEqual(INI.consecutiveBlocked([u, a]), false, "соседняя ветка без инициативы не наследует запрет");
+    // вариант без инициативы внутри логического сообщения-инициативы — сообщение всё равно инициатива
+    assert.ok(INI.isInitiative({ role: "assistant", swipes: [{ text: "x" }, { text: "y", initiative: INI.provenance([]) }] }));
+    assert.strictEqual(INI.eligibility({ mode: "messenger", hasCard: true, path: [u, a, ini], provider: { kind: "openai" } }).code, "already-initiated");
+    assert.strictEqual(INI.eligibility({ mode: "messenger", hasCard: true, path: [u], provider: { kind: "openai" }, regen: true }).code, "ok", "другой вариант той же инициативы — не вторая инициатива");
+  });
+  await ta("D-3: разбор ответа — [no-message] только целиком; внутри текста — испорчено; пусто — пусто", async () => {
+    assert.deepStrictEqual(INI.parse("[no-message]"), { kind: "decline", text: "" });
+    assert.deepStrictEqual(INI.parse("  [NO-MESSAGE] \n"), { kind: "decline", text: "" });
+    assert.strictEqual(INI.parse("Привет! [no-message]").kind, "malformed");
+    assert.strictEqual(INI.parse("[no-message]\nну ладно").kind, "malformed");
+    assert.strictEqual(INI.parse("   ").kind, "empty");
+    assert.deepStrictEqual(INI.parse(" Привет, скучаю "), { kind: "message", text: "Привет, скучаю" });
+  });
+  await ta("D-4: поводы — открытые договорённости (установлено) и молчание ≥ 12 ч (выведено); порог — повод, а не условие; срок договорённости не угадывается", async () => {
+    const at = (t) => ({ at: MT.toIso(t), timeZone: TOKYO, world: ENV.emptyWorld() });
+    const path = [{ id: "a", role: "assistant", swipeIdx: 0, swipes: [{ text: "пока!", messengerAt: at(tk("09:00")) }] }];
+    const rec = Object.assign(ENV.blank("X", { timeZone: TOKYO }), { conversationEvents: [
+      CONV.makeMarkerEvent({ op: "add", kind: "plan", text: "Созвониться завтра вечером", scope: "chat", createdAt: 1 }),
+      CONV.makeMarkerEvent({ id: "done1", op: "add", kind: "promise", text: "Вернуть книгу", scope: "chat", createdAt: 2 }),
+      CONV.makeMarkerEvent({ op: "status", markerId: "done1", status: "done", scope: "chat", createdAt: 3 })] });
+    const soon = INI.reasons(CONV.derive(path, { now: tk("10:00"), record: rec }), tk("10:00"));
+    assert.deepStrictEqual(soon.map((r) => [r.kind, r.status, r.value]), [["open-marker", "ESTABLISHED", "Созвониться завтра вечером"]], "выполненное не повод; час молчания — не повод");
+    const late = INI.reasons(CONV.derive(path, { now: tk("21:30"), record: rec }), tk("21:30"));
+    assert.deepStrictEqual(late.map((r) => r.kind), ["open-marker", "quiet"]); assert.strictEqual(late[1].value, "12 ч 30 мин");
+    assert.ok(!late.some((r) => /due|срок/.test(JSON.stringify(r))), "«завтра» не превращается в срок");
+    const unknown = INI.reasons(CONV.derive([{ id: "old", role: "assistant", swipes: [{ text: "x" }] }], { now: tk("21:30") }), tk("21:30"));
+    assert.deepStrictEqual(unknown, [], "время последнего сообщения неизвестно — молчание не выводится");
+    // без внешних поводов проверка всё равно допустима (личный повод возможен)
+    assert.strictEqual(INI.eligibility({ mode: "messenger", hasCard: true, path, provider: { kind: "openai" } }).code, "ok");
+    const sec = PRP.prismModes.initiativeSection([]);
+    assert.ok(sec.startsWith("[данные · возможные поводы") && /внешние поводы: не найдены/.test(sec) && /событий вне переписки не выдумывать/.test(sec));
+  });
+
+  await ta("D-5: успешная инициатива — одно сообщение с меткой времени подготовки и происхождением; Prism — данные + временное указание, без реплики пользователя; среда, договорённости, мир, опыт не тронуты", async () => {
+    const h = fbHarness(CARD);
+    const id = await msChat(h);
+    await M(h).addMarker({ kind: "plan", text: "Созвониться вечером", scope: "chat" });
+    await h.ctx.svc.worldChat.load(id);
+    const envBefore = JSON.stringify(h.store.messengerEnvironments.get(id));
+    const f = reply("Привет! Ты не забыл, что мы собирались созвониться?\n\nЯ свободна после семи");
+    fbLLM = f;
+    const r = await h.gen.initiative();
+    assert.deepStrictEqual([r.ok, r.outcome, f.calls], [true, "sent", 1]);
+    const p = h.chat.path();
+    assert.strictEqual(p.length, 1); assert.strictEqual(p[0].role, "assistant");
+    const sw = p[0].swipes[0];
+    assert.strictEqual(sw.text, "Привет! Ты не забыл, что мы собирались созвониться?\n\nЯ свободна после семи", "одна логическая единица на несколько пузырей");
+    assert.strictEqual(sw.messengerAt.at, MT.toIso(tk("09:00")), "время — ручное «сейчас», ничего не сдвинулось");
+    assert.deepStrictEqual(sw.initiative.trigger, "user-check"); assert.strictEqual(sw.initiative.schema, 1);
+    assert.ok(sw.initiative.reasonIds.length === 1 && sw.initiative.reasonIds[0].startsWith("marker:"));
+    assert.strictEqual(JSON.stringify(h.store.messengerEnvironments.get(id)), envBefore, "среда и договорённости не изменены (договорённость сама не закрыта)");
+    assert.strictEqual(h.S.experience.length, 0); assert.ok(!(h.store.worldOverlays && h.store.worldOverlays.size), "мир чата не создан");
+    const msgs = f.last.msgs;
+    assert.ok(!msgs.some((m) => m.role === "user"), "реплика пользователя не подделана");
+    const sys = msgs.filter((m) => m.role === "system").map((m) => m.content).join("\n");
+    assert.ok(sys.includes("### Возможные поводы написать первым\n[данные · возможные поводы") && sys.includes('- открытый план (установлено): "Созвониться вечером"'));
+    const last = msgs[msgs.length - 1].content;
+    assert.ok(last.startsWith("### Служебные указания для этого ответа\n") && last.includes("Проверка инициативы") && last.includes("[no-message]"));
+    assert.ok(!JSON.stringify(h.store.messages).includes("Проверка инициативы"), "указание не попало в историю");
+    assert.ok(h.S.lastPrism.report.used <= h.S.lastPrism.report.budget, "строгий бюджет вместе с поводами и указанием");
+  });
+  await ta("D-6: отказ [no-message] — ничего не записано (ни сообщения, ни варианта, ни метки, ни отказа); сообщение «решил пока не писать»", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    const before = snapStores(h);
+    fbLLM = reply("  [no-message]  ");
+    const r = await h.gen.initiative();
+    assert.strictEqual(r.outcome, "declined");
+    assert.strictEqual(snapStores(h), before, "хранилище не изменилось ни в чём");
+    assert.strictEqual(h.chat.path().length, 0);
+    assert.ok(h.toasts.some((t) => t.t === "Персонаж решил пока не писать." && !t.err));
+    // отказ не ставит запрет: следующая проверка допустима
+    fbLLM = reply("Эй, ты тут?");
+    assert.strictEqual((await h.gen.initiative()).outcome, "sent");
+  });
+  await ta("D-7: ошибка провайдера, пустой и испорченный ответ, отмена — разные исходы, ничего не записано", async () => {
+    for (const [fn, outcome] of [[async () => { throw new Error("502 Bad Gateway"); }, "error"], [reply("   "), "empty"], [reply("Привет [no-message]"), "malformed"],
+      [async () => { const e = new Error("stop"); e.name = "AbortError"; throw e; }, "aborted"]]) {
+      const h = fbHarness(CARD);
+      await msChat(h);
+      const before = snapStores(h);
+      fbLLM = fn;
+      if (outcome === "aborted") { const p = h.gen.initiative(); h.gen.stop(); assert.strictEqual((await p).outcome, "aborted"); }
+      else assert.strictEqual((await h.gen.initiative()).outcome, outcome);
+      assert.strictEqual(snapStores(h), before, outcome + ": без записи");
+    }
+  });
+  await ta("D-8: переполнение — 0 вызовов модели, 0 записей; строгий шаблон — отказ до вызова", async () => {
+    const h = fbHarness(Object.assign({}, CARD, { description: "слово ".repeat(6000) }), { contextTokens: 900 });
+    await msChat(h);
+    await M(h).commitEvent({ scope: "chat", patch: { location: "очень ".repeat(3000) } });
+    const before = snapStores(h);
+    const f = reply("x"); fbLLM = f;
+    assert.strictEqual((await h.gen.initiative()).outcome, "overflow");
+    assert.strictEqual(f.calls, 0); assert.strictEqual(snapStores(h), before);
+    const h2 = fbHarness(CARD, { settings: { singleSystem: true } });
+    await msChat(h2);
+    const f2 = reply("x"); fbLLM = f2;
+    const r2 = await h2.gen.initiative();
+    assert.deepStrictEqual([r2.outcome, r2.code, f2.calls], ["ineligible", "needs-user-first", 0]);
+    assert.ok(h2.toasts.some((t) => /Одно системное сообщение/.test(t.t) && t.err));
+  });
+  await ta("D-9: повторный клик во время проверки — без второго вызова; после успеха — «уже написал первым»; после ответа пользователя — снова можно", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    let release; const gate = new Promise((r) => { release = r; });
+    let calls = 0; fbLLM = async () => { calls++; await gate; return { text: "Привет!" }; };
+    const p1 = h.gen.initiative();
+    const r2 = await h.gen.initiative();
+    assert.deepStrictEqual([r2.outcome, r2.code], ["ineligible", "busy"]);
+    release(); assert.strictEqual((await p1).outcome, "sent"); assert.strictEqual(calls, 1);
+    const r3 = await h.gen.initiative();
+    assert.deepStrictEqual([r3.outcome, r3.code, calls], ["ineligible", "already-initiated", 1]);
+    assert.strictEqual(h.chat.path().length, 1);
+    await send(h, "о, привет");
+    fbLLM = reply("Как дела?");
+    await h.gen.generate(); // обычный ответ
+    fbLLM = reply("И ещё вопрос!");
+    assert.strictEqual((await h.gen.initiative()).outcome, "sent", "после ответа пользователя ограничение снято");
+  });
+  await ta("D-10: смена ветки или варианта во время проверки — ответ не дописывается не туда", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    fbLLM = reply("первое"); await h.gen.initiative();
+    await send(h, "ответ"); fbLLM = reply("A"); await h.gen.generate();
+    const a = h.chat.path()[2];
+    fbLLM = reply("B"); await h.gen.generate(a.id, "regen"); // у ответа теперь 2 варианта
+    const before = snapStores(h);
+    fbLLM = async () => { a.swipeIdx = 0; await h.chat.putMsg(a); return { text: "Привет снова" }; }; // пользователь листнул вариант
+    const cnt = h.store.messages.size;
+    const snapA = JSON.stringify(h.store.messages.get(a.id));
+    const r = await h.gen.initiative();
+    assert.strictEqual(r.outcome, "stale");
+    assert.strictEqual(h.store.messages.size, cnt, "сообщения не добавлено");
+    assert.ok(h.toasts.some((t) => /ветка изменились/.test(t.t)));
+    assert.ok(before && snapA, "контекст сверен");
+    // другой чат во время проверки
+    const h2 = fbHarness(CARD);
+    const id1 = await msChat(h2);
+    fbLLM = async () => { h2.S.chatId = "other-chat"; return { text: "Привет" }; };
+    const n2 = h2.store.messages.size;
+    assert.strictEqual((await h2.gen.initiative()).outcome, "stale"); assert.strictEqual(h2.store.messages.size, n2);
+    h2.S.chatId = id1;
+  });
+  await ta("D-11: живое время — метка момента подготовки, не после ответа; ручное время — только явный сдвиг считается прошедшим", async () => {
+    const h = fbHarness(CARD, { clock: tk("10:00") });
+    await msChat(h, { timeZone: TOKYO, timeMode: "live" });
+    fbLLM = async () => { h.ctx.setClock(tk("10:07")); return { text: "Привет" }; };
+    await h.gen.initiative();
+    assert.strictEqual(h.chat.path()[0].swipes[0].messengerAt.at, MT.toIso(tk("10:00")));
+    // ручное: без сдвига молчание не растёт
+    const h2 = fbHarness(CARD);
+    await msChat(h2);
+    fbLLM = reply("доброе утро"); await h2.gen.initiative();
+    await send(h2, "утро!"); fbLLM = reply("как спалось?"); await h2.gen.generate();
+    const f = reply("[no-message]"); fbLLM = f;
+    await h2.gen.initiative();
+    assert.ok(!f.last.msgs.some((m) => m.content.includes("молчание с последнего сообщения")), "время не шло — молчания нет");
+    await M(h2).advance(13 * 60);
+    await h2.gen.initiative();
+    assert.ok(f.last.msgs.some((m) => m.content.includes('- молчание с последнего сообщения (выведено): "13 ч"')), "явный сдвиг на 13 ч — повод «молчание»");
+  });
+  await ta("D-12: другой вариант сообщения-инициативы — снова проверка инициативы (вариант той же единицы); отказ на нём — без нового варианта; продолжить — обычное", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    fbLLM = reply("Привет!"); await h.gen.initiative();
+    const m = h.chat.path()[0];
+    const f = reply("Слушай, а ты где?"); fbLLM = f;
+    await h.gen.generate(m.id, "regen");
+    assert.strictEqual(m.swipes.length, 2); assert.strictEqual(m.swipeIdx, 1);
+    assert.ok(m.swipes[1].initiative && m.swipes[1].messengerAt, "у нового варианта — своё происхождение и метка");
+    assert.ok(f.last.msgs[f.last.msgs.length - 1].content.includes("Проверка инициативы"), "указание — инициативы, не обычного ответа");
+    fbLLM = reply("[no-message]");
+    await h.gen.generate(m.id, "regen");
+    assert.strictEqual(m.swipes.length, 2, "отказ — без пустого варианта");
+    fbLLM = reply("и ещё кое-что");
+    await h.gen.generate(m.id, "continue");
+    assert.ok(m.swipes[1].text.includes("и ещё кое-что") && m.swipes[1].initiative, "продолжение — та же единица, происхождение сохранено");
+    assert.strictEqual(INI.consecutiveBlocked(h.chat.path()), true, "вариант не делает доступной вторую инициативу");
+    // удаление — обычное: после удаления сообщения-инициативы проверка снова допустима
+    await h.chat.deleteFrom(m.id);
+    fbLLM = reply("снова привет");
+    assert.strictEqual((await h.gen.initiative()).outcome, "sent");
+  });
+  await ta("D-13: RP — нет действия; сцена не тронута; Perchance — указание инициативы последней строкой инструкции, без новой реплики пользователя", async () => {
+    const h = fbHarness(CARD);
+    await h.chat.createChat("rp");
+    const f = reply("x"); fbLLM = f;
+    const r = await h.gen.initiative();
+    assert.deepStrictEqual([r.outcome, r.code, f.calls], ["ineligible", "not-messenger", 0]);
+    const PC = PRP.perchance || require(J("providers/perchance.js"));
+    const msgs = [{ role: "system", content: "SYS" }, { role: "user", content: "привет" }, { role: "assistant", content: "пока" }, { role: "system", content: "### Служебные указания для этого ответа\n" + INI.INSTRUCTION }];
+    const closing = PRP.util.macros(INI.CLOSING, { char: "Химэ", user: "Кира" });
+    const p = PC.toPrompt(msgs, { char: "Химэ", user: "Кира" }, closing);
+    assert.ok(p.instruction.endsWith(closing), "последняя строка — решение инициативы, не «Напиши следующее сообщение»");
+    assert.strictEqual((p.instruction.match(/^Кира: /gm) || []).length, 1, "строк пользователя столько же, сколько в истории");
+    assert.ok(p.instruction.indexOf("Проверка инициативы") > p.instruction.indexOf("Химэ: пока"), "указание — после стенограммы, как служебный текст");
+    assert.strictEqual(p.startWith, "Химэ:");
+    assert.ok(PC.toPrompt(msgs, { char: "Химэ", user: "Кира" }).instruction.includes("Напиши следующее сообщение Химэ"), "без closing — прежнее поведение");
+  });
+  await ta("D-15: замок держится до конца записи — повторная проверка во время сохранения не вызывает модель второй раз", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    const put0 = h.ctx.DB.putAll;
+    let releasePut, putStarted = false;
+    const putGate = new Promise((r) => { releasePut = r; });
+    h.ctx.DB.putAll = async (entries) => { putStarted = true; await putGate; return put0(entries); };
+    let calls = 0; fbLLM = async () => { calls++; return { text: "Привет!" }; };
+    const p1 = h.gen.initiative();
+    for (let i = 0; i < 50 && !putStarted; i++) await new Promise((r) => setImmediate(r));
+    assert.ok(putStarted, "ответ получен, идёт сохранение");
+    assert.ok(h.S.gen && h.S.gen.committing, "замок ещё держится");
+    const r2 = await h.gen.initiative();
+    assert.deepStrictEqual([r2.outcome, r2.code, calls], ["ineligible", "busy", 1], "вторая проверка не вызывает модель");
+    let genCalled = false; const realLLM = fbLLM; fbLLM = async (...a) => { genCalled = true; return realLLM(...a); };
+    await h.gen.generate(); // обычная генерация во время записи тоже отклоняется
+    assert.strictEqual(genCalled, false);
+    releasePut();
+    assert.strictEqual((await p1).outcome, "sent");
+    assert.strictEqual(h.S.gen, null, "замок снят после записи");
+    assert.strictEqual(h.chat.path().length, 1); assert.strictEqual([...h.store.messages.values()].length, 1);
+    h.ctx.DB.putAll = put0;
+  });
+  await ta("D-16: отказ транзакции «сообщение + чат» — замок снят; ни сообщения, ни варианта, ни leafId/превью — ни в базе, ни в памяти", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    const put0 = h.ctx.DB.putAll;
+    const used = [];
+    h.ctx.DB.putAll = async (entries) => { used.push(entries.map((e) => e[0])); throw new Error("AbortError: chats write failed"); };
+    const chatBefore = JSON.stringify(h.ctx.chat()), storeBefore = snapStores(h);
+    fbLLM = reply("Привет!");
+    const r = await h.gen.initiative();
+    assert.strictEqual(r.outcome, "error"); assert.strictEqual(h.S.gen, null, "приложение не осталось заблокированным");
+    assert.deepStrictEqual(used, [["messages", "chats"]], "сообщение и чат — одной транзакцией");
+    assert.strictEqual(snapStores(h), storeBefore); assert.strictEqual(JSON.stringify(h.ctx.chat()), chatBefore, "leafId и превью в памяти прежние");
+    assert.strictEqual(h.S.messages.length, 0);
+    assert.ok(h.toasts.some((t) => /Не удалось сохранить сообщение/.test(t.t) && t.err));
+    h.ctx.DB.putAll = put0;
+    fbLLM = reply("Привет!"); await h.gen.initiative();
+    const m = h.chat.path()[0];
+    const mBefore = JSON.stringify(m), chat2 = JSON.stringify(h.ctx.chat()), store2 = snapStores(h);
+    h.ctx.DB.putAll = async () => { throw new Error("disk"); };
+    fbLLM = reply("Другой вариант");
+    assert.strictEqual((await h.gen.initiative(m.id)).outcome, "error");
+    assert.deepStrictEqual([JSON.stringify(m), JSON.stringify(h.ctx.chat()), snapStores(h), h.S.gen], [mBefore, chat2, store2, null], "неудачный вариант не остался ни в памяти, ни в базе");
+    h.ctx.DB.putAll = put0;
+    // успех: сообщение и чат записаны согласованно
+    fbLLM = reply("Ещё вариант");
+    await h.gen.initiative(m.id);
+    const c = h.store.chats.get(h.ctx.chat().id);
+    assert.deepStrictEqual([c.leafId, c.preview, h.store.messages.get(m.id).swipes.length], [m.id, "Ещё вариант", 2]);
+  });
+  await ta("D-17: другой вариант сообщения не на активной ветке — отказ до вызова модели", async () => {
+    const h = fbHarness(CARD);
+    await msChat(h);
+    fbLLM = reply("Привет!"); await h.gen.initiative();
+    const ini = h.chat.path()[0];
+    // уводим активную ветку от сообщения-инициативы: новый корень пользователя
+    const u = h.chat.newMsg("user", null, "другая ветка"); await h.chat.putMsg(u); h.ctx.chat().leafId = u.id;
+    assert.ok(!h.chat.path().includes(ini));
+    const f = reply("x"); fbLLM = f;
+    const r = await h.gen.initiative(ini.id);
+    assert.deepStrictEqual([r.outcome, r.code, f.calls, ini.swipes.length], ["ineligible", "not-on-path", 0, 1]);
+  });
+  await ta("D-14: бэкап — сообщение-инициатива и его происхождение переживают круг; повторное восстановление не дублирует", async () => {
+    const h = fbHarness(CARD);
+    const id = await msChat(h);
+    fbLLM = reply("Привет!"); await h.gen.initiative();
+    const data = { app: "prism-rp", cards: JSON.parse(JSON.stringify(h.S.cards)), chats: [...h.store.chats.values()], messages: [...h.store.messages.values()], messengerEnvironments: [...h.store.messengerEnvironments.values()] };
+    const round = JSON.parse(JSON.stringify(data));
+    const chk = BK.check(round, { replace: true });
+    assert.strictEqual(BK.total(chk.rejected), 0);
+    const m = chk.data.messages.find((x) => x.chatId === id);
+    assert.deepStrictEqual(m.swipes[0].initiative, data.messages.find((x) => x.chatId === id).swipes[0].initiative);
+    assert.ok(INI.isInitiative(m) && m.swipes[0].messengerAt);
+    const twice = BK.check({ app: "prism-rp", cards: round.cards, chats: round.chats, messages: round.messages.concat(round.messages) }, { replace: true });
+    assert.strictEqual(twice.data.messages.length, 0, "повтор id в одном бэкапе — отклонён целиком, без дублей");
+  });
+}
+
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
-foundationB().then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(() => {
+foundationB().then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(() => {
   if (BASELINE.length) {
     console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
     for (const r of BASELINE) console.log(`  ${r.id.padEnd(30)} было ${String(r.old).padStart(5)} → ядро ${String(r.core).padStart(4)} + подробн. ${String(r.details).padStart(4)} + примеры ${String(r.examples).padStart(4)} = ${String(r.total).padStart(5)}; ядро: ${r.coreSource}${r.cut.length ? " (" + r.cut.join(", ") + ")" : ""}; вошло: ${r.selected.join(", ") || "—"}; не вошло: ${r.dropped.length}`);
