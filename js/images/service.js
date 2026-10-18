@@ -56,10 +56,13 @@
            ничто не придумывает. Картинка — производное: её данные в Prism не возвращаются. */
         const st = chat().sceneState(upto);
         const pers = ctx.persona();
-        const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers });
+        // Реплика уточняет «только свитер», но не подменяет [draw:] и не создаёт фактов сцены.
+        const composed = IC.compose({ draw: entry.draw, outfitContext: sw.text, card: cd, scene: st, persona: pers });
         if (cfg.translate && IC.needsRewrite(composed.scene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
         const comp = await ICP.compile(composed.scene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: identityFor(cd) }, textGen);
         const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
+        // Диагностика только в памяти сессии, без сохранения исходных текстов в метаданных картинки.
+        S.lastImageTrace = { chatId: msg.chatId, msgId: msg.id, imageId: entry.id, prompt: fin.prompt, trace: fin.trace };
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
