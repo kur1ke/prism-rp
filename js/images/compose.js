@@ -197,17 +197,15 @@
      Неоднозначная комбинация одежды остаётся нетронутой. */
   function outfitReplacement(draw, context) {
     const speech = String(context || ""), scene = String(draw || "");
-    const explicit = /(?:на\\s+мне\\s+только|одет[а-яё]*\\s+только|wearing\\s+(?:only|just)|(?:only|just)\\s+wearing)/iu;
+    const explicit = /(?:на\s+мне\s+только|одет[а-яё]*\s+только|wearing\s+(?:only|just)|(?:only|just)\s+wearing)/iu;
     return !!(garmentWords(scene).length && (explicit.test(scene) || explicit.test(speech)));
   }
 
-  // Из legacy-look удаляем только распознаваемые теги ОДЕЖДЫ при явно заменённом наряде.
-  // Тело, волосы, пирсинг, именные LoRA и неизвестные теги сохраняются.
-  function omitOldClothes(tags, current, omitted) {
-    const requested = new Set(garmentWords(current));
+  // При явной замене гардероба legacy-одежда из look не имеет права возвращаться в картинку.
+  // Не трогаем токены LoRA, внешность, украшения и неподдающиеся классификации теги.
+  function omitOldClothes(tags, omitted) {
     return splitTags(tags).filter((tag) => {
-      const items = garmentWords(tag);
-      if (!items.length || items.some((g) => requested.has(g))) return true;
+      if (!garmentWords(tag).length) return true;
       omitted.push(tag);
       return false;
     }).join(", ");
@@ -248,8 +246,8 @@
     // Явная замена одежды относится только к текущему изображению, не меняет Card/Scene.
     // Гардероб из Scene при противоречии не превращается в установленный факт картинки.
     if (replacement && wardrobe) {
-      omittedWardrobe.push(...splitTags(wardrobe));
-      wardrobe = "";
+      // Подавляем только распознаваемые предметы одежды; идентификаторы и LoRA сохраняем.
+      wardrobe = omitOldClothes(wardrobe, omittedWardrobe);
     } else if (stale) wardrobe = "";
     const bits = [];
     if (outfit && !wardrobe && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
@@ -262,7 +260,7 @@
     for (const { key: k, tags } of parseMap(subVars(im.look))) {
       if (isSuffix(k)) { tail.push(tags); continue; }
       if (!isBase(k) && !bestVariant(k, hay).score) continue;
-      const chosen = replacement ? omitOldClothes(tags, draw, omittedLook) : tags;
+      const chosen = replacement ? omitOldClothes(tags, omittedLook) : tags;
       const fresh = splitTags(chosen).filter((p) => !hay.includes(p.toLowerCase()));
       if (fresh.length) look.push(fresh.join(", "));
     }
