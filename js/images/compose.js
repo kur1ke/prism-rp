@@ -180,9 +180,9 @@
   }
 
   const GARMENTS = ["dress", "skirt", "shirt", "blouse", "t-shirt", "hoodie", "sweater", "jacket", "coat", "jeans", "shorts", "pants", "trousers",
-    "uniform", "kimono", "yukata", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
+    "uniform", "kimono", "yukata", "boots", "shoes", "sneakers", "heels", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
     "платье", "юбка", "рубашка", "блузка", "футболка", "худи", "свитер", "куртка", "пальто", "джинсы", "шорты", "брюки", "форма",
-    "кимоно", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
+    "кимоно", "ботинки", "сапоги", "туфли", "кроссовки", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
   function garmentWords(text) { return GARMENTS.filter((g) => mentions(g, text)); }
   // Сцена одевает персонажа иначе, чем записано в трекере/гардеробе → трекер устарел.
   function wardrobeConflicts(draw, wardrobeTags, outfitText) {
@@ -258,7 +258,7 @@
     const hay = sceneText.toLowerCase();
     const look = [], tail = [];
     for (const { key: k, tags } of parseMap(subVars(im.look))) {
-      if (isSuffix(k)) { tail.push(tags); continue; }
+      if (isSuffix(k)) { const chosenTail = replacement ? omitOldClothes(tags, omittedLook) : tags; if (chosenTail) tail.push(chosenTail); continue; }
       if (!isBase(k) && !bestVariant(k, hay).score) continue;
       const chosen = replacement ? omitOldClothes(tags, omittedLook) : tags;
       const fresh = splitTags(chosen).filter((p) => !hay.includes(p.toLowerCase()));
