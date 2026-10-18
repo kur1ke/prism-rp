@@ -649,9 +649,16 @@ t("IMAGE-H: явно только серый свитер подавляет с�
 });
 t("IMAGE-H: свитер без указания «только» не стирает совместимую юбку", () => {
   const card = { name: "A", image: { look: "base: grey eyes, black skirt", wardrobe: "base: dark boots" } };
-  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw: "wearing grey sweater" });
+  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw: "wearing grey sweater, dark boots" });
   assert.strictEqual(c.trace.replacement, false);
   assert.ok(c.scene.includes("black skirt") && c.keep.includes("dark boots"));
+});
+t("IMAGE-H: русская форма «в свитере» и «на мне только свитер» заменяют прежнюю юбку", () => {
+  const card = { name: "Лилит", image: { look: "base: бледная кожа, юбка, кошачьи уши, ботинки" } };
+  const c = IC.compose({ card, scene: { chars: {}, present: [] }, draw: "в сером свитере", outfitContext: "На мне только свитер." });
+  assert.strictEqual(c.trace.replacement, true);
+  assert.ok(c.scene.includes("бледная кожа") && c.scene.includes("кошачьи уши"));
+  assert.ok(!c.scene.includes("юбка") && !c.scene.includes("ботинки"));
 });
 t("IMAGE-H: одежда сцены RP не переписывается и конфликт виден в trace", () => {
   const card = { name: "Лилит", image: { look: "base: long red hair, black skirt" } };
