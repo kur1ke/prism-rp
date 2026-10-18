@@ -4284,9 +4284,9 @@
   }
 
   const GARMENTS = ["dress", "skirt", "shirt", "blouse", "t-shirt", "hoodie", "sweater", "jacket", "coat", "jeans", "shorts", "pants", "trousers",
-    "uniform", "kimono", "yukata", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
+    "uniform", "kimono", "yukata", "boots", "shoes", "sneakers", "heels", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
     "платье", "юбка", "рубашка", "блузка", "футболка", "худи", "свитер", "куртка", "пальто", "джинсы", "шорты", "брюки", "форма",
-    "кимоно", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
+    "кимоно", "ботинки", "сапоги", "туфли", "кроссовки", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
   function garmentWords(text) { return GARMENTS.filter((g) => mentions(g, text)); }
   // Сцена одевает персонажа иначе, чем записано в трекере/гардеробе → трекер устарел.
   function wardrobeConflicts(draw, wardrobeTags, outfitText) {
@@ -4294,6 +4294,25 @@
     if (!inDraw.length) return false;
     const known = new Set(garmentWords(wardrobeTags + ", " + (outfitText || "")));
     return !inDraw.some((g) => known.has(g));
+  }
+
+  /* Явная замена текущего наряда: не угадываем её по одному слову sweater/свитер.
+     Текст реплики используется лишь как уточнение к [draw:] и не становится каноном.
+     Неоднозначная комбинация одежды остаётся нетронутой. */
+  function outfitReplacement(draw, context) {
+    const speech = String(context || ""), scene = String(draw || "");
+    const explicit = /(?:на\s+мне\s+только|одет[а-яё]*\s+только|wearing\s+(?:only|just)|(?:only|just)\s+wearing)/iu;
+    return !!(garmentWords(scene).length && (explicit.test(scene) || explicit.test(speech)));
+  }
+
+  // При явной замене гардероба legacy-одежда из look не имеет права возвращаться в картинку.
+  // Не трогаем токены LoRA, внешность, украшения и неподдающиеся классификации теги.
+  function omitOldClothes(tags, omitted) {
+    return splitTags(tags).filter((tag) => {
+      if (!garmentWords(tag).length) return true;
+      omitted.push(tag);
+      return false;
+    }).join(", ");
   }
 
   /* ── Кто в кадре ───────────────────────────────────────────────────── */
@@ -4326,7 +4345,14 @@
 
     let wardrobe = resolveWardrobe(im.wardrobe, outfit);
     const stale = wardrobeConflicts(draw, wardrobe, outfit);
-    if (stale) wardrobe = "";
+    const replacement = outfitReplacement(draw, o.outfitContext);
+    const omittedLook = [], omittedWardrobe = [];
+    // Явная замена одежды относится только к текущему изображению, не меняет Card/Scene.
+    // Гардероб из Scene при противоречии не превращается в установленный факт картинки.
+    if (replacement && wardrobe) {
+      // Подавляем только распознаваемые предметы одежды; идентификаторы и LoRA сохраняем.
+      wardrobe = omitOldClothes(wardrobe, omittedWardrobe);
+    } else if (stale) wardrobe = "";
     const bits = [];
     if (outfit && !wardrobe && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
     if (ch && ch.pose && !draw) bits.push(ch.pose);
@@ -4336,9 +4362,10 @@
     const hay = sceneText.toLowerCase();
     const look = [], tail = [];
     for (const { key: k, tags } of parseMap(subVars(im.look))) {
-      if (isSuffix(k)) { tail.push(tags); continue; }
+      if (isSuffix(k)) { const chosenTail = replacement ? omitOldClothes(tags, omittedLook) : tags; if (chosenTail) tail.push(chosenTail); continue; }
       if (!isBase(k) && !bestVariant(k, hay).score) continue;
-      const fresh = splitTags(tags).filter((p) => !hay.includes(p.toLowerCase()));
+      const chosen = replacement ? omitOldClothes(tags, omittedLook) : tags;
+      const fresh = splitTags(chosen).filter((p) => !hay.includes(p.toLowerCase()));
       if (fresh.length) look.push(fresh.join(", "));
     }
 
@@ -4363,6 +4390,14 @@
       tail: userTail,
       ownerPresent: ownerPresent(card, draw || sceneText),
       stale,
+      trace: {
+        sources: { draw, speech: String(o.outfitContext || ""), sceneOutfit: outfit, look: String(im.look || ""), wardrobe: String(im.wardrobe || "") },
+        replacement, omittedLook, omittedWardrobe,
+        warnings: [
+          ...(outfit && replacement && wardrobeConflicts(draw, outfit, outfit) ? ["rp-scene-vs-image-clothing"] : []),
+          ...(replacement && garmentWords(im.trigger).length ? ["trigger-contains-clothing-review-manually"] : []),
+        ],
+      },
     };
   }
 
@@ -4408,7 +4443,11 @@
     const pov = o.persona && o.persona.image && o.persona.image.view === "first";
     const povNeg = pov ? POV_NEG.concat(subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : []) : [];
     const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, povNeg.join(", "));
-    return { prompt, negative };
+    const trace = Object.assign({}, c.trace || {}, {
+      finalSources: { trigger, fixedPrompt: String(s.fixedPrompt || ""), style, loras },
+      warnings: ((c.trace && c.trace.warnings) || []).concat(pinned && garmentWords(s.fixedPrompt).length ? ["fixed-prompt-contains-clothing-review-manually"] : []),
+    });
+    return { prompt, negative, trace };
   }
 
   /* ── Размер кадра ──────────────────────────────────────────────────── */
@@ -7075,10 +7114,13 @@
            ничто не придумывает. Картинка — производное: её данные в Prism не возвращаются. */
         const st = chat().sceneState(upto);
         const pers = ctx.persona();
-        const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers });
+        // Реплика уточняет «только свитер», но не подменяет [draw:] и не создаёт фактов сцены.
+        const composed = IC.compose({ draw: entry.draw, outfitContext: sw.text, card: cd, scene: st, persona: pers });
         if (cfg.translate && IC.needsRewrite(composed.scene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
         const comp = await ICP.compile(composed.scene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: identityFor(cd) }, textGen);
         const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
+        // Диагностика только в памяти сессии, без сохранения исходных текстов в метаданных картинки.
+        S.lastImageTrace = { chatId: msg.chatId, msgId: msg.id, imageId: entry.id, prompt: fin.prompt, trace: fin.trace };
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
