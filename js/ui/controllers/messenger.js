@@ -20,6 +20,19 @@
     const failed = (r) => { if (r && r.error) { ui.toast(r.error, true); return true; } return false; };
 
     const actions = {
+      // Однократная явная повторная попытка при ошибке интерпретатора;
+      // никакого заполнения среды или изменения канона вручную.
+      "state-retry": async () => {
+        if (S.tracking || S.gen || !svc.state) return;
+        const path = svc.chat.path(), last = path[path.length - 1];
+        if (!last) return;
+        S.tracking = true;
+        ui.renderDrawer();
+        let result;
+        try { result = await svc.state.observeMessage(last, ctx.provider(), { force: true }); }
+        finally { S.tracking = false; ui.renderDrawer(); }
+        if (result && result.status === "error") ui.toast("Не удалось извлечь состояние: проверьте подробности анализа.", true);
+      },
       "ms-create": async () => {
         const tz = $("#ms-tz").value.trim(), mode = radio("ms-mode") || "live";
         const manualNow = mode === "manual" ? MT.toIso(MT.fromLocal($("#ms-manual").value, tz)) : null;
