@@ -37,8 +37,8 @@
         if (!scope) { ui.toast("Выберите, где действует изменение: в этой ветке или во всей переписке.", true); return; }
         const patch = {};
         const clear = new Set([...document.querySelectorAll("[data-env-clear]:checked")].map((x) => x.dataset.envClear));
-        for (const k of ["location", "activity"]) { const v = $("#env-" + k).value.trim(); if (clear.has(k)) patch[k] = null; else if (v) patch[k] = v; }
-        for (const k of ["nearby", "ongoing"]) { const v = csv($("#env-" + k).value); if (clear.has(k)) patch[k] = null; else if (v.length) patch[k] = v; }
+        for (const k of ["location", "activity", "visualPose", "visualHair"]) { const v = $("#env-" + k).value.trim(); if (clear.has(k)) patch[k] = null; else if (v) patch[k] = v; }
+        for (const k of ["nearby", "ongoing", "visualWear"]) { const v = csv($("#env-" + k).value); if (clear.has(k)) patch[k] = null; else if (v.length) patch[k] = v; }
         const av = $("#env-availability").value; if (av) patch.availability = av;
         const r = await svc.messenger.commitEvent({ scope, patch });
         if (failed(r)) return;

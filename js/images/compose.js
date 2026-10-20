@@ -23,7 +23,7 @@
 
   /* ── Словоформы и карты «ключ: теги» ───────────────────────────────── */
   const WORD_RE = /[^\p{L}\p{N}]+/u;
-  function words(s) { return String(s || "").toLowerCase().split(WORD_RE).filter(Boolean); }
+  function words(s) { return String(s || "").toLowerCase().replace(/ё/g, "е").split(WORD_RE).filter(Boolean); }
 
   // «красное» ~ «красном», «Лёня» ~ «Лёне», но «girl» не совпадает с «1girl».
   function wordFormMatch(key, word) {
@@ -146,8 +146,12 @@
   function subjectCount(text) {
     const b = " " + String(text).toLowerCase() + " ";
     let n = 0;
-    if (/\b\d*\s*boys?\b/.test(b)) n++;
-    if (/\b\d*\s*girls?\b/.test(b)) n++;
+    const count = b.matchAll(/\b([1-9])\s*(boys?|girls?)\b/g);
+    for (const m of count) n += Number(m[1]);
+    if (!n) {
+      if (/\bboys?\b/.test(b)) n++;
+      if (/\bgirls?\b/.test(b)) n++;
+    }
     if (/\b(?:hetero|yaoi|yuri|group|threesome)\b/.test(b)) n = Math.max(n, 2);
     if (/\b(?:multiple|several|two|three|[2-9])\s*(?:girls|boys|people|others)\b/.test(b)) n = Math.max(n, 2);
     return n;
@@ -165,9 +169,13 @@
     splitTags(trigger).forEach((t) => { const n = norm(t); tTags.add(n); words(n).filter((w) => w.length > 2).forEach((w) => tWords.add(w)); });
     const low = String(prompt).toLowerCase().replace(/<lora:[^>]*>/g, " ");
     const twoKinds = (/\b\d*\s*girls?\b/.test(low) && /\b\d*\s*boys?\b/.test(low)) || /\b(?:hetero|yaoi|yuri)\b/.test(low);
-    const seen = new Set(), out = [];
+    const seen = new Set(), seenLora = new Set(), out = [];
     for (const tag of splitTags(prompt)) {
       const n = norm(tag);
+      const lm = tag.match(/^<lora:([^:>]+):/i);
+      const lname = lm && norm(lm[1]);
+      if (lname && seenLora.has(lname)) continue;
+      if (lname) seenLora.add(lname);
       if (seen.has(n)) continue;
       seen.add(n);
       if (tWords.size && !twoKinds && !tTags.has(n) && !/^<lora:/i.test(tag) && /^[\x20-\x7e]*$/.test(tag)) {
@@ -179,7 +187,7 @@
     return out.join(", ");
   }
 
-  const GARMENTS = ["dress", "skirt", "shirt", "blouse", "t-shirt", "hoodie", "sweater", "jacket", "coat", "jeans", "shorts", "pants", "trousers",
+  const GARMENTS = ["джинсы", "hooded jacket", "dress", "skirt", "shirt", "blouse", "t-shirt", "hoodie", "sweater", "jacket", "coat", "jeans", "shorts", "pants", "trousers",
     "uniform", "kimono", "yukata", "swimsuit", "bikini", "lingerie", "pajamas", "towel", "apron", "suit", "crop top", "tank top",
     "платье", "юбка", "рубашка", "блузка", "футболка", "худи", "свитер", "куртка", "пальто", "джинсы", "шорты", "брюки", "форма",
     "кимоно", "купальник", "бикини", "бельё", "белье", "пижама", "полотенце", "фартук", "костюм", "топ", "майка"];
@@ -199,67 +207,186 @@
     (im.loras || []).forEach((l) => keys.push(l.name));
     return keys.map((k) => String(k || "").trim()).filter((k) => k.length >= 3);
   }
-  /* Персонаж в кадре, если сцена его называет (имя, псевдоним, первый тег триггера,
-     имя LoRA), или если сцена вообще не называет конкретных людей. Отсутствует —
-     только когда в кадре явно назван кто-то другой (тег-имя вида name_surname), а он нет.
-     Так триггер и LoRA одного персонажа не «перекрашивают» другого. */
-  function ownerPresent(card, drawText) {
-    const t = String(drawText || "").replace(/[_\-]/g, " ");
-    if (ownerKeys(card).some((k) => mentions(k.replace(/[_\-]/g, " "), t))) return true;
-    const namesSomeone = /\b[a-z]{3,}_[a-z]{3,}\b/i.test(String(drawText || ""));
-    return !namesSomeone;
+  /* Контракт кадра: присутствие в сцене ≠ присутствие в конкретном изображении.
+     Отсутствие явной привязки пользователя не добавляет его тегов; пустой интерьер
+     не превращается в портрет. Для неоднозначного [draw:] сохраняем основной
+     персонаж как совместимый запасной выбор, но не второго участника. */
+  function identityKeys(card) {
+    const base = ownerKeys(card);
+    const result = [];
+    for (const key of base) {
+      result.push(key);
+      const parts = words(key.replace(/[_-]/g, " "));
+      if (parts.length === 2 && parts.every((x) => x.length >= 3)) result.push(parts[1] + " " + parts[0]);
+    }
+    return result;
   }
+  const FRAME_EMPTY = /\b(?:empty|unoccupied|nobody|no[ _-]one|no[ _-]people|no[ _-]person|without[ _-]people|vacant|landscape[ _-]only|scenery[ _-]only|still[ _-]life)\b|пуст(?:ая|ой|ое|ые|ом|ую)?\b|без\s+людей|никого\s+нет/i;
+  const FRAME_HUMAN = /\b(?:[1-9]girls?|[1-9]boys?|girls?|boys?|woman|women|man|men|person|people|portrait|selfie|face|smil(?:e|ing)|sitting|standing|hug(?:ging)?|posing|looking[ _-]at[ _-]viewer|pov)\b|портрет|селфи|улыба|сидит|стоит|обнима/i;
+  const COUNT_TAG = /^([1-9])(girls?|boys?)$/i;
+  function genderOf(tags) {
+    const t = splitTags(parseMap(tags).map((x) => x.tags).join(", ") || tags).map((x) => x.toLowerCase());
+    if (t.some((x) => /^(?:[1-9]girls?|female|woman|girl)$/.test(x))) return "girl";
+    if (t.some((x) => /^(?:[1-9]boys?|male|man|boy)$/.test(x))) return "boy";
+    return null;
+  }
+  function frameActors(card, persona, draw, opts) {
+    const raw = String(draw || "");
+    const text = raw.replace(/[_-]/g, " ");
+    const ownerNamed = identityKeys(card).some((x) => mentions(x.replace(/[_-]/g, " "), text));
+    const userName = (persona && persona.name) || "";
+    const userNamed = userName.length >= 3 && !!mentions(userName, text);
+    // Именной danbooru-тег другого персонажа (ichigo_kurosaki) исключает
+    // автодобавление владельца карточки. Не путать с тегами одежды/внешности.
+    const otherName = (raw.match(/\b[a-z]{3,}_[a-z]{3,}\b/gi) || []).some((x) => {
+      if (identityKeys(card).some((key) => words(key.replace(/[_-]/g, " ")).sort().join(" ") === words(x.replace(/_/g, " ")).sort().join(" "))) return false;
+      if (/^(?:long|short|black|white|orange|brown|red|blue|green|pink|purple|grey|gray|blonde|straight|curly|wavy|messy|school|side|front|back|bare|large|small|medium|light|dark|high|low|very|wide|full|half|upper|lower|closed|open)_/.test(x)) return false;
+      const tok = x.split("_");
+      return !tok.some((w) => ["hair", "eyes", "dress", "shirt", "skirt", "jacket", "hoodie", "uniform", "blouse", "pants", "sleeves", "view", "pose", "focus", "body", "face", "smile"].includes(w));
+    });
+    const empty = FRAME_EMPTY.test(text) && !ownerNamed && !userNamed;
+    const qty = splitTags(raw).filter((x) => COUNT_TAG.test(x));
+    const declared = qty.map((x) => { const m = x.match(COUNT_TAG); return { count: +m[1], gender: m[2].startsWith("girl") ? "girl" : "boy" }; });
+    const total = declared.reduce((n, x) => n + x.count, 0);
+    const charGender = genderOf([card.image && card.image.trigger, card.image && card.image.look].filter(Boolean).join(", "));
+    const userGender = genderOf((persona && persona.image && persona.image.appearance) || "");
+    // Один портрет с установленным полом пользователя и несовместимым полом карточки.
+    const userOnlyByGender = !ownerNamed && !userNamed && total === 1 && !!charGender && !!userGender &&
+      declared[0].gender === userGender && declared[0].gender !== charGender;
+    const owner = ownerNamed || (!empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
+    // Смешанный состав явно указан в кадре (например, 1girl + 1boy),
+    // второй actor допускается только если его пол совпадает с профилем пользователя.
+    const mixed = owner && !userNamed && total >= 2 && !!userGender && declared.some((x) => x.gender === userGender) &&
+      (charGender ? declared.some((x) => x.gender === charGender) : declared.length >= 2);
+    const user = userNamed || userOnlyByGender || mixed;
+    return { owner, user, empty, ownerNamed, userNamed, reason: ownerNamed ? "owner-mentioned" : userNamed ? "user-mentioned" : empty ? "empty" : mixed ? "count-with-persona" : "fallback" };
+  }
+  function ownerPresent(card, drawText) { return frameActors(card, null, drawText).owner; }
 
   /* ── compose: из [draw:] и состояния — сцена для перевода и неизменяемые теги ── */
   function compose(o) {
-    const card = o.card || {}, im = card.image || {}, pim = (o.persona && o.persona.image) || {};
+    const card = o.card || {}, im = card.image || {}, persona = o.persona || {}, pim = persona.image || {};
     const st = o.scene || { chars: {}, present: [] };
-    const key = Object.keys(st.chars || {}).find((k) => k.toLowerCase() === String(card.name || "").toLowerCase());
-    const ch = key ? st.chars[key] : null;
-    const outfit = ch ? ch.wear.join(", ") : "";
-    let draw = String(o.draw || "").trim();
-    const subVars = (s) => String(s || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, (o.persona && o.persona.name) || "");
+    const messenger = !!o.messenger;
+    const subVars = (v) => String(v || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, persona.name || "Пользователь");
+    const draw = subVars(o.draw).trim();
+    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner });
+    const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
+    const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
+    const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
+    const outfit = owner && Array.isArray(owner.wear) ? owner.wear.join(", ") : "";
+    const userOutfit = user && Array.isArray(user.wear) ? user.wear.join(", ") : "";
 
-    let wardrobe = resolveWardrobe(im.wardrobe, outfit);
-    const stale = wardrobeConflicts(draw, wardrobe, outfit);
+    let wardrobe = actors.owner ? resolveWardrobe(im.wardrobe, outfit) : "";
+    // В RP при явном изменении одежды в [draw:] старая одежда не навязывается.
+    // В мессенджере явно установленная пользователем одежда имеет приоритет над
+    // случайными противоречащими деталями от модели; смотрим по сохранённому snapshot.
+    const stale = !messenger && actors.owner && wardrobeConflicts(draw, wardrobe, outfit);
     if (stale) wardrobe = "";
     const bits = [];
-    if (outfit && !wardrobe && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
-    if (ch && ch.pose && !draw) bits.push(ch.pose);
+    if (actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
+    if (actors.owner && messenger && outfit && !wardrobe) bits.push("clothing: " + outfit);
+    if (actors.owner && owner && owner.pose && (!draw || messenger)) bits.push("pose: " + owner.pose);
+    if (actors.owner && owner && owner.visualHair) bits.push("hairstyle: " + owner.visualHair);
+    if (actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
+    if (actors.user && user && user.pose) bits.push("user pose: " + user.pose);
     let sceneText = [draw, bits.join(", ")].filter(Boolean).join(", ");
+    if (messenger && actors.owner && o.messenger.location && !/\b(?:cafe|room|park|street|city|house|home|bedroom|classroom|garden|hospital|library|hallway)\b/i.test(draw))
+      sceneText += (sceneText ? ", " : "") + "location: " + o.messenger.location;
 
-    // Карта внешности персонажа: базовые строки всегда, ключевые — когда сцена их называет.
     const hay = sceneText.toLowerCase();
     const look = [], tail = [];
-    for (const { key: k, tags } of parseMap(subVars(im.look))) {
+    if (actors.owner) for (const { key: k, tags } of parseMap(subVars(im.look))) {
       if (isSuffix(k)) { tail.push(tags); continue; }
       if (!isBase(k) && !bestVariant(k, hay).score) continue;
       const fresh = splitTags(tags).filter((p) => !hay.includes(p.toLowerCase()));
       if (fresh.length) look.push(fresh.join(", "));
     }
 
-    // Пользователь в кадре или POV.
     let userTags = "", userTail = "";
     if (pim.view === "first") {
-      const second = subjectCount(sceneText) >= 2 || /\bpov (penis|hands|feet)\b/i.test(sceneText + "," + (pim.povTags || ""));
-      userTags = ["pov", second ? "" : "solo", cleanTags(pim.povTags)].filter(Boolean).join(", ");
-    } else if (pim.appearance) {
-      const u = resolveAppearance(subVars(pim.appearance), sceneText, st.present || []);
+      // POV — камера, а не ещё один нарисованный человек.
+      if (actors.owner || actors.user) userTags = ["pov", actors.owner && !actors.user ? "solo" : "", cleanTags(pim.povTags)].filter(Boolean).join(", ");
+    } else if (actors.user && pim.appearance) {
+      const u = resolveAppearance(subVars(pim.appearance), sceneText, [persona.name]);
       userTags = u.tags; userTail = u.suffix;
-      // Пользователь есть в трекере, а сцена нарисована «соло» — добавить его тег-субъект.
-      const subj = (splitTags(userTags).find((t) => /^\d+(girl|boy)s?$/i.test(t)) || "");
-      if (subj && !new RegExp("\\b" + subj + "\\b", "i").test(sceneText)) sceneText += ", " + subj;
     }
 
-    // NSFW-модификаторы карточки — только по тексту сцены, никогда по одежде из трекера.
-    const nsfw = resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText);
+    const nsfw = actors.owner ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
     return {
       scene: [look.join(", "), sceneText, tail.join(", ")].filter(Boolean).join(", "),
       keep: [wardrobe, userTags, nsfw].filter(Boolean).join(", "),
       tail: userTail,
-      ownerPresent: ownerPresent(card, draw || sceneText),
+      ownerPresent: actors.owner,
+      subjects: actors,
+      userPresent: actors.user,
       stale,
+      visualWear: messenger && actors.owner ? outfit : "",
+      provenance: { subjects: actors, card: actors.owner ? card.name : null, user: actors.user ? persona.name : null,
+        outfit: outfit || null, userOutfit: userOutfit || null, messenger: messenger || false },
     };
+  }
+
+  // Несколько вариантов имени в самом trigger тоже описывают ОДНОГО владельца.
+  // Сохраняем первый составной ID и визуальные теги без перестановок.
+  function uniqueTrigger(card) {
+    const tags = splitTags((card.image && card.image.trigger) || "");
+    const candidate = tags.find((t) => {
+      const w = words(t.replace(/[_-]/g, " "));
+      return w.length === 2 && w.every((x) => x.length > 2) &&
+        !/(?:hair|eyes|dress|shirt|skirt|jacket|hoodie|blouse|pose|body|view)/.test(w.join(" "));
+    });
+    if (!candidate) return tags.join(", ");
+    const person = words(candidate.replace(/[_-]/g, " "));
+    const signature = person.slice().sort().join(" ");
+    let hadName = false;
+    return tags.filter((tag) => {
+      const w = words(tag.replace(/[_-]/g, " "));
+      const same = w.slice().sort().join(" ") === signature;
+      const short = w.length === 1 && person.includes(w[0]);
+      if (short) return false; // одиночный псевдоним не создаёт второго персонажа
+      if (!same) return true;
+      if (hadName) return false;
+      hadName = true;
+      return true;
+    }).join(", ");
+  }
+  function withoutConfiguredLora(text, list) {
+    const names = new Set((list || []).filter((x) => x && x.name).map((x) => norm(x.name)));
+    return splitTags(text).filter((tag) => {
+      const m = tag.match(/^<lora:([^:>]+):/i);
+      return !m || !names.has(norm(m[1]));
+    }).join(", ");
+  }
+
+  // Триггер уже добавляется отдельным блоком. Удалить повторные имена из [draw:]
+  // и из результата переводчика, включая "orihime_inoue" / "inoue_orihime".
+  // Не трогать описательные теги вроде orange hair и чужие имена.
+  function stripIdentityAliases(scene, card) {
+    const keys = identityKeys(card).map((x) => words(x.replace(/[_-]/g, " ")).sort().join(" ")).filter(Boolean);
+    return splitTags(scene).filter((tag) => {
+      const w = words(tag.replace(/[_-]/g, " ")).sort().join(" ");
+      return !keys.includes(w);
+    }).join(", ");
+  }
+  // Зафиксированная вручную одежда в мессенджере — источник истины.
+  // Теги альтернативной одежды от AI не должны конфликтовать с ней.
+  const GARMENT_ALIASES = {
+    "худи": "hoodie", "джинсы": "jeans", "платье": "dress", "юбка": "skirt", "рубашка": "shirt", "блузка": "blouse",
+    "футболка": "t-shirt", "футболку": "t-shirt", "свитер": "sweater", "куртка": "jacket", "пальто": "coat",
+    "брюки": "pants", "шорты": "shorts", "форма": "uniform", "кимоно": "kimono", "пижама": "pajamas",
+    "пижаму": "pajamas", "белье": "lingerie", "бельё": "lingerie", "купальник": "swimsuit",
+    "майка": "tank top", "топ": "crop top", "костюм": "suit", "hooded jacket": "hoodie",
+  };
+  function canonicalGarment(g) { return GARMENT_ALIASES[g] || g; }
+  function enforceMessengerWardrobe(scene, outfit) {
+    if (!String(outfit || "").trim()) return scene;
+    const allowed = new Set(garmentWords(outfit).map(canonicalGarment));
+    if (!allowed.size) return scene; // незнакомая одежда — не угадывать по словам
+    return splitTags(scene).filter((tag) => {
+      const garments = garmentWords(tag).map(canonicalGarment);
+      return !garments.length || garments.some((g) => allowed.has(g));
+    }).join(", ");
   }
 
   /* ── finalise: итоговый промпт и негатив ───────────────────────────── */
@@ -288,15 +415,19 @@
     const s = o.settings || {}, im = (o.card && o.card.image) || {}, c = o.composed || {};
     const pinned = s.promptMode !== "off" && String(s.fixedPrompt || "").trim();
     let scene = String(o.compiled == null ? c.scene : o.compiled);
+    if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
+    if (c.provenance && c.provenance.messenger && c.ownerPresent !== false && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
     const present = c.ownerPresent !== false;
-    const trigger = present ? String(im.trigger || "").trim() : "";
+    const trigger = present ? uniqueTrigger(o.card || {}) : "";
     // Стилевые теги персонажа — только те, о которых просит сцена.
-    const style = splitTags(im.styleTrigger).filter((t) => mentions(bareTag(t), scene)).join(", ");
-    const loras = o.backend === "a1111"
-      ? loraTokens((present ? (im.loras || []) : []).filter((l, i, a) => a.findIndex((x) => norm(x.name) === norm(l.name)) === i))
-      : "";
-    const body = [c.keep, scene, loras, trigger, style, c.tail].filter(Boolean).join(", ");
+    const style = present ? splitTags(im.styleTrigger).filter((t) => mentions(bareTag(t), scene)).join(", ") : "";
+    const activeLoras = present ? (im.loras || []).filter((l, i, a) => a.findIndex((x) => norm(x.name) === norm(l.name)) === i) : [];
+    const loras = o.backend === "a1111" ? loraTokens(activeLoras) : "";
+    // Веса LoRA из карточки авторитетнее случайных дубликатов в [draw:] и переводе.
+    if (loras) scene = withoutConfiguredLora(scene, activeLoras);
+    const keep = loras ? withoutConfiguredLora(c.keep, activeLoras) : c.keep;
+    const body = [keep, scene, loras, trigger, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
@@ -371,7 +502,7 @@
       "- Порядок: персонажи в кадре и их внешность → действие, поза, выражение, одежда, место → свет и ракурс.",
       opts.pov
         ? "- Вид от первого лица: камера — глаза собеседника, его самого в кадре нет. Начни с pov, его лицо и одежду не описывай; видимые части тела — только тегами pov hands / pov feet и т. п. Если в кадре один человек — это solo."
-        : "- Рисуй всех, кто физически в сцене. Если собеседник рядом — он тоже в кадре: теги на обоих (1girl, 1boy) и у каждого своё действие. solo — только когда в кадре один человек. Каждый названный человек: имя + пол + возраст + 1–2 приметы (например, ichigo_kurosaki, male, young man, short orange hair).",
+        : "- Указывай только тех людей, которые действительно видны в кадре. Присутствие рядом не означает обязательного попадания на фото. Если пользователь виден — явно назови его или покажи состав кадра (1girl, 1boy). Не дублируй одного персонажа разными именами. solo — только когда в кадре один человек. Каждый видимый человек: имя + пол + возраст + 1–2 приметы (например, ichigo_kurosaki, male, young man, short orange hair).",
       "- Покажи действие, а не только позу, и сохрани градус сцены: ничего откровеннее и ничего целомудреннее, чем происходит. Обычный момент остаётся обычным.",
       "- Промпт всегда на английском; нелатинские имена — в латинской транскрипции.",
       "- В конце можно указать пропорции: [draw: <prompt>, 16:9]. Варианты: 16:9, 9:16, 4:3, 3:4, 1:1 (по умолчанию).",
@@ -398,6 +529,12 @@
     ];
     let txt = base + "\nRULES:\n" + rules.map((r, i) => `${i + 1}. ${r}`).join("\n");
     if (opts.pov) txt += "\nFIRST-PERSON VIEW: the camera is the viewer's eyes. Start with pov; never describe the viewer; only one person in frame unless the scene shows the viewer's hands etc.";
+    if (opts.frame) {
+      const f = opts.frame;
+      txt += "\nFRAME IDENTITY (do not invent extra copies or people):\n" +
+        "Card owner is " + (f.owner ? "visible" : "NOT visible") + "; user is " + (f.user ? "visible" : "NOT visible") +
+        ". Never inject either when not visible. Preserve any OTHER people explicitly in SCENE; one named person must not become two because of alternate tags.";
+    }
     if (opts.identity) txt += "\nCHARACTER (keep this look constant; tags listed as injected later must NOT be repeated):\n" + opts.identity;
     return txt;
   }
@@ -407,7 +544,7 @@
   PRP.imgCompose = {
     words, wordFormMatch, mentions, parseMap, resolveWardrobe, resolveAppearance,
     splitTags, bareTag, normalizeTags, stripQuality, subjectCount, dropContradictorySolo, dedupe,
-    wardrobeConflicts, ownerPresent, compose, finalise, loraTokens, sizeFor, perchanceResolution, openaiSize,
+    wardrobeConflicts, ownerPresent, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, loraTokens, sizeFor, perchanceResolution, openaiSize,
     parseDraws, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompose;

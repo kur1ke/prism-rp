@@ -31,7 +31,7 @@
 
   const OPS_LINE = (p) => Object.keys(p || {}).map((k) => {
     const v = p[k];
-    const name = { location: "где", activity: "чем занят(а)", nearby: "рядом", ongoing: "происходит", availability: "доступность" }[k] || k;
+    const name = { location: "где", activity: "чем занят(а)", nearby: "рядом", ongoing: "происходит", availability: "доступность", visualWear: "одежда", visualPose: "поза", visualHair: "причёска" }[k] || k;
     if (v == null || (Array.isArray(v) && !v.length)) return name + ": очищено";
     return name + ": " + (k === "availability" ? availWord(v) : Array.isArray(v) ? v.join(", ") : v);
   }).join(" · ");
@@ -50,6 +50,9 @@
         <p class="hint">Пустое поле — не менять. «Очистить» — сделать неизвестным.</p>
         ${fld("location", "Где", "", w.location || "")}${fld("activity", "Чем занят(а)", "", w.activity || "")}
         ${fld("nearby", "Рядом (через запятую)", "", (w.nearby || []).join(", "))}${fld("ongoing", "Происходит (через запятую)", "", (w.ongoing || []).join(", "))}
+        <div class="block-title" style="margin-top:16px">Внешний вид для изображений</div>
+        <p class="hint">Только установленное явно. Из генераций изображений это состояние не обновляется. Правка относится к выбранной области и времени переписки.</p>
+        ${fld("visualWear", "Одежда (через запятую)", "", (w.visualWear || []).join(", "))}${fld("visualPose", "Поза", "", w.visualPose || "")}${fld("visualHair", "Причёска", "", w.visualHair || "")}
         <div class="field"><label>Доступность</label><select id="env-availability"><option value="">не менять</option>${AVAIL.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
         <div class="field"><label>Где действует</label>${scopeRadios("env-scope", d.scope)}</div>
         <div class="row"><button class="btn btn-primary btn-sm" data-act="env-save">Сохранить</button><button class="btn btn-sm btn-ghost" data-act="env-cancel">Отмена</button></div></div>` : "";
@@ -61,10 +64,12 @@
         <div class="mt"><span class="tag">${e.scope === "chat" ? "вся переписка" : "ветка"}</span>${ev.effectiveAt ? `<span class="tag">${esc(MT.format(MT.toMs(ev.effectiveAt), tz))}</span>` : ""}<span class="tag">${e.active ? "действует" : esc(e.reason || "не действует")}</span></div></li>`;
     }).join("");
     return `<div class="block"><div class="block-title">Положение ${esc(m.card.name)}</div>
-        <p class="hint">Текущие обстоятельства вне переписки. Задаются только вами: ответы персонажа сами их не меняют, время само ничего не меняет.</p>
+        <p class="hint">Текущие обстоятельства вне переписки. Указанные вами положения и визуальные детали сохраняются между изображениями; ответы модели и картинки не переписывают их автоматически.</p>
         <dl class="kv env-world"><dt>Где</dt><dd>${esc(w.location || "неизвестно")}</dd><dt>Чем занят(а)</dt><dd>${esc(w.activity || "неизвестно")}</dd>
           <dt>Рядом</dt><dd>${esc((w.nearby || []).join(", ") || "—")}</dd><dt>Происходит</dt><dd>${esc((w.ongoing || []).join(", ") || "—")}</dd>
           <dt>Доступность</dt><dd>${esc(availWord(w.availability))}</dd></dl>
+        <div class="block-title" style="margin-top:14px">Внешний вид для изображений</div>
+        <dl class="kv env-world"><dt>Одежда</dt><dd>${esc((w.visualWear || []).join(", ") || "неизвестно")}</dd><dt>Поза</dt><dd>${esc(w.visualPose || "неизвестно")}</dd><dt>Причёска</dt><dd>${esc(w.visualHair || "неизвестно")}</dd></dl>
         ${d ? "" : `<button class="btn btn-sm" data-act="env-edit">${icon("edit")}Изменить положение</button>`}</div>
       ${form}
       <div class="block"><div class="block-title">Время переписки</div>

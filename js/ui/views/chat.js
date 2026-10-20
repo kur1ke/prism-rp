@@ -130,6 +130,7 @@
 
   function imageInfo(im) {
     return `<div class="pop-title">Промпт</div><div class="code" style="max-height:200px">${esc(im.prompt || "")}</div>
+      ${im.promptSources ? `<details><summary class="hint" style="cursor:pointer">Источники изображения</summary><pre class="code">${esc(JSON.stringify(im.promptSources, null, 2))}</pre></details>` : ""}
       ${im.negative ? `<div class="pop-title">Негатив</div><div class="code" style="max-height:120px">${esc(im.negative)}</div>` : ""}
       ${im.compiledFrom ? `<div class="pop-title">Сцена до перевода</div><div class="code" style="max-height:120px">${esc(im.compiledFrom)}</div>` : ""}
       <dl class="kv" style="padding:8px 10px;font-size:13px"><dt>Seed</dt><dd>${esc(im.seed != null ? String(im.seed) : "—")}</dd>
