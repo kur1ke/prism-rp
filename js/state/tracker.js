@@ -28,7 +28,7 @@
     if (source && source.role === "user" && e.actor !== "user") return "пользователь не управляет чужим персонажем";
     if (source && source.role === "assistant" && e.actor !== "char") return "модель не управляет пользователем";
     if (e.certainty === "established" && source && source.mode === "messenger" && source.role !== "manual") return "сообщения мессенджера не доказывают физическое состояние";
-    if (e.action === "set") {
+    if (["set", "add", "remove"].includes(e.action)) {
       if (LIST.has(e.field)) {
         if (!Array.isArray(e.value) || e.value.length < 1 || e.value.length > 12 || e.value.some((x) => typeof x !== "string" || !x.trim() || x.length > 160)) return "некорректный список";
       } else if (typeof e.value !== "string" || !e.value.trim() || e.value.length > 240) return "некорректное значение";

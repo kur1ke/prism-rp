@@ -1664,7 +1664,7 @@ function fbHarness(card, opts) {
 const allText = (msgs) => msgs.map((m) => m.content).join("\n");
 async function ta(name, fn) {
   try { await fn(); passed++; }
-  catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.stack || e.message || e).split("\n").slice(0, 3).join("\n   ")); }
+  catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.stack || e.message || e).split("\n").slice(0, 12).join("\n   ")); }
 }
 async function foundationB() {
   const CARD_NOFIRST = { name: "Юки", description: "Тихая библиотекарша.", scenario: "SCEN-LIB: дождливый вечер в университетской библиотеке." };
@@ -3593,6 +3593,161 @@ async function unifiedTracker() {
     const result = globalThis.PRP.stateTracker.fold({ mode: "messenger", charName: "Орихимэ", path: [m] });
     assert.strictEqual(result.scene.loc, "");
     assert.deepStrictEqual(globalThis.PRP.stateTracker.forCharacter(result).visualWear, []);
+  });
+  /* UT-1.1: live issue — visible environment stayed unknown after concrete reports. */
+  await ta("UT11-1: malformed Perchance JSON is visible and explicit location is recovered", async () => {
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m = h.chat.newMsg("assistant", null, "Я сейчас дома! 🏠");
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => "Извини, я не умею JSON" };
+    let repaints = 0;
+    h.S.drawerOpen = true;
+    h.ctx.ui.renderDrawer = () => { repaints++; };
+    try {
+      const r = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      assert.strictEqual(r.status, "partial");
+      assert.strictEqual(h.ctx.svc.messenger.view().world.location, "дома");
+      assert.strictEqual(h.ctx.svc.messenger.view().world.fieldStatus.location.certainty, "reported");
+      assert.ok(repaints > 0, "UI must update after observer completes");
+      assert.strictEqual(h.store.messages.get(m.id).swipes[0].stateStatus.status, "partial");
+      assert.ok(h.ctx.svc.messenger.view().stateStatus.issues.some(x=>x.includes("JSON")));
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("UT11-2: Orhime self-report of outfit is saved, isolated, and visible", async () => {
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m1 = h.chat.newMsg("assistant", null, "Я сейчас дома! 🏠");
+    await h.chat.commitMessage(m1, m1.id);
+    const m2 = h.chat.newMsg("assistant", m1.id, "Орихимэ Иноуэ: Сейчас я в домашнем, в уютном светлом кардигане и в пижамных штанах. Самое время для отдыха!");
+    await h.chat.commitMessage(m2, m2.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => '{"events":[]}' };
+    try {
+      await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      await h.ctx.svc.state.observeMessage(h.chat.path()[1], { id: "mock" });
+      const v = h.ctx.svc.messenger.view().world;
+      assert.strictEqual(v.location, "дома");
+      assert.deepStrictEqual(v.visualWear, ["уютном светлом кардигане", "пижамных штанах"]);
+      assert.strictEqual(v.fieldStatus.visualWear.certainty, "reported");
+      assert.deepStrictEqual(h.ctx.svc.state.context([m1]).character.visualWear, [], "older image snapshot unchanged");
+      // A genuine branch change removes only events belonging to that message.
+      const activeM2 = h.chat.path()[1];
+      activeM2.swipes.push({ text: "Привет", sceneOps: [], createdAt: Date.now() });
+      activeM2.swipeIdx = 1;
+      assert.deepStrictEqual(h.ctx.svc.messenger.view().world.visualWear, []);
+      activeM2.swipeIdx = 0;
+      assert.deepStrictEqual(h.ctx.svc.messenger.view().world.visualWear, ["уютном светлом кардигане", "пижамных штанах"]);
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("UT11-3: malformed wear add/remove candidate cannot crash interpreter", async () => {
+    for (const action of ["add", "remove"]) {
+      const p = INTR.parse(JSON.stringify({ events: [Evt("char", "wear", action, "кардиган", "reported", "Я в кардигане")] }),
+        { mode: "messenger", role: "assistant", text: "Я в кардигане" });
+      assert.strictEqual(p.events.length, 0);
+      assert.ok(p.issues.includes("некорректный список"));
+    }
+  });
+  await ta("UT11-4: bounded fallback rejects negation, intention, third-person, questions and quoted text", async () => {
+    const source = { mode: "messenger", role: "assistant", speakerName: "Орихимэ Иноуэ" };
+    for (const sample of ["Я не дома", "Я скоро буду дома", "А ты дома?", "Она сейчас дома", "\"Я сейчас дома\"", "Орихимэ Иноуэ: Я хочу быть дома", "Я переоденусь в пижаму", "Я не в кардигане"]) {
+      assert.deepStrictEqual(INTR.grounded(sample, source), [], sample);
+    }
+  });
+  await ta("UT11-5: fenced/prose JSON is parsed but invented facts still rejected", async () => {
+    const src = { mode: "messenger", role: "assistant", text: "Я дома" };
+    const good = 'Готово:\n```json\n' + JSON.stringify({ events: [Evt("char", "location", "set", "дома", "reported", "Я дома")] }) + '\n```';
+    const p = INTR.parse(good, src);
+    assert.strictEqual(p.valid, true);
+    assert.strictEqual(p.events.length, 1);
+    const bad = INTR.parse(JSON.stringify({ events: [Evt("char", "hair", "set", "фиолетовые", "reported", "Я дома")] }), src);
+    assert.strictEqual(bad.events.length, 0);
+    assert.strictEqual(bad.issues.length, 1);
+  });
+  await ta("UT11-6: failed observer exposes error status and can retry", async () => {
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m = h.chat.newMsg("assistant", null, "Любопытный день.");
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    let calls = 0;
+    globalThis.PRP.llm = { simple: async () => { calls++; return calls === 1 ? "not JSON" : '{"events":[]}'; } };
+    try {
+      const r1 = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      assert.strictEqual(r1.status, "error");
+      assert.strictEqual(h.chat.path()[0].swipes[0].stateStatus.status, "error");
+      const r2 = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      assert.strictEqual(r2.status, "no-changes");
+      assert.strictEqual(calls, 2);
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("UT11-7: image prompt comes from tracked outfit rather than drawing alone", async () => {
+    const card = { name: "Орихимэ Иноуэ", description: "Девушка", image: { trigger: "orihime_inoue", wardrobe: "base: school uniform" } };
+    const h = fbHarness(card);
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m = h.chat.newMsg("assistant", null, "Сейчас я в домашнем, в уютном светлом кардигане и в пижамных штанах.");
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => '{"events":[]}' };
+    const oldGen = IB.generate;
+    try {
+      const live = h.chat.path()[0];
+      await h.ctx.svc.state.observeMessage(live, { id: "mock" });
+      h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
+      h.S.drawing = new Set(); h.S.imgUrls = {};
+      h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+      let sent;
+      IB.generate = async (_, args) => { sent = args; return { dataUrl: "data:image/png;base64,AA==", seed: 8, info: { width: 512, height: 512 } }; };
+      await h.ctx.svc.images.draw(live, live.swipes[0], { prompt: "1girl, orihime_inoue, selfie", ratio: "1:1" });
+      assert.ok(sent.prompt.includes("кардигане"), sent.prompt);
+      assert.ok(sent.prompt.includes("штанах"), sent.prompt);
+      assert.ok(!sent.prompt.includes("school uniform"), sent.prompt);
+      assert.deepStrictEqual(live.swipes[0].images[0].promptSources.actorState.visualWear.certainty, "reported");
+    } finally { globalThis.PRP.llm = old; IB.generate = oldGen; }
+  });
+  await ta("UT11-8: timed-out interpreter does not block conversation or invent facts", async () => {
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    h.ctx.observerTimeoutMs = 300;
+    const m = h.chat.newMsg("assistant", null, "Я сейчас дома!");
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: () => new Promise(() => {}) };
+    try {
+      const r = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      assert.strictEqual(r.status, "partial");
+      assert.ok(r.issues.join(" ").includes("ожидания"));
+      assert.strictEqual(STATE.forCharacter(h.ctx.svc.state.snapshot()).location, "дома");
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("UT11-9: diagnostic status is rendered without manual state form", async () => {
+    require(J("ui/views/messenger.js"));
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m = h.chat.newMsg("assistant", null, "Я сейчас дома!");
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => "not JSON" };
+    try {
+      await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      const result = h.ctx.svc.messenger.view();
+      const markup = globalThis.PRP.views.envTab({ messengerView: result, card: h.ctx.card(), envEdit: null, persona: {name:"Пользователь"} });
+      assert.ok(markup.includes("дома"), markup);
+      assert.ok(markup.includes("Повторить анализ"), markup);
+      assert.ok(markup.includes("не содержит корректный JSON"), markup);
+      assert.ok(!markup.includes('id="env-location"'), "editing form is collapsed by default");
+    } finally { globalThis.PRP.llm = old; }
   });
 }
 

@@ -63,7 +63,22 @@
       return `<li class="${e.active ? "" : "off"}"><div>${esc(OPS_LINE(ev.patch))}</div>
         <div class="mt"><span class="tag">${e.scope === "chat" ? "вся переписка" : "ветка"}</span>${ev.effectiveAt ? `<span class="tag">${esc(MT.format(MT.toMs(ev.effectiveAt), tz))}</span>` : ""}<span class="tag">${e.active ? "действует" : esc(e.reason || "не действует")}</span></div></li>`;
     }).join("");
+    const stateNotes = {
+      ok: "Состояние обновлено автоматически",
+      partial: "Часть сведений извлечена; анализатор сообщил об ограничениях",
+      "no-changes": "Анализ завершён: новых фактов не обнаружено",
+      error: "Не удалось распознать изменения состояния",
+    };
+    const status = v.stateStatus || null;
+    const diagnostics = v.statePending ? `<p class="hint">Обновляю состояние по последнему сообщению…</p>`
+      : status ? `<details class="block" style="margin:8px 0"><summary class="hint" style="cursor:pointer">${esc(stateNotes[status.status] || "Сведения об анализе")}</summary>
+        <p class="hint">Событий: ${Number(status.eventCount) || 0}. ${status.method === "model+grounded" ? "Явные сведения дополнены проверкой по тексту." : ""}</p>
+        ${(status.issues || []).length ? `<ul class="wc-list">${status.issues.map((x) => `<li class="off">${esc(x)}</li>`).join("")}</ul>` : ""}
+        ${(status.status === "error" || status.status === "partial") && !v.statePending
+          ? `<button class="btn btn-sm" data-act="state-retry" style="margin-top:7px">Повторить анализ</button>` : ""}</details>`
+      : `<p class="hint">Автоматический анализ ещё не выполнялся для последнего сообщения.</p>`;
     return `<div class="block"><div class="block-title">Положение ${esc(m.card.name)}</div>
+        ${diagnostics}
         <p class="hint">Положение и внешность отслеживаются автоматически по происходящему в переписке. Сообщённое персонажем не обязательно является проверенным фактом. Изображения не меняют состояние.</p>
         <dl class="kv env-world"><dt>Где</dt><dd>${esc(w.location || "неизвестно")}</dd><dt>Чем занят(а)</dt><dd>${esc(w.activity || "неизвестно")}</dd>
           <dt>Рядом</dt><dd>${esc((w.nearby || []).join(", ") || "—")}</dd><dt>Происходит</dt><dd>${esc((w.ongoing || []).join(", ") || "—")}</dd>

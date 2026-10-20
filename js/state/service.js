@@ -33,42 +33,74 @@
        If interpretation fails, no world fact is manufactured. A missing model leaves
        the normal chat functional. No model-output data can control another actor.
        Only same chat, same active swipe, same source text may be committed. */
-    async function observeMessage(msg, provider) {
+    function updateUi() {
+      // Раньше панель отрисовывалась ДО завершения служебного запроса и
+      // продолжала показывать "неизвестно" даже после записи результата.
+      if (ctx.svc.prism && typeof ctx.svc.prism.refresh === "function") ctx.svc.prism.refresh();
+      if (ctx.ui) {
+        if (typeof ctx.ui.renderHead === "function") ctx.ui.renderHead();
+        if (S.drawerOpen && typeof ctx.ui.renderDrawer === "function") ctx.ui.renderDrawer();
+      }
+    }
+
+    async function simpleWithLimit(provider, instruction) {
+      // Служебный запрос не может бесконечно блокировать обычную переписку.
+      // Таймаут не создаёт факты и не применяет запоздалый ответ.
+      const maxMs = Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || 20000));
+      let timer;
+      try {
+        return await Promise.race([
+          PRP.llm.simple(provider, instruction, { maxTokens: 650 }),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("превышено время ожидания " + maxMs + " мс")), maxMs); }),
+        ]);
+      } finally { clearTimeout(timer); }
+    }
+
+    async function observeMessage(msg, provider, opts) {
       const c = ctx.chat();
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
       const sw = TR.activeSwipe(msg), sourceText = String(sw.text || ""), swipeIdx = msg.swipeIdx || 0;
       if (!sourceText.trim()) return { skipped: "empty" };
       if (!INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
-      if (sw.stateStatus && sw.stateStatus.status === "ok" && sw.stateStatus.sourceText === sourceText) return { skipped: "already-processed" };
-      if (!provider) return { skipped: "no-provider" };
+      if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) && sw.stateStatus.sourceText === sourceText && !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       if (!initialPath.includes(msg)) return { skipped: "off-path" };
       const originalKey = initialPath.map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">");
       const chatId = c.id;
-      let result;
-      try {
-        const instruction = INT.instruction({ mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT) });
-        const raw = await PRP.llm.simple(provider, instruction, { maxTokens: 650 });
-        result = INT.parse(raw, { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT) });
-      } catch (e) {
-        return { error: "interpretation-failed", detail: String(e && e.message || e) };
+      const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
+        speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name };
+      let result = { valid: false, events: [], issues: ["Текстовая модель недоступна"] };
+      if (provider) {
+        try {
+          const instruction = INT.instruction(options);
+          const raw = await simpleWithLimit(provider, instruction);
+          result = INT.parse(raw, options);
+        } catch (e) {
+          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
+        }
       }
+      // Высокоточные явные самоописания не должны исчезать только потому,
+      // что Perchance вернул неполный JSON или не распознал простое предложение.
+      // Более сложные случаи по-прежнему требуют модельного извлечения.
+      const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
+      const events = result.events.slice();
+      for (const e of fallback) if (!events.some((x) => x.actor === e.actor && x.field === e.field && x.certainty !== "intent")) events.push(e);
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
           chat().path().map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">") !== originalKey) {
         return { skipped: "stale-branch" };
       }
-      const stateStatus = { status: "ok", sourceText, issues: result.issues, at: Date.now() };
+      const status = !result.valid ? events.length ? "partial" : "error" : result.issues.length ? "partial" : events.length ? "ok" : "no-changes";
+      const stateStatus = { status, sourceText, issues: result.issues, at: Date.now(),
+        method: fallback.length ? "model+grounded" : "model", eventCount: events.length };
       const next = JSON.parse(JSON.stringify(msg));
-      next.swipes[swipeIdx].stateEvents = result.events;
+      next.swipes[swipeIdx].stateEvents = events;
       next.swipes[swipeIdx].stateStatus = stateStatus;
-      // Persist first; keep the SAME message + swipe objects in S.messages.
-      // Replacing their identity would make an ongoing image draw rewrite old
-      // records over just-extracted stateEvents.
       await ctx.DB.put("messages", next);
-      sw.stateEvents = result.events;
+      sw.stateEvents = events;
       sw.stateStatus = stateStatus;
-      return { events: result.events, issues: result.issues };
+      updateUi();
+      return { events, issues: result.issues, status };
     }
     async function correct(patch) {
       const c = ctx.chat();
