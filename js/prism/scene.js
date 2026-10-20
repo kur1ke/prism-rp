@@ -85,12 +85,19 @@
   const UNIT_MIN = { m: 1, min: 1, "мин": 1, h: 60, "ч": 60, d: 1440, "д": 1440, "дн": 1440 };
 
   function shiftClock(c, minutes) {
-    const base = c.min == null ? 0 : c.min;
-    let total = base + minutes;
-    let days = Math.floor(total / 1440);
+    // Относительное время без известных часов не начинается выдуманной полуночью.
+    // Полные сутки можно сдвинуть даже тогда, когда время суток неизвестно.
+    if (c.min == null) {
+      if (minutes % 1440 !== 0) return false;
+      if (minutes) addDays(c, minutes / 1440);
+      return true;
+    }
+    let total = c.min + minutes;
+    const days = Math.floor(total / 1440);
     total -= days * 1440;
     c.min = total;
     if (days) addDays(c, days);
+    return true;
   }
 
   function addDays(c, days) {
@@ -104,6 +111,14 @@
     }
   }
 
+  function validDate(y, m, d) {
+    if (!Number.isInteger(m) || m < 1 || m > 12 || !Number.isInteger(d) || d < 1 || d > 31) return false;
+    // В отсутствие года используем високосный 2000-й: 29 февраля без года допустимо.
+    const year = y == null ? 2000 : y;
+    const t = new Date(Date.UTC(year, m - 1, d));
+    return t.getUTCFullYear() === year && t.getUTCMonth() + 1 === m && t.getUTCDate() === d;
+  }
+
   function applyTime(c, value) {
     let v = String(value).trim().toLowerCase();
     const rel = v.match(/^\+\s*(\d+(?:[.,]\d+)?)\s*([a-zа-я]*)$/i);
@@ -111,39 +126,40 @@
       const n = parseFloat(rel[1].replace(",", "."));
       const unit = UNIT_MIN[rel[2]] || (rel[2] ? null : 1);
       if (unit == null) return false;
-      shiftClock(c, Math.round(n * unit));
-      return true;
+      return shiftClock(c, Math.round(n * unit));
     }
-    let matched = false;
-    // ISO: 2026-05-14 [18:40]
+    // Абсолютное изменение — транзакция: некорректное время не должно частично
+    // переписать день/месяц или незаметно оставить от предыдущей записи часы.
+    const next = Object.assign({}, c);
+    let hasDate = false;
     const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ t](.*))?$/);
     if (iso) {
-      c.y = +iso[1]; c.m = +iso[2]; c.d = +iso[3];
+      const y = +iso[1], m = +iso[2], d = +iso[3];
+      if (!validDate(y, m, d)) return false;
+      next.y = y; next.m = m; next.d = d;
       v = (iso[4] || "").trim();
-      matched = true;
+      hasDate = true;
     } else {
-      // 14.05[.2026] [18:40]
       const dm = v.match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?(?:\s+(.*))?$/);
-      // «18.40» без года и времени — это время, если вторая часть не похожа на месяц.
       const looksLikeTime = dm && !dm[3] && !dm[4] && +dm[2] > 12;
-      if (dm && !looksLikeTime && +dm[2] >= 1 && +dm[2] <= 12 && +dm[1] >= 1 && +dm[1] <= 31) {
-        c.d = +dm[1]; c.m = +dm[2];
-        c.y = dm[3] ? (dm[3].length === 2 ? 2000 + +dm[3] : +dm[3]) : c.y;
+      if (dm && !looksLikeTime) {
+        const y = dm[3] ? (dm[3].length === 2 ? 2000 + +dm[3] : +dm[3]) : next.y;
+        const m = +dm[2], d = +dm[1];
+        if (!validDate(y, m, d)) return false;
+        next.y = y; next.m = m; next.d = d;
         v = (dm[4] || "").trim();
-        matched = true;
+        hasDate = true;
       }
     }
-    if (!v) return matched;
-    const hm = v.match(/^(\d{1,2})[:.](\d{2})$/);
-    if (hm) {
+    if (v) {
+      const hm = v.match(/^(\d{1,2})[:.](\d{2})$/);
+      if (!hm || +hm[1] > 23 || +hm[2] > 59) return false;
       const min = +hm[1] * 60 + +hm[2];
-      if (min >= 1440) return matched;
-      // Время раньше текущего без указания даты — это уже следующий день.
-      if (!matched && c.min != null && min < c.min) addDays(c, 1);
-      c.min = min;
-      return true;
-    }
-    return matched;
+      if (!hasDate && next.min != null && min < next.min) addDays(next, 1);
+      next.min = min;
+    } else if (!hasDate) return false;
+    Object.assign(c, next);
+    return true;
   }
 
   function formatClock(c) {
@@ -170,20 +186,35 @@
     return /^(-|—|–|нет|none)$/i.test(String(v).trim());
   }
 
+  function normName(name) {
+    return String(name || "").trim().replace(/\s+/g, " ").toLowerCase().replace(/ё/g, "е");
+  }
+  function resolveName(name, meta) {
+    const raw = String(name || "").trim().replace(/\s+/g, " ");
+    const normalized = normName(raw);
+    const m = meta || {};
+    if (m.charName && (normalized === "{{char}}" || normalized === normName(m.charName))) return String(m.charName);
+    if (m.userName && (normalized === "{{user}}" || normalized === normName(m.userName))) return String(m.userName);
+    return raw;
+  }
   function findName(list, name) {
-    const low = name.toLowerCase();
-    return list.findIndex((n) => n.toLowerCase() === low);
+    const low = normName(name);
+    return list.findIndex((n) => normName(n) === low);
   }
-
   function charOf(state, name) {
-    const key = Object.keys(state.chars).find((k) => k.toLowerCase() === name.toLowerCase());
+    const key = Object.keys(state.chars).find((k) => normName(k) === normName(name));
     if (key) return state.chars[key];
-    return (state.chars[name] = { wear: [], pose: "", mood: "", moodSrc: null, moodTurn: null });
+    const ch = { wear: [], pose: "", mood: "", moodSrc: null, moodTurn: null };
+    // Имена приходят из текста модели: не превращаем __proto__ в прототип объекта.
+    Object.defineProperty(state.chars, name, { value: ch, writable: true, enumerable: true, configurable: true });
+    return ch;
   }
-
   function sameItem(a, b) {
-    a = a.toLowerCase(); b = b.toLowerCase();
-    return a === b || a.includes(b) || b.includes(a);
+    const aw = String(a).toLowerCase().replace(/ё/g, "е").match(/[\p{L}\p{N}]+/gu) || [];
+    const bw = String(b).toLowerCase().replace(/ё/g, "е").match(/[\p{L}\p{N}]+/gu) || [];
+    if (!aw.length || !bw.length) return false;
+    const contains = (hay, needle) => hay.some((_, i) => needle.every((w, j) => hay[i + j] === w));
+    return contains(aw, bw) || contains(bw, aw);
   }
 
   /* Чистая функция: возвращает новое состояние и списки применённых/пропущенных операций.
@@ -197,7 +228,11 @@
       const v = op.value;
       if (isLegacy(op)) { legacy.push(op); ignored.push(op); continue; }
       if (op.subject) {
-        const ch = charOf(s, op.subject);
+        // Сначала проверить ключ: ошибочная директива не создаёт фиктивного актёра.
+        if (!["wear", "add", "remove", "pose", "mood"].includes(op.key)) { ignored.push(op); continue; }
+        const who = resolveName(op.subject, meta);
+        if (!who || !String(v == null ? "" : v).trim()) { ignored.push(op); continue; }
+        const ch = charOf(s, who);
         switch (op.key) {
           case "wear": ch.wear = isClear(v) ? [] : splitList(v); break;
           case "add": splitList(v).forEach((it) => { if (!ch.wear.some((w) => sameItem(w, it))) ch.wear.push(it); }); break;
@@ -212,12 +247,15 @@
           default: ok = false;
         }
       } else {
+        if (["loc", "weather", "enter", "leave"].includes(op.key) && !String(v == null ? "" : v).trim()) {
+          ignored.push(op); continue;
+        }
         switch (op.key) {
           case "time": ok = applyTime(s.clock, v); break;
           case "loc": s.loc = isClear(v) ? "" : v; break;
           case "weather": s.weather = isClear(v) ? "" : v; break;
-          case "enter": splitList(v).forEach((n) => { if (findName(s.present, n) < 0) s.present.push(n); }); break;
-          case "leave": splitList(v).forEach((n) => { const i = findName(s.present, n); if (i >= 0) s.present.splice(i, 1); }); break;
+          case "enter": splitList(v).map((n) => resolveName(n, meta)).forEach((n) => { if (n && findName(s.present, n) < 0) s.present.push(n); }); break;
+          case "leave": splitList(v).map((n) => resolveName(n, meta)).forEach((n) => { const i = findName(s.present, n); if (i >= 0) s.present.splice(i, 1); }); break;
           default: ok = false;
         }
       }
@@ -230,18 +268,29 @@
   /* steps: [{ msgId, ops, role? }] по активному пути. Ход = ответ модели (role "assistant");
      если роль не указана, ходом считается каждый шаг. Возраст настроения считается
      заново по каждой ветке и нигде не хранится. */
-  function fold(initBody, steps) {
-    const first = apply(emptyState(), parseBody(initBody || ""), { turn: 0 });
+  function fold(initBody, steps, opts) {
+    const names = opts || {};
+    const first = apply(emptyState(), parseBody(initBody || ""), Object.assign({ turn: 0 }, names));
     let st = first.state, legacy = first.legacy.length;
+    const invalid = [];
+    const noteInvalid = (result, source) => {
+      for (const op of result.ignored) if (!isLegacy(op)) {
+        invalid.push({ source, raw: String(op.raw || `${op.subject ? op.subject + "." : ""}${op.key || "?"}=${op.value || ""}`) });
+      }
+    };
+    noteInvalid(first, "sceneInit");
     let turn = 0;
     for (const step of steps || []) {
       if (!step.role || step.role === "assistant") turn++;
-      const r = apply(st, step.ops, { msgId: step.msgId, turn });
+      const r = apply(st, step.ops, Object.assign({ msgId: step.msgId, turn }, names));
       st = r.state; legacy += r.legacy.length;
+      noteInvalid(r, step.msgId || "сообщение");
     }
     st.turn = turn;
     // Сколько устаревших операций (rel, relset, flag) на ветке не действует — только для отчёта и интерфейса.
     st.legacyIgnored = legacy;
+    st.invalidOps = invalid.length;
+    st.invalidEntries = invalid.slice(-10);
     for (const n of Object.keys(st.chars)) {
       const ch = st.chars[n];
       ch.moodAge = ch.mood ? Math.max(0, turn - (ch.moodTurn || 0)) : null;
@@ -309,9 +358,11 @@
   }
 
   const PROTOCOL = [
-    "В самом конце ответа, отдельной строкой, сообщи только изменения сцены, если они были:",
-    "[scene: time=+15m; loc=место; weather=погода; enter=Имя; leave=Имя; Имя.wear=полный комплект одежды; Имя.add=предмет; Имя.remove=предмет; Имя.pose=поза; Имя.mood=как выглядит настроение]",
-    "Указывай только то, что изменилось. Не пересказывай сцену в тексте ответа. Если ничего не изменилось — строку не пиши.",
+    "В самом конце ответа, отдельной строкой, сообщи только изменения сцены, если они действительно установлены:",
+    "[scene: time=+15m; loc=место; weather=погода; enter={{char}}; {{char}}.wear=одежда; {{char}}.pose=поза]",
+    "Это ПРИМЕР СИНТАКСИСА, а не перечень событий: не копируй его целиком. Используй точные имена участников; для {{char}} и {{user}} модель знает их значения.",
+    "Не придумывай действия, переодевание и положение {{user}} — фиксируй только явно сообщённое пользователем. Не записывай неизменившееся; неизвестное остаётся неизвестным.",
+    "Если ничего не изменилось — строку не пиши. Изменения состояния не повторяй в тексте ответа.",
   ].join("\n");
 
   PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, ageWords, describe, summaryLine, formatClock, opLabel, isLegacy, PROTOCOL };

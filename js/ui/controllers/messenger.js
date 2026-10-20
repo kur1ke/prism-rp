@@ -40,7 +40,10 @@
         for (const k of ["location", "activity", "visualPose", "visualHair"]) { const v = $("#env-" + k).value.trim(); if (clear.has(k)) patch[k] = null; else if (v) patch[k] = v; }
         for (const k of ["nearby", "ongoing", "visualWear"]) { const v = csv($("#env-" + k).value); if (clear.has(k)) patch[k] = null; else if (v.length) patch[k] = v; }
         const av = $("#env-availability").value; if (av) patch.availability = av;
-        const r = await svc.messenger.commitEvent({ scope, patch });
+        // Штатные изменения происходят автоматически. Только явно вызванное
+        // исправление принадлежит пользователю и записывается в активную ветку.
+        const r = svc.state && scope === "branch" && svc.chat.path().length
+          ? await svc.state.correct(patch) : await svc.messenger.commitEvent({ scope, patch });
         if (failed(r)) return;
         S.envEdit = null;
         await after("Положение сохранено.");

@@ -12,7 +12,10 @@
 
     // Ручные изменения сцены → в ветку; затем Prism, панель и шапка.
     async function applySceneOps(ops) {
-      if (!(await svc.chat.applySceneOps(ops))) return;
+      if (!(await svc.chat.applySceneOps(ops))) {
+        ui.toast("Изменение сцены отклонено: проверьте значение. Сдвиг минут/часов возможен после установки времени суток.", true);
+        return;
+      }
       svc.prism.refresh();
       ui.renderDrawer();
       ui.renderHead();
@@ -70,7 +73,14 @@
       "sc-leave": (t) => applySceneOps([op(null, "leave", t.dataset.name)]),
       "sc-enter": (t) => applySceneOps([op(null, "enter", t.dataset.name)]),
       "sc-remove": (t) => applySceneOps([op(t.dataset.name, "remove", t.dataset.item)]),
-      "scene-init-save": async () => { const c = ctx.chat(); c.sceneInit = $("#scene-init").value.trim(); await svc.chat.putChat(c); svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); ui.toast("Начальная сцена сохранена."); },
+      "scene-init-save": async () => {
+        const c = ctx.chat(), value = $("#scene-init").value.trim();
+        const ops = SC.parseBody(value);
+        const check = SC.apply(SC.emptyState(), ops, { charName: ctx.card() && ctx.card().name, userName: ctx.persona() && ctx.persona().name });
+        if (check.ignored.length) { ui.toast("Начальная сцена содержит недопустимые команды. Исправьте их перед сохранением.", true); return; }
+        c.sceneInit = value; await svc.chat.putChat(c);
+        svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); ui.toast("Начальная сцена сохранена.");
+      },
       // Опыт
       "to-exp": (t) => {
         S.expDraft = svc.exp.draftFromMessage(t.dataset.id);

@@ -152,7 +152,7 @@
     const frame = m(T.frame);
     // Сцена — слой режима rp. В переписке её место занимают разделы среды переписки.
     const scene = AD.usesScene ? section(m(T.scene), SCENE.describe(o.sceneState)) : "";
-    const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? SCENE.PROTOCOL : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
+    const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
     const protocol = section(T.operation, protocolBody);
     const msPlansAll = (o.messenger && o.messenger.plans) || [];
     const msList = msW ? (msW.nearby || []).length + (msW.ongoing || []).length : 0;

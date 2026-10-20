@@ -23,7 +23,7 @@
   const S = {
     settings: null, cards: [], chats: [],
     view: "home", cardId: null, chatId: null, messages: [], experience: [],
-    gen: null, lastPrism: null, editingMsg: null, expDraft: null,
+    gen: null, tracking: false, lastPrism: null, editingMsg: null, expDraft: null,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
@@ -57,6 +57,7 @@
   ctx.svc.exp = PRP.experienceService.create(ctx);
   ctx.svc.prism = PRP.prismService.create(ctx);
   ctx.svc.images = PRP.imageService.create(ctx);
+  ctx.svc.state = PRP.stateService.create(ctx);
   ctx.svc.gen = PRP.generationService.create(ctx);
   ctx.svc.cards = PRP.cardService.create(ctx);
   ctx.svc.assist = PRP.assistService.create(ctx);

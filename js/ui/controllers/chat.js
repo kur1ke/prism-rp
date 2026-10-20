@@ -14,14 +14,20 @@
       const input = $("#input");
       if (!input) return;
       const text = input.value.trim();
-      if (!text || S.gen) return;
+      if (!text || S.gen || S.tracking) return;
       if (S.view === "assist") { input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
       input.value = "";
       ui.autoGrow(input);
       // Переписка: у отправленного сообщения — неизменяемая метка времени и положения (её даёт сервис переписки).
       const c = ctx.chat();
       const stamp = c && c.mode === "messenger" ? svc.messenger.stampForNew() : null;
-      await svc.chat.addUserMessage(text, stamp ? { messengerAt: stamp } : null);
+      const sent = await svc.chat.addUserMessage(text, stamp ? { messengerAt: stamp } : null);
+      // Интерпретация событий — служебный этап, пользователь не заполняет трекер.
+      if (svc.state) {
+        S.tracking = true;
+        try { await svc.state.observeMessage(sent, ctx.provider()); }
+        finally { S.tracking = false; }
+      }
       ui.renderFeed();
       ui.scrollBottom();
       await svc.gen.generate();
@@ -52,6 +58,8 @@
         if (!S.messages.find((x) => x.id === t.dataset.id)) return;
         S.editingMsg = null;
         await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
+        const edited = S.messages.find((x) => x.id === t.dataset.id);
+        if (svc.state && edited) await svc.state.observeMessage(edited, ctx.provider());
         await afterBranchChange();
       },
       "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },

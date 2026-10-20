@@ -63,6 +63,10 @@
           <input class="chip-add" id="sc-enter-new" placeholder="+ добавить…"></div></div>
       <div class="block"><div class="block-title">Персонажи</div>${people}</div>
       ${st.legacyIgnored ? `<p class="hint legacy-note">На этой ветке есть устаревшие отметки сцены (отношение, отметки сюжета): ${st.legacyIgnored}. Они сохранены в сообщениях, но больше не действуют и в модель не подаются.</p>` : ""}
+      ${st.invalidOps ? `<details class="block"><summary class="hint">Не применены команды трекера: ${st.invalidOps}</summary>
+        <p class="hint">Такие команды не меняют состояние сцены. Исходные сообщения не переписываются.</p>
+        <ul class="imp-issues">${(st.invalidEntries || []).map((x) => `<li><code>${esc(x.raw)}</code> <small>(${esc(x.source)})</small></li>`).join("")}</ul>
+      </details>` : ""}
       <div class="block"><div class="block-title">Как модель ведёт сцену</div>
         <label class="check"><input type="checkbox" data-set="sceneProtocol" ${m.settings.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сама<small>В конце ответа она пишет короткую служебную строку; приложение применяет её и прячет из текста.</small></span></label>
         <details><summary class="hint" style="cursor:pointer">Начальная сцена в текстовом виде</summary>

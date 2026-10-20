@@ -19,10 +19,10 @@
   }
 
   // Короткий служебный вызов без стриминга (перевод сцены в промпт картинки).
-  async function simple(prov, instruction) {
+  async function simple(prov, instruction, options) {
     if (!prov) throw new Error("нет текстовой модели");
     if (prov.kind === "perchance") return PC.simple(instruction);
-    const r = await OA.chat(prov, [{ role: "user", content: instruction }], { temperature: 0.3, max_tokens: 400 }, {});
+    const r = await OA.chat(prov, [{ role: "user", content: instruction }], { temperature: 0.3, max_tokens: Math.max(120, Math.min(1000, Number(options && options.maxTokens) || 400)) }, {});
     return OA.splitThink(r.text).text;
   }
 

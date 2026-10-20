@@ -278,6 +278,13 @@
     const userOutfit = user && Array.isArray(user.wear) ? user.wear.join(", ") : "";
 
     let wardrobe = actors.owner ? resolveWardrobe(im.wardrobe, outfit) : "";
+    // Когда одежда подтверждена состоянием переписки, общий/базовый гардероб
+    // карточки не должен подменять её другой формой. Используем словарь
+    // образов только если нашёлся явный ключ конкретной одежды.
+    if (messenger && actors.owner && outfit && wardrobe) {
+      const mapped = parseMap(im.wardrobe).some(({ key }) => key && !isBase(key) && !isSuffix(key) && bestVariant(key, outfit).score > 0);
+      if (!mapped) wardrobe = "";
+    }
     // В RP при явном изменении одежды в [draw:] старая одежда не навязывается.
     // В мессенджере явно установленная пользователем одежда имеет приоритет над
     // случайными противоречащими деталями от модели; смотрим по сохранённому snapshot.

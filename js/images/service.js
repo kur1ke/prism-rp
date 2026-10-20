@@ -51,26 +51,27 @@
       try {
         const path = chat().path();
         const upto = path.indexOf(msg) >= 0 ? path.slice(0, path.indexOf(msg) + 1) : path;
-        /* RP использует активную сцену. У переписки нет общей физической RP-сцены:
-           для изображений разрешаем только визуальные поля её собственной среды,
-           с привязкой к активной ветке и моменту САМОГО сообщения. Позднейшая правка
-           среды не меняет уже созданный snapshot. Картинка не пишет состояние. */
-        const st = chat().sceneState(upto);
+        /* Единый физический State Snapshot ДО ЭТОГО сообщения включительно.
+           У старого сообщения ручные записи мессенджера берутся только из его
+           исторической метки, а не из будущего состояния; новые события —
+           из сообщений выбранной ветки. Рисование ничего не коммитит в состояние. */
         const pers = ctx.persona();
         const ms = ctx.chat() && ctx.chat().mode === "messenger" && ctx.svc.messenger;
-        let visual = null;
-        if (ms) {
-          const stamped = sw.messengerAt && sw.messengerAt.world;
-          // У старых сообщений снимок мог не иметь визуальных полей. В этом
-          // случае они НЕИЗВЕСТНЫ: нельзя подставлять позднейшую одежду даже
-          // если ручные часы переписки не менялись между сообщениями.
-          visual = stamped ? {
-            location: stamped.location || null,
-            visualWear: Array.isArray(stamped.visualWear) ? stamped.visualWear.slice() : [],
-            visualPose: stamped.visualPose || null,
-            visualHair: stamped.visualHair || null,
-          } : { location: null, visualWear: [], visualPose: null, visualHair: null };
-          st.chars[cd.name] = { wear: (visual.visualWear || []).slice(), pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
+        const stamped = sw.messengerAt && sw.messengerAt.world;
+        const snap = ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
+        const st = snap ? snap.state.scene : chat().sceneState(upto);
+        let visual = ms ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null })) : null;
+        if (snap) {
+          for (const [actorId, name] of [["char", cd.name], ["user", pers.name]]) {
+            const actor = snap.state.actors[actorId];
+            const old = st.chars[name] || { wear: [], pose: "", mood: "" };
+            if (actor.fields.wear) old.wear = actor.fields.wear.value || [];
+            if (actor.fields.pose) old.pose = actor.fields.pose.value || "";
+            if (actor.fields.hair) old.visualHair = actor.fields.hair.value || "";
+            st.chars[name] = old;
+          }
+        } else if (ms && visual) {
+          st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
         }
         const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !!entry.fromMessage });
         if (cfg.translate && IC.needsRewrite(composed.scene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
@@ -85,7 +86,7 @@
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
         Object.assign(entry, { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? composed.scene : "",
-          promptSources: { draw: entry.draw, ...composed.provenance, compiled: !!comp.compiled, translatedText: comp.text } });
+          promptSources: { draw: entry.draw, ...composed.provenance, compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null } });
         if (dims) { entry.w = dims[0]; entry.h = dims[1]; }
         delete entry.stage;
       } catch (e) {

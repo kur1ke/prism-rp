@@ -23,7 +23,9 @@
     function sceneState(p) {
       const c = ctx.chat();
       if (c && c.mode === "messenger") return SC.fold("", []);
-      return SC.fold(c ? c.sceneInit : "", (p || path()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
+      return SC.fold(c ? c.sceneInit : "", (p || path()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })), {
+        charName: ctx.card() && ctx.card().name, userName: ctx.persona() && ctx.persona().name,
+      });
     }
     /* Служебная строка [scene:] из текста ответа: в сцене — операции сцены; в переписке — вырезается из текста,
        а операции хранятся в варианте только как неактивные (ignoredSceneOps, для совместимости и отладки). */
@@ -148,7 +150,16 @@
       const sw = TR.activeSwipe(m);
       const parsed = SC.parse(text);
       sw.text = m.role === "assistant" ? parsed.text : text.trim();
-      if (m.role === "assistant") { delete sw.ignoredSceneOps; Object.assign(sw, sceneFields(parsed.ops)); }
+      if (m.role === "assistant") {
+        // Правка текста переопределяет модельные дельты, но ручные корректировки
+        // принадлежат пользователю и продолжают действовать ПОСЛЕ них.
+        const manual = (sw.sceneOps || []).filter((o) => o.manual);
+        delete sw.ignoredSceneOps;
+        Object.assign(sw, sceneFields(parsed.ops.concat(manual)));
+      }
+      // Извлечённые факты зависят от исходного текста этого свайпа.
+      // Изменение текста делает их недействительными до нового анализа.
+      delete sw.stateEvents; delete sw.stateStatus;
       await putMsg(m);
       await touch();
       return true;
@@ -188,6 +199,10 @@
       if (!ops.length) return false;
       const c = ctx.chat();
       if (!c || c.mode === "messenger") return false; // у переписки сцены нет
+      // Ручное изменение не записывается, если оно не может подействовать
+      // (например, +15 минут при ещё неизвестном времени суток).
+      const preview = SC.apply(sceneState(), ops, { charName: ctx.card() && ctx.card().name, userName: ctx.persona() && ctx.persona().name });
+      if (preview.ignored.length || preview.applied.length !== ops.length) return false;
       const leaf = path().slice(-1)[0];
       if (leaf) {
         const sw = TR.activeSwipe(leaf);

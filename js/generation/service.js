@@ -8,7 +8,8 @@
    Сценарий карточки подаётся по правилу prism/scenario.js (граница первого ответа).
    Переписка: момент переписки выбирается при подготовке (живое время — часы, ручное — сохранённое) и вместе
    с положением персонажа записывается в вариант (messengerAt) ТОЛЬКО при успешном ответе. Ошибка, отмена,
-   пустой ответ и переполнение время не записывают и не двигают. Среду переписки генерация не меняет никогда.
+   пустой ответ и переполнение время не записывают и не двигают. Legacy Environment генерация не меняет;
+   UT-1 записывает проверенные автоматические события состояния в тот же вариант сообщения.
    Перерисовка — через порт ctx.ui (сервис не трогает DOM сам). */
 (function (root) {
   "use strict";
@@ -33,7 +34,7 @@
     const messenger = () => { const c = ctx.chat(); return c && c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger : null; };
 
     async function generate(msgId, mode) {
-      if (S.gen) return;
+      if (S.gen || S.tracking) return;
       const c = ctx.chat(), cd = ctx.card();
       const prov = ctx.provider();
       if (!c || !cd) return;
@@ -126,7 +127,14 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (!error && dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(target, sw, dr.draws[0]);
+      if (!error && sw.text && ctx.svc.state) {
+        S.tracking = true;
+        try { await ctx.svc.state.observeMessage(target, prov); }
+        finally { S.tracking = false; }
+      }
+      if (!error && dr.draws.length && ctx.chat() && ctx.chat().id === target.chatId &&
+          chat().path().some((m) => m.id === target.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
+        images().draw(target, TR.activeSwipe(target), dr.draws[0]);
     }
 
     // Записать сборку для вкладки Prism; при переполнении — сообщить и вернуть true (запрос не уходит).
@@ -210,8 +218,15 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      const sw = m.swipes[0];
-      if (dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(m, sw, dr.draws[0]);
+      if (ctx.svc.state) {
+        S.tracking = true;
+        try { await ctx.svc.state.observeMessage(m, prov); }
+        finally { S.tracking = false; }
+      }
+      const sw = TR.activeSwipe(m);
+      if (dr.draws.length && ctx.chat() && ctx.chat().id === m.chatId &&
+          chat().path().some((x) => x.id === m.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
+        images().draw(m, sw, dr.draws[0]);
       return { ok: true, msgId: m.id };
     }
 
@@ -316,7 +331,14 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (dr.draws.length && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw) images().draw(msg, TR.activeSwipe(msg), dr.draws[0]);
+      if (ctx.svc.state) {
+        S.tracking = true;
+        try { await ctx.svc.state.observeMessage(msg, prov); }
+        finally { S.tracking = false; }
+      }
+      if (dr.draws.length && ctx.chat() && ctx.chat().id === msg.chatId &&
+          chat().path().some((x) => x.id === msg.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
+        images().draw(msg, TR.activeSwipe(msg), dr.draws[0]);
       return Object.assign(done("sent"), { msgId: msg.id });
     }
 

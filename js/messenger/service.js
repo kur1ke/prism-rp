@@ -6,8 +6,9 @@
    • «Сейчас» переписки: live — часы ctx.clock (в тестах подставные), manual — сохранённое время; само не идёт.
    • Для Prism всё только читается: context() и snapshot() ничего не пишут. Метку времени сообщения
      (messengerAt на варианте) записывают отправка пользователя и успешная генерация — вместе с самим сообщением.
-   • Среда и договорённости меняются только явными действиями пользователя (commitEvent, addMarker, markerStatus,
-     setTime) — никогда из ответа модели, сцены, опыта или мира.
+   • Legacy Environment events и договорённости изменяются только явными действиями пользователя.
+     НОВЫЙ UT-1: context() / view() читают общий State Tracker поверх legacy-среды;
+     автоматические события хранятся В ВАРИАНТАХ СООБЩЕНИЙ, а не дублируются в Environment.
    DOM не трогает; ветку берёт у сервиса чата. */
 (function (root) {
   "use strict";
@@ -53,6 +54,18 @@
       const path = p || chat().path();
       const at = t !== undefined ? t : now(env);
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: at });
+      // Один трекер для обоих режимов. Старая среда является только
+      // совместимым базовым слоем; сообщения дополняют/изменяют его автоматически.
+      if (ctx.svc.state) {
+        const tracked = ctx.svc.state.context(path, { now: at, legacyWorld: w.world });
+        const known = tracked.character;
+        for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
+          if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
+          w.world[field] = known[field];
+        }
+        w.world.fieldStatus = known.fieldStatus;
+        w.world.intentions = known.intentions;
+      }
       const conv = CONV.derive(path, { now: at, record: env });
       const open = conv.promises.concat(conv.plans).filter((m) => m.status === "open").sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       return {
@@ -194,6 +207,16 @@
       const path = chat().path();
       const t = now(env);
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: t });
+      if (ctx.svc.state) {
+        const tracked = ctx.svc.state.context(path, { now: t, legacyWorld: w.world });
+        const known = tracked.character;
+        for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
+          if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
+          w.world[field] = known[field];
+        }
+        w.world.fieldStatus = known.fieldStatus;
+        w.world.intentions = known.intentions;
+      }
       const conv = CONV.derive(path, { now: t, record: env });
       return { env, now: t, world: w.world, events: w.events, warnings: w.warnings.concat(conv.warnings), conversation: conv, canBranch: path.length > 0 };
     }

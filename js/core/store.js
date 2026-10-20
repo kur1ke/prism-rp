@@ -13,7 +13,8 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const DB_NAME = "prism-rp";
+  // Тестовый загрузчик выбирает отдельную IndexedDB до подключения приложения.
+  const DB_NAME = root.__PRP_TEST_MIRROR === true ? "prism-rp-testing" : "prism-rp";
   const DB_VERSION = 6;
   const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.

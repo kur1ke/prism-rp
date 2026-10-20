@@ -27,9 +27,34 @@
         const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first" });
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
-      const st = chat().sceneState(path);
       const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;
-      // «Сейчас» режима для отбора опыта и мира: в переписке — положение из среды, а не сцена RP.
+      const st = chat().sceneState(path);
+      // Общее физическое состояние независимо от способа общения. Мессенджер
+      // показывает сообщение о месте (reported), а не притворяется зрительной сценой.
+      const tracked = ctx.svc.state ? ctx.svc.state.context(path, { now: extra && extra.messengerNow }) : null;
+      if (tracked) {
+        if (messenger) {
+          const known = tracked.character;
+          for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
+            if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
+            messenger.world[field] = known[field];
+          }
+          messenger.world.fieldStatus = known.fieldStatus;
+          messenger.world.intentions = known.intentions;
+        } else {
+          for (const [actorId, name] of [["char", cd.name], ["user", ctx.persona().name]]) {
+            const actor = tracked.state.actors[actorId];
+            if (!actor) continue;
+            const ch = st.chars[name] || { wear: [], pose: "", mood: "" };
+            if (actor.fields.wear) ch.wear = actor.fields.wear.value || [];
+            if (actor.fields.pose) ch.pose = actor.fields.pose.value || "";
+            if (actor.fields.hair) ch.visualHair = actor.fields.hair.value || "";
+            st.chars[name] = ch;
+          }
+        }
+      }
+      // В RP здесь видимое общее пространство; в переписке — заявленные персонажем обстоятельства,
+      // используемые для поиска мира без утверждения, что пользователь их наблюдал.
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
       const history = path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })).filter((h) => h.text);
       const recent = history.slice(-4).map((h) => h.text).join("\n");

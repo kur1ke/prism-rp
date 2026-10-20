@@ -1,0 +1,38 @@
+name: PRISM Testing Mirror
+on:
+  push:
+    branches: [testing]
+  pull_request:
+    branches: [testing]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: prism-testing-mirror
+  cancel-in-progress: false
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run regression tests
+        run: node tests/run.js
+      - name: Check test loader and isolated database
+        run: node tests/test-mirror.js
+      - name: Build Perchance and web bundles
+        run: node build.js
+      - name: Update testing bundles on GitHub
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(testing): refresh mirror bundles [skip ci]"
+            git push origin HEAD:testing
+          fi
