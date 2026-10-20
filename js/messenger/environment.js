@@ -6,7 +6,7 @@
    собирается по активной ветке (resolveWorld). conversationEvents — явные договорённости (messenger/conversation).
 
    Событие среды: { id, scope: "chat" | "branch", patch, provenance, effectiveAt, note, createdAt }
-     patch: { location?, activity?, nearby?, ongoing?, availability? }
+     patch: { location?, activity?, nearby?, ongoing?, availability?, visualWear?, visualPose?, visualHair? }
        ключ не указан — значение не меняется; null, "" или [] — очищается (становится неизвестным/пустым).
      availability: "available" | "busy" | "away" | "unknown" — контекст для Prism, не запрет отвечать.
      provenance ветки — chat/branch.anchorOf (все сообщения ветки и их варианты); у события «на весь чат» — null.
@@ -22,8 +22,8 @@
 
   const SCHEMA = 1;
   const AVAIL = ["available", "busy", "away", "unknown"];
-  const STR_KEYS = ["location", "activity"];
-  const LIST_KEYS = ["nearby", "ongoing"];
+  const STR_KEYS = ["location", "activity", "visualPose", "visualHair"];
+  const LIST_KEYS = ["nearby", "ongoing", "visualWear"];
   const KEYS = STR_KEYS.concat(LIST_KEYS, ["availability"]);
 
   const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
@@ -32,7 +32,7 @@
   const uid = (p) => p + "_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
 
-  function emptyWorld() { return { location: null, activity: null, nearby: [], ongoing: [], availability: "unknown" }; }
+  function emptyWorld() { return { location: null, activity: null, nearby: [], ongoing: [], availability: "unknown", visualWear: [], visualPose: null, visualHair: null }; }
 
   function blank(chatId, setup) {
     const s = setup || {};

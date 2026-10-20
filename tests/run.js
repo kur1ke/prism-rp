@@ -639,10 +639,14 @@ t("compose: POV — внешность пользователя не добав�
   assert.strictEqual(c.keep, "grey hoodie, jeans, pov, solo");
   assert.ok(!c.keep.includes("black hair"));
 });
-t("compose: внешность пользователя и его тег-субъект в сцене", () => {
-  const c = IC.compose({ draw: "1girl, hug", card: imgCard, scene: st0, persona: { image: { appearance: "base: 1boy, black hair" } } });
-  assert.ok(c.keep.includes("1boy, black hair"));
-  assert.ok(/\b1boy\b/.test(c.scene));
+t("compose: пользователь не подмешивается по умолчанию, но явно названный участвует", () => {
+  const persona = { name: "Лёня", image: { appearance: "base: 1boy, black hair" } };
+  const single = IC.compose({ draw: "1girl, hug", card: imgCard, scene: st0, persona });
+  assert.ok(!single.keep.includes("1boy") && !single.keep.includes("black hair"));
+  const together = IC.compose({ draw: "1girl, 1boy, hug", card: imgCard, scene: st0, persona });
+  assert.ok(together.keep.includes("1boy, black hair"));
+  const byName = IC.compose({ draw: "1girl, Химэ, Лёня, улыбка", card: imgCard, scene: st0, persona });
+  assert.ok(byName.keep.includes("1boy, black hair"));
 });
 t("finalise: LoRA и триггер персонажа, закреплённый блок качества, негатив", () => {
   const composed = IC.compose({ draw: "1girl, sitting, cafe, masterpiece", card: imgCard, scene: st0, persona: {} });
@@ -662,6 +666,70 @@ t("finalise: другой названный персонаж без неё → 
 t("finalise: для Perchance/OpenAI LoRA-токены не добавляются", () => {
   const composed = IC.compose({ draw: "1girl", card: imgCard, scene: st0, persona: {} });
   assert.ok(!IC.finalise({ composed, card: imgCard, backend: "perchance", settings: {} }).prompt.includes("<lora:"));
+});
+t("VC-1: пустой кадр не получает ни персонажа, ни пользователя", () => {
+  const card = { name: "Орихимэ", image: { trigger: "orihime_inoue, orange hair", loras: [{ name: "orihime", weight: 0.8 }], look: "base: brown eyes" } };
+  const persona = { name: "Лёня", image: { appearance: "base: 1boy, black hair" } };
+  const c = IC.compose({ draw: "empty hallway, evening lighting", card, persona, scene: S.emptyState() });
+  const f = IC.finalise({ composed: c, card, persona, backend: "a1111", settings: {} });
+  assert.ok(!c.ownerPresent && !c.userPresent);
+  assert.ok(!/orihime|orange hair|brown eyes|1boy|black hair|<lora:/i.test(f.prompt));
+});
+t("VC-2: только пользователь — без чужого триггера, LoRA и look", () => {
+  const card = { name: "Орихимэ", image: { trigger: "orihime_inoue, orange hair", loras: [{ name: "orihime", weight: 0.8 }], look: "base: brown eyes" } };
+  const persona = { name: "Лёня", image: { appearance: "base: 1boy, black hair" } };
+  const c = IC.compose({ draw: "1boy, portrait of Леня, friendly smile", card, persona, scene: S.emptyState() });
+  const f = IC.finalise({ composed: c, card, persona, backend: "a1111", settings: {} });
+  assert.ok(!c.ownerPresent && c.userPresent);
+  assert.ok(f.prompt.includes("black hair") && !/orihime|orange hair|brown eyes|<lora:/i.test(f.prompt));
+});
+t("VC-3: при двух участниках внешность пользователя не приписывается Орихимэ", () => {
+  const card = { name: "Орихимэ", image: { trigger: "orihime_inoue, long orange hair" } };
+  const persona = { name: "Лёня", image: { appearance: "base: 1boy, short black hair" } };
+  const st = S.fold("enter=Орихимэ, Лёня; Лёня.wear=черная куртка; Лёня.pose=стоит у двери", []);
+  const c = IC.compose({ draw: "1girl, 1boy, Орихимэ and Лёня, at home", card, persona, scene: st });
+  const f = IC.finalise({ composed: c, card, persona, backend: "a1111", settings: {} });
+  assert.ok(c.ownerPresent && c.userPresent);
+  assert.ok(c.scene.includes("user clothing: черная куртка") && c.scene.includes("user pose: стоит у двери"));
+  assert.ok(f.prompt.includes("orihime_inoue") && f.prompt.includes("short black hair"));
+});
+t("VC-4: имя персонажа не дублируется между [draw:] и триггером", () => {
+  const card = { name: "Орихимэ", image: { trigger: "orihime_inoue, long orange hair", loras: [{ name: "orihime", weight: 0.8 }] } };
+  const c = IC.compose({ draw: "1girl, inoue_orihime, orihime_inoue, smiling", card, scene: S.emptyState(), persona: {} });
+  const f = IC.finalise({ composed: c, compiled: "1girl, inoue_orihime, orihime_inoue, smiling, <lora:orihime:0.6>", card, backend: "a1111", settings: {} });
+  assert.strictEqual((f.prompt.match(/(?:inoue_orihime|orihime_inoue)/g) || []).length, 1);
+  assert.strictEqual((f.prompt.match(/<lora:orihime:/g) || []).length, 1);
+  assert.ok(f.prompt.includes("<lora:orihime:0.8>"), "вес из карточки, а не из перевода");
+});
+t("VC-4b: даже внутри собственного триггера один идентификатор Орихимэ", () => {
+  const c = { name: "Орихимэ", image: { trigger: "orihime_inoue, inoue_orihime, orihime, long orange hair" } };
+  const prompt = IC.finalise({ composed: IC.compose({ draw: "1girl, orihime_inoue, smiling", card: c, scene: S.emptyState(), persona: {} }), card: c, backend: "a1111", settings: {} }).prompt;
+  assert.strictEqual((prompt.match(/(?:orihime_inoue|inoue_orihime|\borihime\b)/g) || []).length, 1, prompt);
+  assert.ok(prompt.includes("long orange hair"));
+});
+t("VC-5: чужой персонаж не получает LoRA Орихимэ", () => {
+  const card = { name: "Орихимэ", image: { trigger: "orihime_inoue, long orange hair", loras: [{ name: "orihime", weight: 0.8 }] } };
+  const c = IC.compose({ draw: "1boy, ichigo_kurosaki, standing", card, scene: S.emptyState(), persona: {} });
+  const f = IC.finalise({ composed: c, card, backend: "a1111", settings: {} });
+  assert.ok(!c.ownerPresent);
+  assert.ok(!/orihime|orange hair|<lora:/.test(f.prompt));
+});
+t("VC-6: состав кадра корректно убирает solo для 2girls", () => {
+  assert.strictEqual(IC.dropContradictorySolo("2girls, solo, cafe"), "2girls, cafe");
+});
+t("VC-6b: переводчик знает участников кадра и не вводит владельца в чужое селфи", () => {
+  const rules = IC.rewriteRules({ format: "tags", frame: { owner: false, user: true }, identity: "" });
+  assert.ok(rules.includes("Card owner is NOT visible; user is visible"));
+  assert.ok(!rules.includes("CHARACTER (keep this look constant"));
+});
+t("VC-7: визуальная одежда переписки приоритетнее случайной замены AI", () => {
+  const card = { name: "Орихимэ", image: { trigger: "orihime_inoue", wardrobe: "худи: grey hoodie", look: "base: brown eyes" } };
+  const st = { chars: { Орихимэ: { wear: ["худи"], pose: "сидит", visualHair: "две косы" } }, present: [] };
+  const c = IC.compose({ draw: "1girl, red dress, smiling", card, scene: st, persona: {}, messenger: { location: "дома" } });
+  const f = IC.finalise({ composed: c, compiled: "1girl, red dress, smiling, hoodie, black hair", card, backend: "a1111", settings: {} });
+  assert.ok(c.keep.includes("grey hoodie"));
+  assert.ok(!f.prompt.includes("red dress") && f.prompt.includes("grey hoodie"));
+  assert.ok(c.scene.includes("две косы"));
 });
 t("размеры: SDXL-бакеты, Perchance, OpenAI", () => {
   assert.deepStrictEqual(IC.sizeFor("1:1"), [1024, 1024]);
@@ -1483,6 +1551,7 @@ require(J("world/service.js"));
 require(J("world/overlay-service.js"));
 require(J("messenger/service.js"));
 require(J("cards/service.js"));
+require(J("images/service.js"));
 function fbHarness(card, opts) {
   const o = opts || {};
   const store = { messages: new Map(), chats: new Map() };
@@ -2122,7 +2191,7 @@ async function foundationC() {
     assert.deepStrictEqual(W([], PD1).world, ENV.emptyWorld());
     const r = W([onC({ patch: { location: "Кафе", activity: "пьёт чай", nearby: ["Тацуки"], availability: "busy" }, createdAt: 1 }),
       onC({ patch: { activity: null, nearby: [] }, createdAt: 2 })], PD1);
-    assert.deepStrictEqual(r.world, { location: "Кафе", activity: null, nearby: [], ongoing: [], availability: "busy" });
+    assert.deepStrictEqual(r.world, { location: "Кафе", activity: null, nearby: [], ongoing: [], availability: "busy", visualWear: [], visualPose: null, visualHair: null });
     const r2 = W([onC({ patch: { location: "Кафе", availability: "busy" }, createdAt: 1 }), onC({ patch: { location: "", availability: null }, createdAt: 2 })], PD1);
     assert.deepStrictEqual([r2.world.location, r2.world.availability], [null, "unknown"]);
     assert.ok(ENV.hasErrors(ENV.validateEvent(onC({ patch: {} }))), "событие без изменений не принимается");
@@ -2579,6 +2648,73 @@ async function foundationH() {
     const sw2 = TR_.activeSwipe(h.chat.path()[1]);
     assert.deepStrictEqual([sw2.text, sw2.sceneOps.length, sw2.ignoredSceneOps.length], ["Дома!", 0, 1]);
     assert.strictEqual(await h.chat.applySceneOps([h.chat.op(null, "loc", "Кафе")]), false, "ручные правки сцены в переписке не пишутся");
+  });
+  await ta("VC-8: мессенджер — визуальное состояние живёт в среде и сохраняет снимок сообщения", async () => {
+    const h = fbHarness(MCARD);
+    await msChat(h);
+    const e1 = await h.ctx.svc.messenger.commitEvent({ scope: "chat", patch: { visualWear: ["белая блузка"], visualPose: "сидит", visualHair: "две косы" } });
+    assert.ok(e1.event);
+    const initial = h.ctx.svc.messenger.view().world;
+    assert.deepStrictEqual(initial.visualWear, ["белая блузка"]);
+    assert.strictEqual(initial.visualHair, "две косы");
+    await h.chat.addUserMessage("Покажи селфи", { messengerAt: h.ctx.svc.messenger.stampForNew() });
+    fbLLM = async () => ({ text: "Вот фото!" });
+    await h.gen.generate();
+    const sw = TR_.activeSwipe(h.chat.path()[1]);
+    assert.deepStrictEqual(sw.messengerAt.world.visualWear, ["белая блузка"]);
+    const after = await h.ctx.svc.messenger.commitEvent({ scope: "chat", patch: { visualWear: ["синее платье"], visualPose: "стоит" } });
+    assert.ok(after.event);
+    assert.deepStrictEqual(h.ctx.svc.messenger.view().world.visualWear, ["синее платье"]);
+    assert.deepStrictEqual(sw.messengerAt.world.visualWear, ["белая блузка"], "прошлый снимок не меняется задним числом");
+    const visualCard = { name: "Химэ", image: {} };
+    const imageSt = S.fold("", []);
+    imageSt.chars[visualCard.name] = { wear: sw.messengerAt.world.visualWear, pose: sw.messengerAt.world.visualPose, visualHair: sw.messengerAt.world.visualHair };
+    const c = IC.compose({ draw: "1girl, selfie", card: visualCard, scene: imageSt, persona: {}, messenger: sw.messengerAt.world });
+    assert.ok(c.scene.includes("белая блузка") && !c.scene.includes("синее платье"));
+    // Существующие RP [scene:] в переписке по-прежнему не применяются.
+    assert.deepStrictEqual(h.chat.sceneState().present, []);
+  });
+  await ta("VC-9: images/service использует визуальный snapshot сообщения, а не нынешнюю одежду", async () => {
+    const card = { name: "Химэ", image: { trigger: "orihime_inoue", wardrobe: "белая блузка: white blouse\nсинее платье: blue dress" } };
+    const h = fbHarness(card);
+    await msChat(h);
+    await h.ctx.svc.messenger.commitEvent({ scope: "chat", patch: { visualWear: ["белая блузка"] } });
+    await h.chat.addUserMessage("Как выглядишь?", { messengerAt: h.ctx.svc.messenger.stampForNew() });
+    fbLLM = async () => ({ text: "Вот селфи!" });
+    await h.gen.generate();
+    const msg = h.chat.path()[1], sw = TR_.activeSwipe(msg);
+    assert.ok(sw.messengerAt && sw.messengerAt.world);
+    await h.ctx.svc.messenger.commitEvent({ scope: "chat", patch: { visualWear: ["синее платье"] } });
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const original = IB.generate;
+    let called = null;
+    try {
+      IB.generate = async (cfg, args) => { called = args; return { dataUrl: "data:image/png;base64,AA==", seed: 7, info: { width: 512, height: 512 } }; };
+      await h.ctx.svc.images.draw(msg, sw, { prompt: "1girl, selfie", ratio: "1:1" });
+      assert.ok(called && called.prompt.includes("white blouse") && !called.prompt.includes("blue dress"), called && called.prompt);
+      const img = sw.images[0];
+      assert.strictEqual(img.status, "done");
+      assert.strictEqual(img.promptSources.outfit, "белая блузка");
+      assert.strictEqual(img.promptSources.messenger, true);
+    } finally { IB.generate = original; }
+  });
+  await ta("VC-10: визуальные записи мессенджера изолируются по ветке и времени", async () => {
+    const E = globalThis.PRP.messengerEnv, B = globalThis.PRP.branch, M = globalThis.PRP.messengerTime;
+    const path = (leaf, swipe = 0) => ["R", "B"].concat(leaf ? [leaf] : []).map((id) => ({ id, swipeIdx: id === "B" ? swipe : 0 }));
+    const one = path("C"), other = path("D"), changed = path("C", 1);
+    const ev = (scope, patch, anchor = null, effectiveAt = null) => E.makeEvent({ scope, patch, anchor: anchor ? B.anchorOf(anchor) : null, effectiveAt });
+    const base = ev("chat", { visualWear: ["белая блузка"], visualHair: "косы" });
+    const branch = ev("branch", { visualWear: ["пижама"] }, one);
+    const future = ev("chat", { visualPose: "сидит" }, null, "2026-10-20T15:00:00.000Z");
+    const record = E.blank("test", { timeZone: "UTC", timeMode: "live" });
+    const at = (events, p, now) => E.resolveWorld(Object.assign({}, record, { events }), { path: p, now });
+    assert.deepStrictEqual(at([base, branch], one).world.visualWear, ["пижама"]);
+    assert.deepStrictEqual(at([base, branch], other).world.visualWear, ["белая блузка"]);
+    assert.deepStrictEqual(at([base, branch], changed).world.visualWear, ["белая блузка"]);
+    assert.strictEqual(at([future], one, M.toMs("2026-10-20T12:00:00.000Z")).world.visualPose, null);
+    assert.strictEqual(at([future], one, M.toMs("2026-10-20T16:00:00.000Z")).world.visualPose, "сидит");
   });
   await ta("H-D2: старая переписка с сохранёнными sceneOps (до разделения режимов) — сцена не действует", async () => {
     const h = fbHarness(MCARD);

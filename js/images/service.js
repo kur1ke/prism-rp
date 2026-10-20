@@ -40,7 +40,7 @@
       if (!cfg.enabled) { ui.toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
       if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
-      const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1" };
+      const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1", fromMessage: !!d.fromMessage };
       Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
       delete entry.error;
       if (!reuse) (sw.images = sw.images || []).push(entry);
@@ -51,14 +51,30 @@
       try {
         const path = chat().path();
         const upto = path.indexOf(msg) >= 0 ? path.slice(0, path.indexOf(msg) + 1) : path;
-        /* Зрительное состояние: у сцены RP — одежда и поза из сцены; у переписки сцены нет (chat/service.sceneState —
-           пустое состояние), поэтому картинка строится только из [draw:], карточки и персоны: одежду и место «вне кадра»
-           ничто не придумывает. Картинка — производное: её данные в Prism не возвращаются. */
+        /* RP использует активную сцену. У переписки нет общей физической RP-сцены:
+           для изображений разрешаем только визуальные поля её собственной среды,
+           с привязкой к активной ветке и моменту САМОГО сообщения. Позднейшая правка
+           среды не меняет уже созданный snapshot. Картинка не пишет состояние. */
         const st = chat().sceneState(upto);
         const pers = ctx.persona();
-        const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers });
+        const ms = ctx.chat() && ctx.chat().mode === "messenger" && ctx.svc.messenger;
+        let visual = null;
+        if (ms) {
+          const stamped = sw.messengerAt && sw.messengerAt.world;
+          // У старых сообщений снимок мог не иметь визуальных полей. В этом
+          // случае они НЕИЗВЕСТНЫ: нельзя подставлять позднейшую одежду даже
+          // если ручные часы переписки не менялись между сообщениями.
+          visual = stamped ? {
+            location: stamped.location || null,
+            visualWear: Array.isArray(stamped.visualWear) ? stamped.visualWear.slice() : [],
+            visualPose: stamped.visualPose || null,
+            visualHair: stamped.visualHair || null,
+          } : { location: null, visualWear: [], visualPose: null, visualHair: null };
+          st.chars[cd.name] = { wear: (visual.visualWear || []).slice(), pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
+        }
+        const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !!entry.fromMessage });
         if (cfg.translate && IC.needsRewrite(composed.scene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        const comp = await ICP.compile(composed.scene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: identityFor(cd) }, textGen);
+        const comp = await ICP.compile(composed.scene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "", frame: composed.subjects }, textGen);
         const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
@@ -68,7 +84,8 @@
         S.imgUrls[entry.id] = res.dataUrl;
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
-        Object.assign(entry, { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? composed.scene : "" });
+        Object.assign(entry, { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? composed.scene : "",
+          promptSources: { draw: entry.draw, ...composed.provenance, compiled: !!comp.compiled, translatedText: comp.text } });
         if (dims) { entry.w = dims[0]; entry.h = dims[1]; }
         delete entry.stage;
       } catch (e) {
@@ -85,7 +102,7 @@
     function drawFromMessage(msgId) {
       const msg = S.messages.find((x) => x.id === msgId);
       const sw = TR.activeSwipe(msg);
-      const d = (sw.draws && sw.draws[0]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1" };
+      const d = (sw.draws && sw.draws[0]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1", fromMessage: msg.role === "assistant" };
       return draw(msg, sw, d);
     }
 
