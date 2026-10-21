@@ -775,6 +775,20 @@ t("VIS-WARDROBE-1: card outfit preset is a fallback, never a second copy over sh
   const conflict = IC.compose({ draw: "1girl, red dress, smiling", card: { name: "Лилит", image: { wardrobe: "Hoodie: grey hoodie" } }, scene: { chars: { Лилит: { wear: ["Hoodie"] } }, present: [] }, persona: {}, messenger: { location: "" } });
   assert.ok(conflict.keep.includes("grey hoodie"), "a different drawn garment must not erase established clothing");
 });
+t("VIS-STATE-2: visual [draw:] remains shot evidence, never established physical canon", () => {
+  const m = (id, text, draws, events) => ({ id, chatId: "test-chat", role: "assistant", swipeIdx: 0, swipes: [{ text, draws: draws || [], stateEvents: events || [] }] });
+  const shot = m("a", "Вот снимок", [{ prompt: "1girl, grey sweater, bare feet, lying on bed" }]);
+  const later = m("b", "Ещё кадр", [{ prompt: "1girl, black boots, sitting on sofa" }]);
+  const fold = (path) => globalThis.PRP.stateTracker.fold({ mode: "messenger", path, charName: "Лилит", userName: "Пользователь" });
+  const unknown = fold([shot, later]);
+  assert.ok(!unknown.actors.char.fields.wear && !unknown.actors.char.fields.pose, "draws alone cannot establish wardrobe or pose");
+  const stated = m("c", "На мне серый свитер", [], [{ actor: "char", field: "wear", action: "add", value: ["серый свитер"], certainty: "reported", evidence: "На мне серый свитер" }]);
+  const withEvidence = fold([stated, shot, later]);
+  assert.ok(withEvidence.actors.char.fields.wear, "explicit branch evidence must remain visible after images");
+  assert.ok(withEvidence.actors.char.fields.wear.value.includes("серый свитер"));
+  const sibling = fold([shot, later]);
+  assert.ok(!sibling.actors.char.fields.wear, "a sibling path cannot inherit an event outside its ancestry");
+});
 t("VIS-PROVENANCE-1: diagnostic image layers preserve source ownership", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair", wardrobe: "Cozy: grey sweater" } };
   const state = { chars: { Лилит: { wear: ["Cozy"], pose: "сидит" } }, present: [] };
