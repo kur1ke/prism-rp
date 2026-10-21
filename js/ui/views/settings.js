@@ -55,6 +55,7 @@
       body = `<h3>Внешний вид</h3><p class="lead">Тема и размер текста сцены.</p>
         <div class="themes">${THEMES.map((t) => `<button class="theme ${s.theme === t.id ? "on" : ""}" data-act="theme" data-id="${t.id}">
           <div class="sw" style="background:${t.c[0]}"><i style="width:36%;background:${t.c[1]}"></i><i style="width:18%;background:${t.c[2]}"></i><i style="width:12%;background:${t.c[3]}"></i></div><div class="nm">${t.name}</div></button>`).join("")}</div>
+        <label class="check" style="margin-top:18px"><input type="checkbox" data-set="developerMode" ${s.developerMode ? "checked" : ""}><span>Режим разработчика<small>Показывать кнопку Debug в шапке переписки.</small></span></label>
         <div class="field" style="margin-top:18px"><label>Размер текста сцены: <span id="fs-out">${s.proseSize}</span> px</label><input type="range" min="14" max="22" step="1" data-set-range="proseSize" value="${s.proseSize}" style="accent-color:var(--accent)"></div>`;
     } else {
       body = `<h3>Данные</h3><p class="lead">Всё хранится только в этом браузере. Бэкап переносит персонажей, чаты, опыт и настройки — в том числе на другую платформу.</p>
