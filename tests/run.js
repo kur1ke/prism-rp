@@ -4077,6 +4077,7 @@ async function unifiedTracker() {
       const result = h.ctx.svc.messenger.view();
       const markup = globalThis.PRP.views.envTab({ messengerView: result, card: h.ctx.card(), envEdit: null, persona: {name:"Пользователь"} });
       assert.ok(markup.includes("дома"), markup);
+      require(J("ui/views/kit.js"));
       require(J("ui/views/drawer.js"));
       const debug = globalThis.PRP.views.debugModal({
         messengerView: result, card: h.ctx.card(), path: h.chat.path(),
