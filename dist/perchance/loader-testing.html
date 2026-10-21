@@ -9,6 +9,7 @@
   window.PRISM_RP_CHANNEL = "testing";
   var api = "https://api.github.com/repos/kur1ke/prism-rp/branches/testing";
   var cdn = "https://cdn.jsdelivr.net/gh/kur1ke/prism-rp@";
+  var raw = "https://raw.githubusercontent.com/kur1ke/prism-rp/";
   var suffix = "/dist/web/prism-app.js";
   var badge = document.getElementById("prism-testing-badge");
   var boot = document.getElementById("prism-boot");
@@ -16,23 +17,27 @@
   function error(t) { if (boot) boot.textContent = "Тестовая версия не загрузилась: " + t + ". Рабочая версия не затронута."; status("ошибка загрузки"); }
   function load(ref, warning) {
     if (!/^[a-f0-9]{40}$/.test(ref) && ref !== "testing") { error("неверный SHA"); return; }
-    status(warning || ref.slice(0, 7));
     window.PRISM_RP_TEST_REVISION = ref;
-    var script = document.createElement("script");
-    script.src = cdn + encodeURIComponent(ref) + suffix;
-    script.onerror = function () { error("недоступен GitHub CDN (" + ref.slice(0, 7) + ")"); };
-    script.onload = function () {
-      if (!window.PRP || !window.PRISM_RP_VERSION) error("приложение не инициализировалось");
-      else status((warning ? "кэш ветки · " : "") + ref.slice(0, 7));
-    };
-    document.head.appendChild(script);
+    var urls = [cdn + encodeURIComponent(ref) + suffix, raw + encodeURIComponent(ref) + suffix];
+    function attempt(index) {
+      status(index ? "резервный источник · " + ref.slice(0, 7) : (warning || ref.slice(0, 7)));
+      var script = document.createElement("script");
+      script.src = urls[index];
+      script.onerror = function () {
+        if (index + 1 < urls.length) attempt(index + 1);
+        else error("оба источника недоступны (" + ref.slice(0, 7) + ")");
+      };
+      script.onload = function () {
+        if (!window.PRP || !window.PRISM_RP_VERSION) error("приложение не инициализировалось");
+        else status((index ? "резерв · " : warning ? "кэш ветки · " : "") + ref.slice(0, 7));
+      };
+      document.head.appendChild(script);
+    }
+    attempt(0);
   }
   fetch(api, { cache: "no-store", headers: { "Accept": "application/vnd.github+json" } })
     .then(function (res) { if (!res.ok) throw new Error("GitHub API " + res.status); return res.json(); })
     .then(function (data) { var sha = data && data.commit && data.commit.sha; if (!/^[a-f0-9]{40}$/.test(sha || "")) throw new Error("неверный ответ GitHub"); load(sha); })
-    .catch(function () {
-      // Ветка testing без фиксации SHA может кэшироваться в CDN.
-      load("testing", "возможно кэшированная ветка");
-    });
+    .catch(function () { load("testing", "возможно кэшированная ветка"); });
 })();
 </script>
