@@ -690,14 +690,14 @@ const imgCard = { name: "Химэ", image: { trigger: "orihime inoue, long orang
 const st0 = S.fold("enter=Химэ; Химэ.wear=худи, джинсы; Химэ.pose=сидит у окна", []);
 t("compose: гардероб из сцены уходит в неизменяемые теги", () => {
   const c = IC.compose({ draw: "1girl, sitting, cafe", card: imgCard, scene: st0, persona: { name: "Кира" } });
-  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans");
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pose: сидит у окна");
   assert.ok(c.keep.includes("brown eyes"), "stable card appearance stays outside the rewritable shot");
   assert.ok(!c.scene.includes("brown eyes"), "compiler sees the shot without immutable look");
   assert.ok(c.ownerPresent);
 });
 t("compose: сцена одевает иначе → устаревший гардероб не добавляется", () => {
   const c = IC.compose({ draw: "1girl, red dress, standing", card: imgCard, scene: st0, persona: {} });
-  assert.strictEqual(c.keep, "brown eyes");
+  assert.strictEqual(c.keep, "brown eyes, pose: сидит у окна");
   assert.ok(c.stale);
 });
 t("compose: NSFW-теги только по сцене, а не по одежде", () => {
@@ -706,7 +706,7 @@ t("compose: NSFW-теги только по сцене, а не по одежд�
 });
 t("compose: POV — внешность пользователя не добавляется, solo для одного", () => {
   const c = IC.compose({ draw: "1girl, looking at viewer", card: imgCard, scene: st0, persona: { image: { view: "first", appearance: "base: 1boy, black hair" } } });
-  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pov, solo");
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pose: сидит у окна, pov, solo");
   assert.ok(!c.keep.includes("black hair"));
 });
 t("compose: пользователь не подмешивается по умолчанию, но явно названный участвует", () => {
@@ -733,6 +733,18 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
   assert.ok(instruction.includes("не означает переодевание"), instruction);
   const legacy = IC.drawInstruction({ format: "tags", fixedIdentity: false });
   assert.ok(!legacy.includes("добавляются приложением отдельно"), legacy);
+});
+t("VIS-STATE-1: tracked pose and wear are distinct from camera shot", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
+  const scene = { chars: { Лилит: { wear: ["серый свитер"], pose: "сидит на диване" } }, present: [] };
+  const c = IC.compose({ draw: "1girl, looking at viewer, medium shot", card, scene, persona: {}, messenger: { location: "" } });
+  assert.ok(c.keep.includes("clothing: серый свитер"), c.keep);
+  assert.ok(c.keep.includes("pose: сидит на диване"), c.keep);
+  assert.ok(!c.scene.includes("clothing:") && !c.scene.includes("pose:"), c.scene);
+  const f = IC.finalise({ composed: c, compiled: "1girl, medium shot, soft lighting", card, settings: {}, backend: "a1111" });
+  assert.ok(f.prompt.includes("pose: сидит на диване") && f.prompt.includes("clothing: серый свитер"), f.prompt);
+  const unknown = IC.compose({ draw: "1girl, medium shot", card, scene: { chars: {}, present: [] }, persona: {} });
+  assert.ok(!unknown.keep.includes("pose:") && !unknown.keep.includes("clothing:"), unknown.keep);
 });
 t("VIS-ARCH-2: stable look survives shot compilation unchanged", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: long burgundy-red hair, black cat ears" } };
@@ -825,7 +837,7 @@ t("VC-7: визуальная одежда переписки приоритет
   const f = IC.finalise({ composed: c, compiled: "1girl, red dress, smiling, hoodie, black hair", card, backend: "a1111", settings: {} });
   assert.ok(c.keep.includes("grey hoodie"));
   assert.ok(!f.prompt.includes("red dress") && f.prompt.includes("grey hoodie"));
-  assert.ok(c.scene.includes("две косы"));
+  assert.ok(c.keep.includes("две косы") && !c.scene.includes("две косы"));
 });
 t("размеры: SDXL-бакеты, Perchance, OpenAI", () => {
   assert.deepStrictEqual(IC.sizeFor("1:1"), [1024, 1024]);
@@ -2786,7 +2798,7 @@ async function foundationH() {
     const imageSt = S.fold("", []);
     imageSt.chars[visualCard.name] = { wear: sw.messengerAt.world.visualWear, pose: sw.messengerAt.world.visualPose, visualHair: sw.messengerAt.world.visualHair };
     const c = IC.compose({ draw: "1girl, selfie", card: visualCard, scene: imageSt, persona: {}, messenger: sw.messengerAt.world });
-    assert.ok(c.scene.includes("белая блузка") && !c.scene.includes("синее платье"));
+    assert.ok(c.keep.includes("белая блузка") && !c.keep.includes("синее платье") && !c.scene.includes("синее платье"));
     // Существующие RP [scene:] в переписке по-прежнему не применяются.
     assert.deepStrictEqual(h.chat.sceneState().present, []);
   });
