@@ -28,18 +28,18 @@ const bare = html.replace(/<script[\s\S]*?<\/script>/g, "");
 assert.doesNotMatch(bare, /[\[\]{}]/);
 const scriptCode = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 async function run(reply,fail) {
-  let src="",badge={textContent:""},boot={textContent:""};
+  let src="", scripts=[],badge={textContent:""},boot={textContent:""};
   const document = {
     getElementById(id) { return id==="prism-testing-badge"?badge:id==="prism-boot"?boot:null; },
     createElement(tag) { assert.equal(tag,"script"); return {src:"",onload:null,onerror:null}; },
-    head: {appendChild(el) { src=el.src; }}
+    head: {appendChild(el) { src=el.src; scripts.push(el); }}
   };
   const ctx={document,window:null,fetch:()=>fail?Promise.reject(Error("network")):Promise.resolve({ok:true,json:async()=>({commit:{sha:reply}})}),encodeURIComponent};
   ctx.window=ctx;
   vm.runInNewContext(scriptCode,ctx);
   await new Promise(resolve=>setImmediate(resolve));
   await new Promise(resolve=>setImmediate(resolve));
-  return {ctx,src,badge,boot};
+  return {ctx,src,badge,boot,scripts};
 }
 (async ()=>{
   const sha="e338fa4dab0eb6a7e70b0e6f25ea0ddc23eb31a3";
@@ -48,6 +48,14 @@ async function run(reply,fail) {
   assert.equal(ok.ctx.PRISM_RP_TEST_REVISION,sha);
   assert.ok(ok.src.includes("@"+sha+"/dist/web/prism-app.js"));
   assert.ok(!ok.src.includes("@main"));
+  assert.equal(ok.scripts.length,1);
+  ok.scripts[0].onerror();
+  assert.equal(ok.scripts.length,2, "CDN error must start raw fallback");
+  assert.ok(ok.scripts[1].src.includes("raw.githubusercontent.com/kur1ke/prism-rp/"+sha+"/dist/web/prism-app.js"));
+  assert.equal(ok.ctx.PRISM_RP_TEST_REVISION,sha, "fallback must keep the same commit");
+  assert.ok(!ok.scripts[1].src.includes("/main/"));
+  ok.scripts[1].onerror();
+  assert.match(ok.boot.textContent,/оба источника недоступны/);
   const fallback=await run(null,true);
   assert.ok(fallback.src.includes("@testing/dist/web/prism-app.js"));
   assert.match(fallback.badge.textContent,/кэш/);
