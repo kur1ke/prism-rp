@@ -6183,8 +6183,8 @@
       <div class="head-tools">
         <span class="mode-badge" title="Режим задан при создании чата и не меняется. Другой режим — новый чат в меню «Ещё».">${icon(c.mode === "messenger" ? "bubble" : "book")}<span>${c.mode === "messenger" ? "Переписка" : "Сцена"}</span></span>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
-        <button class="icon-btn" data-act="edit-card" title="Карточка персонажа">${icon("card")}</button>
-        <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата, Prism">${icon("panel")}</button>
+        <button class="icon-btn" data-act="debug-open" title="Инструменты разработчика" aria-label="Debug">${icon("prism")}</button>
+        <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
     </header>`;
@@ -6417,7 +6417,7 @@
   function drawer(m) {
     // У сцены — «Сцена», у переписки — «Среда» (сцены RP в переписке нет). Мир, опыт и Prism — у обоих режимов.
     const ms = m.chat && m.chat.mode === "messenger";
-    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"], ["prism", "Prism", "prism"]];
+    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"]];
     const tab = ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
     m = Object.assign({}, m, { tab });
     let body = "";
@@ -6426,7 +6426,7 @@
     else if (m.tab === "scene") body = sceneTab(m);
     else if (m.tab === "memory") body = memoryTab(m);
     else if (m.tab === "world") body = worldTab(m);
-    else body = prismTab(m);
+    else body = sceneTab(m);
     return `<div class="drawer-head"><nav class="drawer-tabs">${tabs.map(([id, name, ic]) => `<button class="dtab ${m.tab === id ? "on" : ""}" data-act="tab" data-tab="${id}">${icon(ic)}${name}</button>`).join("")}</nav>
       <button class="icon-btn" data-act="drawer-close" title="Закрыть панель">${icon("x")}</button></div>
       <div class="drawer-body" id="drawer-body">${body}</div>`;
@@ -6636,7 +6636,34 @@
         <div class="code">${p.messages.map((x) => `<span class="role">${esc(x.role)}</span>\n${esc(x.content)}`).join("\n\n")}</div></div>`;
   }
 
-  Object.assign((PRP.views = PRP.views || {}), { drawer });
+  function debugModal(m, modal) {
+    const section = modal.section || "prism";
+    const names = [["prism", "Prism"], ["tracker", "Трекер"], ["events", "События"], ["errors", "Ошибки"]];
+    const v = m.messengerView;
+    const status = v && v.stateStatus;
+    let content = "";
+    if (section === "prism") content = prismTab(m);
+    else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
+    else if (section === "tracker") {
+      const w = v.world || {};
+      const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
+      content = '<div class="block"><div class="block-title">Текущее состояние</div><dl class="kv">' + pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>';
+    } else if (section === "events") {
+      content = '<div class="block"><div class="block-title">История среды</div>' + ((v.events || []).length
+        ? '<ul class="wc-list">' + v.events.slice().reverse().map(e => '<li><span class="tag">' + esc(e.scope || "") + '</span> ' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
+        : '<p class="empty-note">Событий пока нет.</p>') + '</div>';
+    } else {
+      content = '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
+        + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
+        + '<button class="btn btn-sm" data-act="state-retry">Повторить анализ</button></div>'
+        + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
+    }
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal debug-modal" role="dialog" aria-modal="true" aria-label="Debug">
+      <div class="modal-head"><h2>Debug — ${esc(m.card ? m.card.name : "чат")}</h2><button class="icon-btn" data-act="modal-close" title="Закрыть">${icon("x")}</button></div>
+      <nav class="debug-tabs">${names.map(([id,title]) => `<button class="dtab ${id === section ? "on" : ""}" data-act="debug-section" data-section="${id}">${title}</button>`).join("")}</nav>
+      <div class="modal-body debug-body">${content}</div></div></div>`;
+  }
+  Object.assign((PRP.views = PRP.views || {}), { drawer, debugModal });
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/ui/views/settings.js */
@@ -9235,7 +9262,7 @@
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
         worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit,
         // Переписка: среда (только чтение) — для вкладки «Среда», статуса в шапке и времени сообщений в поясе переписки.
-        messengerView: S.drawerOpen && (S.tab === "env" || S.tab === "scene") && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
+        messengerView: ((S.drawerOpen && (S.tab === "env" || S.tab === "scene")) || (S.modal && S.modal.kind === "debug")) && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
         msWorld: isMs() ? (svc().messenger.context() || {}).world : null, msTz: isMs() ? (svc().messenger.current() || {}).timeZone : null, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
         drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
         stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
@@ -9338,6 +9365,7 @@
       rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section)
         : S.modal.kind === "import" ? V.importReview(m, S.modal)
         : S.modal.kind === "new-messenger" ? V.newMessengerModal(m, S.modal)
+        : S.modal.kind === "debug" ? V.debugModal(m, S.modal)
         : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
@@ -9660,8 +9688,10 @@
       drawer: () => { S.drawerOpen = !S.drawerOpen; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       "drawer-close": () => { S.drawerOpen = false; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       tab: (t) => { collectExp(); collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
-      "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
-      "prism-preview": () => { svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
+      "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
+      "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
+      "open-prism": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
+      "prism-preview": () => { svc.prism.refresh(); if (S.modal && S.modal.kind === "debug") ui.renderModal(); else ui.renderDrawer(); },
       // Сцена
       "sc-time-set": () => {
         const d = $("#sc-date").value.trim(), tm = $("#sc-time").value.trim();
