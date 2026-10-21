@@ -515,6 +515,12 @@
   /* Инструкция модели, когда она может «нарисовать» момент сама. */
   function drawInstruction(o) {
     const opts = o || {};
+    if (opts.intentMode) return [
+      "Если по контексту персонаж отправляет изображение, добавь [draw: короткое описание того, что показано].",
+      "Сохраняй определённый диалогом формат (например, скриншот), объект и факты; не заменяй их портретом отправителя.",
+      "Не пиши технические теги, LoRA, качество, постоянную внешность из карточки.",
+      "Максимум одна директива; не добавляй её без повода."
+    ].join("\n");
     const tags = opts.format !== "description";
     const pinned = !!opts.qualityPinned;
     const lines = [
@@ -548,6 +554,7 @@
       ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). Output ONLY one to three English sentences, no lists, no quotes, no markdown.\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
       : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
+      ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
       "Keep every concrete detail: pose, action, expression, exactly the garments described, place, time, framing.",
       "Keep the amount of clothing exactly as described. Never add nudity or sexual content the scene did not state; if the scene is sexual, name the act plainly with standard tags, never soften it.",
       q,
