@@ -4974,9 +4974,10 @@
 
     const nsfw = actors.owner ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
     return {
-      scene: [look.join(", "), sceneText, tail.join(", ")].filter(Boolean).join(", "),
-      keep: [wardrobe, userTags, nsfw].filter(Boolean).join(", "),
-      tail: userTail,
+      // The card owns stable appearance; the shot compiler must not rewrite it.
+      scene: sceneText,
+      keep: [look.join(", "), wardrobe, userTags, nsfw].filter(Boolean).join(", "),
+      tail: [tail.join(", "), userTail].filter(Boolean).join(", "),
       ownerPresent: actors.owner,
       subjects: actors,
       userPresent: actors.user,
