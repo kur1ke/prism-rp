@@ -19,7 +19,7 @@
     else if (m.tab === "scene") body = sceneTab(m);
     else if (m.tab === "memory") body = memoryTab(m);
     else if (m.tab === "world") body = worldTab(m);
-    else body = sceneTab(m);
+    else body = ms ? PRP.views.envTab(m) : sceneTab(m);
     return `<div class="drawer-head"><nav class="drawer-tabs">${tabs.map(([id, name, ic]) => `<button class="dtab ${m.tab === id ? "on" : ""}" data-act="tab" data-tab="${id}">${icon(ic)}${name}</button>`).join("")}</nav>
       <button class="icon-btn" data-act="drawer-close" title="Закрыть панель">${icon("x")}</button></div>
       <div class="drawer-body" id="drawer-body">${body}</div>`;
