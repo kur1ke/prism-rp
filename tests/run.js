@@ -726,6 +726,13 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
+t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () => {
+  const instruction = IC.drawInstruction({ format: "tags", fixedIdentity: true });
+  assert.ok(instruction.includes("добавляются приложением отдельно"), instruction);
+  assert.ok(instruction.includes("не означает переодевание"), instruction);
+  const legacy = IC.drawInstruction({ format: "tags", fixedIdentity: false });
+  assert.ok(!legacy.includes("добавляются приложением отдельно"), legacy);
+});
 t("VIS-ID-1: canonical identity precedes shot details and never leaks into another actor", () => {
   const cd = { name: "Лилит", image: { trigger: "Lilithx, black cat ears", look: "base: burgundy hair, grey-green eyes" } };
   const single = IC.compose({ draw: "1girl, sitting on a bed, soft cinematic lighting", card: cd, scene: { chars: {}, present: [] }, persona: {} });
