@@ -4077,8 +4077,13 @@ async function unifiedTracker() {
       const result = h.ctx.svc.messenger.view();
       const markup = globalThis.PRP.views.envTab({ messengerView: result, card: h.ctx.card(), envEdit: null, persona: {name:"Пользователь"} });
       assert.ok(markup.includes("дома"), markup);
-      assert.ok(markup.includes("Повторить анализ"), markup);
-      assert.ok(markup.includes("не содержит корректный JSON"), markup);
+      require(J("ui/views/drawer.js"));
+      const debug = globalThis.PRP.views.debugModal({
+        messengerView: result, card: h.ctx.card(), path: h.chat.path(),
+      }, { section: "errors" });
+      assert.ok(!markup.includes("Повторить анализ"), "diagnostics no longer appear in environment");
+      assert.ok(debug.includes("Повторить анализ"), debug);
+      assert.ok(debug.includes("не содержит корректный JSON"), debug);
       assert.ok(!markup.includes('id="env-location"'), "editing form is collapsed by default");
     } finally { globalThis.PRP.llm = old; }
   });
