@@ -95,13 +95,13 @@
     return Object.assign({}, event, { actor: role === "user" ? "user" : "char" });
   }
 
-  // Perchance occasionally returns a single garment as a string even though
-  // the event contract requires an array. Repair that representational error
-  // at the LLM boundary, not in the strict state validator. All other checks
-  // (actor, exact evidence, certainty and list length) still apply unchanged.
-  function clothingListCandidate(candidate) {
+  // Perchance иногда выдаёт одиночное текстовое значение вместо массива.
+  // Исправляем только форму известного поля на границе модели. Источник,
+  // права говорящего и подтверждение цитатой всё равно проверяет Tracker.
+  function scalarListCandidate(candidate) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
-        candidate.field !== "wear" || !["add", "set", "remove"].includes(candidate.action) ||
+        !["wear", "nearby", "ongoing"].includes(candidate.field) ||
+        !["add", "set", "remove"].includes(candidate.action) ||
         typeof candidate.value !== "string") return candidate;
     const value = candidate.value.trim();
     if (!value) return candidate;
@@ -113,15 +113,28 @@
     if (!value) return { valid: false, events: [], issues: ["Ответ наблюдателя не содержит корректный JSON со списком событий"] };
     if (!Array.isArray(value.events) || value.events.length > MAX) return { valid: false, events: [], issues: ["Некорректный список событий"] };
     const events = [], issues = [];
-    for (const candidate of value.events) {
+    for (let index = 0; index < value.events.length; index++) {
+      const candidate = value.events[index];
       // A language model often writes the current speaker's name or "assistant"
       // instead of PRISM's internal actor id. Resolve ONLY the current speaker;
       // another person's name must never gain permission to alter their state.
-      const canonical = clothingListCandidate(speakerEvent(candidate, o));
+      const canonical = scalarListCandidate(speakerEvent(candidate, o));
       const r = ST.normalize(canonical, o);
       if (r.error) {
+        // В wear.add допускаем частичное восстановление только явно
+        // подтверждённых предметов. Нельзя восстанавливать wear.set — оно
+        // объявляет ПОЛНЫЙ комплект и его неполная запись исказит состояние.
+        if (r.error === "элемент списка не подтверждается цитатой" &&
+            canonical && canonical.field === "wear" && canonical.action === "add" &&
+            Array.isArray(canonical.value) && canonical.value.length > 1) {
+          const safe = canonical.value.map((item) => ST.normalize(Object.assign({}, canonical, { value: [item] }), o))
+            .filter((item) => item.event).map((item) => item.event.value[0]);
+          if (safe.length) events.push(Object.assign({}, canonical, { value: safe }));
+        }
         const label = candidate && typeof candidate.actor === "string" ? candidate.actor.trim().slice(0, 65) : "не задан";
-        issues.push(r.error === "неизвестный участник" ? r.error + " (actor: " + JSON.stringify(label) + ")" : r.error);
+        const field = candidate && typeof candidate.field === "string" ? candidate.field.slice(0, 30) : "?";
+        const detail = r.error === "неизвестный участник" ? r.error + " (actor: " + JSON.stringify(label) + ")" : r.error;
+        issues.push("Событие " + (index + 1) + " [" + field + "]: " + detail);
       } else events.push(r.event);
     }
     return { valid: true, events, issues };
