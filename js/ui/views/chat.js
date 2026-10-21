@@ -32,8 +32,8 @@
       <div class="head-tools">
         <span class="mode-badge" title="Режим задан при создании чата и не меняется. Другой режим — новый чат в меню «Ещё».">${icon(c.mode === "messenger" ? "bubble" : "book")}<span>${c.mode === "messenger" ? "Переписка" : "Сцена"}</span></span>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
-        <button class="icon-btn" data-act="edit-card" title="Карточка персонажа">${icon("card")}</button>
-        <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата, Prism">${icon("panel")}</button>
+        <button class="icon-btn" data-act="debug-open" title="Инструменты разработчика" aria-label="Debug">${icon("prism")}</button>
+        <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
     </header>`;
