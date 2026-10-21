@@ -19,7 +19,20 @@
         const cd = await svc.images.pinSeed(im.seed);
         ui.toast(`Seed ${im.seed} закреплён за ${cd.name}.`);
       },
-      "img-info": (t) => { const { im } = findImg(t); if (im) ui.openPop(V.imageInfo(im), t); },
+      "img-info": (t) => {
+        const { im } = findImg(t);
+        if (im) ui.openPop(V.imageInfo(im, !!S.settings.developerMode, { mid: t.dataset.mid, sw: t.dataset.sw, img: t.dataset.img }), t);
+      },
+      "img-copy-prompt": async (t) => {
+        const { im } = findImg(t);
+        if (!im) return;
+        const value = V.imageCopyText(im, !!S.settings.developerMode);
+        if (typeof navigator === "undefined" || !navigator.clipboard || !navigator.clipboard.writeText) {
+          throw new Error("Буфер обмена недоступен в этом браузере");
+        }
+        await navigator.clipboard.writeText(value);
+        ui.toast("Промпт скопирован");
+      },
       "img-dl": (t) => {
         const { im } = findImg(t);
         const url = im && S.imgUrls[im.id];
