@@ -242,9 +242,25 @@
       const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
       content = '<div class="block"><div class="block-title">Текущее состояние</div><dl class="kv">' + pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>';
     } else if (section === "events") {
-      content = '<div class="block"><div class="block-title">История среды</div>' + ((v.events || []).length
-        ? '<ul class="wc-list">' + v.events.slice().reverse().map(e => '<li><span class="tag">' + esc(e.scope || "") + '</span> ' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
-        : '<p class="empty-note">Событий пока нет.</p>') + '</div>';
+      const active = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return (sw && sw.stateEvents || []).map(e => ({ e, msg }));
+      });
+      const corrections = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return (sw && sw.stateCorrections || []).map(e => ({ e, msg }));
+      });
+      const rows = active.concat(corrections);
+      content = '<div class="block"><div class="block-title">События активной ветки <small>' + rows.length + '</small></div>'
+        + (rows.length ? '<ul class="wc-list">' + rows.map(({e,msg}) =>
+            '<li><span class="tag">' + esc(e.actor || "") + '</span> <b>' + esc(e.field || "") + '</b> · ' + esc(e.action || "")
+            + '<div>' + esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) + '</div>'
+            + '<small>' + esc(e.certainty || "") + ' · ' + esc(msg.id || "") + '</small></li>').join("") + '</ul>'
+          : '<p class="empty-note">Извлечённых событий в активной ветке нет.</p>') + '</div>'
+        + '<div class="block"><div class="block-title">Старые изменения среды <small>' + (v.events || []).length + '</small></div>'
+        + ((v.events || []).length ? '<ul class="wc-list">' + v.events.slice().reverse().map(e =>
+          '<li>' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
+          : '<p class="empty-note">Нет.</p>') + '</div>';
     } else {
       content = '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
         + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
