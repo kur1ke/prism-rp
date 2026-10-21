@@ -42,7 +42,6 @@ require(J("state/service.js"));
 require(J("images/compose.js"));
 require(J("images/backends.js"));
 require(J("images/compile.js"));
-require(J("images/service.js"));
 require(J("assist/assist.js"));
 require(J("core/settings.js"));
 require(J("ui/render.js"));
