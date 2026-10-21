@@ -56,36 +56,20 @@
         <div class="field"><label>Доступность</label><select id="env-availability"><option value="">не менять</option>${AVAIL.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
         <div class="field"><label>Где действует</label>${scopeRadios("env-scope", d.scope)}</div>
         <div class="row"><button class="btn btn-primary btn-sm" data-act="env-save">Сохранить</button><button class="btn btn-sm btn-ghost" data-act="env-cancel">Отмена</button></div></div>` : "";
-    const markers = c.promises.concat(c.plans).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    const stWord = { open: "открыто", done: "выполнено", cancelled: "отменено" };
     const evs = v.events.slice().reverse().map((e) => {
       const ev = (env.events || []).find((x) => x.id === e.id) || {};
       return `<li class="${e.active ? "" : "off"}"><div>${esc(OPS_LINE(ev.patch))}</div>
         <div class="mt"><span class="tag">${e.scope === "chat" ? "вся переписка" : "ветка"}</span>${ev.effectiveAt ? `<span class="tag">${esc(MT.format(MT.toMs(ev.effectiveAt), tz))}</span>` : ""}<span class="tag">${e.active ? "действует" : esc(e.reason || "не действует")}</span></div></li>`;
     }).join("");
-    const stateNotes = {
-      ok: "Состояние обновлено автоматически",
-      partial: "Часть сведений извлечена; анализатор сообщил об ограничениях",
-      "no-changes": "Анализ завершён: новых фактов не обнаружено",
-      error: "Не удалось распознать изменения состояния",
-    };
-    const status = v.stateStatus || null;
-    const diagnostics = v.statePending ? `<p class="hint">Обновляю состояние по последнему сообщению…</p>`
-      : status ? `<details class="block" style="margin:8px 0"><summary class="hint" style="cursor:pointer">${esc(stateNotes[status.status] || "Сведения об анализе")}</summary>
-        <p class="hint">Событий: ${Number(status.eventCount) || 0}. ${status.method === "model+grounded" ? "Явные сведения дополнены проверкой по тексту." : ""}</p>
-        ${(status.issues || []).length ? `<ul class="wc-list">${status.issues.map((x) => `<li class="off">${esc(x)}</li>`).join("")}</ul>` : ""}
-        ${(status.status === "error" || status.status === "partial") && !v.statePending
-          ? `<button class="btn btn-sm" data-act="state-retry" style="margin-top:7px">Повторить анализ</button>` : ""}</details>`
-      : `<p class="hint">Автоматический анализ ещё не выполнялся для последнего сообщения.</p>`;
+    const rows = (items) => items.filter(([,value]) => value != null && value !== "" && value !== "unknown").map(([label,value]) => `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join("");
+    const position = rows([["Где", w.location], ["Чем занят(а)", w.activity],
+      ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")],
+      ["Доступность", w.availability && w.availability !== "unknown" ? availWord(w.availability) : ""]]);
+    const appearance = rows([["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]]);
     return `<div class="block"><div class="block-title">Положение ${esc(m.card.name)}</div>
-        ${diagnostics}
-        <p class="hint">Положение и внешность отслеживаются автоматически по происходящему в переписке. Сообщённое персонажем не обязательно является проверенным фактом. Изображения не меняют состояние.</p>
-        <dl class="kv env-world"><dt>Где</dt><dd>${esc(w.location || "неизвестно")}</dd><dt>Чем занят(а)</dt><dd>${esc(w.activity || "неизвестно")}</dd>
-          <dt>Рядом</dt><dd>${esc((w.nearby || []).join(", ") || "—")}</dd><dt>Происходит</dt><dd>${esc((w.ongoing || []).join(", ") || "—")}</dd>
-          <dt>Доступность</dt><dd>${esc(availWord(w.availability))}</dd></dl>
-        <div class="block-title" style="margin-top:14px">Внешний вид для изображений</div>
-        <dl class="kv env-world"><dt>Одежда</dt><dd>${esc((w.visualWear || []).join(", ") || "неизвестно")}</dd><dt>Поза</dt><dd>${esc(w.visualPose || "неизвестно")}</dd><dt>Причёска</dt><dd>${esc(w.visualHair || "неизвестно")}</dd></dl>
-        ${d ? "" : `<details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Ошиблись с состоянием? Исправить…</summary><button class="btn btn-sm" style="margin-top:8px" data-act="env-edit">${icon("edit")}Исправить неверный факт</button></details>`}</div>
+        ${position ? `<dl class="kv env-world">${position}</dl>` : '<p class="empty-note">Пока нет сведений о положении.</p>'}
+        ${appearance ? `<div class="block-title" style="margin-top:20px">Внешний вид</div><dl class="kv env-world">${appearance}</dl>` : ""}
+        ${d ? "" : `<button class="btn btn-sm btn-ghost" style="margin-top:14px" data-act="env-edit">${icon("edit")}Исправить состояние</button>`}</div>
       ${form}
       <div class="block"><div class="block-title">Время переписки</div>
         <dl class="kv"><dt>Сейчас</dt><dd id="env-now">${v.now != null ? esc(MT.format(v.now, tz)) : "не задано"}</dd>
@@ -99,22 +83,7 @@
           <div class="quick">${[[15, "+15 мин"], [60, "+1 час"], [180, "+3 часа"], [1440, "+1 день"]].map(([n, l]) => `<button class="btn btn-sm btn-ghost" data-act="env-advance" data-min="${n}">${icon("clock")}${l}</button>`).join("")}</div>` : ""}
         <button class="btn btn-sm" data-act="env-time-save">Применить</button>
         <p class="hint">Метки времени уже отправленных сообщений не меняются.</p></div>
-      <div class="block"><div class="block-title">Переписка</div>
-        <dl class="kv"><dt>Последним писал(а)</dt><dd>${c.lastSender === "user" ? esc(m.persona.name) : c.lastSender === "assistant" ? esc(m.card.name) : "никто"}</dd>
-          <dt>Без ответа</dt><dd>${c.unansweredUserCount ? c.unansweredUserCount + " от " + esc(m.persona.name) : "—"}</dd>
-          <dt>Состояние</dt><dd>${esc(String(c.reason || "").replace(/\{\{user\}\}/g, m.persona.name).replace(/\{\{char\}\}/g, m.card.name))}</dd></dl>
-        <div class="block-title" style="margin-top:10px">Договорённости <small>${markers.length}</small></div>
-        <p class="hint">Только то, что вы отметили сами; из сообщений ничего не извлекается.</p>
-        <ul class="wc-list">${markers.map((x) => `<li class="${x.status === "open" ? "" : "off"}"><div>${esc(x.text)}</div><div class="mt"><span class="tag">${x.kind === "promise" ? "обещание" : "план"}</span><span class="tag">${stWord[x.status]}</span>
-          ${x.status === "open" ? `<span style="flex:1"></span><button class="tool" data-act="env-mk-status" data-id="${esc(x.id)}" data-status="done">Выполнено</button><button class="tool" data-act="env-mk-status" data-id="${esc(x.id)}" data-status="cancelled">Отменено</button>` : ""}</div></li>`).join("") || `<li class="empty-note">Нет.</li>`}</ul>
-        <div class="row" style="margin-top:8px"><select id="env-mk-kind"><option value="promise">обещание</option><option value="plan">план</option></select>
-          <input id="env-mk-text" placeholder="«Созвонимся завтра вечером»"></div>
-        <div class="field">${scopeRadios("env-mk-scope", v.canBranch ? "branch" : "")}</div>
-        <button class="btn btn-sm" data-act="env-mk-add">${icon("plus")}Отметить</button></div>
-      <details class="block"><summary class="block-title" style="cursor:pointer">История среды <small>${v.events.length}</small></summary>
-        <p class="hint">События не переписываются. События другой ветки или другого варианта ответа хранятся и снова действуют, когда вы туда вернётесь.</p>
-        <ul class="wc-list">${evs || `<li class="empty-note">Пока пусто.</li>`}</ul></details>
-      ${v.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${v.warnings.map((x) => `<li class="off">${esc(String(x.message).replace(/\{\{user\}\}/g, m.persona.name).replace(/\{\{char\}\}/g, m.card.name))}</li>`).join("")}</ul></div>` : ""}`;
+`;
   }
 
   // Строка статуса в шапке переписки — из среды (не из сцены RP).
