@@ -26,7 +26,7 @@
       steps: 28, cfg: 5.5, seed: "", sizeMode: "auto", fixedSize: "1024x1024", maxSide: 1216,
       hires: false, hiresScale: 1.5, hiresUpscaler: "R-ESRGAN 4x+ Anime6B", hiresDenoise: 0.4, hiresSteps: 0,
       fixedPrompt: "", promptMode: "append", negative: "", format: "tags", translate: true,
-      modelDraws: true, modelDrawPolicy: "contextual", autoDraw: true, extra: "",
+      drawPromptMode: "tags", modelDraws: true, modelDrawPolicy: "contextual", autoDraw: true, extra: "",
     },
   };
 
