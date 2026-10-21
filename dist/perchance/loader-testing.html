@@ -18,7 +18,9 @@
   function load(ref, warning) {
     if (!/^[a-f0-9]{40}$/.test(ref) && ref !== "testing") { error("неверный SHA"); return; }
     window.PRISM_RP_TEST_REVISION = ref;
-    var urls = [cdn + encodeURIComponent(ref) + suffix, raw + encodeURIComponent(ref) + suffix];
+    // Branch fallback is not pinned. Bust browser/CDN caches and label it as unverified.
+    var bust = ref === "testing" ? "?test_reload=" + Date.now() : "";
+    var urls = [cdn + encodeURIComponent(ref) + suffix + bust, raw + encodeURIComponent(ref) + suffix + bust];
     function attempt(index) {
       status(index ? "резервный источник · " + ref.slice(0, 7) : (warning || ref.slice(0, 7)));
       var script = document.createElement("script");
@@ -29,7 +31,7 @@
       };
       script.onload = function () {
         if (!window.PRP || !window.PRISM_RP_VERSION) error("приложение не инициализировалось");
-        else status((index ? "резерв · " : warning ? "кэш ветки · " : "") + ref.slice(0, 7));
+        else status(ref === "testing" ? "testing · SHA неизвестен" : (index ? "резерв · " : "") + ref.slice(0, 7));
       };
       document.head.appendChild(script);
     }
@@ -38,6 +40,6 @@
   fetch(api, { cache: "no-store", headers: { "Accept": "application/vnd.github+json" } })
     .then(function (res) { if (!res.ok) throw new Error("GitHub API " + res.status); return res.json(); })
     .then(function (data) { var sha = data && data.commit && data.commit.sha; if (!/^[a-f0-9]{40}$/.test(sha || "")) throw new Error("неверный ответ GitHub"); load(sha); })
-    .catch(function () { load("testing", "возможно кэшированная ветка"); });
+    .catch(function () { load("testing", "SHA недоступен · testing"); });
 })();
 </script>
