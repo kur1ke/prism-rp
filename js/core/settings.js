@@ -14,6 +14,7 @@
     autoContext: true,
     singleSystem: false,
     sceneProtocol: true,
+    developerMode: false,
     noPostHistory: false,
     expLimit: 8,
     worldLimit: 8, // фактов мира за ход (наибольшее число; входят только релевантные)
