@@ -58,8 +58,13 @@ async function run(reply,fail) {
   assert.match(ok.boot.textContent,/оба источника недоступны/);
   const fallback=await run(null,true);
   assert.ok(fallback.src.includes("@testing/dist/web/prism-app.js"));
-  assert.match(fallback.badge.textContent,/кэш/);
+  assert.match(fallback.badge.textContent,/SHA недоступен/);
+  assert.match(fallback.src,/test_reload=\\d+/,"branch fallback must bust CDN/browser cache");
+  fallback.ctx.PRP={}; fallback.ctx.PRISM_RP_VERSION="test";
+  fallback.scripts[0].onload();
+  assert.match(fallback.badge.textContent,/SHA неизвестен/,"never label an unverified branch as a pinned revision");
   const malformed=await run("<script>",false);
   assert.ok(malformed.src.includes("@testing/dist/web/prism-app.js"));
+  assert.match(malformed.src,/test_reload=\\d+/);
   console.log("Test mirror checks: storage isolation, pinned release, fallback, SHA validation — OK");
 })().catch(e=>{console.error(e);process.exitCode=1;});
