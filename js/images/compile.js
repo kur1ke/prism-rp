@@ -28,9 +28,9 @@
   async function compile(scene, opts, generateText) {
     const s = String(scene || "").trim();
     const o = opts || {};
-    if (!s || o.translate === false || !IC.needsRewrite(s) || typeof generateText !== "function") return { text: s, compiled: false };
+    if (!s || (!o.intentMode && (o.translate === false || !IC.needsRewrite(s))) || typeof generateText !== "function") return { text: s, compiled: false };
     await warm();
-    const key = ["v2-frame", o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "", o.frame ? JSON.stringify(o.frame) : "", s].join("\u0001");
+    const key = ["v3-frame", o.intentMode ? "intent" : "tags", o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "", o.frame ? JSON.stringify(o.frame) : "", s].join("\u0001");
     if (mem.has(key)) return { text: mem.get(key), compiled: true, cached: true };
     const instruction = IC.rewriteRules(o) + "\n\nSCENE:\n" + s;
     try {
