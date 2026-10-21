@@ -37,7 +37,7 @@
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
         worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit,
         // Переписка: среда (только чтение) — для вкладки «Среда», статуса в шапке и времени сообщений в поясе переписки.
-        messengerView: S.drawerOpen && (S.tab === "env" || S.tab === "scene") && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
+        messengerView: ((S.drawerOpen && (S.tab === "env" || S.tab === "scene")) || (S.modal && S.modal.kind === "debug")) && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
         msWorld: isMs() ? (svc().messenger.context() || {}).world : null, msTz: isMs() ? (svc().messenger.current() || {}).timeZone : null, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
         drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
         stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
@@ -140,6 +140,7 @@
       rootEl.innerHTML = S.modal.kind === "settings" ? V.settingsModal(m, S.modal.section)
         : S.modal.kind === "import" ? V.importReview(m, S.modal)
         : S.modal.kind === "new-messenger" ? V.newMessengerModal(m, S.modal)
+        : S.modal.kind === "debug" ? V.debugModal(m, S.modal)
         : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
