@@ -745,6 +745,21 @@ t("VIS-WARDROBE-1: card outfit preset is a fallback, never a second copy over sh
   const conflict = IC.compose({ draw: "1girl, red dress, smiling", card: { name: "Лилит", image: { wardrobe: "Hoodie: grey hoodie" } }, scene: { chars: { Лилит: { wear: ["Hoodie"] } }, present: [] }, persona: {}, messenger: { location: "" } });
   assert.ok(conflict.keep.includes("grey hoodie"), "a different drawn garment must not erase established clothing");
 });
+t("VIS-PROVENANCE-1: diagnostic image layers preserve source ownership", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair", wardrobe: "Cozy: grey sweater" } };
+  const state = { chars: { Лилит: { wear: ["Cozy"], pose: "сидит" } }, present: [] };
+  const c = IC.compose({ draw: "1girl, looking at viewer, on sofa", card, scene: state, persona: {} });
+  const layers = c.provenance.imageLayers;
+  assert.equal(layers.identity, "burgundy hair");
+  assert.equal(layers.established, "pose: сидит");
+  assert.equal(layers.wardrobePreset, "grey sweater");
+  assert.equal(layers.shot, "1girl, looking at viewer, on sofa");
+  assert.equal(layers.outfitKnown, true);
+  assert.ok(!c.scene.includes("burgundy hair") && !c.scene.includes("pose: сидит"));
+  const other = IC.compose({ draw: "1boy, ichigo_kurosaki, running", card, scene: state, persona: {} });
+  assert.equal(other.provenance.imageLayers.identity, "");
+  assert.equal(other.provenance.imageLayers.wardrobePreset, "");
+});
 t("VIS-STATE-1: tracked pose and wear are distinct from camera shot", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
   const scene = { chars: { Лилит: { wear: ["серый свитер"], pose: "сидит на диване" } }, present: [] };
