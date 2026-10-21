@@ -8447,6 +8447,31 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const PRP = (root.PRP = root.PRP || {});
   const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario;
 
+  // Bring at most two latest selected-swipe visual directives back into the
+  // text model history. These are shot references, NOT canonical scene updates.
+  // They live inside history messages so normal context budgeting can evict them.
+  function historyWithDraws(path, enabled) {
+    const messages = Array.isArray(path) ? path : [];
+    const chosen = [];
+    if (enabled) for (let i = messages.length - 1; i >= 0 && chosen.length < 2; i--) {
+      const m = messages[i];
+      const sw = TR.activeSwipe(m);
+      if (m.role === "assistant" && sw && Array.isArray(sw.draws) && sw.draws.length) {
+        const prompt = String(sw.draws[0].prompt || "").trim();
+        if (prompt) chosen.push(i);
+      }
+    }
+    const selected = new Set(chosen);
+    return messages.map((m, i) => {
+      const sw = TR.activeSwipe(m);
+      const base = String(sw.text || "");
+      if (!selected.has(i)) return { role: m.role, text: base };
+      const d = sw.draws[0];
+      const prompt = String(d.prompt || "").replace(/\s+/g, " ").trim().slice(0, 700);
+      const ratio = /^\d{1,2}:\d{1,2}$/.test(d.ratio || "") ? ", " + d.ratio : "";
+      return { role: m.role, text: base + (base ? "\n" : "") + "[draw: " + prompt + ratio + "]" };
+    }).filter((h) => h.text);
+  }
   function create(ctx) {
     const { S } = ctx;
     const chat = () => ctx.svc.chat;
@@ -8496,7 +8521,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       // В RP здесь видимое общее пространство; в переписке — заявленные персонажем обстоятельства,
       // используемые для поиска мира без утверждения, что пользователь их наблюдал.
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
-      const history = path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })).filter((h) => h.text);
+      const history = historyWithDraws(path, allowDraw);
       const recent = history.slice(-4).map((h) => h.text).join("\n");
       const ex = EX.rank(S.experience, {
         chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(here.present),
@@ -8529,7 +8554,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return { build, refresh };
   }
 
-  PRP.prismService = { create };
+  PRP.prismService = { create, historyWithDraws };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
