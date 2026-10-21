@@ -3988,6 +3988,14 @@ async function unifiedTracker() {
     assert.strictEqual(globalThis.PRP.imageService.dialogueImageContext([previous, clothes, request], reply), "", "вне активной ветки не извлекать контекст");
     assert.strictEqual(globalThis.PRP.imageService.dialogueImageContext([request], request), "", "пользователь не создаёт контекст фотографии персонажа");
   });
+  await ta("VIS-IMG-2: явный [draw:] не переписывается диалогом; fallback сохраняет контекст", async () => {
+    const service = globalThis.PRP.imageService;
+    const explicit = { prompt: "1girl, burgundy hair, black cat ears, lifting skirt, bedroom" };
+    const sw = { draws: [explicit] };
+    assert.strictEqual(service.shouldAppendDialogue(sw, { draw: explicit.prompt }), false);
+    assert.strictEqual(service.shouldAppendDialogue(sw, { draw: "1girl, sitting" }), true);
+    assert.strictEqual(service.shouldAppendDialogue({ draws: [] }, { draw: "manual scene" }), true);
+  });
   await ta("UT14-1: Лилит сообщает гардероб через 'На мне' — два предмета, не выдумывая остальное", async () => {
     const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
     const txt = "Ой, ты сейчас решил провести ревизию моего гардероба? 😼\n" +
