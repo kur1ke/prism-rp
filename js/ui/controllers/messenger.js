@@ -20,6 +20,7 @@
     const failed = (r) => { if (r && r.error) { ui.toast(r.error, true); return true; } return false; };
 
     const actions = {
+      "time-open": () => { S.modal = { kind: "messenger-time" }; ui.renderModal(); },
       // Однократная явная повторная попытка при ошибке интерпретатора;
       // никакого заполнения среды или изменения канона вручную.
       "state-retry": async () => {
@@ -68,6 +69,7 @@
         if (mode === "manual" && mi && mi.value) t.manualNow = MT.toIso(MT.fromLocal(mi.value, tz));
         if (failed(await svc.messenger.setTime(t))) return;
         await after("Время переписки сохранено.");
+        if (S.modal && S.modal.kind === "messenger-time") ui.renderModal();
       },
       "env-advance": async (t) => { if (failed(await svc.messenger.advance(+t.dataset.min))) return; await after(); },
       "env-mk-add": async () => {
