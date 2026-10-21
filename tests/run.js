@@ -757,6 +757,15 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
+t("VIS-INTENT-3: intent distinguishes shop screenshot from named owner", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
+  const ctx = { card, persona: {}, scene: { chars: {}, present: [] }, requireNamedOwner: true };
+  const shop = IC.compose({ ...ctx, draw: "screenshot of a shopping site, 1girl modeling a gothic dress, black boots" });
+  assert.strictEqual(shop.ownerPresent, false, "unnamed model in screenshot is not Lilith");
+  assert.ok(!shop.keep.includes("burgundy hair"), "card identity must not leak");
+  const photo = IC.compose({ ...ctx, draw: "Лилит sitting on a sofa, wearing a grey sweater" });
+  assert.strictEqual(photo.ownerPresent, true, "named owner retains card identity");
+});
 t("VIS-INTENT-1: short draw contract and distinct compilation instructions", () => {
   const short = IC.drawInstruction({ intentMode: true, fixedIdentity: true });
   const full = IC.drawInstruction({ format: "tags" });
