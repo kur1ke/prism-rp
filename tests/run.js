@@ -757,6 +757,12 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
+t("VIS-INTENT-1: short draw contract and distinct compilation instructions", () => {
+  const short = IC.drawInstruction({ intentMode: true, fixedIdentity: true });
+  const full = IC.drawInstruction({ format: "tags" });
+  assert.ok(short.includes("скриншот") && short.length < full.length / 2);
+  assert.ok(IC.rewriteRules({ intentMode: true }).includes("screenshot of products"));
+});
 t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () => {
   const instruction = IC.drawInstruction({ format: "tags", fixedIdentity: true });
   assert.ok(instruction.includes("добавляются приложением отдельно"), instruction);
