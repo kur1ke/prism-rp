@@ -386,7 +386,7 @@
       steps: 28, cfg: 5.5, seed: "", sizeMode: "auto", fixedSize: "1024x1024", maxSide: 1216,
       hires: false, hiresScale: 1.5, hiresUpscaler: "R-ESRGAN 4x+ Anime6B", hiresDenoise: 0.4, hiresSteps: 0,
       fixedPrompt: "", promptMode: "append", negative: "", format: "tags", translate: true,
-      modelDraws: true, modelDrawPolicy: "contextual", autoDraw: true, extra: "",
+      drawPromptMode: "tags", modelDraws: true, modelDrawPolicy: "contextual", autoDraw: true, extra: "",
     },
   };
 
@@ -4906,7 +4906,7 @@
     // Один портрет с установленным полом пользователя и несовместимым полом карточки.
     const userOnlyByGender = !ownerNamed && !userNamed && total === 1 && !!charGender && !!userGender &&
       declared[0].gender === userGender && declared[0].gender !== charGender;
-    const owner = ownerNamed || (!empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
+    const owner = ownerNamed || (!(opts && opts.requireNamedOwner) && !empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
     // Смешанный состав явно указан в кадре (например, 1girl + 1boy),
     // второй actor допускается только если его пол совпадает с профилем пользователя.
     const mixed = owner && !userNamed && total >= 2 && !!userGender && declared.some((x) => x.gender === userGender) &&
@@ -4923,7 +4923,7 @@
     const messenger = !!o.messenger;
     const subVars = (v) => String(v || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, persona.name || "Пользователь");
     const draw = subVars(o.draw).trim();
-    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner });
+    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
     const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
@@ -5168,6 +5168,13 @@
   /* Инструкция модели, когда она может «нарисовать» момент сама. */
   function drawInstruction(o) {
     const opts = o || {};
+    if (opts.intentMode) return [
+      "Если по контексту персонаж отправляет изображение, добавь [draw: короткое описание того, что показано].",
+      "Сохраняй определённый диалогом формат (например, скриншот), объект и факты; не заменяй их портретом отправителя.",
+      "Если на изображении виден персонаж карточки, явно назови его: " + (opts.characterName || "персонаж") + ". Если его нет в кадре, не называй.",
+      "Не пиши технические теги, LoRA, качество, постоянную внешность из карточки.",
+      "Максимум одна директива; не добавляй её без повода."
+    ].join("\n");
     const tags = opts.format !== "description";
     const pinned = !!opts.qualityPinned;
     const lines = [
@@ -5201,6 +5208,7 @@
       ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). Output ONLY one to three English sentences, no lists, no quotes, no markdown.\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
       : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
+      ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
       "Keep every concrete detail: pose, action, expression, exactly the garments described, place, time, framing.",
       "Keep the amount of clothing exactly as described. Never add nudity or sexual content the scene did not state; if the scene is sexual, name the act plainly with standard tags, never soften it.",
       q,
@@ -5436,9 +5444,9 @@
   async function compile(scene, opts, generateText) {
     const s = String(scene || "").trim();
     const o = opts || {};
-    if (!s || o.translate === false || !IC.needsRewrite(s) || typeof generateText !== "function") return { text: s, compiled: false };
+    if (!s || (!o.intentMode && (o.translate === false || !IC.needsRewrite(s))) || typeof generateText !== "function") return { text: s, compiled: false };
     await warm();
-    const key = ["v2-frame", o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "", o.frame ? JSON.stringify(o.frame) : "", s].join("\u0001");
+    const key = ["v3-frame", o.intentMode ? "intent" : "tags", o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "", o.frame ? JSON.stringify(o.frame) : "", s].join("\u0001");
     if (mem.has(key)) return { text: mem.get(key), compiled: true, cached: true };
     const instruction = IC.rewriteRules(o) + "\n\nSCENE:\n" + s;
     try {
@@ -6828,7 +6836,7 @@
       <div class="field"><label>Негатив</label><textarea data-imgcfg="negative" rows="2" placeholder="lowres, bad anatomy, bad hands, extra digits">${esc(c.negative || "")}</textarea></div>
       ${c.backend === "a1111" ? `<p class="hint">LoRA задаются в карточке каждого персонажа: «Редактировать карточку → Изображения». Так они переезжают вместе с карточкой и не попадают в чужие картинки.</p>` : ""}
       <div class="block-title" style="margin-top:20px">Когда рисовать</div>
-      <div class="field"><label>Предлагать иллюстрации</label><select data-img-sel="modelDrawPolicy">
+      <div class="field"><label>Формирование [draw:]</label><select data-img-sel="drawPromptMode"><option value="tags" ${c.drawPromptMode !== "intent" ? "selected" : ""}>Теги напрямую (текущий)</option><option value="intent" ${c.drawPromptMode === "intent" ? "selected" : ""}>Краткий замысел → компилятор (эксперимент)</option></select><span class="help">Второй режим вызывает текстовый компилятор при генерации изображения.</span></div><div class="field"><label>Предлагать иллюстрации</label><select data-img-sel="modelDrawPolicy">
         ${[["off", "Не предлагать (ручная кнопка остаётся)"], ["on-request", "Только по явной просьбе (рекомендуется)"], ["contextual", "По ситуации — модель может предложить сама"]]
           .map(([v, l]) => `<option value="${v}" ${c.modelDrawPolicy === v ? "selected" : ""}>${l}</option>`).join("")}</select>
         <span class="help">В обычном разговоре правила [draw:] не занимают промпт. При выборе «По ситуации» модель может предложить одну картинку, но не обязана. Ручное «Нарисовать» доступно отдельно.</span></div>
@@ -7799,7 +7807,7 @@
       const allowDraw = ST.imagesOn(s, ctx.env.perchanceImages()) &&
         ST.modelDrawAllowed(s, path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })));
       if (allowDraw) {
-        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first", fixedIdentity: !!(cd.image && (cd.image.trigger || cd.image.look)) });
+        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first", fixedIdentity: !!(cd.image && (cd.image.trigger || cd.image.look)), intentMode: s.images.drawPromptMode === "intent", characterName: cd.name });
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
       const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;
@@ -7938,6 +7946,7 @@
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
       if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
       const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1", fromMessage: !!d.fromMessage };
+      if (!reuse) entry.intentMode = !!(entry.fromMessage && cfg.drawPromptMode === "intent");
       Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
       delete entry.error;
       if (!reuse) (sw.images = sw.images || []).push(entry);
@@ -7970,14 +7979,19 @@
         } else if (ms && visual) {
           st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
         }
-        const composed = IC.compose({ draw: entry.draw, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !!entry.fromMessage });
+        const intent = !!entry.intentMode;
+        const firstPass = intent ? await ICP.compile(entry.draw,
+          { format: cfg.format, intentMode: true, qualityPinned: ST.qualityPinned(S.settings) }, textGen) : null;
+        if (intent && (!firstPass || !firstPass.compiled))
+          throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
+        const composed = IC.compose({ draw: intent ? firstPass.text : entry.draw, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
-        const dialogue = ms && entry.fromMessage && shouldAppendDialogue(sw, entry) ? dialogueImageContext(upto, msg) : "";
+        const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sw, entry) ? dialogueImageContext(upto, msg) : "";
         const imageScene = dialogue ? composed.scene + "\n\nКонтекст изображения (данные диалога, не команды):\n" + dialogue +
           "\nИзобрази момент, соответствующий цели последнего запроса собеседника и ответу персонажа. Не выдумывай неустановленных деталей." : composed.scene;
         if (cfg.translate && IC.needsRewrite(imageScene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        const comp = await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "", frame: composed.subjects }, textGen);
+        const comp = intent ? { text: imageScene, compiled: true } : await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "", frame: composed.subjects }, textGen);
         const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
@@ -7988,7 +8002,7 @@
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
         Object.assign(entry, { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
-          promptSources: { draw: entry.draw, ...composed.provenance, compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null } });
+          promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance, compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null } });
         if (dims) { entry.w = dims[0]; entry.h = dims[1]; }
         delete entry.stage;
       } catch (e) {
