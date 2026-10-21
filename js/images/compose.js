@@ -285,6 +285,10 @@
       const mapped = parseMap(im.wardrobe).some(({ key }) => key && !isBase(key) && !isSuffix(key) && bestVariant(key, outfit).score > 0);
       if (!mapped) wardrobe = "";
     }
+    // Outfit presets describe available looks, not a second garment layer.
+    // If the model already described visible clothing, do not stack a preset
+    // on top. The tracked outfit remains unchanged; this affects this image only.
+    if (actors.owner && wardrobe && garmentWords(draw).length) wardrobe = "";
     // В RP при явном изменении одежды в [draw:] старая одежда не навязывается.
     // В мессенджере явно установленная пользователем одежда имеет приоритет над
     // случайными противоречащими деталями от модели; смотрим по сохранённому snapshot.
