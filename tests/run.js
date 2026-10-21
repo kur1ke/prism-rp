@@ -42,6 +42,7 @@ require(J("state/service.js"));
 require(J("images/compose.js"));
 require(J("images/backends.js"));
 require(J("images/compile.js"));
+require(J("images/service.js"));
 require(J("assist/assist.js"));
 require(J("core/settings.js"));
 require(J("ui/render.js"));
@@ -3954,6 +3955,19 @@ async function unifiedTracker() {
     assert.strictEqual(s.pictureRequested("Не покажи мне фото"), false);
     assert.strictEqual(s.pictureRequested("Скинь мне фотку"), true);
     assert.strictEqual(s.pictureRequested("Can you send me a pic?"), true);
+  });
+  await ta("UT14-image-1: цель фотографии берётся из предшествующего запроса текущей ветки", async () => {
+    const mk = (role, text) => ({role, swipeIdx: 0, swipes: [{text}]});
+    const previous = mk("user", "А одежда какая?");
+    const clothes = mk("assistant", "На мне огромный мягкий свитер и тёплые носочки.");
+    const request = mk("user", "А трусики? Покажешь фото?");
+    const reply = mk("assistant", "Сейчас попробую поймать ракурс, чтобы свитер был виден.");
+    const context = globalThis.PRP.imageService.dialogueImageContext([previous, clothes, request, reply], reply);
+    assert.ok(context.includes("Покажешь фото?"), context);
+    assert.ok(context.includes("свитер и тёплые носочки"), context);
+    assert.ok(!context.includes("Сейчас попробую"), "текущий ответ передаётся отдельно в draw");
+    assert.strictEqual(globalThis.PRP.imageService.dialogueImageContext([previous, clothes, request], reply), "", "вне активной ветки не извлекать контекст");
+    assert.strictEqual(globalThis.PRP.imageService.dialogueImageContext([request], request), "", "пользователь не создаёт контекст фотографии персонажа");
   });
   await ta("UT14-1: Лилит сообщает гардероб через 'На мне' — два предмета, не выдумывая остальное", async () => {
     const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
