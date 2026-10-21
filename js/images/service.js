@@ -8,6 +8,25 @@
   const PRP = (root.PRP = root.PRP || {});
   const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm;
 
+    // В мессенджере цель отправленного изображения определяется не только последним
+    // ответом персонажа: он может отвечать на вопрос несколькими репликами.
+    // Это контекст ОДНОГО кадра, не новый физический факт и не stateEvents.
+    function dialogueImageContext(path, msg) {
+      const p = Array.isArray(path) ? path : [];
+      const index = p.indexOf(msg);
+      if (index < 0 || !msg || msg.role !== "assistant") return "";
+      const before = p.slice(Math.max(0, index - 7), index);
+      const lastUser = before.map((m, i) => m.role === "user" ? i : -1).filter((i) => i >= 0).pop();
+      if (lastUser === undefined) return "";
+      const chosen = before.slice(Math.max(0, lastUser - 3)).filter((m) => m.role === "user" || m.role === "assistant");
+      const entries = chosen.map((m) => {
+        const sw = TR.activeSwipe(m);
+        const line = String(sw && sw.text || "").replace(/\[[^\]\n]{0,30}:[^\]]*\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 260);
+        return line ? (m.role === "user" ? "Собеседник: " : "Персонаж: ") + line : "";
+      }).filter(Boolean);
+      return entries.join("\n").slice(-1100);
+    }
+
   function create(ctx) {
     const { S, DB, ui } = ctx;
     const chat = () => ctx.svc.chat;
@@ -31,25 +50,6 @@
       for (const msg of S.messages) for (const sw of msg.swipes) for (const im of sw.images || []) {
         if (im.status === "pending" && !S.drawing.has(im.id)) { im.status = "error"; im.error = "Рисование прервано. Попробуйте ещё раз."; }
       }
-    }
-
-    // В мессенджере цель отправленного изображения определяется не только последним
-    // ответом персонажа: он может отвечать на вопрос несколькими репликами.
-    // Это контекст ОДНОГО кадра, не новый физический факт и не stateEvents.
-    function dialogueImageContext(path, msg) {
-      const p = Array.isArray(path) ? path : [];
-      const index = p.indexOf(msg);
-      if (index < 0 || !msg || msg.role !== "assistant") return "";
-      const before = p.slice(Math.max(0, index - 7), index);
-      const lastUser = before.map((m, i) => m.role === "user" ? i : -1).filter((i) => i >= 0).pop();
-      if (lastUser === undefined) return "";
-      const chosen = before.slice(Math.max(0, lastUser - 3)).filter((m) => m.role === "user" || m.role === "assistant");
-      const entries = chosen.map((m) => {
-        const sw = TR.activeSwipe(m);
-        const line = String(sw && sw.text || "").replace(/\[[^\]\n]{0,30}:[^\]]*\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 260);
-        return line ? (m.role === "user" ? "Собеседник: " : "Персонаж: ") + line : "";
-      }).filter(Boolean);
-      return entries.join("\n").slice(-1100);
     }
 
     // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
