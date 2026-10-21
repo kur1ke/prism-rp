@@ -170,7 +170,7 @@
     function refreshAfterSettings() {
       svc().prism.refresh();
       renderRail();
-      if (S.view === "chat") renderFeed(); else renderStage();
+      if (S.view === "chat") { renderHead(); renderFeed(); } else renderStage();
       S.modal && (S.modal.keepScroll = true);
       renderModal();
     }
