@@ -3840,16 +3840,26 @@ async function unifiedTracker() {
     assert.strictEqual(STATE.forCharacter(state).location, null);
     assert.deepStrictEqual(STATE.forCharacter(state).visualWear, ["огромном свитере"]);
   });
-  await ta("UT13-5: политика иллюстраций безопасна по умолчанию и сохраняет старые настройки", async () => {
+  await ta("UT13-5: контекстный инструмент рисования и сохранение строгой политики", async () => {
     const S = globalThis.PRP.settings;
     const current = S.merge(null);
-    assert.strictEqual(current.images.modelDrawPolicy, "on-request");
-    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Привет! Как ты?" }]), false);
-    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Пришли мне фотографию, пожалуйста" }]), true);
-    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "А можешь прислать мне селфи?" }]), true);
-    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Мне нравится твоя фотография" }]), false);
-    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Пришли фото" }, { role: "assistant", text: "Уже отправила" }]), false);
-    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Не присылай фото" }]), false);
+    assert.strictEqual(current.images.modelDrawPolicy, "contextual");
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Привет! Как ты?" }]), true);
+    // In a continuing dialogue, the last turn need not literally request a photo.
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Лилит, а можешь показать трусики?" }]), true);
+    assert.strictEqual(S.modelDrawAllowed(current, [
+      { role: "user", text: "Лилит, а можешь показать трусики?" },
+      { role: "assistant", text: "Сначала скажи что-нибудь милое." },
+      { role: "user", text: "Пожалуйста, ты очень милая." },
+    ]), true);
+    // Preserve the original strictly request-triggered policy when selected.
+    const requestOnly = S.merge({ images: { modelDrawPolicy: "on-request" } });
+    assert.strictEqual(S.modelDrawAllowed(requestOnly, [{ role: "user", text: "Привет! Как ты?" }]), false);
+    assert.strictEqual(S.modelDrawAllowed(requestOnly, [{ role: "user", text: "Пришли мне фотографию, пожалуйста" }]), true);
+    assert.strictEqual(S.modelDrawAllowed(requestOnly, [{ role: "user", text: "А можешь прислать мне селфи?" }]), true);
+    assert.strictEqual(S.modelDrawAllowed(requestOnly, [{ role: "user", text: "Мне нравится твоя фотография" }]), false);
+    assert.strictEqual(S.modelDrawAllowed(requestOnly, [{ role: "user", text: "Пришли фото" }, { role: "assistant", text: "Уже отправила" }]), false);
+    assert.strictEqual(S.modelDrawAllowed(requestOnly, [{ role: "user", text: "Не присылай фото" }]), false);
     const priorYes = S.merge({ images: { modelDraws: true } });
     const priorNo = S.merge({ images: { modelDraws: false } });
     assert.strictEqual(priorYes.images.modelDrawPolicy, "contextual");
