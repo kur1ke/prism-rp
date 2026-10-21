@@ -726,6 +726,16 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
+t("VIS-ID-1: canonical identity precedes shot details and never leaks into another actor", () => {
+  const cd = { name: "Лилит", image: { trigger: "Lilithx, black cat ears", look: "base: burgundy hair, grey-green eyes" } };
+  const single = IC.compose({ draw: "1girl, sitting on a bed, soft cinematic lighting", card: cd, scene: { chars: {}, present: [] }, persona: {} });
+  const f = IC.finalise({ composed: single, card: cd, backend: "a1111", settings: { promptMode: "off" } });
+  assert.ok(f.prompt.indexOf("Lilithx") >= 0 && f.prompt.indexOf("Lilithx") < f.prompt.indexOf("sitting on a bed"), f.prompt);
+  assert.ok(f.prompt.includes("burgundy hair") && f.prompt.includes("grey-green eyes"), f.prompt);
+  const other = IC.compose({ draw: "1boy, ichigo_kurosaki, standing", card: cd, scene: { chars: {}, present: [] }, persona: {} });
+  const otherPrompt = IC.finalise({ composed: other, card: cd, backend: "a1111", settings: { promptMode: "off" } }).prompt;
+  assert.ok(!otherPrompt.includes("Lilithx"), otherPrompt);
+});
 t("finalise: другой названный персонаж без неё → её триггер, LoRA и негатив не идут", () => {
   const composed = IC.compose({ draw: "1boy, ichigo_kurosaki, standing", card: imgCard, scene: st0, persona: {} });
   const f = IC.finalise({ composed, card: imgCard, backend: "a1111", settings: { negative: "lowres" } });
