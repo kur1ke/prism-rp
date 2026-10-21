@@ -4990,7 +4990,15 @@
       stale,
       visualWear: messenger && actors.owner ? outfit : "",
       provenance: { subjects: actors, card: actors.owner ? card.name : null, user: actors.user ? persona.name : null,
-        outfit: outfit || null, userOutfit: userOutfit || null, messenger: messenger || false },
+        outfit: outfit || null, userOutfit: userOutfit || null, messenger: messenger || false,
+        imageLayers: {
+          identity: actors.owner ? look.join(", ") : "",
+          established: established.join(", "),
+          wardrobePreset: wardrobe,
+          shot: draw,
+          shotExtras: bits.join(", "),
+          outfitKnown: !!outfit,
+        } },
     };
   }
 
