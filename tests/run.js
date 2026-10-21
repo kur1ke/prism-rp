@@ -56,6 +56,36 @@ function t(name, fn) {
   catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.message || e)); }
 }
 
+/* ── UI: visible image info respects developer mode; copy respects same gate ── */
+{
+  const fs = require("fs");
+  const vm = require("vm");
+  const context = { PRP: {
+    render: { esc: (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"), icon: () => "ICON" },
+    scene: {}, tree: {}, openai: {}, viewKit: { SAMPLER_PRESETS: [], THEMES: [], WEATHER: [], loraRows: () => "" },
+    views: {}
+  } };
+  context.globalThis = context;
+  vm.runInNewContext(fs.readFileSync(J("ui/views/chat.js"), "utf8"), context);
+  const V = context.PRP.views;
+  const image = { prompt: "a cat", negative: "bad hands", promptSources: { shot: "secret debug source" },
+    compiledFrom: "raw input", seed: 42, w: 832, h: 1216, backend: "a1111" };
+  t("IMG-QOL-1: sources and raw input hidden outside developer mode", () => {
+    const normal = V.imageInfo(image, false, { mid: "m", sw: 0, img: "i" });
+    assert.ok(normal.includes("img-copy-prompt"));
+    assert.ok(!normal.includes("Источники изображения") && !normal.includes("Сцена до перевода"));
+    const debug = V.imageInfo(image, true, { mid: "m", sw: 0, img: "i" });
+    assert.ok(debug.includes("Источники изображения") && debug.includes("Сцена до перевода"));
+  });
+  t("IMG-QOL-2: copy in normal mode has prompt and negative; debug mode contains all diagnostics", () => {
+    const plain = V.imageCopyText(image, false);
+    assert.ok(plain.includes("a cat") && plain.includes("bad hands"));
+    assert.ok(!plain.includes("secret debug source") && !plain.includes("Seed"));
+    const detailed = V.imageCopyText(image, true);
+    assert.ok(detailed.includes("secret debug source") && detailed.includes("raw input") && detailed.includes("832×1216") && detailed.includes("42"));
+  });
+}
+
 /* ── Сцена ── */
 t("parse: директивы вырезаются, операции собираются", () => {
   const r = S.parse("Она улыбнулась.\n\n[scene: time=+15m; loc=Кафе, терраса; Химэ.wear=худи, джинсы]");
