@@ -60,8 +60,10 @@
       drawer: () => { S.drawerOpen = !S.drawerOpen; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       "drawer-close": () => { S.drawerOpen = false; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       tab: (t) => { collectExp(); collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
-      "open-prism": () => { S.tab = "prism"; S.drawerOpen = true; svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
-      "prism-preview": () => { svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); },
+      "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
+      "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
+      "open-prism": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
+      "prism-preview": () => { svc.prism.refresh(); if (S.modal && S.modal.kind === "debug") ui.renderModal(); else ui.renderDrawer(); },
       // Сцена
       "sc-time-set": () => {
         const d = $("#sc-date").value.trim(), tm = $("#sc-time").value.trim();
