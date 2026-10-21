@@ -25,7 +25,7 @@
       steps: 28, cfg: 5.5, seed: "", sizeMode: "auto", fixedSize: "1024x1024", maxSide: 1216,
       hires: false, hiresScale: 1.5, hiresUpscaler: "R-ESRGAN 4x+ Anime6B", hiresDenoise: 0.4, hiresSteps: 0,
       fixedPrompt: "", promptMode: "append", negative: "", format: "tags", translate: true,
-      modelDraws: true, autoDraw: true, extra: "",
+      modelDraws: true, modelDrawPolicy: "on-request", autoDraw: true, extra: "",
     },
   };
 
@@ -38,6 +38,11 @@
     s.sampler = Object.assign({}, DEFAULTS.sampler, s.sampler || {});
     s.persona = Object.assign({}, DEFAULTS.persona, s.persona || {});
     s.images = Object.assign({}, DEFAULTS.images, s.images || {});
+    // Старые настройки сохраняют выбранное пользователем поведение.
+    // Новая установка по умолчанию не предлагает иллюстрации без запроса.
+    if (saved && saved.images && !Object.prototype.hasOwnProperty.call(saved.images, "modelDrawPolicy")) {
+      s.images.modelDrawPolicy = saved.images.modelDraws === false ? "off" : "contextual";
+    }
     if (!saved && opts && opts.perchanceImages === false) s.images.backend = "a1111";
     return s;
   }
@@ -67,11 +72,36 @@
     const ic = s.images;
     return ic.enabled && (ic.backend !== "perchance" || perchanceImagesAvailable);
   }
+  const DRAW_POLICIES = ["off", "on-request", "contextual"];
+  function modelDrawPolicy(s) {
+    const c = s && s.images || DEFAULTS.images;
+    if (DRAW_POLICIES.includes(c.modelDrawPolicy)) return c.modelDrawPolicy;
+    return c.modelDraws === false ? "off" : "contextual"; // legacy settings
+  }
+  // Явная просьба прислать/создать изображение, а не простое упоминание фото.
+  // Это безопасный минимальный шлюз; сложные контекстные просьбы можно
+  // удовлетворить ручной кнопкой «Нарисовать» или режимом «По ситуации».
+  function pictureRequested(text) {
+    const s = String(text || "").toLowerCase().replace(/ё/g, "е");
+    if (/(?:^|[^\p{L}\p{N}])(?:не\s+(?:покажи|пришли|скинь|кинь|отправь|рисуй|нарисуй|делай|генерируй|сгенерируй|присылай|показывай|send|show|draw|generate)|не\s+хочу[^.!?]{0,70}(?:фото|селфи|картинк|photo|picture))/iu.test(s)) return false;
+    const noun = /(?:фото(?:графи[юяией])?|селфи|картинк[ауеиой]?|изображени[ея]|портрет|рисунок|фотку|photo|picture|image|selfie|portrait|pic)/i;
+    const verb = /(?:пришли|скинь|кинь|отправь|покажи|нарисуй|нарисовать|сгенерируй|сделай|сфотографируй|сфоткай|создай|прислать|скинуть|отправить|показать|сгенерировать|send|show|draw|generate|make|create)/i;
+    if (/(?:покажи|show)\s+(?:мне\s+)?(?:как\s+ты\s+выглядишь|себя)/i.test(s)) return true;
+    // «А можешь прислать мне фотографию?» — да; «фото было красивым» — нет.
+    return verb.test(s) && noun.test(s) && (s.search(noun) >= s.search(verb)) && s.search(noun) - s.search(verb) < 85;
+  }
+  function modelDrawAllowed(s, path) {
+    const mode = modelDrawPolicy(s);
+    if (mode === "off") return false;
+    if (mode === "contextual") return true;
+    const last = Array.isArray(path) && path[path.length - 1];
+    return !!last && last.role === "user" && pictureRequested(last.text);
+  }
   function qualityPinned(s) {
     const ic = s.images;
     return ic.promptMode !== "off" && !!String(ic.fixedPrompt || "").trim();
   }
 
-  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned };
+  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -105,8 +105,11 @@
       <div class="field"><label>Негатив</label><textarea data-imgcfg="negative" rows="2" placeholder="lowres, bad anatomy, bad hands, extra digits">${esc(c.negative || "")}</textarea></div>
       ${c.backend === "a1111" ? `<p class="hint">LoRA задаются в карточке каждого персонажа: «Редактировать карточку → Изображения». Так они переезжают вместе с карточкой и не попадают в чужие картинки.</p>` : ""}
       <div class="block-title" style="margin-top:20px">Когда рисовать</div>
-      ${chk("modelDraws", "Модель сама решает, когда показать картинку", "Она пишет короткую служебную строку [draw: …]; приложение её прячет и рисует.")}
-      ${chk("autoDraw", "Рисовать сразу", "Иначе под сообщением появится кнопка «Нарисовать».")}`;
+      <div class="field"><label>Предлагать иллюстрации</label><select data-img-sel="modelDrawPolicy">
+        ${[["off", "Не предлагать (ручная кнопка остаётся)"], ["on-request", "Только по явной просьбе (рекомендуется)"], ["contextual", "По ситуации — модель может предложить сама"]]
+          .map(([v, l]) => `<option value="${v}" ${c.modelDrawPolicy === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+        <span class="help">В обычном разговоре правила [draw:] не занимают промпт. При выборе «По ситуации» модель может предложить одну картинку, но не обязана. Ручное «Нарисовать» доступно отдельно.</span></div>
+      ${chk("autoDraw", "Рисовать сразу, если есть директива", "Иначе можно запустить предложенную картинку вручную.")}`;
   }
 
   function providerForm(p) {

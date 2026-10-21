@@ -3729,6 +3729,232 @@ async function unifiedTracker() {
       assert.strictEqual(STATE.forCharacter(h.ctx.svc.state.snapshot()).location, "дома");
     } finally { globalThis.PRP.llm = old; }
   });
+  // UT-1.2: live screenshot exposed "неизвестный участник" and lost self-reports.
+  await ta("UT12-1: модель вправе назвать текущего говорящего по имени, но не пользователя", async () => {
+    const source = { mode: "messenger", role: "assistant", speakerName: "Орихимэ Иноуэ", otherName: "Лёня", text: "Я дома" };
+    for (const actor of ["Орихимэ Иноуэ", "Орихимэ", "assistant", "character", "{{char}}", undefined]) {
+      const input = { actor, field: "location", action: "set", value: "дома", certainty: "reported", evidence: "Я дома" };
+      const parsed = INTR.parse(JSON.stringify({ events: [input] }), source);
+      assert.strictEqual(parsed.events.length, 1, actor);
+      assert.strictEqual(parsed.events[0].actor, "char");
+    }
+    for (const actor of ["Лёня", "user", "чужой персонаж"]) {
+      const parsed = INTR.parse(JSON.stringify({ events: [{ actor, field: "location", action: "set", value: "дома", certainty: "reported", evidence: "Я дома" }] }), source);
+      assert.strictEqual(parsed.events.length, 0, actor);
+      assert.ok(parsed.issues.length, actor);
+    }
+  });
+  await ta("UT12-2: безымянный субъект не может присвоить чужое действие", async () => {
+    const source = { mode: "messenger", role: "assistant", speakerName: "Орихимэ Иноуэ", otherName: "Лёня", text: "Лёня дома" };
+    const event = { field: "location", action: "set", value: "дома", certainty: "reported", evidence: "Лёня дома" };
+    const parsed = INTR.parse(JSON.stringify({ events: [event] }), source);
+    assert.strictEqual(parsed.events.length, 0);
+    assert.ok(parsed.issues[0].includes("неизвестный участник"));
+  });
+  await ta("UT12-2b: без actor встроенная цитата другого человека не становится состоянием", async () => {
+    const src = { mode: "messenger", role: "assistant", speakerName: "Орихимэ Иноуэ", otherName: "Лёня", text: "Лёня сказал: Я дома" };
+    const e = { field: "location", action: "set", value: "дома", certainty: "reported", evidence: "Я дома" };
+    assert.strictEqual(INTR.parse(JSON.stringify({events:[e]}), src).events.length, 0);
+    src.text = "Орихимэ Иноуэ: Я дома";
+    assert.strictEqual(INTR.parse(JSON.stringify({events:[e]}), src).events.length, 1);
+  });
+  await ta("UT12-3: реальная реплика о пироге и неудаче не скрывает Я дома", async () => {
+    const txt = "Привет-привет!\nОрихимэ Иноуэ: Я дома, пытаюсь разобраться с рецептом одного очень необычного пирога, но что-то всё пошло не по плану...";
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m = h.chat.newMsg("assistant", null, txt);
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => JSON.stringify({ events: [
+      { actor: "неизвестный", field: "activity", action: "set", value: "разбирается с рецептом", certainty: "reported", evidence: "пытаюсь разобраться с рецептом" },
+    ] }) };
+    try {
+      const r = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      assert.strictEqual(r.status, "partial");
+      assert.ok(r.issues.some((x) => x.includes("actor:")));
+      const v = h.ctx.svc.messenger.view().world;
+      assert.strictEqual(v.location, "дома");
+      assert.strictEqual(v.fieldStatus.location.certainty, "reported");
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("UT12-4: футболка и шорты — разные элементы одежды, а не одна строка", async () => {
+    const source = { role: "assistant", mode: "messenger", speakerName: "Орихимэ Иноуэ" };
+    const txt = "Орихимэ Иноуэ: Я сейчас в домашнем, в большой белой футболке и коротких шортах. Очень удобно готовить!";
+    const data = INTR.grounded(txt, source);
+    assert.strictEqual(data.length, 1);
+    assert.deepStrictEqual(data[0].value, ["большой белой футболке", "коротких шортах"]);
+    assert.strictEqual(data[0].actor, "char");
+  });
+  await ta("UT12-5: резервный разбор не принимает вопросы, условия и отрицания", async () => {
+    const opts = { mode: "messenger", role: "assistant", speakerName: "Орихимэ Иноуэ" };
+    for (const txt of ["Я дома?", "Я не дома", "Я дома, если всё получится", "Если я дома, то почему грустно?", "Я планирую быть дома", "Я в футболке?", "Я не в футболке"]) {
+      assert.deepStrictEqual(INTR.grounded(txt, opts), [], txt);
+    }
+    assert.strictEqual(INTR.grounded("Я дома, но пирог не получился", opts)[0].value, "дома");
+  });
+  // UT-1.3: naturally expressed state, drawing policy and deterministic safety.
+  await ta("UT13-1: Лилит — эллиптическая поза, одежда и деятельность в одном предложении", async () => {
+    const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)", otherName: "Лёня" };
+    const txt = "Лилит (Лили): А вообще — лежу в своём любимом огромном свитере и воюю с конфигами. А ты что делаешь?";
+    const ev = INTR.grounded(txt, o);
+    assert.deepStrictEqual(ev.map((x) => x.field).sort(), ["activity", "pose", "wear"]);
+    assert.strictEqual(ev.find((x) => x.field === "pose").value, "лежу");
+    assert.deepStrictEqual(ev.find((x) => x.field === "wear").value, ["своём любимом огромном свитере"]);
+    assert.strictEqual(ev.find((x) => x.field === "activity").value, "воюю с конфигами");
+    for (const e of ev) { assert.strictEqual(e.certainty, "reported"); assert.ok(txt.includes(e.evidence)); }
+    const m = make("assistant", txt, ev, "l1");
+    const state = STATE.fold({ mode: "messenger", path: [m], charName: "Лилит (Лили)" });
+    const visual = STATE.forCharacter(state);
+    assert.strictEqual(visual.visualPose, "лежу");
+    assert.deepStrictEqual(visual.visualWear, ["своём любимом огромном свитере"]);
+    assert.strictEqual(visual.activity, "воюю с конфигами");
+    assert.strictEqual(visual.location, null);
+    assert.strictEqual(STATE.forUser(state, "messenger").visible.wear, undefined);
+  });
+  await ta("UT13-2: два сообщения Лилит — последнее конкретное занятие выигрывает, чужие слова не импортируются", async () => {
+    const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)", otherName: "Лёня" };
+    const txt = "Пытаюсь сосредоточиться на одной очень вредной нейронке, которая отказывается рисовать пальцы правильно 😳\n\n" +
+      "Лилит (Лили): А вообще — лежу в своём любимом огромном свитере и воюю с конфигами. А ты что делаешь?";
+    const events = INTR.grounded(txt, o);
+    assert.strictEqual(events.find((x) => x.field === "activity").value, "воюю с конфигами");
+    assert.strictEqual(events.find((x) => x.field === "pose").value, "лежу");
+    assert.deepStrictEqual(INTR.grounded("Лёня: Лежу в свитере", o), []);
+    assert.deepStrictEqual(INTR.grounded("Лёня сказал: Я лежу в свитере", o), []);
+  });
+  await ta("UT13-3: не превращать вопросы, планы, гипотезы и прошлые события в физическое состояние", async () => {
+    const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
+    for (const msg of ["Я переоденусь в свитер", "Я буду в свитере", "Я не в свитере", "Я в футболке?",
+      "Она лежит в свитере", "Лежала в свитере", "Я закончила читать статью", "Если я лежу в свитере, то что?",
+      "Я лежу в свитере, если бы был дома", "Лилит (Лили): А вообще — буду лежать в свитере"])
+      assert.deepStrictEqual(INTR.grounded(msg, o), [], msg);
+    assert.strictEqual(INTR.grounded("Я дома, но пирог не получился", o)[0].value, "дома");
+    assert.strictEqual(INTR.grounded("А вообще — лежу в свитере, но потом переоденусь", o)[0].field, "pose");
+  });
+  await ta("UT13-4: персонифицированное сообщение не меняет состояния пользователя и не создаёт место из воздуха", async () => {
+    const txt = "Лилит (Лили): А вообще — лежу в огромном свитере и воюю с конфигами.";
+    const ev = INTR.grounded(txt, { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" });
+    const state = STATE.fold({ mode: "messenger", path: [make("assistant", txt, ev, "e1")] });
+    assert.strictEqual(STATE.fieldOf(state, "user", "pose"), null);
+    assert.strictEqual(STATE.forCharacter(state).location, null);
+    assert.deepStrictEqual(STATE.forCharacter(state).visualWear, ["огромном свитере"]);
+  });
+  await ta("UT13-5: политика иллюстраций безопасна по умолчанию и сохраняет старые настройки", async () => {
+    const S = globalThis.PRP.settings;
+    const current = S.merge(null);
+    assert.strictEqual(current.images.modelDrawPolicy, "on-request");
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Привет! Как ты?" }]), false);
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Пришли мне фотографию, пожалуйста" }]), true);
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "А можешь прислать мне селфи?" }]), true);
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Мне нравится твоя фотография" }]), false);
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Пришли фото" }, { role: "assistant", text: "Уже отправила" }]), false);
+    assert.strictEqual(S.modelDrawAllowed(current, [{ role: "user", text: "Не присылай фото" }]), false);
+    const priorYes = S.merge({ images: { modelDraws: true } });
+    const priorNo = S.merge({ images: { modelDraws: false } });
+    assert.strictEqual(priorYes.images.modelDrawPolicy, "contextual");
+    assert.strictEqual(priorNo.images.modelDrawPolicy, "off");
+    assert.strictEqual(S.modelDrawAllowed(priorYes, [{ role: "user", text: "Привет" }]), true);
+    assert.strictEqual(S.modelDrawAllowed(priorNo, [{ role: "user", text: "Пришли фото" }]), false);
+  });
+  await ta("UT13-6: модельное описание и визуальный трекер из одного снимка ветки", async () => {
+    const txt = "Лилит (Лили): Лежу в своём огромном свитере и воюю с конфигами.";
+    const ev = INTR.grounded(txt, { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" });
+    const state = STATE.fold({ mode: "messenger", charName: "Лилит (Лили)", path: [make("assistant", txt, ev, "l1")] });
+    const tracked = STATE.forCharacter(state);
+    const card = { name: "Лилит (Лили)", image: { trigger: "lilith", wardrobe: "base: black dress" } };
+    const scene = { chars: { [card.name]: { wear: tracked.visualWear, pose: tracked.visualPose || "" } }, present: [] };
+    const picture = IC.compose({ draw: "1girl, lilith, selfie", card, scene, messenger: tracked });
+    const prompt = IC.finalise({ composed: picture, card, backend: "a1111", settings: {} }).prompt;
+    assert.ok(prompt.includes("свитере"), prompt);
+    assert.ok(!prompt.includes("black dress"), prompt);
+    assert.ok(!prompt.includes("конфигами"), "текст занятия не должен автоматически стать тегом сцены");
+  });
+  await ta("UT13-7: в Prism инструкция [draw:] появляется только по выбранной политике", async () => {
+    const h = fbHarness({ name: "Лилит", description: "Персонаж" });
+    h.ctx.env.perchanceImages = () => true;
+    await h.chat.createChat("rp", "c1");
+    h.S.settings.images.modelDrawPolicy = "on-request";
+    let built = h.prism.build([]);
+    assert.strictEqual(built.report.imageDirectiveAllowed, false);
+    assert.ok(!allText(built.messages).includes("Ты можешь показать собеседнику картинку"));
+    await h.chat.addUserMessage("Привет, что делаешь?");
+    built = h.prism.build(h.chat.path());
+    assert.strictEqual(built.report.imageDirectiveAllowed, false);
+    assert.ok(!allText(built.messages).includes("Ты можешь показать собеседнику картинку"));
+    await h.chat.addUserMessage("А можешь прислать мне фотографию?");
+    built = h.prism.build(h.chat.path());
+    assert.strictEqual(built.report.imageDirectiveAllowed, true);
+    assert.ok(allText(built.messages).includes("Ты можешь показать собеседнику картинку"));
+    h.S.settings.images.modelDrawPolicy = "off";
+    built = h.prism.build(h.chat.path());
+    assert.strictEqual(built.report.imageDirectiveAllowed, false);
+    h.S.settings.images.modelDrawPolicy = "contextual";
+    built = h.prism.build([]);
+    assert.strictEqual(built.report.imageDirectiveAllowed, true);
+  });
+  await ta("UT13-8: в отключённом режиме неожиданная [draw:] не создаёт автоматическую иллюстрацию", async () => {
+    const h = fbHarness({ name: "Лилит", description: "Персонаж" });
+    h.ctx.env.perchanceImages = () => true;
+    h.S.settings.images.modelDrawPolicy = "off";
+    await h.chat.createChat("rp", "c1");
+    await h.chat.addUserMessage("Как дела?");
+    fbLLM = async () => ({ text: "Пытаюсь настроить приложение.\n\n[draw: 1girl, lilith, selfie]", reasoning: "" });
+    await h.gen.generate(null, "new");
+    const last = h.chat.path().slice(-1)[0];
+    assert.strictEqual(last.role, "assistant");
+    assert.strictEqual(last.swipes[0].draws.length, 0);
+    assert.ok(!last.swipes[0].text.includes("[draw:"));
+    assert.ok(last.swipes[0].text.includes("Пытаюсь настроить приложение"));
+  });
+  await ta("UT13-11: максимум одно предложенное изображение за ответ — требование кода", async () => {
+    const h = fbHarness({ name: "Лилит", description: "Персонаж" });
+    h.ctx.env.perchanceImages = () => true;
+    h.S.settings.images.modelDrawPolicy = "contextual";
+    h.S.settings.images.autoDraw = false;
+    await h.chat.createChat("rp", "c1");
+    await h.chat.addUserMessage("Привет");
+    fbLLM = async () => ({ text: "Привет!\n[draw: 1girl, selfie]\n[draw: 2girls, park]", reasoning: "" });
+    await h.gen.generate(null, "new");
+    const sw = globalThis.PRP.tree.activeSwipe(h.chat.path().slice(-1)[0]);
+    assert.strictEqual(sw.draws.length, 1);
+    assert.strictEqual(sw.draws[0].prompt, "1girl, selfie");
+    assert.ok(!sw.text.includes("[draw:"));
+  });
+  await ta("UT13-9: живой путь observer → событие → Messenger view без валидного JSON", async () => {
+    const h = fbHarness({ name: "Лилит (Лили)", description: "Персонаж." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const text = "Лилит (Лили): А вообще — лежу в своём любимом огромном свитере и воюю с конфигами.";
+    const m = h.chat.newMsg("assistant", null, text);
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => "sorry, cannot return JSON" };
+    try {
+      const status = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { kind: "perchance" });
+      assert.strictEqual(status.status, "partial");
+      const state = h.ctx.svc.messenger.view().world;
+      assert.strictEqual(state.visualPose, "лежу");
+      assert.deepStrictEqual(state.visualWear, ["своём любимом огромном свитере"]);
+      assert.strictEqual(state.activity, "воюю с конфигами");
+      assert.strictEqual(state.location, null);
+      const saved = h.store.messages.get(m.id).swipes[0];
+      assert.strictEqual(saved.stateEvents.length, 3);
+      assert.strictEqual(saved.stateStatus.eventCount, 3);
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("UT13-10: установленное сейчас сохраняется, будущее намерение не меняет его", async () => {
+    const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
+    const ev = INTR.grounded("Лежу в огромном свитере и хочу переодеться в пижаму", o);
+    assert.ok(ev.some((x) => x.field === "pose" && x.value === "лежу"));
+    assert.ok(ev.some((x) => x.field === "wear" && x.value.some((v) => v.includes("свитере"))));
+    assert.ok(!ev.some((x) => x.field === "wear" && x.value.some((v) => v.includes("пижаму"))));
+    const s = globalThis.PRP.settings;
+    assert.strictEqual(s.pictureRequested("Не покажи мне фото"), false);
+    assert.strictEqual(s.pictureRequested("Скинь мне фотку"), true);
+    assert.strictEqual(s.pictureRequested("Can you send me a pic?"), true);
+  });
   await ta("UT11-9: diagnostic status is rendered without manual state form", async () => {
     require(J("ui/views/messenger.js"));
     const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
