@@ -84,7 +84,24 @@
       // Более сложные случаи по-прежнему требуют модельного извлечения.
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
       const events = result.events.slice();
-      for (const e of fallback) if (!events.some((x) => x.actor === e.actor && x.field === e.field && x.certainty !== "intent")) events.push(e);
+      // Compare common Russian inflections ('синяя куртка'/'синей куртке')
+      // to avoid adding the same garment twice when model and fallback agree.
+      const garmentKey = (value) => (String(value || "").toLowerCase().replace(/ё/g, "е")
+        .match(/[\p{L}\p{N}]+/gu) || []).map((word) => word.length > 4
+          ? word.replace(/(?:ого|ему|ому|ыми|ими|ая|яя|ый|ий|ой|ей|ие|ые|ую|юю|ых|их|ым|им|ом|ем|а|я|е|у|ю|ы|и)$/u, "")
+          : word).join(" ");
+      for (const e of fallback) {
+        if (events.length >= INT.MAX) break;
+        const sameField = events.filter((x) => x.actor === e.actor && x.field === e.field && x.certainty !== "intent");
+        if (e.field === "wear" && e.action === "add" && Array.isArray(e.value)) {
+          // A model may return one garment (or an invalid second garment).
+          // Preserve correctly grounded items missing from that partial list;
+          // don't discard all of fallback just because a wear field exists.
+          const known = sameField.flatMap((x) => Array.isArray(x.value) ? x.value : []).map(garmentKey);
+          const missing = e.value.filter((item) => !known.includes(garmentKey(item)));
+          if (missing.length) events.push(Object.assign({}, e, { value: missing }));
+        } else if (!sameField.length) events.push(e);
+      }
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
           chat().path().map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">") !== originalKey) {

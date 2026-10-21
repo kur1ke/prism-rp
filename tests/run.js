@@ -3647,7 +3647,7 @@ async function unifiedTracker() {
   });
   await ta("UT11-3: malformed wear add/remove candidate cannot crash interpreter", async () => {
     for (const action of ["add", "remove"]) {
-      const p = INTR.parse(JSON.stringify({ events: [Evt("char", "wear", action, "кардиган", "reported", "Я в кардигане")] }),
+      const p = INTR.parse(JSON.stringify({ events: [Evt("char", "wear", action, { item: "кардиган" }, "reported", "Я в кардигане")] }),
         { mode: "messenger", role: "assistant", text: "Я в кардигане" });
       assert.strictEqual(p.events.length, 0);
       assert.ok(p.issues.includes("некорректный список"));
@@ -3954,6 +3954,60 @@ async function unifiedTracker() {
     assert.strictEqual(s.pictureRequested("Не покажи мне фото"), false);
     assert.strictEqual(s.pictureRequested("Скинь мне фотку"), true);
     assert.strictEqual(s.pictureRequested("Can you send me a pic?"), true);
+  });
+  await ta("UT14-1: Лилит сообщает гардероб через 'На мне' — два предмета, не выдумывая остальное", async () => {
+    const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
+    const txt = "Ой, ты сейчас решил провести ревизию моего гардероба? 😼\n" +
+      "Я сегодня в режиме «максимальный уют». На мне огромный мягкий свитер, который почти полностью меня поглотил, и тёплые носочки.";
+    const data = INTR.grounded(txt, o);
+    assert.strictEqual(data.length, 1);
+    assert.strictEqual(data[0].field, "wear");
+    assert.strictEqual(data[0].certainty, "reported");
+    assert.deepStrictEqual(data[0].value, ["огромный мягкий свитер", "тёплые носочки"]);
+    assert.ok(txt.includes(data[0].evidence));
+  });
+  await ta("UT14-2: модельное wear в строке безопасно приводится к массиву — другие поля по-прежнему строги", async () => {
+    const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)", text: "На мне огромный мягкий свитер, и тёплые носочки" };
+    const wear = { actor: "char", field: "wear", action: "add", value: "огромный мягкий свитер", certainty: "reported", evidence: "огромный мягкий свитер" };
+    const parsed = INTR.parse(JSON.stringify({ events: [wear] }), o);
+    assert.strictEqual(parsed.issues.length, 0);
+    assert.deepStrictEqual(parsed.events[0].value, ["огромный мягкий свитер"]);
+    const invalid = INTR.parse(JSON.stringify({ events: [{ ...wear, value: { shirt: true } }] }), o);
+    assert.strictEqual(invalid.events.length, 0);
+    assert.ok(invalid.issues.some((x) => x.includes("некорректный список")));
+    const spoof = INTR.parse(JSON.stringify({ events: [{ ...wear, actor: "user" }] }), o);
+    assert.strictEqual(spoof.events.length, 0);
+    const madeUp = INTR.parse(JSON.stringify({ events: [{ ...wear, value: "кожаная куртка" }] }), o);
+    assert.strictEqual(madeUp.events.length, 0);
+  });
+  await ta("UT14-3: не превращать отрицания, планы, вопросы и чужие слова о 'На мне' в факты", async () => {
+    const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
+    for (const txt of ["На мне не свитер", "На мне будет свитер", "На мне был свитер",
+      "На мне, кажется, свитер", "На мне свитер?", "Лёня: На мне свитер",
+      "Лёня сказал: На мне свитер", "Если на мне свитер, это не значит, что я дома"])
+      assert.deepStrictEqual(INTR.grounded(txt, o), [], txt);
+  });
+  await ta("UT14-4: модельная ошибка не блокирует хранение и показ одежды в messenger", async () => {
+    const h = fbHarness({ name: "Лилит (Лили)", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m = h.chat.newMsg("assistant", null, "На мне огромный мягкий свитер, который почти полностью меня поглотил, и тёплые носочки");
+    await h.chat.commitMessage(m, m.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => JSON.stringify({ events: [
+      { actor: "char", field: "wear", action: "add", value: "огромный мягкий свитер", certainty: "reported", evidence: "огромный мягкий свитер" },
+      { actor: "char", field: "wear", action: "add", value: {}, certainty: "reported", evidence: "тёплые носочки" },
+    ] }) };
+    try {
+      const r = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { id: "mock" });
+      assert.strictEqual(r.status, "partial");
+      assert.ok(r.issues.some((x) => x.includes("некорректный список")));
+      const state = h.ctx.svc.messenger.view().world;
+      assert.ok(state.visualWear.includes("огромный мягкий свитер"));
+      assert.ok(state.visualWear.includes("тёплые носочки"));
+      assert.strictEqual(state.fieldStatus.visualWear.certainty, "reported");
+    } finally { globalThis.PRP.llm = old; }
   });
   await ta("UT11-9: diagnostic status is rendered without manual state form", async () => {
     require(J("ui/views/messenger.js"));
