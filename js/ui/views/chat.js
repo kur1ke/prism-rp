@@ -242,6 +242,7 @@
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
       <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка…</button>
       <div class="pop-sep"></div>
+      ${m.chat.mode === "messenger" ? `<button class="pop-item" data-act="time-open">${icon("clock")}Время переписки</button>` : ""}
       <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>
       <button class="pop-item" data-act="edit-card">${icon("card")}Редактировать персонажа</button>
       <button class="pop-item" data-act="rename-chat">${icon("edit")}Переименовать чат</button>
