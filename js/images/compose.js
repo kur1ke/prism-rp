@@ -253,7 +253,7 @@
     // Один портрет с установленным полом пользователя и несовместимым полом карточки.
     const userOnlyByGender = !ownerNamed && !userNamed && total === 1 && !!charGender && !!userGender &&
       declared[0].gender === userGender && declared[0].gender !== charGender;
-    const owner = ownerNamed || (!empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
+    const owner = ownerNamed || (!(opts && opts.requireNamedOwner) && !empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
     // Смешанный состав явно указан в кадре (например, 1girl + 1boy),
     // второй actor допускается только если его пол совпадает с профилем пользователя.
     const mixed = owner && !userNamed && total >= 2 && !!userGender && declared.some((x) => x.gender === userGender) &&
@@ -270,7 +270,7 @@
     const messenger = !!o.messenger;
     const subVars = (v) => String(v || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, persona.name || "Пользователь");
     const draw = subVars(o.draw).trim();
-    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner });
+    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
     const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
@@ -515,6 +515,13 @@
   /* Инструкция модели, когда она может «нарисовать» момент сама. */
   function drawInstruction(o) {
     const opts = o || {};
+    if (opts.intentMode) return [
+      "Если по контексту персонаж отправляет изображение, добавь [draw: короткое описание того, что показано].",
+      "Сохраняй определённый диалогом формат (например, скриншот), объект и факты; не заменяй их портретом отправителя.",
+      "Если на изображении виден персонаж карточки, явно назови его: " + (opts.characterName || "персонаж") + ". Если его нет в кадре, не называй.",
+      "Не пиши технические теги, LoRA, качество, постоянную внешность из карточки.",
+      "Максимум одна директива; не добавляй её без повода."
+    ].join("\n");
     const tags = opts.format !== "description";
     const pinned = !!opts.qualityPinned;
     const lines = [
@@ -548,6 +555,7 @@
       ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). Output ONLY one to three English sentences, no lists, no quotes, no markdown.\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
       : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
+      ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
       "Keep every concrete detail: pose, action, expression, exactly the garments described, place, time, framing.",
       "Keep the amount of clothing exactly as described. Never add nudity or sexual content the scene did not state; if the scene is sexual, name the act plainly with standard tags, never soften it.",
       q,

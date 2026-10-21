@@ -53,7 +53,7 @@
       const allowDraw = ST.imagesOn(s, ctx.env.perchanceImages()) &&
         ST.modelDrawAllowed(s, path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })));
       if (allowDraw) {
-        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first", fixedIdentity: !!(cd.image && (cd.image.trigger || cd.image.look)) });
+        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first", fixedIdentity: !!(cd.image && (cd.image.trigger || cd.image.look)), intentMode: s.images.drawPromptMode === "intent", characterName: cd.name });
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
       const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;

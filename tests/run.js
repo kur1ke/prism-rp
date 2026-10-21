@@ -757,6 +757,21 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
+t("VIS-INTENT-3: intent distinguishes shop screenshot from named owner", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
+  const ctx = { card, persona: {}, scene: { chars: {}, present: [] }, requireNamedOwner: true };
+  const shop = IC.compose({ ...ctx, draw: "screenshot of a shopping site, 1girl modeling a gothic dress, black boots" });
+  assert.strictEqual(shop.ownerPresent, false, "unnamed model in screenshot is not Lilith");
+  assert.ok(!shop.keep.includes("burgundy hair"), "card identity must not leak");
+  const photo = IC.compose({ ...ctx, draw: "Лилит sitting on a sofa, wearing a grey sweater" });
+  assert.strictEqual(photo.ownerPresent, true, "named owner retains card identity");
+});
+t("VIS-INTENT-1: short draw contract and distinct compilation instructions", () => {
+  const short = IC.drawInstruction({ intentMode: true, fixedIdentity: true });
+  const full = IC.drawInstruction({ format: "tags" });
+  assert.ok(short.includes("скриншот") && short.length < full.length / 2);
+  assert.ok(IC.rewriteRules({ intentMode: true }).includes("screenshot of products"));
+});
 t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () => {
   const instruction = IC.drawInstruction({ format: "tags", fixedIdentity: true });
   assert.ok(instruction.includes("добавляются приложением отдельно"), instruction);
@@ -4111,6 +4126,18 @@ async function unifiedTracker() {
     assert.strictEqual(service.shouldAppendDialogue(sw, { draw: explicit.prompt }), false);
     assert.strictEqual(service.shouldAppendDialogue(sw, { draw: "1girl, sitting" }), true);
     assert.strictEqual(service.shouldAppendDialogue({ draws: [] }, { draw: "manual scene" }), true);
+  });
+  await ta("VIS-INTENT-2: English intent is compiled but English tags are not", async () => {
+    const before = await ICP.compile("1girl, sitting on sofa", { format: "tags" }, async () => { throw Error("should not run"); });
+    assert.strictEqual(before.compiled, false);
+    let calls = 0;
+    const after = await ICP.compile("screenshot of an online shop showing boots", { format: "tags", intentMode: true }, async () => {
+      calls++;
+      return "screenshot, online shopping page, black platform boots, product listing";
+    });
+    assert.strictEqual(calls, 1);
+    assert.strictEqual(after.compiled, true);
+    assert.ok(after.text.includes("screenshot"));
   });
   await ta("UT14-1: Лилит сообщает гардероб через 'На мне' — два предмета, не выдумывая остальное", async () => {
     const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
