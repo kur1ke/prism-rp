@@ -98,6 +98,10 @@
       const th = OA.splitThink(raw || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
+      // Даже если модель сама добавила [draw:] без разрешения, картинка не
+      // создаётся. Служебный текст при этом всё равно удалён из ответа.
+      if (!built.report.imageDirectiveAllowed) dr.draws = [];
+      else dr.draws = dr.draws.slice(0, 1);
       // Переписка: [scene:] вырезается из текста, но сцену не пишет (chat/service.sceneFields — только неактивная копия).
       const sf = chat().sceneFields(parsed.ops);
       if (mode === "continue") {
@@ -196,6 +200,8 @@
         th = OA.splitThink((res && res.text) || "");
         parsed = SC.parse(th.text);
         dr = IC.parseDraws(parsed.text);
+        if (!built.report.imageDirectiveAllowed) dr.draws = [];
+        else dr.draws = dr.draws.slice(0, 1);
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
       }
       if (aborted || error || S.chatId !== chatId) {
@@ -295,6 +301,8 @@
       const th = OA.splitThink((res && res.text) || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
+      if (!built.report.imageDirectiveAllowed) dr.draws = [];
+      else dr.draws = dr.draws.slice(0, 1);
       const r = INI.parse(dr.text);
       // Ответ пришёл в другой контекст (чат, ветка или вариант сменились) — не дописываем не туда.
       if (S.chatId !== chatId || !ctx.chat() || pathKey(chat().path()) !== key) return finish("stale", "Пока шла проверка, чат или ветка изменились — ответ не сохранён.", true);

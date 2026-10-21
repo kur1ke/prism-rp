@@ -23,7 +23,11 @@
     function build(path, extraPost, scenario, extra) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
-      if (ST.imagesOn(s, ctx.env.perchanceImages()) && s.images.modelDraws) {
+      // Модель получает инструкцию [draw:] только согласно явно выбранной
+      // политике. В обычной переписке просьба о фото — не скрытый побочный эффект.
+      const allowDraw = ST.imagesOn(s, ctx.env.perchanceImages()) &&
+        ST.modelDrawAllowed(s, path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })));
+      if (allowDraw) {
         const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first" });
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
@@ -70,6 +74,8 @@
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
       }, extra));
+      built.report.imageDirectiveAllowed = allowDraw;
+      built.report.imageDirectivePolicy = ST.modelDrawPolicy(s);
       built.report.expDebug = ex.debug;
       built.report.world = wctx.report;
       if (messenger) built.report.messengerState = messenger.report;
