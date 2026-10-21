@@ -253,7 +253,7 @@
     // Один портрет с установленным полом пользователя и несовместимым полом карточки.
     const userOnlyByGender = !ownerNamed && !userNamed && total === 1 && !!charGender && !!userGender &&
       declared[0].gender === userGender && declared[0].gender !== charGender;
-    const owner = ownerNamed || (!empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
+    const owner = ownerNamed || (!(opts && opts.requireNamedOwner) && !empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
     // Смешанный состав явно указан в кадре (например, 1girl + 1boy),
     // второй actor допускается только если его пол совпадает с профилем пользователя.
     const mixed = owner && !userNamed && total >= 2 && !!userGender && declared.some((x) => x.gender === userGender) &&
@@ -270,7 +270,7 @@
     const messenger = !!o.messenger;
     const subVars = (v) => String(v || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, persona.name || "Пользователь");
     const draw = subVars(o.draw).trim();
-    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner });
+    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
     const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
@@ -518,6 +518,7 @@
     if (opts.intentMode) return [
       "Если по контексту персонаж отправляет изображение, добавь [draw: короткое описание того, что показано].",
       "Сохраняй определённый диалогом формат (например, скриншот), объект и факты; не заменяй их портретом отправителя.",
+      "Если на изображении виден персонаж карточки, явно назови его: " + (opts.characterName || "персонаж") + ". Если его нет в кадре, не называй.",
       "Не пиши технические теги, LoRA, качество, постоянную внешность из карточки.",
       "Максимум одна директива; не добавляй её без повода."
     ].join("\n");
