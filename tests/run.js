@@ -3877,6 +3877,23 @@ async function unifiedTracker() {
     assert.strictEqual(S.modelDrawAllowed(priorYes, [{ role: "user", text: "Привет" }]), true);
     assert.strictEqual(S.modelDrawAllowed(priorNo, [{ role: "user", text: "Пришли фото" }]), false);
   });
+  await ta("VIS-HISTORY-1: последние два draw активной ветки возвращаются модели", async () => {
+    const makeDraw = (role, text, prompt) => ({ role, swipeIdx: 0, swipes: [{ text, draws: prompt ? [{ prompt, ratio: "9:16" }] : [] }] });
+    const a = makeDraw("assistant", "Первый кадр", "1girl, red dress");
+    const b = makeDraw("assistant", "Второй кадр", "1girl, black shirt, sitting on sofa");
+    const c = makeDraw("assistant", "Третий кадр", "1girl, black shirt, looking sideways");
+    const user = makeDraw("user", "А что выше?");
+    const list = globalThis.PRP.prismService.historyWithDraws([a, b, user, c], true);
+    assert.ok(!list[0].text.includes("[draw:"), list[0].text);
+    assert.ok(list[1].text.includes("black shirt, sitting on sofa"), list[1].text);
+    assert.ok(list[3].text.includes("black shirt, looking sideways"), list[3].text);
+    assert.ok(!list[2].text.includes("[draw:"), "user message must not gain a draw");
+    assert.ok(!globalThis.PRP.prismService.historyWithDraws([b, user], false)[0].text.includes("[draw:"), "disabled tool must not leak draw");
+    const sibling = makeDraw("assistant", "Соседний свайп", "1girl, green hair");
+    b.swipes.push(sibling.swipes[0]);
+    assert.ok(!globalThis.PRP.prismService.historyWithDraws([b], true)[0].text.includes("green hair"), "inactive swipe must not leak");
+    assert.ok(!globalThis.PRP.prismService.historyWithDraws([a, user], true)[0].text.includes("black shirt"), "off-path images must not leak");
+  });
   await ta("UT13-6: модельное описание и визуальный трекер из одного снимка ветки", async () => {
     const txt = "Лилит (Лили): Лежу в своём огромном свитере и воюю с конфигами.";
     const ev = INTR.grounded(txt, { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" });
