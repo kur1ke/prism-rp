@@ -742,6 +742,8 @@ t("VIS-WARDROBE-1: card outfit preset is a fallback, never a second copy over sh
   assert.ok(described.scene.includes("large oversized grey knit sweater"), described.scene);
   const omitted = IC.compose({ draw: "1girl, sitting on sofa, medium shot", card, scene: state, persona: {} });
   assert.ok(omitted.keep.includes("oversized cozy sweater"), omitted.keep);
+  const conflict = IC.compose({ draw: "1girl, red dress, smiling", card: { name: "Лилит", image: { wardrobe: "Hoodie: grey hoodie" } }, scene: { chars: { Лилит: { wear: ["Hoodie"] } }, present: [] }, persona: {}, messenger: { location: "" } });
+  assert.ok(conflict.keep.includes("grey hoodie"), "a different drawn garment must not erase established clothing");
 });
 t("VIS-STATE-1: tracked pose and wear are distinct from camera shot", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
