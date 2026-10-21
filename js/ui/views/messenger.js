@@ -71,19 +71,29 @@
         ${appearance ? `<div class="block-title" style="margin-top:20px">Внешний вид</div><dl class="kv env-world">${appearance}</dl>` : ""}
         ${d ? "" : `<button class="btn btn-sm btn-ghost" style="margin-top:14px" data-act="env-edit">${icon("edit")}Исправить состояние</button>`}</div>
       ${form}
-      <div class="block"><div class="block-title">Время переписки</div>
-        <dl class="kv"><dt>Сейчас</dt><dd id="env-now">${v.now != null ? esc(MT.format(v.now, tz)) : "не задано"}</dd>
-          <dt>Последнее сообщение</dt><dd>${c.lastMessageAt ? esc(MT.format(MT.toMs(c.lastMessageAt), tz)) : "время неизвестно"}</dd>
-          <dt>Прошло</dt><dd>${esc(c.elapsedSinceLastMessage || "—")}</dd></dl>
-        <div class="field"><label>Часовой пояс</label><input id="env-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
-        <div class="field"><label>Время</label>
-          <label class="check"><input type="radio" name="env-mode" value="live" ${env.timeMode === "live" ? "checked" : ""}><span>Текущее</span></label>
-          <label class="check"><input type="radio" name="env-mode" value="manual" ${env.timeMode === "manual" ? "checked" : ""}><span>Задаю сам(а)</span></label></div>
-        ${env.timeMode === "manual" ? `<div class="field"><label>Сейчас в переписке</label><input id="env-manual" type="datetime-local" value="${esc(MT.toLocalInput(MT.toMs(env.manualNow), tz))}"></div>
-          <div class="quick">${[[15, "+15 мин"], [60, "+1 час"], [180, "+3 часа"], [1440, "+1 день"]].map(([n, l]) => `<button class="btn btn-sm btn-ghost" data-act="env-advance" data-min="${n}">${icon("clock")}${l}</button>`).join("")}</div>` : ""}
-        <button class="btn btn-sm" data-act="env-time-save">Применить</button>
-        <p class="hint">Метки времени уже отправленных сообщений не меняются.</p></div>
 `;
+  }
+
+  // Отдельное окно управления временем переписки: не перегружает «Среду».
+  function messengerTimeModal(m) {
+    const v = m.messengerView;
+    if (!v) return "";
+    const env = v.env, tz = env.timeZone;
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow" role="dialog" aria-modal="true" aria-label="Время переписки">
+      <div class="modal-head"><h2>Время переписки</h2><button class="icon-btn" data-act="modal-close" title="Закрыть">${icon("x")}</button></div>
+      <div class="modal-body">
+              <div class="block"><div class="block-title">Текущее время</div>
+                <dl class="kv"><dt>Сейчас</dt><dd id="env-now">${v.now != null ? esc(MT.format(v.now, tz)) : "не задано"}</dd>
+                  </dl>
+                <div class="field"><label>Часовой пояс</label><input id="env-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
+                <div class="field"><label>Время</label>
+                  <label class="check"><input type="radio" name="env-mode" value="live" ${env.timeMode === "live" ? "checked" : ""}><span>Текущее</span></label>
+                  <label class="check"><input type="radio" name="env-mode" value="manual" ${env.timeMode === "manual" ? "checked" : ""}><span>Задаю сам(а)</span></label></div>
+                ${env.timeMode === "manual" ? `<div class="field"><label>Сейчас в переписке</label><input id="env-manual" type="datetime-local" value="${esc(MT.toLocalInput(MT.toMs(env.manualNow), tz))}"></div>
+                  <div class="quick">${[[15, "+15 мин"], [60, "+1 час"], [180, "+3 часа"], [1440, "+1 день"]].map(([n, l]) => `<button class="btn btn-sm btn-ghost" data-act="env-advance" data-min="${n}">${icon("clock")}${l}</button>`).join("")}</div>` : ""}
+                <button class="btn btn-sm" data-act="env-time-save">Применить</button>
+                <p class="hint">Метки времени уже отправленных сообщений не меняются.</p></div>
+      </div></div></div>`;
   }
 
   // Строка статуса в шапке переписки — из среды (не из сцены RP).
@@ -92,5 +102,5 @@
     return [world.availability && world.availability !== "unknown" ? availWord(world.availability) : "", world.location, world.activity].filter(Boolean).join(" · ");
   }
 
-  Object.assign((PRP.views = PRP.views || {}), { newMessengerModal, envTab, messengerStatus });
+  Object.assign((PRP.views = PRP.views || {}), { newMessengerModal, messengerTimeModal, envTab, messengerStatus });
 })(typeof window !== "undefined" ? window : globalThis);
