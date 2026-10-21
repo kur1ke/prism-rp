@@ -5864,11 +5864,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ? "- <prompt> — только то, что видит камера в этот момент, списком английских тегов в стиле danbooru через запятую (например: 1girl, long orange hair, white blouse, sitting at a table, library, soft lighting, close-up). Без предложений."
         : "- <prompt> — только то, что видит камера в этот момент, одним-двумя простыми английскими предложениями.",
       pinned ? "- Не пиши теги качества (masterpiece, best quality, absurdres, 8k) и веса вида (x:1.3) — приложение добавит их само." : "- Начни с короткого постоянного блока качества (masterpiece, best quality).",
-      "- Порядок: персонажи в кадре и их внешность → действие, поза, выражение, одежда, место → свет и ракурс.",
+      opts.fixedIdentity
+        ? "- Постоянная внешность и триггер владельца карточки добавляются приложением отдельно. Не повторяй в [draw:] его волосы, глаза, уши, хвост, возраст или другие уже известные постоянные признаки. Описывай видимых участников и только происходящее сейчас: одежду, действие, место, фокус, ракурс и свет. Изменение внешности указывай, только если оно действительно произошло в сюжете."
+        : "- Порядок: персонажи в кадре и их внешность → действие, поза, выражение, одежда, место → свет и ракурс.",
       opts.pov
         ? "- Вид от первого лица: камера — глаза собеседника, его самого в кадре нет. Начни с pov, его лицо и одежду не описывай; видимые части тела — только тегами pov hands / pov feet и т. п. Если в кадре один человек — это solo."
         : "- Указывай только тех людей, которые действительно видны в кадре. Присутствие рядом не означает обязательного попадания на фото. Если пользователь виден — явно назови его или покажи состав кадра (1girl, 1boy). Не дублируй одного персонажа разными именами. solo — только когда в кадре один человек. Каждый видимый человек: имя + пол + возраст + 1–2 приметы (например, ichigo_kurosaki, male, young man, short orange hair).",
       "- Покажи действие, а не только позу, и сохрани градус сцены: ничего откровеннее и ничего целомудреннее, чем происходит. Обычный момент остаётся обычным.",
+      "- Продолжая показанный момент, сохраняй его обстановку и одежду, если не было события, меняющего их; новый ракурс сам по себе не означает переодевание или перемещение.",
       "- Промпт всегда на английском; нелатинские имена — в латинской транскрипции.",
       "- В конце можно указать пропорции: [draw: <prompt>, 16:9]. Варианты: 16:9, 9:16, 4:3, 3:4, 1:1 (по умолчанию).",
       "- Не больше одной директивы за ответ, и только когда картинка действительно уместна или о ней просят.",
@@ -8489,7 +8492,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const allowDraw = ST.imagesOn(s, ctx.env.perchanceImages()) &&
         ST.modelDrawAllowed(s, path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })));
       if (allowDraw) {
-        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first" });
+        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first", fixedIdentity: !!(cd.image && (cd.image.trigger || cd.image.look)) });
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
       const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;
