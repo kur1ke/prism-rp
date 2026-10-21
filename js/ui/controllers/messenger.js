@@ -71,7 +71,7 @@
         await after("Время переписки сохранено.");
         if (S.modal && S.modal.kind === "messenger-time") ui.renderModal();
       },
-      "env-advance": async (t) => { if (failed(await svc.messenger.advance(+t.dataset.min))) return; await after(); },
+      "env-advance": async (t) => { if (failed(await svc.messenger.advance(+t.dataset.min))) return; await after(); if (S.modal && S.modal.kind === "messenger-time") ui.renderModal(); },
       "env-mk-add": async () => {
         const scope = radio("env-mk-scope");
         if (!scope) { ui.toast("Выберите, где действует договорённость.", true); return; }
