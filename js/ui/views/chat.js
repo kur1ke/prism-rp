@@ -128,11 +128,26 @@
     }).join("")}</div>`;
   }
 
-  function imageInfo(im) {
-    return `<div class="pop-title">Промпт</div><div class="code" style="max-height:200px">${esc(im.prompt || "")}</div>
-      ${im.promptSources ? `<details><summary class="hint" style="cursor:pointer">Источники изображения</summary><pre class="code">${esc(JSON.stringify(im.promptSources, null, 2))}</pre></details>` : ""}
+  function imageCopyText(im, debug) {
+    const text = ["Промпт", im.prompt || "", "Негатив", im.negative || ""];
+    if (debug) {
+      if (im.promptSources) text.push("Источники изображения", JSON.stringify(im.promptSources, null, 2));
+      if (im.compiledFrom) text.push("Сцена до перевода", im.compiledFrom);
+      text.push("Seed", im.seed != null ? String(im.seed) : "—",
+        "Размер", im.w && im.h ? im.w + "×" + im.h : ((im.info && im.info.resolution) || "—"),
+        "Backend", im.backend || "—");
+      if (im.info) text.push("Информация backend", JSON.stringify(im.info, null, 2));
+    }
+    return text.join("\n\n");
+  }
+
+  function imageInfo(im, debug, ids) {
+    const attrs = ids ? `data-mid="${esc(ids.mid)}" data-sw="${esc(ids.sw)}" data-img="${esc(ids.img)}"` : "";
+    return `<div class="row" style="align-items:center;justify-content:space-between;gap:8px"><div class="pop-title">Промпт</div>
+      <button type="button" class="btn sm" data-act="img-copy-prompt" ${attrs} title="Скопировать ${debug ? "все сведения об изображении" : "промпт и негатив"}">${icon("copy")} Копировать</button></div><div class="code" style="max-height:200px">${esc(im.prompt || "")}</div>
+      ${debug && im.promptSources ? `<details><summary class="hint" style="cursor:pointer">Источники изображения</summary><pre class="code">${esc(JSON.stringify(im.promptSources, null, 2))}</pre></details>` : ""}
       ${im.negative ? `<div class="pop-title">Негатив</div><div class="code" style="max-height:120px">${esc(im.negative)}</div>` : ""}
-      ${im.compiledFrom ? `<div class="pop-title">Сцена до перевода</div><div class="code" style="max-height:120px">${esc(im.compiledFrom)}</div>` : ""}
+      ${debug && im.compiledFrom ? `<div class="pop-title">Сцена до перевода</div><div class="code" style="max-height:120px">${esc(im.compiledFrom)}</div>` : ""}
       <dl class="kv" style="padding:8px 10px;font-size:13px"><dt>Seed</dt><dd>${esc(im.seed != null ? String(im.seed) : "—")}</dd>
       <dt>Размер</dt><dd>${esc(im.w && im.h ? im.w + "×" + im.h : (im.info && im.info.resolution) || "—")}</dd>
       <dt>Где</dt><dd>${esc({ perchance: "Perchance", a1111: "Forge / A1111", openai: "API" }[im.backend] || im.backend || "—")}${im.info && im.info.model ? " · " + esc(im.info.model) : ""}</dd></dl>`;
@@ -251,5 +266,5 @@
       <button class="pop-item" data-act="delete-chat" style="color:var(--danger)">${icon("trash")}Удалить чат</button>`;
   }
 
-  Object.assign((PRP.views = PRP.views || {}), { chat, chatHead, feed, composer, modelPop, chatMenu, imageInfo });
+  Object.assign((PRP.views = PRP.views || {}), { chat, chatHead, feed, composer, modelPop, chatMenu, imageInfo, imageCopyText });
 })(typeof window !== "undefined" ? window : globalThis);

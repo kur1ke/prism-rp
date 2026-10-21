@@ -9,6 +9,17 @@
     const { S, ui, svc } = ctx;
     const findImg = (t) => svc.images.find(t.dataset.mid, t.dataset.sw, t.dataset.img);
     const newSeed = () => Math.floor(Math.random() * 1e9);
+    function copyLegacy(value) {
+      const field = document.createElement("textarea");
+      field.value = value;
+      field.setAttribute("readonly", "");
+      field.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+      document.body.appendChild(field);
+      try {
+        field.select();
+        if (!document.execCommand || !document.execCommand("copy")) throw new Error("Буфер обмена недоступен в этом браузере");
+      } finally { field.remove(); }
+    }
 
     const actions = {
       draw: (t) => svc.images.drawFromMessage(t.dataset.id),
@@ -19,7 +30,21 @@
         const cd = await svc.images.pinSeed(im.seed);
         ui.toast(`Seed ${im.seed} закреплён за ${cd.name}.`);
       },
-      "img-info": (t) => { const { im } = findImg(t); if (im) ui.openPop(V.imageInfo(im), t); },
+      "img-info": (t) => {
+        const { im } = findImg(t);
+        if (im) ui.openPop(V.imageInfo(im, !!S.settings.developerMode, { mid: t.dataset.mid, sw: t.dataset.sw, img: t.dataset.img }), t);
+      },
+      "img-copy-prompt": async (t) => {
+        const { im } = findImg(t);
+        if (!im) return;
+        const value = V.imageCopyText(im, !!S.settings.developerMode);
+        const clipboard = typeof navigator !== "undefined" && navigator.clipboard;
+        if (clipboard && clipboard.writeText) {
+          try { await clipboard.writeText(value); }
+          catch (_) { copyLegacy(value); }
+        } else copyLegacy(value);
+        ui.toast("Промпт скопирован");
+      },
       "img-dl": (t) => {
         const { im } = findImg(t);
         const url = im && S.imgUrls[im.id];
