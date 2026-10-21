@@ -4118,6 +4118,18 @@ async function unifiedTracker() {
     assert.strictEqual(service.shouldAppendDialogue(sw, { draw: "1girl, sitting" }), true);
     assert.strictEqual(service.shouldAppendDialogue({ draws: [] }, { draw: "manual scene" }), true);
   });
+  await ta("VIS-INTENT-2: English intent is compiled but English tags are not", async () => {
+    const before = await ICP.compile("1girl, sitting on sofa", { format: "tags" }, async () => { throw Error("should not run"); });
+    assert.strictEqual(before.compiled, false);
+    let calls = 0;
+    const after = await ICP.compile("screenshot of an online shop showing boots", { format: "tags", intentMode: true }, async () => {
+      calls++;
+      return "screenshot, online shopping page, black platform boots, product listing";
+    });
+    assert.strictEqual(calls, 1);
+    assert.strictEqual(after.compiled, true);
+    assert.ok(after.text.includes("screenshot"));
+  });
   await ta("UT14-1: Лилит сообщает гардероб через 'На мне' — два предмета, не выдумывая остальное", async () => {
     const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
     const txt = "Ой, ты сейчас решил провести ревизию моего гардероба? 😼\n" +
