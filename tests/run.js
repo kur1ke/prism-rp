@@ -734,6 +734,15 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
   const legacy = IC.drawInstruction({ format: "tags", fixedIdentity: false });
   assert.ok(!legacy.includes("добавляются приложением отдельно"), legacy);
 });
+t("VIS-WARDROBE-1: card outfit preset is a fallback, never a second copy over shot clothing", () => {
+  const card = { name: "Лилит", image: { wardrobe: "Cozy sweater: oversized cozy sweater" } };
+  const state = { chars: { Лилит: { wear: ["Cozy sweater"] } }, present: [] };
+  const described = IC.compose({ draw: "1girl, wearing a large oversized grey knit sweater, sitting on sofa", card, scene: state, persona: {} });
+  assert.ok(!described.keep.includes("oversized cozy sweater"), described.keep);
+  assert.ok(described.scene.includes("large oversized grey knit sweater"), described.scene);
+  const omitted = IC.compose({ draw: "1girl, sitting on sofa, medium shot", card, scene: state, persona: {} });
+  assert.ok(omitted.keep.includes("oversized cozy sweater"), omitted.keep);
+});
 t("VIS-STATE-1: tracked pose and wear are distinct from camera shot", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
   const scene = { chars: { Лилит: { wear: ["серый свитер"], pose: "сидит на диване" } }, present: [] };
