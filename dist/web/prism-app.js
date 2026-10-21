@@ -5087,7 +5087,9 @@
     // Веса LoRA из карточки авторитетнее случайных дубликатов в [draw:] и переводе.
     if (loras) scene = withoutConfiguredLora(scene, activeLoras);
     const keep = loras ? withoutConfiguredLora(c.keep, activeLoras) : c.keep;
-    const body = [keep, scene, loras, trigger, style, c.tail].filter(Boolean).join(", ");
+    // Character identity must precede variable shot details: later tags are less reliable anchors.
+    // Do not inject the trigger for scenes in which the card owner is absent.
+    const body = [trigger, keep, scene, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
