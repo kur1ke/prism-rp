@@ -4919,13 +4919,30 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         // самой цитате; нормализованные словоформы допускаются.
         const meaningful = (s) => String(s || "").toLowerCase().replace(/ё/g, "е")
           .match(/[\p{L}\p{N}]+/gu) || [];
-        const words = meaningful(Array.isArray(e.value) ? e.value.join(" ") : e.value).filter((x) => x.length >= 3);
         const original = meaningful(e.evidence);
         const near = (a, b) => {
           const len = Math.min(a.length, b.length);
           return len >= 3 && a.slice(0, Math.max(3, len - 2)) === b.slice(0, Math.max(3, len - 2));
         };
-        if (words.length && !words.some((x) => original.some((y) => near(x, y)))) return "значение не подтверждается цитатой";
+        const found = (word) => original.some((sourceWord) => near(word, sourceWord));
+        if (LIST.has(e.field) && Array.isArray(e.value)) {
+          // Список нельзя подтверждать одним совпавшим словом. Прежде модель
+          // могла приписать вторую, не названную вещь к настоящему свитеру:
+          // ["свитер", "кожаные штаны"] проходил по слову "свитер".
+          // У каждого элемента все содержательные слова должны иметь
+          // текстовую опору; служебные местоимения и союзы не учитываем.
+          const fillers = new Set(["мой", "моя", "мои", "мое", "это", "этот", "эти", "там", "тут", "для", "или", "при", "еще", "как", "над"]);
+          for (const entry of e.value) {
+            const words = meaningful(entry).filter((word) => word.length >= 3 && !fillers.has(word));
+            if (!words.length || !words.every(found)) return "элемент списка не подтверждается цитатой";
+          }
+        } else {
+          // Для скалярных состояний пока допускается осторожная лемматизация:
+          // "дома" / "доме", "лежу" / "лежит". Слова не должны быть
+          // выдуманы целиком; список проверяется отдельно, строже.
+          const words = meaningful(e.value).filter((x) => x.length >= 3);
+          if (words.length && !words.some(found)) return "значение не подтверждается цитатой";
+        }
       }
     }
     return null;
@@ -5168,13 +5185,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return Object.assign({}, event, { actor: role === "user" ? "user" : "char" });
   }
 
-  // Perchance occasionally returns a single garment as a string even though
-  // the event contract requires an array. Repair that representational error
-  // at the LLM boundary, not in the strict state validator. All other checks
-  // (actor, exact evidence, certainty and list length) still apply unchanged.
-  function clothingListCandidate(candidate) {
+  // Perchance иногда выдаёт одиночное текстовое значение вместо массива.
+  // Исправляем только форму известного поля на границе модели. Источник,
+  // права говорящего и подтверждение цитатой всё равно проверяет Tracker.
+  function scalarListCandidate(candidate) {
     if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
-        candidate.field !== "wear" || !["add", "set", "remove"].includes(candidate.action) ||
+        !["wear", "nearby", "ongoing"].includes(candidate.field) ||
+        !["add", "set", "remove"].includes(candidate.action) ||
         typeof candidate.value !== "string") return candidate;
     const value = candidate.value.trim();
     if (!value) return candidate;
@@ -5186,15 +5203,28 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (!value) return { valid: false, events: [], issues: ["Ответ наблюдателя не содержит корректный JSON со списком событий"] };
     if (!Array.isArray(value.events) || value.events.length > MAX) return { valid: false, events: [], issues: ["Некорректный список событий"] };
     const events = [], issues = [];
-    for (const candidate of value.events) {
+    for (let index = 0; index < value.events.length; index++) {
+      const candidate = value.events[index];
       // A language model often writes the current speaker's name or "assistant"
       // instead of PRISM's internal actor id. Resolve ONLY the current speaker;
       // another person's name must never gain permission to alter their state.
-      const canonical = clothingListCandidate(speakerEvent(candidate, o));
+      const canonical = scalarListCandidate(speakerEvent(candidate, o));
       const r = ST.normalize(canonical, o);
       if (r.error) {
+        // В wear.add допускаем частичное восстановление только явно
+        // подтверждённых предметов. Нельзя восстанавливать wear.set — оно
+        // объявляет ПОЛНЫЙ комплект и его неполная запись исказит состояние.
+        if (r.error === "элемент списка не подтверждается цитатой" &&
+            canonical && canonical.field === "wear" && canonical.action === "add" &&
+            Array.isArray(canonical.value) && canonical.value.length > 1) {
+          const safe = canonical.value.map((item) => ST.normalize(Object.assign({}, canonical, { value: [item] }), o))
+            .filter((item) => item.event).map((item) => item.event.value[0]);
+          if (safe.length) events.push(Object.assign({}, canonical, { value: safe }));
+        }
         const label = candidate && typeof candidate.actor === "string" ? candidate.actor.trim().slice(0, 65) : "не задан";
-        issues.push(r.error === "неизвестный участник" ? r.error + " (actor: " + JSON.stringify(label) + ")" : r.error);
+        const field = candidate && typeof candidate.field === "string" ? candidate.field.slice(0, 30) : "?";
+        const detail = r.error === "неизвестный участник" ? r.error + " (actor: " + JSON.stringify(label) + ")" : r.error;
+        issues.push("Событие " + (index + 1) + " [" + field + "]: " + detail);
       } else events.push(r.event);
     }
     return { valid: true, events, issues };
