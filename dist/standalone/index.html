@@ -640,6 +640,20 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 /* Переключатели внутри поля (область «ветка / вся переписка», режим времени) — не растягиваются на всю ширину */
 .field .check input[type=radio], .field .check input[type=checkbox] { width: auto; flex: none; height: auto; padding: 0; }
 
+
+/* Developer diagnostics: separate modal, not a permanent chat column. */
+.modal.debug-modal { width: min(900px, 100%); grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+.debug-tabs { display: flex; align-items: center; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--line-soft); overflow-x: auto; }
+.debug-tabs .dtab { flex: 0 0 auto; }
+.debug-body { min-height: 0; overflow: auto; }
+.debug-body .code { overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.debug-body table { display: block; max-width: 100%; overflow-x: auto; }
+@media (max-width: 640px) {
+  .modal.debug-modal { width: 100%; height: 100%; max-height: 100%; border-radius: 0; }
+  .debug-tabs { padding: 8px; }
+  .debug-body { padding: 16px; }
+}
+
 </style>
 </head>
 <body>
@@ -1029,6 +1043,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     autoContext: true,
     singleSystem: false,
     sceneProtocol: true,
+    developerMode: false,
     noPostHistory: false,
     expLimit: 8,
     worldLimit: 8, // фактов мира за ход (наибольшее число; входят только релевантные)
@@ -6882,7 +6897,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <div class="head-tools">
         <span class="mode-badge" title="Режим задан при создании чата и не меняется. Другой режим — новый чат в меню «Ещё».">${icon(c.mode === "messenger" ? "bubble" : "book")}<span>${c.mode === "messenger" ? "Переписка" : "Сцена"}</span></span>
         <button class="icon-btn ${m.find ? "on" : ""}" data-act="find" title="Поиск (Ctrl+F)">${icon("search")}</button>
-        <button class="icon-btn" data-act="debug-open" title="Инструменты разработчика" aria-label="Debug">${icon("prism")}</button>
+        ${m.settings.developerMode ? `<button class="icon-btn" data-act="debug-open" title="Инструменты разработчика" aria-label="Debug">${icon("prism")}</button>` : ""}
         <button class="icon-btn ${m.drawerOpen ? "on" : ""}" data-act="drawer" title="Сцена, опыт, мир чата">${icon("panel")}</button>
         <button class="icon-btn" data-act="chat-menu" title="Ещё">${icon("more")}</button>
       </div>
@@ -7092,6 +7107,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
       <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка…</button>
       <div class="pop-sep"></div>
+      ${m.chat.mode === "messenger" ? `<button class="pop-item" data-act="time-open">${icon("clock")}Время переписки</button>` : ""}
       <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>
       <button class="pop-item" data-act="edit-card">${icon("card")}Редактировать персонажа</button>
       <button class="pop-item" data-act="rename-chat">${icon("edit")}Переименовать чат</button>
@@ -7118,7 +7134,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // У сцены — «Сцена», у переписки — «Среда» (сцены RP в переписке нет). Мир, опыт и Prism — у обоих режимов.
     const ms = m.chat && m.chat.mode === "messenger";
     const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"]];
-    const tab = ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
+    const tab = m.tab === "prism" ? (ms ? "env" : "scene") : ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
     m = Object.assign({}, m, { tab });
     let body = "";
     if (!m.chat) body = `<p class="empty-note">Откройте чат.</p>`;
@@ -7126,7 +7142,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     else if (m.tab === "scene") body = sceneTab(m);
     else if (m.tab === "memory") body = memoryTab(m);
     else if (m.tab === "world") body = worldTab(m);
-    else body = sceneTab(m);
+    else body = ms ? PRP.views.envTab(m) : sceneTab(m);
     return `<div class="drawer-head"><nav class="drawer-tabs">${tabs.map(([id, name, ic]) => `<button class="dtab ${m.tab === id ? "on" : ""}" data-act="tab" data-tab="${id}">${icon(ic)}${name}</button>`).join("")}</nav>
       <button class="icon-btn" data-act="drawer-close" title="Закрыть панель">${icon("x")}</button></div>
       <div class="drawer-body" id="drawer-body">${body}</div>`;
@@ -7349,9 +7365,25 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
       content = '<div class="block"><div class="block-title">Текущее состояние</div><dl class="kv">' + pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>';
     } else if (section === "events") {
-      content = '<div class="block"><div class="block-title">История среды</div>' + ((v.events || []).length
-        ? '<ul class="wc-list">' + v.events.slice().reverse().map(e => '<li><span class="tag">' + esc(e.scope || "") + '</span> ' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
-        : '<p class="empty-note">Событий пока нет.</p>') + '</div>';
+      const active = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return (sw && sw.stateEvents || []).map(e => ({ e, msg }));
+      });
+      const corrections = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return (sw && sw.stateCorrections || []).map(e => ({ e, msg }));
+      });
+      const rows = active.concat(corrections);
+      content = '<div class="block"><div class="block-title">События активной ветки <small>' + rows.length + '</small></div>'
+        + (rows.length ? '<ul class="wc-list">' + rows.map(({e,msg}) =>
+            '<li><span class="tag">' + esc(e.actor || "") + '</span> <b>' + esc(e.field || "") + '</b> · ' + esc(e.action || "")
+            + '<div>' + esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) + '</div>'
+            + '<small>' + esc(e.certainty || "") + ' · ' + esc(msg.id || "") + '</small></li>').join("") + '</ul>'
+          : '<p class="empty-note">Извлечённых событий в активной ветке нет.</p>') + '</div>'
+        + '<div class="block"><div class="block-title">Старые изменения среды <small>' + (v.events || []).length + '</small></div>'
+        + ((v.events || []).length ? '<ul class="wc-list">' + v.events.slice().reverse().map(e =>
+          '<li>' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
+          : '<p class="empty-note">Нет.</p>') + '</div>';
     } else {
       content = '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
         + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
@@ -7425,6 +7457,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       body = `<h3>Внешний вид</h3><p class="lead">Тема и размер текста сцены.</p>
         <div class="themes">${THEMES.map((t) => `<button class="theme ${s.theme === t.id ? "on" : ""}" data-act="theme" data-id="${t.id}">
           <div class="sw" style="background:${t.c[0]}"><i style="width:36%;background:${t.c[1]}"></i><i style="width:18%;background:${t.c[2]}"></i><i style="width:12%;background:${t.c[3]}"></i></div><div class="nm">${t.name}</div></button>`).join("")}</div>
+        <label class="check" style="margin-top:18px"><input type="checkbox" data-set="developerMode" ${s.developerMode ? "checked" : ""}><span>Режим разработчика<small>Показывать кнопку Debug в шапке переписки.</small></span></label>
         <div class="field" style="margin-top:18px"><label>Размер текста сцены: <span id="fs-out">${s.proseSize}</span> px</label><input type="range" min="14" max="22" step="1" data-set-range="proseSize" value="${s.proseSize}" style="accent-color:var(--accent)"></div>`;
     } else {
       body = `<h3>Данные</h3><p class="lead">Всё хранится только в этом браузере. Бэкап переносит персонажей, чаты, опыт и настройки — в том числе на другую платформу.</p>
@@ -7913,65 +7946,44 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <div class="field"><label>Доступность</label><select id="env-availability"><option value="">не менять</option>${AVAIL.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
         <div class="field"><label>Где действует</label>${scopeRadios("env-scope", d.scope)}</div>
         <div class="row"><button class="btn btn-primary btn-sm" data-act="env-save">Сохранить</button><button class="btn btn-sm btn-ghost" data-act="env-cancel">Отмена</button></div></div>` : "";
-    const markers = c.promises.concat(c.plans).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    const stWord = { open: "открыто", done: "выполнено", cancelled: "отменено" };
     const evs = v.events.slice().reverse().map((e) => {
       const ev = (env.events || []).find((x) => x.id === e.id) || {};
       return `<li class="${e.active ? "" : "off"}"><div>${esc(OPS_LINE(ev.patch))}</div>
         <div class="mt"><span class="tag">${e.scope === "chat" ? "вся переписка" : "ветка"}</span>${ev.effectiveAt ? `<span class="tag">${esc(MT.format(MT.toMs(ev.effectiveAt), tz))}</span>` : ""}<span class="tag">${e.active ? "действует" : esc(e.reason || "не действует")}</span></div></li>`;
     }).join("");
-    const stateNotes = {
-      ok: "Состояние обновлено автоматически",
-      partial: "Часть сведений извлечена; анализатор сообщил об ограничениях",
-      "no-changes": "Анализ завершён: новых фактов не обнаружено",
-      error: "Не удалось распознать изменения состояния",
-    };
-    const status = v.stateStatus || null;
-    const diagnostics = v.statePending ? `<p class="hint">Обновляю состояние по последнему сообщению…</p>`
-      : status ? `<details class="block" style="margin:8px 0"><summary class="hint" style="cursor:pointer">${esc(stateNotes[status.status] || "Сведения об анализе")}</summary>
-        <p class="hint">Событий: ${Number(status.eventCount) || 0}. ${status.method === "model+grounded" ? "Явные сведения дополнены проверкой по тексту." : ""}</p>
-        ${(status.issues || []).length ? `<ul class="wc-list">${status.issues.map((x) => `<li class="off">${esc(x)}</li>`).join("")}</ul>` : ""}
-        ${(status.status === "error" || status.status === "partial") && !v.statePending
-          ? `<button class="btn btn-sm" data-act="state-retry" style="margin-top:7px">Повторить анализ</button>` : ""}</details>`
-      : `<p class="hint">Автоматический анализ ещё не выполнялся для последнего сообщения.</p>`;
+    const rows = (items) => items.filter(([,value]) => value != null && value !== "" && value !== "unknown").map(([label,value]) => `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join("");
+    const position = rows([["Где", w.location], ["Чем занят(а)", w.activity],
+      ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")],
+      ["Доступность", w.availability && w.availability !== "unknown" ? availWord(w.availability) : ""]]);
+    const appearance = rows([["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]]);
     return `<div class="block"><div class="block-title">Положение ${esc(m.card.name)}</div>
-        ${diagnostics}
-        <p class="hint">Положение и внешность отслеживаются автоматически по происходящему в переписке. Сообщённое персонажем не обязательно является проверенным фактом. Изображения не меняют состояние.</p>
-        <dl class="kv env-world"><dt>Где</dt><dd>${esc(w.location || "неизвестно")}</dd><dt>Чем занят(а)</dt><dd>${esc(w.activity || "неизвестно")}</dd>
-          <dt>Рядом</dt><dd>${esc((w.nearby || []).join(", ") || "—")}</dd><dt>Происходит</dt><dd>${esc((w.ongoing || []).join(", ") || "—")}</dd>
-          <dt>Доступность</dt><dd>${esc(availWord(w.availability))}</dd></dl>
-        <div class="block-title" style="margin-top:14px">Внешний вид для изображений</div>
-        <dl class="kv env-world"><dt>Одежда</dt><dd>${esc((w.visualWear || []).join(", ") || "неизвестно")}</dd><dt>Поза</dt><dd>${esc(w.visualPose || "неизвестно")}</dd><dt>Причёска</dt><dd>${esc(w.visualHair || "неизвестно")}</dd></dl>
-        ${d ? "" : `<details style="margin-top:10px"><summary class="hint" style="cursor:pointer">Ошиблись с состоянием? Исправить…</summary><button class="btn btn-sm" style="margin-top:8px" data-act="env-edit">${icon("edit")}Исправить неверный факт</button></details>`}</div>
+        ${position ? `<dl class="kv env-world">${position}</dl>` : '<p class="empty-note">Пока нет сведений о положении.</p>'}
+        ${appearance ? `<div class="block-title" style="margin-top:20px">Внешний вид</div><dl class="kv env-world">${appearance}</dl>` : ""}
+        ${d ? "" : `<button class="btn btn-sm btn-ghost" style="margin-top:14px" data-act="env-edit">${icon("edit")}Исправить состояние</button>`}</div>
       ${form}
-      <div class="block"><div class="block-title">Время переписки</div>
-        <dl class="kv"><dt>Сейчас</dt><dd id="env-now">${v.now != null ? esc(MT.format(v.now, tz)) : "не задано"}</dd>
-          <dt>Последнее сообщение</dt><dd>${c.lastMessageAt ? esc(MT.format(MT.toMs(c.lastMessageAt), tz)) : "время неизвестно"}</dd>
-          <dt>Прошло</dt><dd>${esc(c.elapsedSinceLastMessage || "—")}</dd></dl>
-        <div class="field"><label>Часовой пояс</label><input id="env-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
-        <div class="field"><label>Время</label>
-          <label class="check"><input type="radio" name="env-mode" value="live" ${env.timeMode === "live" ? "checked" : ""}><span>Текущее</span></label>
-          <label class="check"><input type="radio" name="env-mode" value="manual" ${env.timeMode === "manual" ? "checked" : ""}><span>Задаю сам(а)</span></label></div>
-        ${env.timeMode === "manual" ? `<div class="field"><label>Сейчас в переписке</label><input id="env-manual" type="datetime-local" value="${esc(MT.toLocalInput(MT.toMs(env.manualNow), tz))}"></div>
-          <div class="quick">${[[15, "+15 мин"], [60, "+1 час"], [180, "+3 часа"], [1440, "+1 день"]].map(([n, l]) => `<button class="btn btn-sm btn-ghost" data-act="env-advance" data-min="${n}">${icon("clock")}${l}</button>`).join("")}</div>` : ""}
-        <button class="btn btn-sm" data-act="env-time-save">Применить</button>
-        <p class="hint">Метки времени уже отправленных сообщений не меняются.</p></div>
-      <div class="block"><div class="block-title">Переписка</div>
-        <dl class="kv"><dt>Последним писал(а)</dt><dd>${c.lastSender === "user" ? esc(m.persona.name) : c.lastSender === "assistant" ? esc(m.card.name) : "никто"}</dd>
-          <dt>Без ответа</dt><dd>${c.unansweredUserCount ? c.unansweredUserCount + " от " + esc(m.persona.name) : "—"}</dd>
-          <dt>Состояние</dt><dd>${esc(String(c.reason || "").replace(/\{\{user\}\}/g, m.persona.name).replace(/\{\{char\}\}/g, m.card.name))}</dd></dl>
-        <div class="block-title" style="margin-top:10px">Договорённости <small>${markers.length}</small></div>
-        <p class="hint">Только то, что вы отметили сами; из сообщений ничего не извлекается.</p>
-        <ul class="wc-list">${markers.map((x) => `<li class="${x.status === "open" ? "" : "off"}"><div>${esc(x.text)}</div><div class="mt"><span class="tag">${x.kind === "promise" ? "обещание" : "план"}</span><span class="tag">${stWord[x.status]}</span>
-          ${x.status === "open" ? `<span style="flex:1"></span><button class="tool" data-act="env-mk-status" data-id="${esc(x.id)}" data-status="done">Выполнено</button><button class="tool" data-act="env-mk-status" data-id="${esc(x.id)}" data-status="cancelled">Отменено</button>` : ""}</div></li>`).join("") || `<li class="empty-note">Нет.</li>`}</ul>
-        <div class="row" style="margin-top:8px"><select id="env-mk-kind"><option value="promise">обещание</option><option value="plan">план</option></select>
-          <input id="env-mk-text" placeholder="«Созвонимся завтра вечером»"></div>
-        <div class="field">${scopeRadios("env-mk-scope", v.canBranch ? "branch" : "")}</div>
-        <button class="btn btn-sm" data-act="env-mk-add">${icon("plus")}Отметить</button></div>
-      <details class="block"><summary class="block-title" style="cursor:pointer">История среды <small>${v.events.length}</small></summary>
-        <p class="hint">События не переписываются. События другой ветки или другого варианта ответа хранятся и снова действуют, когда вы туда вернётесь.</p>
-        <ul class="wc-list">${evs || `<li class="empty-note">Пока пусто.</li>`}</ul></details>
-      ${v.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${v.warnings.map((x) => `<li class="off">${esc(String(x.message).replace(/\{\{user\}\}/g, m.persona.name).replace(/\{\{char\}\}/g, m.card.name))}</li>`).join("")}</ul></div>` : ""}`;
+`;
+  }
+
+  // Отдельное окно управления временем переписки: не перегружает «Среду».
+  function messengerTimeModal(m) {
+    const v = m.messengerView;
+    if (!v) return "";
+    const env = v.env, tz = env.timeZone;
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow" role="dialog" aria-modal="true" aria-label="Время переписки">
+      <div class="modal-head"><h2>Время переписки</h2><button class="icon-btn" data-act="modal-close" title="Закрыть">${icon("x")}</button></div>
+      <div class="modal-body">
+              <div class="block"><div class="block-title">Текущее время</div>
+                <dl class="kv"><dt>Сейчас</dt><dd id="env-now">${v.now != null ? esc(MT.format(v.now, tz)) : "не задано"}</dd>
+                  </dl>
+                <div class="field"><label>Часовой пояс</label><input id="env-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
+                <div class="field"><label>Время</label>
+                  <label class="check"><input type="radio" name="env-mode" value="live" ${env.timeMode === "live" ? "checked" : ""}><span>Текущее</span></label>
+                  <label class="check"><input type="radio" name="env-mode" value="manual" ${env.timeMode === "manual" ? "checked" : ""}><span>Задаю сам(а)</span></label></div>
+                ${env.timeMode === "manual" ? `<div class="field"><label>Сейчас в переписке</label><input id="env-manual" type="datetime-local" value="${esc(MT.toLocalInput(MT.toMs(env.manualNow), tz))}"></div>
+                  <div class="quick">${[[15, "+15 мин"], [60, "+1 час"], [180, "+3 часа"], [1440, "+1 день"]].map(([n, l]) => `<button class="btn btn-sm btn-ghost" data-act="env-advance" data-min="${n}">${icon("clock")}${l}</button>`).join("")}</div>` : ""}
+                <button class="btn btn-sm" data-act="env-time-save">Применить</button>
+                <p class="hint">Метки времени уже отправленных сообщений не меняются.</p></div>
+      </div></div></div>`;
   }
 
   // Строка статуса в шапке переписки — из среды (не из сцены RP).
@@ -7980,7 +7992,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return [world.availability && world.availability !== "unknown" ? availWord(world.availability) : "", world.location, world.activity].filter(Boolean).join(" · ");
   }
 
-  Object.assign((PRP.views = PRP.views || {}), { newMessengerModal, envTab, messengerStatus });
+  Object.assign((PRP.views = PRP.views || {}), { newMessengerModal, messengerTimeModal, envTab, messengerStatus });
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -9980,7 +9992,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
         worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit,
         // Переписка: среда (только чтение) — для вкладки «Среда», статуса в шапке и времени сообщений в поясе переписки.
-        messengerView: ((S.drawerOpen && (S.tab === "env" || S.tab === "scene")) || (S.modal && S.modal.kind === "debug")) && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
+        messengerView: ((S.drawerOpen && (S.tab === "env" || S.tab === "scene")) || (S.modal && (S.modal.kind === "debug" || S.modal.kind === "messenger-time"))) && isMs() ? svc().messenger.view() : null, envEdit: S.envEdit,
         msWorld: isMs() ? (svc().messenger.context() || {}).world : null, msTz: isMs() ? (svc().messenger.current() || {}).timeZone : null, lastPrism: S.lastPrism, tab: S.tab, find: S.find,
         drawerOpen: S.drawerOpen, homeQuery: S.homeQuery, editProviderId: S.editProviderId,
         stats: `Персонажей: ${S.cards.length}, чатов: ${S.chats.length}.`,
@@ -10084,6 +10096,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         : S.modal.kind === "import" ? V.importReview(m, S.modal)
         : S.modal.kind === "new-messenger" ? V.newMessengerModal(m, S.modal)
         : S.modal.kind === "debug" ? V.debugModal(m, S.modal)
+        : S.modal.kind === "messenger-time" ? V.messengerTimeModal(m)
         : V.cardModal(m, S.modal.draft, S.modal.section);
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
@@ -10112,7 +10125,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     function refreshAfterSettings() {
       svc().prism.refresh();
       renderRail();
-      if (S.view === "chat") renderFeed(); else renderStage();
+      if (S.view === "chat") { renderHead(); renderFeed(); } else renderStage();
       S.modal && (S.modal.keepScroll = true);
       renderModal();
     }
@@ -11087,6 +11100,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const failed = (r) => { if (r && r.error) { ui.toast(r.error, true); return true; } return false; };
 
     const actions = {
+      "time-open": () => { S.modal = { kind: "messenger-time" }; ui.renderModal(); },
       // Однократная явная повторная попытка при ошибке интерпретатора;
       // никакого заполнения среды или изменения канона вручную.
       "state-retry": async () => {
@@ -11135,8 +11149,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (mode === "manual" && mi && mi.value) t.manualNow = MT.toIso(MT.fromLocal(mi.value, tz));
         if (failed(await svc.messenger.setTime(t))) return;
         await after("Время переписки сохранено.");
+        if (S.modal && S.modal.kind === "messenger-time") ui.renderModal();
       },
-      "env-advance": async (t) => { if (failed(await svc.messenger.advance(+t.dataset.min))) return; await after(); },
+      "env-advance": async (t) => { if (failed(await svc.messenger.advance(+t.dataset.min))) return; await after(); if (S.modal && S.modal.kind === "messenger-time") ui.renderModal(); },
       "env-mk-add": async () => {
         const scope = radio("env-mk-scope");
         if (!scope) { ui.toast("Выберите, где действует договорённость.", true); return; }
