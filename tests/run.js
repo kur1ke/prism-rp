@@ -690,13 +690,14 @@ const imgCard = { name: "Химэ", image: { trigger: "orihime inoue, long orang
 const st0 = S.fold("enter=Химэ; Химэ.wear=худи, джинсы; Химэ.pose=сидит у окна", []);
 t("compose: гардероб из сцены уходит в неизменяемые теги", () => {
   const c = IC.compose({ draw: "1girl, sitting, cafe", card: imgCard, scene: st0, persona: { name: "Кира" } });
-  assert.strictEqual(c.keep, "grey hoodie, jeans");
-  assert.ok(c.scene.startsWith("brown eyes"));
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans");
+  assert.ok(c.keep.includes("brown eyes"), "stable card appearance stays outside the rewritable shot");
+  assert.ok(!c.scene.includes("brown eyes"), "compiler sees the shot without immutable look");
   assert.ok(c.ownerPresent);
 });
 t("compose: сцена одевает иначе → устаревший гардероб не добавляется", () => {
   const c = IC.compose({ draw: "1girl, red dress, standing", card: imgCard, scene: st0, persona: {} });
-  assert.strictEqual(c.keep, "");
+  assert.strictEqual(c.keep, "brown eyes");
   assert.ok(c.stale);
 });
 t("compose: NSFW-теги только по сцене, а не по одежде", () => {
@@ -705,7 +706,7 @@ t("compose: NSFW-теги только по сцене, а не по одежд�
 });
 t("compose: POV — внешность пользователя не добавляется, solo для одного", () => {
   const c = IC.compose({ draw: "1girl, looking at viewer", card: imgCard, scene: st0, persona: { image: { view: "first", appearance: "base: 1boy, black hair" } } });
-  assert.strictEqual(c.keep, "grey hoodie, jeans, pov, solo");
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pov, solo");
   assert.ok(!c.keep.includes("black hair"));
 });
 t("compose: пользователь не подмешивается по умолчанию, но явно названный участвует", () => {
@@ -732,6 +733,15 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
   assert.ok(instruction.includes("не означает переодевание"), instruction);
   const legacy = IC.drawInstruction({ format: "tags", fixedIdentity: false });
   assert.ok(!legacy.includes("добавляются приложением отдельно"), legacy);
+});
+t("VIS-ARCH-2: stable look survives shot compilation unchanged", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: long burgundy-red hair, black cat ears" } };
+  const c = IC.compose({ draw: "1girl, sitting on sofa", card, scene: { chars: {}, present: [] }, persona: {} });
+  assert.ok(!c.scene.includes("burgundy-red hair"), c.scene);
+  assert.ok(c.keep.includes("long burgundy-red hair"), c.keep);
+  const f = IC.finalise({ composed: c, compiled: "1girl, sitting on sofa, wide shot", card, backend: "a1111", settings: { promptMode: "off" } });
+  assert.ok(f.prompt.includes("lilithx") && f.prompt.includes("long burgundy-red hair"), f.prompt);
+  assert.ok(f.prompt.indexOf("long burgundy-red hair") < f.prompt.indexOf("sitting on sofa"), f.prompt);
 });
 t("VIS-ID-1: canonical identity precedes shot details and never leaks into another actor", () => {
   const cd = { name: "Лилит", image: { trigger: "Lilithx, black cat ears", look: "base: burgundy hair, grey-green eyes" } };
