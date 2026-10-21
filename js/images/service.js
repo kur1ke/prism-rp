@@ -106,7 +106,7 @@
           { format: cfg.format, intentMode: true, qualityPinned: ST.qualityPinned(S.settings) }, textGen) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
-        const composed = IC.compose({ draw: intent ? firstPass.text : entry.draw, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !intent && !!entry.fromMessage });
+        const composed = IC.compose({ draw: intent ? firstPass.text : entry.draw, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
         const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sw, entry) ? dialogueImageContext(upto, msg) : "";
