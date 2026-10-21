@@ -288,7 +288,7 @@
     // Outfit presets describe available looks, not a second garment layer.
     // If the model already described visible clothing, do not stack a preset
     // on top. The tracked outfit remains unchanged; this affects this image only.
-    if (actors.owner && wardrobe && garmentWords(draw).length) wardrobe = "";
+    if (actors.owner && wardrobe && garmentWords(draw).some((item) => garmentWords(wardrobe).includes(item))) wardrobe = "";
     // В RP при явном изменении одежды в [draw:] старая одежда не навязывается.
     // В мессенджере явно установленная пользователем одежда имеет приоритет над
     // случайными противоречащими деталями от модели; смотрим по сохранённому snapshot.
