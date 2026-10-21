@@ -5641,9 +5641,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (stale) wardrobe = "";
     const bits = [];
     if (actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
-    if (actors.owner && messenger && outfit && !wardrobe) bits.push("clothing: " + outfit);
-    if (actors.owner && owner && owner.pose && (!draw || messenger)) bits.push("pose: " + owner.pose);
-    if (actors.owner && owner && owner.visualHair) bits.push("hairstyle: " + owner.visualHair);
+    // Tracked physical state is independent from the camera shot.
+    const established = [];
+    if (actors.owner && messenger && outfit && !wardrobe) established.push("clothing: " + outfit);
+    if (actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
+    if (actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
     if (actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
     if (actors.user && user && user.pose) bits.push("user pose: " + user.pose);
     let sceneText = [draw, bits.join(", ")].filter(Boolean).join(", ");
@@ -5672,7 +5674,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return {
       // The card owns stable appearance; the shot compiler must not rewrite it.
       scene: sceneText,
-      keep: [look.join(", "), wardrobe, userTags, nsfw].filter(Boolean).join(", "),
+      keep: [look.join(", "), wardrobe, established.join(", "), userTags, nsfw].filter(Boolean).join(", "),
       tail: [tail.join(", "), userTail].filter(Boolean).join(", "),
       ownerPresent: actors.owner,
       subjects: actors,
