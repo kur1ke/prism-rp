@@ -734,6 +734,18 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
   const legacy = IC.drawInstruction({ format: "tags", fixedIdentity: false });
   assert.ok(!legacy.includes("добавляются приложением отдельно"), legacy);
 });
+t("VIS-STATE-1: tracked pose and wear are distinct from camera shot", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
+  const scene = { chars: { Лилит: { wear: ["серый свитер"], pose: "сидит на диване" } }, present: [] };
+  const c = IC.compose({ draw: "1girl, looking at viewer, medium shot", card, scene, persona: {}, messenger: { location: "" } });
+  assert.ok(c.keep.includes("clothing: серый свитер"), c.keep);
+  assert.ok(c.keep.includes("pose: сидит на диване"), c.keep);
+  assert.ok(!c.scene.includes("clothing:") && !c.scene.includes("pose:"), c.scene);
+  const f = IC.finalise({ composed: c, compiled: "1girl, medium shot, soft lighting", card, settings: {}, backend: "a1111" });
+  assert.ok(f.prompt.includes("pose: сидит на диване") && f.prompt.includes("clothing: серый свитер"), f.prompt);
+  const unknown = IC.compose({ draw: "1girl, medium shot", card, scene: { chars: {}, present: [] }, persona: {} });
+  assert.ok(!unknown.keep.includes("pose:") && !unknown.keep.includes("clothing:"), unknown.keep);
+});
 t("VIS-ARCH-2: stable look survives shot compilation unchanged", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: long burgundy-red hair, black cat ears" } };
   const c = IC.compose({ draw: "1girl, sitting on sofa", card, scene: { chars: {}, present: [] }, persona: {} });
