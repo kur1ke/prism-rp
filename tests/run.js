@@ -3650,7 +3650,7 @@ async function unifiedTracker() {
       const p = INTR.parse(JSON.stringify({ events: [Evt("char", "wear", action, { item: "кардиган" }, "reported", "Я в кардигане")] }),
         { mode: "messenger", role: "assistant", text: "Я в кардигане" });
       assert.strictEqual(p.events.length, 0);
-      assert.ok(p.issues.includes("некорректный список"));
+      assert.ok(p.issues.some((issue) => issue.includes("некорректный список")));
     }
   });
   await ta("UT11-4: bounded fallback rejects negation, intention, third-person, questions and quoted text", async () => {
@@ -4008,6 +4008,59 @@ async function unifiedTracker() {
       assert.ok(state.visualWear.includes("тёплые носочки"));
       assert.strictEqual(state.fieldStatus.visualWear.certainty, "reported");
     } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("UT15-1: рядом и ongoing могут приходить одной строкой — без ослабления источника", async () => {
+    const o = { role: "assistant", mode: "messenger", speakerName: "Лилит (Лили)", text: "На столе лежит телефон, и вокруг разбросаны пледы" };
+    const p = INTR.parse(JSON.stringify({ events: [
+      { actor: "char", field: "nearby", action: "set", value: "телефон", certainty: "reported", evidence: "На столе лежит телефон" },
+      { actor: "char", field: "ongoing", action: "set", value: "пледы", certainty: "reported", evidence: "вокруг разбросаны пледы" },
+    ] }), o);
+    assert.strictEqual(p.valid, true);
+    assert.deepStrictEqual(p.issues, []);
+    assert.deepStrictEqual(p.events.map((e) => e.value), [["телефон"], ["пледы"]]);
+    const spoof = INTR.parse(JSON.stringify({ events: [
+      { actor: "user", field: "nearby", action: "set", value: "телефон", certainty: "reported", evidence: "На столе лежит телефон" },
+    ] }), o);
+    assert.strictEqual(spoof.events.length, 0);
+  });
+  await ta("UT15-2: каждый предмет одежды должен иметь подтверждение цитатой", async () => {
+    const o = { role: "assistant", mode: "messenger", text: "На мне огромный мягкий свитер", speakerName: "Лилит (Лили)" };
+    const make = (value, action="add") => ({ actor:"char", field:"wear", action, value, certainty:"reported", evidence:o.text });
+    const bad = globalThis.PRP.stateTracker.normalize(make(["огромный мягкий свитер", "кожаные штаны"]), o);
+    assert.ok(bad.error && bad.error.includes("элемент списка"));
+    const good = globalThis.PRP.stateTracker.normalize(make(["огромный мягкий свитер"]), o);
+    assert.deepStrictEqual(good.event.value, ["огромный мягкий свитер"]);
+    const extraAdjective = globalThis.PRP.stateTracker.normalize(make(["чёрный свитер"]), o);
+    assert.ok(extraAdjective.error, "несуществующий цвет не подтверждён");
+    const fromModel = INTR.parse(JSON.stringify({ events: [make(["огромный мягкий свитер", "кожаные штаны"])] }), o);
+    assert.strictEqual(fromModel.events.length, 1, "при wear.add можно спасти подтверждённый предмет");
+    assert.deepStrictEqual(fromModel.events[0].value, ["огромный мягкий свитер"]);
+    assert.ok(fromModel.issues.some((issue) => issue.includes("wear") && issue.includes("элемент списка")));
+    const completeOutfit = INTR.parse(JSON.stringify({ events: [make(["огромный мягкий свитер", "кожаные штаны"], "set")] }), o);
+    assert.strictEqual(completeOutfit.events.length, 0, "неполный полный комплект не должен сбрасывать одежду");
+  });
+  await ta("UT15-3: невалидное значение соседнего поля не ломает одежду и диагностика указывает поле", async () => {
+    const h = fbHarness({name:"Лилит (Лили)",description:"Девушка."});
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, {timeZone:"UTC",timeMode:"live"});
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const msg = h.chat.newMsg("assistant", null, "На мне огромный мягкий свитер и тёплые носочки");
+    await h.chat.commitMessage(msg, msg.id);
+    const old = globalThis.PRP.llm;
+    globalThis.PRP.llm = { simple: async () => JSON.stringify({events:[
+      {actor:"char",field:"wear",action:"add",value:["огромный мягкий свитер", "кожаные штаны"],certainty:"reported",evidence:"На мне огромный мягкий свитер и тёплые носочки"},
+      {actor:"char",field:"nearby",action:"set",value:{unknown:true},certainty:"reported",evidence:"тёплые носочки"}
+    ]})};
+    try {
+      const res = await h.ctx.svc.state.observeMessage(h.chat.path()[0], {id:"mock"});
+      assert.strictEqual(res.status, "partial");
+      assert.ok(res.issues.some(x=>x.includes("[nearby]") && x.includes("некорректный список")));
+      const st = h.ctx.svc.messenger.view().world;
+      assert.ok(st.visualWear.some((x)=>x.includes("свитер")));
+      assert.ok(st.visualWear.some((x)=>x.includes("носочки")));
+      assert.ok(!st.visualWear.some((x)=>x.includes("штаны")));
+      assert.strictEqual(st.fieldStatus.visualWear.certainty,"reported");
+    } finally { globalThis.PRP.llm=old; }
   });
   await ta("UT11-9: diagnostic status is rendered without manual state form", async () => {
     require(J("ui/views/messenger.js"));

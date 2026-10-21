@@ -43,13 +43,30 @@
         // самой цитате; нормализованные словоформы допускаются.
         const meaningful = (s) => String(s || "").toLowerCase().replace(/ё/g, "е")
           .match(/[\p{L}\p{N}]+/gu) || [];
-        const words = meaningful(Array.isArray(e.value) ? e.value.join(" ") : e.value).filter((x) => x.length >= 3);
         const original = meaningful(e.evidence);
         const near = (a, b) => {
           const len = Math.min(a.length, b.length);
           return len >= 3 && a.slice(0, Math.max(3, len - 2)) === b.slice(0, Math.max(3, len - 2));
         };
-        if (words.length && !words.some((x) => original.some((y) => near(x, y)))) return "значение не подтверждается цитатой";
+        const found = (word) => original.some((sourceWord) => near(word, sourceWord));
+        if (LIST.has(e.field) && Array.isArray(e.value)) {
+          // Список нельзя подтверждать одним совпавшим словом. Прежде модель
+          // могла приписать вторую, не названную вещь к настоящему свитеру:
+          // ["свитер", "кожаные штаны"] проходил по слову "свитер".
+          // У каждого элемента все содержательные слова должны иметь
+          // текстовую опору; служебные местоимения и союзы не учитываем.
+          const fillers = new Set(["мой", "моя", "мои", "мое", "это", "этот", "эти", "там", "тут", "для", "или", "при", "еще", "как", "над"]);
+          for (const entry of e.value) {
+            const words = meaningful(entry).filter((word) => word.length >= 3 && !fillers.has(word));
+            if (!words.length || !words.every(found)) return "элемент списка не подтверждается цитатой";
+          }
+        } else {
+          // Для скалярных состояний пока допускается осторожная лемматизация:
+          // "дома" / "доме", "лежу" / "лежит". Слова не должны быть
+          // выдуманы целиком; список проверяется отдельно, строже.
+          const words = meaningful(e.value).filter((x) => x.length >= 3);
+          if (words.length && !words.some(found)) return "значение не подтверждается цитатой";
+        }
       }
     }
     return null;
