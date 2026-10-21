@@ -690,14 +690,14 @@ const imgCard = { name: "Химэ", image: { trigger: "orihime inoue, long orang
 const st0 = S.fold("enter=Химэ; Химэ.wear=худи, джинсы; Химэ.pose=сидит у окна", []);
 t("compose: гардероб из сцены уходит в неизменяемые теги", () => {
   const c = IC.compose({ draw: "1girl, sitting, cafe", card: imgCard, scene: st0, persona: { name: "Кира" } });
-  assert.strictEqual(c.keep, "grey hoodie, jeans");
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans");
   assert.ok(c.keep.includes("brown eyes"), "stable card appearance stays outside the rewritable shot");
   assert.ok(!c.scene.includes("brown eyes"), "compiler sees the shot without immutable look");
   assert.ok(c.ownerPresent);
 });
 t("compose: сцена одевает иначе → устаревший гардероб не добавляется", () => {
   const c = IC.compose({ draw: "1girl, red dress, standing", card: imgCard, scene: st0, persona: {} });
-  assert.strictEqual(c.keep, "");
+  assert.strictEqual(c.keep, "brown eyes");
   assert.ok(c.stale);
 });
 t("compose: NSFW-теги только по сцене, а не по одежде", () => {
@@ -706,7 +706,7 @@ t("compose: NSFW-теги только по сцене, а не по одежд�
 });
 t("compose: POV — внешность пользователя не добавляется, solo для одного", () => {
   const c = IC.compose({ draw: "1girl, looking at viewer", card: imgCard, scene: st0, persona: { image: { view: "first", appearance: "base: 1boy, black hair" } } });
-  assert.strictEqual(c.keep, "grey hoodie, jeans, pov, solo");
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pov, solo");
   assert.ok(!c.keep.includes("black hair"));
 });
 t("compose: пользователь не подмешивается по умолчанию, но явно названный участвует", () => {
