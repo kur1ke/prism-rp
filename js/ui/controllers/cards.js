@@ -154,7 +154,7 @@
       if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await ctx.files.readFile(t.files[0], "dataurl"); t.value = ""; ui.renderModal(); return true; }
       if (t.dataset.lore !== undefined && t.dataset.k === "selective" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
       if (t.dataset.customMore !== undefined && S.modal && S.modal.kind === "card") {
-        const expanded = S.modal.expandedCustom = S.modal.expandedCustom || {};
+        const expanded = S.modal.expandedCustom = S.modal.expandedCustom || Object.create(null);
         expanded[t.dataset.customMore] = t.checked;
         const content = t.closest(".lore") && t.closest(".lore").querySelector(".custom-field-extra");
         if (content) content.hidden = !t.checked;
