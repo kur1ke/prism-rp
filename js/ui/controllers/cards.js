@@ -160,7 +160,14 @@
         if (content) content.hidden = !t.checked;
         return true;
       }
-      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
+      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") {
+        // Do not rebuild the editor: focus, scroll and the open LoRA panel must survive.
+        collectCard();
+        const group = t.closest("#image-lora-panel");
+        const details = group && group.querySelector(".lora-advanced-panel");
+        if (details) details.open = t.checked;
+        return true;
+      }
       return false;
     }
 
