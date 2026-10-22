@@ -68,8 +68,12 @@
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
     if (isObj(prism.image)) { d.image = clone(prism.image); if (isObj(d.image.loraAdvanced)) d.image.loraAdvanced.enabled = false; }
     // Import cannot enable new model-facing custom data without local user approval.
-    d.customFields = CM.normalizeCustomFields(prism.customFields, true)
-      .concat(customFromUnknown(data, known, "data", detection.format));
+    d.customFields = CM.normalizeCustomFields(prism.customFields, true);
+    // Source fields often survive in CCv3's standard data alongside Prism's
+    // own custom-field extension. One origin path must not produce two entries.
+    for (const f of customFromUnknown(data, known, "data", detection.format)) {
+      if (!d.customFields.some((existing) => existing.origin && existing.origin.path === f.origin.path)) d.customFields.push(f);
+    }
     if (d.customFields.length) notes.push(note("info", "prism-custom-fields", "Пользовательские поля сохранены, но передача модели выключена до явного включения."));
     // Ядро Prism из нашего расширения — данные, а не указание; приходит непроверенным и не используется,
     // пока пользователь не сохранит его в редакторе (до этого Prism собирает запасное ядро из полей).
