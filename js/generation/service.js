@@ -48,15 +48,22 @@
       const st = state();
       /* Источник картинки фиксируется в момент ответа: этот вариант (объект свайпа), его номер и текст.
          Директива [draw:] принадлежит ИМЕННО этому варианту: если за время разбора выбран другой свайп,
-         вариант изменён или сообщение ушло с активной ветки — авто-картинка не рисуется ни в какой вариант. */
+         вариант изменён, изменился путь до него или сообщение ушло с активной ветки — авто-картинка не рисуется. */
       const sw = TR.activeSwipe(msg), swIdx = msg.swipeIdx || 0, text = String(sw.text || "");
+      /* Якорь происхождения: весь активный путь ДО и включая это сообщение (id, выбранные свайпы, текст).
+         Смена свайпа или правка ПРЕДКА не убирает сообщение с пути (путь строится по parentId), но меняет
+         контекст, в котором был дан ответ, — тогда авто-картинка тоже пропускается. Потомки (ход из очереди)
+         якорь не меняют. */
+      const prefixKey = () => { const p = chat().path(), i = p.indexOf(msg); return i < 0 ? null : turnKey(p.slice(0, i + 1)); };
+      const anchor = prefixKey();
       const analysed = st && msg && text.trim() ? st.track(msg, prov) : Promise.resolve(null);
-      return analysed.then(() => {
+      return analysed.then((res) => {
         if (!draw) return null;
         const c = ctx.chat();
         const same = c && c.id === msg.chatId && (msg.swipeIdx || 0) === swIdx && msg.swipes[swIdx] === sw &&
-          String(sw.text || "") === text && (sw.draws || []).some((d) => d === draw || (d && d.prompt === draw.prompt && d.ratio === draw.ratio)) && chat().path().includes(msg);
-        if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: "source-changed" }); return null; }
+          String(sw.text || "") === text && (sw.draws || []).some((d) => d === draw || (d && d.prompt === draw.prompt && d.ratio === draw.ratio)) &&
+          anchor != null && prefixKey() === anchor && !(res && res.skipped === "stale-branch");
+        if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: res && res.skipped === "stale-branch" ? "analysis-stale" : "source-changed" }); return null; }
         if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
         return images().draw(msg, sw, draw);
       }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, outcome: String(e && e.message || e).slice(0, 120) }); return null; });

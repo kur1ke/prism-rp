@@ -87,13 +87,17 @@
       const app = $("#app");
       const m = vm();
       const keep = takeInput();
+      // Уход из поля ввода чата в любой другой вид (другой чат, ассистент, «Персонажи», мир, главная):
+      // набранное сохраняется черновиком своего чата и вернётся при его открытии.
+      if (keep && keep.chat && keep.v.trim() && !(S.view === "chat" && m.chat && m.chat.id === keep.chat)) {
+        S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v;
+      }
       const feedEl = $("#feed");
       const scroll = feedEl ? feedEl.scrollTop : null;
       if (S.view === "assist" && S.assist) {
         $("#stage").innerHTML = V.assist(m);
         app.classList.remove("messenger");
-        if (keep && keep.chat && keep.v.trim()) { S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v; }
-        else if (keep && !keep.chat) {
+        if (keep && !keep.chat) {
           const i = $("#input"); i.value = keep.v; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }

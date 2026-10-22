@@ -136,6 +136,20 @@ try:
         page.evaluate(f"PRP.app.ctx.nav.openChat('{first_chat}')")
         page.wait_for_function(f"PRP.app.S.chatId === '{first_chat}'")
         page.wait_for_timeout(200)
+        # Уход из чата в «Персонажи» (кнопка в боковой панели) и обратно — черновик своего чата сохраняется.
+        page.fill("#input", "Черновик перед «Персонажами».")
+        if not page.locator(".rail [data-act=characters]").is_visible():
+            page.evaluate("PRP.app.ctx.nav.goCharacters()")
+        else:
+            page.click(".rail [data-act=characters]")
+        page.wait_for_function("PRP.app.S.view === 'characters'")
+        page.wait_for_timeout(200)
+        on_chars = page.locator("#input").count()
+        page.evaluate(f"PRP.app.ctx.nav.openChat('{first_chat}')")
+        page.wait_for_function(f"PRP.app.S.chatId === '{first_chat}' && PRP.app.S.view === 'chat'")
+        page.wait_for_timeout(200)
+        check("PERF-E7c: чат → «Персонажи» → тот же чат — черновик не потерян",
+              on_chars == 0 and page.input_value("#input") == "Черновик перед «Персонажами».")
         page.fill("#input", "")
         page.dispatch_event("#input", "input")
 

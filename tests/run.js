@@ -4909,7 +4909,7 @@ async function perfTurn() {
       assert.strictEqual(imgs.length, 0, "картинка не нарисована");
       assert.ok(!a.swipes[1].images || !a.swipes[1].images.length, "в новый вариант ничего не попало");
       assert.ok(!a.swipes[0].images || !a.swipes[0].images.length, "в скрытый вариант — тоже");
-      assert.ok(h.S.perf.some((x) => x.metric === "imageSkipped" && x.outcome === "source-changed"));
+      assert.ok(h.S.perf.some((x) => x.metric === "imageSkipped"));
       // контроль: тот же сценарий без смены свайпа рисует ровно в исходный вариант
       const h2 = await mk("rp", true);
       replies.push("Вот, смотри: я надела синюю куртку.\n[draw: 1girl, orihime, blue jacket, sitting, cafe]");
@@ -4976,6 +4976,49 @@ async function perfTurn() {
       sims[1].res(ok());
       await until(() => sims.length === 3, "разбор реплики"); sims[2].res(ok());
       assert.strictEqual((await q3).outcome, "sent");
+    });
+    await ta("PERF-14 (review MAJOR): смена свайпа ПРЕДКА во время разбора — авто-картинка пропускается, бэкенд не вызывается", async () => {
+      // Путь P(swipe0) → U → A[draw:X]; у P есть swipe1. Разбор A висит; переключаем P, A не трогаем.
+      const setup = async () => {
+        const h = await mk("rp", true);
+        const P = h.chat.newMsg("assistant", null, "Привет у входа.");
+        P.swipes.push({ text: "Привет на крыше.", sceneOps: [], createdAt: Date.now() });
+        await h.chat.commitMessage(P, P.id);
+        replies.push("Вот, смотри: я надела синюю куртку.\n[draw: 1girl, orihime, blue jacket, sitting, cafe]");
+        const p = h.gen.send("Покажи фото, пожалуйста: я сижу в кафе.");
+        await until(() => sims.length === 1, "разбор реплики"); sims[0].res(ok());
+        await until(() => sims.length === 2, "разбор ответа");
+        const r = await p;
+        return { h, P: h.chat.path()[0], r, A: h.chat.path()[2] }; // P — объект в памяти (commitMessage мог сохранить копию)
+      };
+      const { h, P, r, A } = await setup();
+      assert.ok(A.role === "assistant" && A.swipes[0].draws.length === 1);
+      const swA = A.swipes[0], textA = swA.text;
+      P.swipeIdx = 1; await h.chat.putMsg(P);
+      assert.ok(h.chat.path().includes(A), "потомок остаётся на пути после смены свайпа предка");
+      sims[1].res(ok(jacket("я надела синюю куртку")));
+      await r.reply.post;
+      assert.strictEqual(imgs.length, 0, "бэкенд не вызван");
+      assert.ok(!A.swipes[0].images || !A.swipes[0].images.length, "в A ничего не записано");
+      assert.strictEqual(stored(h, A.id).swipes[0].images, undefined);
+      assert.ok(A.swipes[0] === swA && A.swipes[0].text === textA, "сам вариант A не менялся");
+      assert.ok(h.S.perf.some((x) => x.metric === "imageSkipped"));
+      // правка текста предка — тоже другой контекст
+      const s2 = await setup();
+      s2.P.swipes[0].text = "Привет у входа (правка).";
+      sims[1].res(ok()); await s2.r.reply.post;
+      assert.strictEqual(imgs.length, 0, "правка предка — картинки нет");
+      // контроль: путь не менялся — картинка рисуется ровно в A
+      const s3 = await setup();
+      sims[1].res(ok()); await s3.r.reply.post;
+      assert.strictEqual(imgs.length, 1);
+      assert.strictEqual(s3.A.swipes[0].images.length, 1);
+      // контроль: предка переключили и вернули до конца разбора — путь тот же, картинка есть
+      const s4 = await setup();
+      s4.P.swipeIdx = 1; s4.P.swipeIdx = 0;
+      sims[1].res(ok()); await s4.r.reply.post;
+      assert.strictEqual(imgs.length, 1);
+      assert.strictEqual(s4.A.swipes[0].images.length, 1);
     });
     await ta("PERF-11: переписка — инициатива во время разбора ждёт видимо; Messenger не пишет сцену", async () => {
       const h = await mk("messenger");
