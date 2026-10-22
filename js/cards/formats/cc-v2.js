@@ -6,7 +6,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const F = PRP.cardFormats, CM = PRP.cardModel;
-  const { clone, str, strList, isObj, unmapped, loreEntry, note } = F.helpers;
+  const { clone, str, strList, isObj, unmapped, customFromUnknown, loreEntry, note } = F.helpers;
 
   const KNOWN = ["name", "description", "personality", "scenario", "first_mes", "mes_example", "creator_notes", "system_prompt", "post_history_instructions",
     "alternate_greetings", "tags", "creator", "character_version", "character_book", "extensions"];
@@ -68,7 +68,8 @@
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
     if (isObj(prism.image)) { d.image = clone(prism.image); if (isObj(d.image.loraAdvanced)) d.image.loraAdvanced.enabled = false; }
     // Import cannot enable new model-facing custom data without local user approval.
-    d.customFields = CM.normalizeCustomFields(prism.customFields, true);
+    d.customFields = CM.normalizeCustomFields(prism.customFields, true)
+      .concat(customFromUnknown(data, known, "data", detection.format));
     if (d.customFields.length) notes.push(note("info", "prism-custom-fields", "Пользовательские поля сохранены, но передача модели выключена до явного включения."));
     // Ядро Prism из нашего расширения — данные, а не указание; приходит непроверенным и не используется,
     // пока пользователь не сохранит его в редакторе (до этого Prism собирает запасное ядро из полей).
