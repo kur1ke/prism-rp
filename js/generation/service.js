@@ -67,7 +67,7 @@
         if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: res && res.skipped === "stale-branch" ? "analysis-stale" : "source-changed" }); return null; }
         if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
         return images().draw(msg, sw, draw);
-      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
+      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, chatId: msg && msg.chatId, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
     }
 
     /* PERF-01: операция, которой нужно полное состояние чата, ждёт незавершённых разборов этого чата —
@@ -206,7 +206,7 @@
       const shownAt = now();
       // Ответ сохранён и показан, замок снят: разбор и картинка идут отдельно и не держат переписку.
       const post = !error && sw.text ? afterReply(target, prov, dr.draws.length ? dr.draws[0] : null) : Promise.resolve(null);
-      const reply = { msgId: target.id, shownAt, post };
+      const reply = { msgId: target.id, chatId: c.id, shownAt, post };
       if (!o.turn) ready(reply); // без хода ничего больше не держит ввод
       return reply;
     }
@@ -295,7 +295,7 @@
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
       const shownAt = now();
-      return { ok: true, msgId: m.id, shownAt, post: afterReply(m, prov, dr.draws.length ? dr.draws[0] : null) };
+      return { ok: true, msgId: m.id, chatId: c.id, shownAt, post: afterReply(m, prov, dr.draws.length ? dr.draws[0] : null) };
     }
 
     /* Проверка инициативы (FOUNDATION-D): только переписка и только по явному действию пользователя.
@@ -412,7 +412,7 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      return Object.assign(done("sent"), { msgId: msg.id, shownAt: now(), post: afterReply(msg, prov, dr.draws.length ? dr.draws[0] : null) });
+      return Object.assign(done("sent"), { msgId: msg.id, chatId: c.id, shownAt: now(), post: afterReply(msg, prov, dr.draws.length ? dr.draws[0] : null) });
     }
 
     /* PERF-01: отправка реплики пользователя как один ход.
@@ -476,7 +476,7 @@
       }
     }
     // Ответ показан → переписка снова принимает ввод: сколько прошло (мс). Только число.
-    function ready(reply) { if (reply && reply.shownAt != null) perf("readyAfterReplyMs", Math.round(now() - reply.shownAt), { msgId: reply.msgId }); }
+    function ready(reply) { if (reply && reply.shownAt != null) perf("readyAfterReplyMs", Math.round(now() - reply.shownAt), { msgId: reply.msgId, chatId: reply.chatId }); }
     function restore(turn, message) {
       if (typeof ui.restoreDraft === "function") ui.restoreDraft(turn.chatId, turn.text);
       if (message) ui.toast(message, true);
