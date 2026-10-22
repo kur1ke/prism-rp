@@ -4748,7 +4748,7 @@ async function perfTurn() {
       const next = h.gen.send("Я снял шарф.");
       await until(() => sims.length === 3, "early user observation before assistant completes");
       assert.strictEqual(sims[2].prov, processing);
-      assert.strictEqual(sims[2].user, true);
+      assert.ok(sims[2].instruction.includes("Я снял шарф."), "early observer receives queued user text");
       assert.strictEqual(h.store.messages.size, n, "speculation does not insert a user node");
       assert.strictEqual(rp.length, rpBefore, "RP waits for committed previous state");
       assert.strictEqual(h.ctx.svc.state.pending(h.chatId), 1, "only committed assistant observer is pending");
