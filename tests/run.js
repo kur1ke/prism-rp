@@ -2972,6 +2972,33 @@ async function foundationH() {
       assert.strictEqual(await h.ctx.DB.get("images", first.swipes[0].images[0].id), undefined, "orphan image must not be saved");
     } finally { IB.generate = oldGen; }
   });
+  await ta("VIS-ORIGIN-5: edited source during async generation remains edited and gets no new image blob", async () => {
+    const h = fbHarness({ name: "Лилит", image: { trigger: "lilithx" } });
+    await h.chat.createChat("messenger", "c1");
+    const first = h.chat.newMsg("assistant", null, "Оригинальный текст");
+    await h.chat.commitMessage(first, first.id);
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const oldGen = IB.generate;
+    let entered, done;
+    const started = new Promise((r) => { entered = r; });
+    const pending = new Promise((r) => { done = r; });
+    try {
+      IB.generate = async () => { entered(); return pending; };
+      const run = h.ctx.svc.images.draw(first, first.swipes[0], { prompt: "1girl, lilithx, portrait" });
+      await started;
+      const updated = await h.ctx.DB.get("messages", first.id);
+      updated.swipes[0].text = "Отредактированный текст";
+      await h.ctx.DB.put("messages", updated);
+      done({ dataUrl: "data:image/png;base64,AA==", seed: 3, info: { width: 512, height: 512 } });
+      await run;
+      const persisted = await h.ctx.DB.get("messages", first.id);
+      assert.strictEqual(persisted.swipes[0].text, "Отредактированный текст");
+      assert.strictEqual(persisted.swipes[0].images[0].status, "pending", "late result must not overwrite an edited source");
+      assert.strictEqual(await h.ctx.DB.get("images", first.swipes[0].images[0].id), undefined);
+    } finally { IB.generate = oldGen; }
+  });
   await ta("VC-9: images/service использует визуальный snapshot сообщения, а не нынешнюю одежду", async () => {
     const card = { name: "Химэ", image: { trigger: "orihime_inoue", wardrobe: "белая блузка: white blouse\nсинее платье: blue dress" } };
     const h = fbHarness(card);
