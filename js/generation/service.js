@@ -437,7 +437,7 @@
         // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
         if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
         turn.phase = "generating";
-        perf("sendToRoleplayMs", Math.round(now() - pressedAt), { chatId: c.id, msgId: sent.id, outcome: turn.waitedMs ? "queued" : "direct" });
+        perf("sendToRoleplayMs", Math.round(now() - pressedAt), { chatId: c.id, msgId: sent.id, outcome: w0 ? "queued" : "direct" });
         reply = await generate(null, "new", { turn });
         return { outcome: "sent", msgId: sent.id, reply };
       } finally {
