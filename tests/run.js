@@ -777,6 +777,20 @@ t("VIS-POV-1: owner camera is not a second full character in frame", () => {
   assert.ok(final.prompt.includes("bare feet") && final.prompt.includes("grey carpet") && final.prompt.includes("pov"), final.prompt);
   assert.ok(final.negative.includes("extra legs") && final.negative.includes("duplicate body"), final.negative);
 });
+t("VIS-POV-4: owner POV preserves established outfit and physical camera pose", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
+  const scene = { chars: { Лилит: { wear: ["black socks"], pose: "reclining on a sofa" } }, present: [] };
+  const c = IC.compose({ draw: "camera=owner; my own feet and carpet, POV", card, scene, persona: {}, messenger: { location: null } });
+  assert.strictEqual(c.ownerPresent, false);
+  assert.ok(c.keep.includes("black socks"), c.keep);
+  assert.ok(c.keep.includes("camera pose: reclining on a sofa"), c.keep);
+  assert.ok(!c.keep.includes("burgundy hair"), c.keep);
+  const final = IC.finalise({ composed: c, compiled: "female, 1girl, bare feet, carpet, pov",
+    card, settings: { promptMode: "off" }, backend: "a1111", persona: {} });
+  assert.ok(final.prompt.includes("black socks") && !final.prompt.includes("1girl"), final.prompt);
+  assert.ok(!final.prompt.includes("lilithx_v2"), final.prompt);
+  assert.ok(IC.embodiedShot("lying on back, bare feet, carpet", card).includes("reclining viewpoint"));
+});
 t("VIS-POV-2: legacy explicit self-body Russian description works, ordinary user POV is unchanged", () => {
   const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", look: "base: burgundy hair" } };
   const old = "фото из первого лица, на котором видны изящные бледные ступни Лилит (Лили) на сером ковре";
