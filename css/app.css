@@ -649,3 +649,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .card-disclosure[open]>summary{margin-bottom:12px}
 .card-disclosure .card-disclosure{margin:10px 0 0}
 .card-disclosure textarea{width:100%;box-sizing:border-box}
+
+/* Keep technical custom-field details hidden regardless of inherited form styles. */
+.custom-field-extra[hidden]{display:none !important}
+.custom-field-extra{margin-top:10px;padding-top:10px;border-top:1px solid var(--line, rgba(255,255,255,.12))}
