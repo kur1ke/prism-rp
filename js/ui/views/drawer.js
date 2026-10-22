@@ -284,7 +284,9 @@
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
     }
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal debug-modal" role="dialog" aria-modal="true" aria-label="Debug">
-      <div class="modal-head"><h2>Debug — ${esc(m.card ? m.card.name : "чат")}</h2><button class="icon-btn" data-act="modal-close" title="Закрыть">${icon("x")}</button></div>
+      <div class="modal-head"><h2>Debug — ${esc(m.card ? m.card.name : "чат")}</h2>
+        <button class="btn btn-sm btn-ghost" data-act="debug-copy" title="Скопировать текущий раздел Debug">Копировать</button>
+        <button class="icon-btn" data-act="modal-close" title="Закрыть">${icon("x")}</button></div>
       <nav class="debug-tabs">${names.map(([id,title]) => `<button class="dtab ${id === section ? "on" : ""}" data-act="debug-section" data-section="${id}">${title}</button>`).join("")}</nav>
       <div class="modal-body debug-body">${content}</div></div></div>`;
   }
