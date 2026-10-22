@@ -103,6 +103,17 @@
       "import-cancel": () => { S.modal = null; ui.renderModal(); },
       "new-card": () => openCardEditor(null),
       "open-card": (t) => nav.openCard(t.dataset.id),
+      "new-card-chat": async (t) => {
+        // Each chat has an immutable mode. Messenger must first configure its time.
+        const cardId = t.dataset.id;
+        if (!S.cards.some((c) => c.id === cardId)) return ui.toast("Персонаж не найден.", true);
+        if (t.dataset.mode === "messenger") {
+          S.modal = { kind: "new-messenger", cardId, timeMode: "live" };
+          ui.renderModal();
+          return;
+        }
+        await nav.newChat("rp", cardId);
+      },
       "edit-card": (t) => { ui.closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : ctx.card()); },
       "card-section": (t) => { collectCard(); S.modal.section = t.dataset.section; ui.renderModal(); },
       "card-save": async () => {
@@ -160,7 +171,14 @@
         if (content) content.hidden = !t.checked;
         return true;
       }
-      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
+      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") {
+        // Do not rebuild the editor: focus, scroll and the open LoRA panel must survive.
+        collectCard();
+        const group = t.closest("#image-lora-panel");
+        const details = group && group.querySelector(".lora-advanced-panel");
+        if (details) details.open = t.checked;
+        return true;
+      }
       return false;
     }
 
