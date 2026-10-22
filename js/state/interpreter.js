@@ -7,24 +7,12 @@
   const PRP = (root.PRP = root.PRP || {});
   const ST = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
   const MAX = 6;
-  // PERF-03A: positive allowlist of *entire* phatic utterances with no
-  // self-reported physical event. Never classify a compound message or
-  // a phrase with attached actions using substring/keyword matching.
-  const GREETINGS = new Set(["привет", "приветик", "хай", "здрасьте", "здравствуй",
-    "здравствуйте", "доброе утро", "добрый день", "добрый вечер", "спокойной ночи",
-    "пока", "до встречи", "hello", "hi", "hey"]);
-  const ACKNOWLEDGEMENTS = new Set(["да", "нет", "неа", "ага", "угу", "ок", "окей",
-    "хорошо", "ладно", "понятно", "ясно", "конечно", "спасибо", "благодарю",
-    "пожалуйста", "не за что", "thanks", "thank you", "okay", "ok", "got it"]);
-  function nonEventReason(text) {
-    const s = String(text || "").toLowerCase().trim()
-      .replace(/^[!?.,…\s]+|[!?.,…\s]+$/g, "").replace(/\s+/g, " ");
-    if (GREETINGS.has(s)) return "non-event-greeting";
-    if (ACKNOWLEDGEMENTS.has(s)) return "non-event-acknowledgement";
-    return null;
-  }
   function mayChangeState(text) {
-    return !nonEventReason(text);
+    // Только очевидные приветствия обходятся без дополнительного модельного
+    // запроса. Во всех остальных случаях неизвестное лучше уточнить через
+    // интерпретатор, чем потерять реальное событие.
+    const s = String(text || "").toLowerCase().replace(/[!?.,…]+/g, "").trim();
+    return !/^(?:привет|приветик|хай|здрасьте|здравствуй|здравствуйте|доброе утро|добрый день|добрый вечер|спокойной ночи|пока|до встречи|hello|hi|hey)$/.test(s);
   }
   function instruction(o) {
     const x = o || {};
@@ -255,6 +243,6 @@
     }
     return events;
   }
-  PRP.stateInterpreter = { MAX, instruction, parse, mayChangeState, nonEventReason, grounded, speakerEvent };
+  PRP.stateInterpreter = { MAX, instruction, parse, mayChangeState, grounded, speakerEvent };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateInterpreter;
 })(typeof window !== "undefined" ? window : globalThis);
