@@ -4739,6 +4739,123 @@ async function perfTurn() {
       await r.reply.post;
       assert.strictEqual(imgs.length, 1, "image backend completed after processing");
     });
+    await ta("PERF-02B-1: independent Processing Provider overlaps queued user observation with assistant observation", async () => {
+      const h = await mk("rp");
+      const role = { id: "local", kind: "openai" }, processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role; h.ctx.processingProvider = () => processing;
+      const first = await firstTurn(h);
+      const n = h.store.messages.size, rpBefore = rp.length;
+      const next = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early user observation before assistant completes");
+      assert.strictEqual(sims[2].prov, processing);
+      assert.ok(sims[2].instruction.includes("Я снял шарф."), "early observer receives queued user text");
+      assert.strictEqual(h.store.messages.size, n, "speculation does not insert a user node");
+      assert.strictEqual(rp.length, rpBefore, "RP waits for committed previous state");
+      assert.strictEqual(h.ctx.svc.state.pending(h.chatId), 1, "only committed assistant observer is pending");
+      sims[2].res(ok()); // user interpretation finishes before the earlier assistant
+      await tick();
+      assert.strictEqual(h.store.messages.size, n, "early result has no state side effects");
+      sims[1].res(ok(jacket()));
+      await until(() => rp.length === rpBefore + 1, "next RP after both observers");
+      assert.strictEqual(sims.filter((s) => s.instruction.includes("Я снял шарф.")).length, 1,
+        "early user interpretation is reused, not requested again");
+      assert.ok(rp[1].messages.map((x) => x.content).join("\n").includes("синяя куртка"),
+        "RP receives committed state of previous assistant");
+      const result = await next;
+      assert.strictEqual(result.outcome, "sent");
+      assert.strictEqual(h.chat.path().length, 4);
+      if (sims[3]) sims[3].res(ok()); // next assistant may also require observation
+      await first.reply.post; await result.reply.post;
+    });
+    await ta("PERF-02B-2: cancelling an overlapped user observation never commits its result", async () => {
+      const h = await mk("rp");
+      h.ctx.provider = () => ({ id: "local", kind: "openai" });
+      h.ctx.processingProvider = () => ({ id: "perchance", kind: "perchance" });
+      const first = await firstTurn(h), n = h.store.messages.size;
+      const pending = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer on cancellable turn");
+      assert.strictEqual(h.gen.cancelTurn(), true);
+      assert.strictEqual((await pending).outcome, "cancelled");
+      sims[2].res(ok());
+      sims[1].res(ok());
+      await first.reply.post;
+      assert.strictEqual(h.store.messages.size, n, "cancelled input and its early result are discarded");
+      assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
+    });
+    await ta("PERF-02B-3: changed swipe discards speculative user result and does not write a queued message", async () => {
+      const h = await mk("rp");
+      h.ctx.provider = () => ({ id: "local", kind: "openai" });
+      h.ctx.processingProvider = () => ({ id: "perchance", kind: "perchance" });
+      const first = await firstTurn(h), n = h.store.messages.size;
+      const waiting = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer before swipe switch");
+      const a = h.chat.path()[1];
+      a.swipes.push({ text: "Другой вариант ответа.", sceneOps: [], createdAt: Date.now() });
+      a.swipeIdx = 1; await h.chat.putMsg(a);
+      sims[2].res(ok()); sims[1].res(ok(jacket()));
+      const result = await waiting;
+      assert.strictEqual(result.outcome, "context-changed");
+      assert.strictEqual(h.store.messages.size, n);
+      assert.strictEqual(rp.length, 1, "RP never runs on changed context");
+      assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
+      await first.reply.post;
+    });
+    await ta("PERF-02B-4: changed user identity invalidates early observer input and reanalyses before RP", async () => {
+      const h = await mk("rp");
+      const role = { id: "local", kind: "openai" }, processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role; h.ctx.processingProvider = () => processing;
+      const first = await firstTurn(h);
+      const next = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer before identity changes");
+      h.ctx.persona = () => ({ name: "Другой собеседник", description: "" });
+      sims[2].res(ok()); sims[1].res(ok(jacket()));
+      await until(() => sims.length === 4, "new observer after changed identity");
+      assert.strictEqual(sims[3].prov, processing, "changed identity causes a fresh call on Processing Provider");
+      assert.ok(sims[3].instruction.includes("Я снял шарф."), "fresh observer keeps the original user text");
+      assert.strictEqual(rp.length, 1, "RP does not run before validated new observation");
+      sims[3].res(ok());
+      await until(() => rp.length === 2, "RP after updated observer");
+      const r = await next;
+      assert.strictEqual(r.outcome, "sent");
+      if (sims[4]) sims[4].res(ok());
+      await first.reply.post; await r.reply.post;
+    });
+    await ta("PERF-02B-5: failed early analysis follows existing error fallback without blocking RP", async () => {
+      const h = await mk("rp");
+      const role = { id: "local", kind: "openai" }, processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role; h.ctx.processingProvider = () => processing;
+      const first = await firstTurn(h);
+      const next = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer on failing API");
+      sims[2].rej(new Error("API offline"));
+      sims[1].res(ok(jacket()));
+      await until(() => rp.length === 2, "RP after failed early observer");
+      const user = h.chat.path()[2];
+      assert.ok(user.swipes[0].stateStatus.issues.some((x) => /API offline/.test(x)),
+        "normal observer error report is preserved");
+      assert.strictEqual(sims.filter((s) => s.instruction.includes("Я снял шарф.")).length, 1,
+        "failed early observation is not silently retried twice");
+      const r = await next;
+      if (sims[3]) sims[3].res(ok());
+      await first.reply.post; await r.reply.post;
+    });
+    await ta("PERF-02B-6: switching chats during early observation cannot create a message in either chat", async () => {
+      const h = await mk("rp");
+      h.ctx.provider = () => ({ id: "local", kind: "openai" });
+      h.ctx.processingProvider = () => ({ id: "perchance", kind: "perchance" });
+      const first = await firstTurn(h), n = h.store.messages.size, originalChat = h.chatId;
+      const next = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer before chat switch");
+      const other = await h.chat.createChat("rp", "c1");
+      assert.notStrictEqual(other, originalChat);
+      sims[2].res(ok()); sims[1].res(ok(jacket()));
+      const result = await next;
+      assert.strictEqual(result.outcome, "context-changed");
+      assert.strictEqual(h.store.messages.size, n, "no user messages leaked or persisted after context switch");
+      assert.strictEqual(rp.length, 1, "next RP never starts in the wrong chat");
+      assert.deepStrictEqual(h.restored, [{ chatId: originalChat, text: "Я снял шарф." }]);
+      await first.reply.post;
+    });
     await ta("PERF-1 (сл. 1, 3): ответ сохранён и ввод свободен, пока разбор ответа не завершён; затем события записываются", async () => {
       const h = await mk("rp");
       const r = await firstTurn(h);

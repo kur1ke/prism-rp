@@ -432,7 +432,16 @@
       // Ход, ждущий в другом чате, отменяется: его текст вернётся в тот чат.
       if (S.turn) cancelTurn();
       const pressedAt = now();
-      const w0 = state() && state().pending(c.id);
+      const st = state(), w0 = st && st.pending(c.id);
+      // PERF-02B: only with a separately configured processing provider, overlap
+      // the read-only user interpretation with an already-running assistant
+      // observer. The user message is NOT inserted until the branch gate passes.
+      // Provider and input are snapped at send time; stale/cancelled previews
+      // have no persistent effect.
+      const observerProvider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
+      const roleProvider = ctx.provider();
+      const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
+        observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
       let turn;
       if (w0) {
         const w = await waitForState("send", { text: body, extra: extra || null, pressedAt });
@@ -454,7 +463,7 @@
         ui.renderFeed();
         ui.scrollBottom();
         // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
-        if (state()) { await state().track(sent, ctx.processingProvider ? ctx.processingProvider() : ctx.provider()); await state().settle(c.id); }
+        if (st) { await st.track(sent, observerProvider, prepared ? { prepared } : undefined); await st.settle(c.id); }
         // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
         if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
         turn.phase = "generating";

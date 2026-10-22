@@ -56,6 +56,31 @@
       } finally { clearTimeout(timer); }
     }
 
+    // PERF-02B: model-only analysis can start while an earlier message is still
+    // being observed. It never writes state; observeMessage validates the active
+    // chat, path, swipe and text before any persistent commit.
+    async function analyse(options, provider) {
+      let result = { valid: false, events: [], issues: ["Текстовая модель недоступна"] };
+      if (provider) {
+        try {
+          const instruction = INT.instruction(options);
+          const raw = await simpleWithLimit(provider, instruction);
+          result = INT.parse(raw, options);
+        } catch (e) {
+          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
+        }
+      }
+      return result;
+    }
+    function prepareUser(text, provider) {
+      const c = ctx.chat(), source = String(text || "");
+      if (!c || !source.trim() || !INT.mayChangeState(source)) return null;
+      const options = { mode: c.mode, role: "user", text: source.slice(0, MAX_TEXT),
+        speakerName: (ctx.persona() || {}).name };
+      // A cancelled or stale turn simply discards this promise; it never commits.
+      return { chatId: c.id, providerId: provider && provider.id, options, promise: analyse(options, provider) };
+    }
+
     async function observeMessage(msg, provider, opts) {
       const c = ctx.chat();
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
@@ -69,16 +94,13 @@
       const chatId = c.id;
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name };
-      let result = { valid: false, events: [], issues: ["Текстовая модель недоступна"] };
-      if (provider) {
-        try {
-          const instruction = INT.instruction(options);
-          const raw = await simpleWithLimit(provider, instruction);
-          result = INT.parse(raw, options);
-        } catch (e) {
-          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
-        }
-      }
+      // Reuse a read-only early result only when its interpretation inputs still
+      // match. Changed persona/mode/text cannot silently inherit stale events.
+      const prepared = opts && opts.prepared;
+      const sameInputs = prepared && prepared.chatId === msg.chatId &&
+        prepared.providerId === (provider && provider.id) && prepared.options &&
+        ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]);
+      const result = sameInputs ? await prepared.promise : await analyse(options, provider);
       // Высокоточные явные самоописания не должны исчезать только потому,
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
@@ -192,7 +214,7 @@
       sw.stateCorrections = next.swipes[swIdx].stateCorrections;
       return { corrections: changes };
     }
-    return { snapshot, context, observeMessage, track, pending, settle, correct };
+    return { snapshot, context, prepareUser, observeMessage, track, pending, settle, correct };
   }
   PRP.stateService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
