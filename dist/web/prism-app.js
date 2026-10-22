@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "34d1e136c1bc0091a9114f2bb6e6351705042c05";
+  window.PRISM_RP_BUILD_SHA = "215f021a08d5d201804baee8ef127b7a4202aba1";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4564,24 +4564,12 @@
   const PRP = (root.PRP = root.PRP || {});
   const ST = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
   const MAX = 6;
-  // PERF-03A: positive allowlist of *entire* phatic utterances with no
-  // self-reported physical event. Never classify a compound message or
-  // a phrase with attached actions using substring/keyword matching.
-  const GREETINGS = new Set(["привет", "приветик", "хай", "здрасьте", "здравствуй",
-    "здравствуйте", "доброе утро", "добрый день", "добрый вечер", "спокойной ночи",
-    "пока", "до встречи", "hello", "hi", "hey"]);
-  const ACKNOWLEDGEMENTS = new Set(["да", "нет", "неа", "ага", "угу", "ок", "окей",
-    "хорошо", "ладно", "понятно", "ясно", "конечно", "спасибо", "благодарю",
-    "пожалуйста", "не за что", "thanks", "thank you", "okay", "ok", "got it"]);
-  function nonEventReason(text) {
-    const s = String(text || "").toLowerCase().trim()
-      .replace(/^[!?.,…\s]+|[!?.,…\s]+$/g, "").replace(/\s+/g, " ");
-    if (GREETINGS.has(s)) return "non-event-greeting";
-    if (ACKNOWLEDGEMENTS.has(s)) return "non-event-acknowledgement";
-    return null;
-  }
   function mayChangeState(text) {
-    return !nonEventReason(text);
+    // Только очевидные приветствия обходятся без дополнительного модельного
+    // запроса. Во всех остальных случаях неизвестное лучше уточнить через
+    // интерпретатор, чем потерять реальное событие.
+    const s = String(text || "").toLowerCase().replace(/[!?.,…]+/g, "").trim();
+    return !/^(?:привет|приветик|хай|здрасьте|здравствуй|здравствуйте|доброе утро|добрый день|добрый вечер|спокойной ночи|пока|до встречи|hello|hi|hey)$/.test(s);
   }
   function instruction(o) {
     const x = o || {};
@@ -4812,7 +4800,7 @@
     }
     return events;
   }
-  PRP.stateInterpreter = { MAX, instruction, parse, mayChangeState, nonEventReason, grounded, speakerEvent };
+  PRP.stateInterpreter = { MAX, instruction, parse, mayChangeState, grounded, speakerEvent };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateInterpreter;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -8500,8 +8488,7 @@
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
       const sw = TR.activeSwipe(msg), sourceText = String(sw.text || ""), swipeIdx = msg.swipeIdx || 0;
       if (!sourceText.trim()) return { skipped: "empty" };
-      const nonEvent = INT.nonEventReason(sourceText);
-      if (nonEvent) return { skipped: nonEvent };
+      if (!INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
       if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) && sw.stateStatus.sourceText === sourceText && !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       if (!initialPath.includes(msg)) return { skipped: "off-path" };
