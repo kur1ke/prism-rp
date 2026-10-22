@@ -4461,6 +4461,66 @@ async function unifiedTracker() {
   });
 }
 
+/* ── CARD-Q: semantic export, opt-in data and LoRA advanced gating ── */
+t("CARD-Q: empty Prism fields and image slots survive V3 export", () => {
+  const card = Object.assign(CM.blank(), { name: "Sample", description: "A character" });
+  const json = C.toSpec(card, "v3");
+  assert.deepStrictEqual(json.data.extensions.prism_rp.fields, { description: "A character", appearance: "", background: "" });
+  assert.strictEqual(json.data.extensions.prism_rp.image.look, "");
+  assert.deepStrictEqual(json.data.extensions.prism_rp.image.loras, []);
+  assert.ok(Array.isArray(json.data.extensions.prism_rp.customFields));
+});
+t("CARD-Q: labelled Prism appearance remains distinct on roundtrip", () => {
+  const card = Object.assign(CM.blank(), { name: "Sample", description: "Character summary", appearance: "Blue eyes", background: "Former pilot" });
+  const exported = C.toSpec(card, "v3");
+  let restored = normalize(exported);
+  assert.strictEqual(restored.description, "Character summary");
+  assert.strictEqual(restored.appearance, "Blue eyes");
+  assert.strictEqual(restored.background, "Former pilot");
+  delete exported.data.extensions.prism_rp.fields;
+  restored = normalize(exported);
+  assert.strictEqual(restored.appearance, "Blue eyes");
+  assert.strictEqual(restored.background, "Former pilot");
+});
+t("CARD-Q: imported custom data stays disabled until local opt-in", () => {
+  const card = Object.assign(CM.blank(), { name: "Sample", description: "Character", customFields: [
+    { id: "a", label: "Secret ability", text: "Can fly", mode: "always", enabled: true },
+  ], image: { loraAdvanced: { enabled: true, rules: "feet: dark pedicure" } } });
+  const copy = normalize(C.toSpec(card, "v3"));
+  assert.strictEqual(copy.customFields[0].enabled, false);
+  assert.strictEqual(copy.customFields[0].text, "Can fly");
+  assert.strictEqual(copy.image.loraAdvanced.enabled, false);
+});
+t("CARD-Q: only explicitly enabled custom fields enter selected budgeted details", () => {
+  const cc = globalThis.PRP.cardContext;
+  const c = Object.assign(CM.blank(), { description: "Librarian", customFields: [
+    { id: "1", label: "Magic", text: "Silent spells", mode: "always", enabled: false },
+    { id: "2", label: "Hobby", text: "Collects beautiful stones", mode: "always", enabled: true },
+  ]});
+  const list = cc.chunks(c, cc.core(c));
+  assert.ok(!list.some((x) => /Silent spells/.test(x.text)));
+  const selected = cc.select(list, { text: "", context: "" });
+  assert.ok(selected.selected.some((x) => /Collects beautiful stones/.test(x.text)));
+  assert.strictEqual(selected.selected.find((x) => /Collects beautiful stones/.test(x.text)).field, "custom");
+});
+t("CARD-Q: owner POV retains LoRA without enabling advanced rules", () => {
+  const card = Object.assign(CM.blank(), { name: "Lilith", image: {
+    trigger: "lilithx", look: "base: visible face", negative: "",
+    loras: [{ name: "lilithx_v2", weight: 0.8 }],
+    loraAdvanced: { enabled: false, rules: "feet: dark pedicure" }
+  }});
+  const composed = { scene: "pov, feet", keep: "", ownerPresent: false, cameraOwner: true };
+  let result = IC.finalise({ card, composed, backend: "a1111" });
+  assert.ok(result.prompt.includes("lilithx"));
+  assert.ok(result.prompt.includes("<lora:lilithx_v2:0.8>"));
+  assert.ok(!result.prompt.includes("dark pedicure"));
+  card.image.loraAdvanced.enabled = true;
+  result = IC.finalise({ card, composed, backend: "a1111" });
+  assert.ok(result.prompt.includes("dark pedicure"));
+});
+
+/* End CARD-Q. */
+
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
 // Do not let an unresolved async fixture finish Node with exit code 0.
