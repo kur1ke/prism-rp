@@ -11,20 +11,19 @@
   var cdn = "https://cdn.jsdelivr.net/gh/kur1ke/prism-rp@";
   var raw = "https://raw.githubusercontent.com/kur1ke/prism-rp/";
   var suffix = "/dist/web/prism-app.js";
+  // Last verified testing distribution commit. Immutable CDN ref for API outages.
+  // Bump deliberately after each validated testing publication if this fallback must be updated.
+  var safeRevision = "9355480089a1dd2d25b25be528b5bf93bc3a847b";
   var badge = document.getElementById("prism-testing-badge");
   var boot = document.getElementById("prism-boot");
   function status(t) { if (badge) badge.textContent = "PRISM TEST · " + t; }
   function error(t) { if (boot) boot.textContent = "Тестовая версия не загрузилась: " + t + ". Рабочая версия не затронута."; status("ошибка загрузки"); }
   function load(ref, warning) {
-    if (!/^[a-f0-9]{40}$/.test(ref) && ref !== "testing") { error("неверный SHA"); return; }
+    if (!/^[a-f0-9]{40}$/.test(ref)) { error("неверный SHA"); return; }
     window.PRISM_RP_TEST_REVISION = ref;
-    // Branch fallback is not pinned. Bust browser/CDN caches and label it as unverified.
-    var bust = ref === "testing" ? "?test_reload=" + Date.now() : "";
-    // If GitHub's API is blocked, ask the branch directly (with a cache buster).
-    // An unpinned CDN alias is only the secondary source in that case.
-    var urls = ref === "testing"
-      ? [raw + "testing" + suffix + bust, cdn + "testing" + suffix + bust]
-      : [cdn + encodeURIComponent(ref) + suffix, raw + encodeURIComponent(ref) + suffix];
+    // Never fall back to @testing: jsDelivr can cache branch aliases for hours.
+    // The same immutable ref is used by both sources.
+    var urls = [cdn + encodeURIComponent(ref) + suffix, raw + encodeURIComponent(ref) + suffix];
     function attempt(index) {
       status(index ? "резервный источник · " + ref.slice(0, 7) : (warning || ref.slice(0, 7)));
       var script = document.createElement("script");
@@ -39,9 +38,9 @@
           // Embedded at build time by GitHub Actions: this is the source commit
           // used to generate the bundle, not necessarily the bot's later dist commit.
           var builtFrom = window.PRISM_RP_BUILD_SHA || "";
-          if (ref === "testing") {
-            var marker = /^[a-f0-9]{40}$/.test(builtFrom) ? "сборка " + builtFrom.slice(0, 7) : "SHA сборки неизвестен";
-            status("testing · " + marker + " · SHA ветки недоступен" + (index ? " · CDN" : ""));
+          if (warning) {
+            var marker = /^[a-f0-9]{40}$/.test(builtFrom) ? " · сборка " + builtFrom.slice(0, 7) : " · SHA сборки отсутствует";
+            status("testing · закреплено " + ref.slice(0, 7) + marker + " · API недоступен");
           } else {
             status((index ? "резерв · " : "") + ref.slice(0, 7));
           }
@@ -54,6 +53,6 @@
   fetch(api, { cache: "no-store", headers: { "Accept": "application/vnd.github+json" } })
     .then(function (res) { if (!res.ok) throw new Error("GitHub API " + res.status); return res.json(); })
     .then(function (data) { var sha = data && data.commit && data.commit.sha; if (!/^[a-f0-9]{40}$/.test(sha || "")) throw new Error("неверный ответ GitHub"); load(sha); })
-    .catch(function () { load("testing", "SHA недоступен · testing"); });
+    .catch(function () { load(safeRevision, "GitHub API недоступен"); });
 })();
 </script>
