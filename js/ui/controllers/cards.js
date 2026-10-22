@@ -71,6 +71,9 @@
         d.customFields = PRP.cardModel.normalizeCustomFields(d.customFields);
       }
       if (S.modal.section === "images") {
+        const basePanel = $("#image-base-panel"), loraPanel = $("#image-lora-panel");
+        S.modal.imageBaseOpen = basePanel ? basePanel.open : true;
+        S.modal.imageLoraOpen = loraPanel ? loraPanel.open : false;
         d.image = Object.assign({}, d.image);
         d.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, d.image.loraAdvanced || {});
         $$("[data-lora-advanced]").forEach((el) => {
