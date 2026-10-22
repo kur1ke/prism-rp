@@ -47,6 +47,7 @@
     persona: () => ST.persona(S.settings),
     providers: () => ST.providerList(S.settings, PC.available()),
     provider: () => ST.activeProvider(S.settings, ctx.providers()),
+    processingProvider: () => ST.processingProvider(S.settings, ctx.providers()),
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
     // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».

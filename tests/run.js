@@ -57,6 +57,25 @@ function t(name, fn) {
   catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.message || e)); }
 }
 
+/* ── PERF-02A: independent provider selection (no migration) ── */
+{
+  const rp = { id: "local", kind: "openai" }, pc = { id: "perchance", kind: "perchance" }, all = [pc, rp];
+  t("PERF-02A-1: legacy settings inherit RP model unless processing is selected", () => {
+    const old = STG.merge({ activeProvider: "local", providers: [] });
+    assert.strictEqual(old.processingProvider, "");
+    assert.strictEqual(STG.activeProvider(old, all), rp);
+    assert.strictEqual(STG.processingProvider(old, all), rp);
+    const configured = STG.merge({ activeProvider: "local", processingProvider: "perchance" });
+    assert.strictEqual(STG.activeProvider(configured, all), rp);
+    assert.strictEqual(STG.processingProvider(configured, all), pc);
+  });
+  t("PERF-02A-2: unavailable Processing Provider inherits RP, never arbitrary provider", () => {
+    const s = STG.merge({ activeProvider: "local", processingProvider: "offline" });
+    assert.strictEqual(STG.processingProvider(s, all), rp);
+    assert.strictEqual(STG.processingProvider({ activeProvider: "local", processingProvider: "" }, all), rp);
+  });
+}
+
 /* ── UI: visible image info respects developer mode; copy respects same gate ── */
 {
   const fs = require("fs");
@@ -4658,10 +4677,10 @@ async function perfTurn() {
   process.on("unhandledRejection", onUnhandled);
   let sims = [], rp = [], imgs = [];
   // Разбор состояния — управляемые «обещания»: тест сам решает, когда и чем они завершатся.
-  PRPg.llm.simple = (prov, instruction) => new Promise((res, rej) => sims.push({ instruction, res, rej, user: /сообщение пользователя|role":"user|Автор: пользователь/i.test(instruction) }));
+  PRPg.llm.simple = (prov, instruction) => new Promise((res, rej) => sims.push({ prov, instruction, res, rej, user: /сообщение пользователя|role":"user|Автор: пользователь/i.test(instruction) }));
   IBo.generate = async (cfg, req) => { imgs.push(req); return { dataUrl: "data:image/png;base64,AA", seed: 1, info: {} }; };
   const replies = [];
-  fbLLM = async (prov, messages) => { rp.push({ messages, at: sims.length }); const t = replies.shift() || "Хорошо."; return { text: t, reasoning: "" }; };
+  fbLLM = async (prov, messages) => { rp.push({ prov, messages, at: sims.length }); const t = replies.shift() || "Хорошо."; return { text: t, reasoning: "" }; };
   const ok = (events) => JSON.stringify({ events: events || [] });
   const mk = async (mode, imagesOn) => {
     sims = []; rp = []; imgs = []; replies.length = 0;
@@ -4688,6 +4707,38 @@ async function perfTurn() {
   };
   const jacket = (ev) => [Evt("char", "wear", "set", ["синяя куртка"], "established", ev || "Я надела синюю куртку")];
   try {
+    await ta("PERF-02A-3: RP stays on roleplay provider; user and assistant state use processing provider", async () => {
+      const h = await mk("rp");
+      const role = { id: "local", kind: "openai" };
+      const processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role;
+      h.ctx.processingProvider = () => processing;
+      const r = await firstTurn(h);
+      assert.strictEqual(sims[0].prov, processing, "user observer uses processing provider");
+      assert.strictEqual(rp[0].prov, role, "roleplay stays on selected local model");
+      assert.strictEqual(sims[1].prov, processing, "assistant observer uses processing provider");
+      sims[1].res(ok()); await r.reply.post;
+    });
+    await ta("PERF-02A-4: image intent compiler calls processing provider, not RP provider", async () => {
+      const h = await mk("rp", true);
+      const role = { id: "local", kind: "openai" };
+      const processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role;
+      h.ctx.processingProvider = () => processing;
+      h.S.settings.images.drawPromptMode = "intent";
+      replies.push("Я покажу фото.\n[draw: я снимаю вид на комнату из окна]");
+      const p = h.gen.send("Покажи фото комнаты.");
+      await until(() => sims.length === 1, "user observer"); sims[0].res(ok());
+      await until(() => sims.length === 2, "assistant observer");
+      const r = await p;
+      assert.strictEqual(rp[0].prov, role);
+      sims[1].res(ok());
+      await until(() => sims.length >= 3, "image compiler request");
+      assert.strictEqual(sims[2].prov, processing, "visual prompt uses Processing Provider");
+      sims[2].res("window view, tidy room, soft daylight");
+      await r.reply.post;
+      assert.strictEqual(imgs.length, 1, "image backend completed after processing");
+    });
     await ta("PERF-1 (сл. 1, 3): ответ сохранён и ввод свободен, пока разбор ответа не завершён; затем события записываются", async () => {
       const h = await mk("rp");
       const r = await firstTurn(h);

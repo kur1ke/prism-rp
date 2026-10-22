@@ -53,7 +53,7 @@
     const { S, DB, ui } = ctx;
     const chat = () => ctx.svc.chat;
 
-    function textGen(instruction) { return LLM.simple(ctx.provider(), instruction); }
+    function textGen(instruction) { return LLM.simple(ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), instruction); }
 
     // Подсказка переводчику: кто это и какие теги уже добавятся сами.
     function identityFor(cd) {
@@ -83,7 +83,8 @@
       if (!origin) { ui.toast("Исходное сообщение или свайп недоступны для изображения.", true); return; }
       const cfg = JSON.parse(JSON.stringify(S.settings.images)), cd = JSON.parse(JSON.stringify(ctx.card()));
       const pers = JSON.parse(JSON.stringify(ctx.persona()));
-      const provider = ctx.provider();
+      // Snapshot the processing provider for the whole image operation; RP model remains independent.
+      const provider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
       const generateText = (instruction) => LLM.simple(provider, instruction);
       if (!cfg.enabled) { ui.toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
