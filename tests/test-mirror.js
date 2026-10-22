@@ -79,7 +79,7 @@ async function run(reply,fail) {
   assert.ok(failover.scripts[1].src.includes("@testing/dist/web/prism-app.js"));
   assert.ok(!failover.scripts[1].src.includes("@main"));
   const malformed=await run("<script>",false);
-  assert.ok(malformed.src.includes("@testing/dist/web/prism-app.js"));
+  assert.ok(malformed.src.includes("raw.githubusercontent.com/kur1ke/prism-rp/testing/dist/web/prism-app.js"));
   assert.match(malformed.src,/test_reload=\d+/);
   console.log("Test mirror checks: storage isolation, pinned release, raw first, CDN fallback, embedded build SHA — OK");
 })().catch(e=>{console.error(e);process.exitCode=1;});
