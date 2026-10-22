@@ -36,6 +36,13 @@
       text: String(f.text || ""),
       mode: f.mode === "always" ? "always" : "relevant",
       enabled: !imported && f.enabled === true,
+      ...(f.origin && typeof f.origin === "object" && !Array.isArray(f.origin) ? {
+        origin: {
+          format: String(f.origin.format || ""),
+          path: String(f.origin.path || ""),
+          imported: f.origin.imported === true,
+        }
+      } : {}),
     }));
   }
 
