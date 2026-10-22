@@ -5324,12 +5324,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const PRP = (root.PRP = root.PRP || {});
   const ST = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
   const MAX = 6;
+  // PERF-03A: positive allowlist of *entire* phatic utterances with no
+  // self-reported physical event. Never classify a compound message or
+  // a phrase with attached actions using substring/keyword matching.
+  const GREETINGS = new Set(["привет", "приветик", "хай", "здрасьте", "здравствуй",
+    "здравствуйте", "доброе утро", "добрый день", "добрый вечер", "спокойной ночи",
+    "пока", "до встречи", "hello", "hi", "hey"]);
+  const ACKNOWLEDGEMENTS = new Set(["да", "нет", "неа", "ага", "угу", "ок", "окей",
+    "хорошо", "ладно", "понятно", "ясно", "конечно", "спасибо", "благодарю",
+    "пожалуйста", "не за что", "thanks", "thank you", "okay", "ok", "got it"]);
+  function nonEventReason(text) {
+    const s = String(text || "").toLowerCase().trim()
+      .replace(/^[!?.,…\s]+|[!?.,…\s]+$/g, "").replace(/\s+/g, " ");
+    if (GREETINGS.has(s)) return "non-event-greeting";
+    if (ACKNOWLEDGEMENTS.has(s)) return "non-event-acknowledgement";
+    return null;
+  }
   function mayChangeState(text) {
-    // Только очевидные приветствия обходятся без дополнительного модельного
-    // запроса. Во всех остальных случаях неизвестное лучше уточнить через
-    // интерпретатор, чем потерять реальное событие.
-    const s = String(text || "").toLowerCase().replace(/[!?.,…]+/g, "").trim();
-    return !/^(?:привет|приветик|хай|здрасьте|здравствуй|здравствуйте|доброе утро|добрый день|добрый вечер|спокойной ночи|пока|до встречи|hello|hi|hey)$/.test(s);
+    return !nonEventReason(text);
   }
   function instruction(o) {
     const x = o || {};
@@ -5560,7 +5572,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }
     return events;
   }
-  PRP.stateInterpreter = { MAX, instruction, parse, mayChangeState, grounded, speakerEvent };
+  PRP.stateInterpreter = { MAX, instruction, parse, mayChangeState, nonEventReason, grounded, speakerEvent };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateInterpreter;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -9271,7 +9283,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
       const sw = TR.activeSwipe(msg), sourceText = String(sw.text || ""), swipeIdx = msg.swipeIdx || 0;
       if (!sourceText.trim()) return { skipped: "empty" };
-      if (!INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
+      const nonEvent = INT.nonEventReason(sourceText);
+      if (nonEvent) return { skipped: nonEvent };
       if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) && sw.stateStatus.sourceText === sourceText && !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       if (!initialPath.includes(msg)) return { skipped: "off-path" };
