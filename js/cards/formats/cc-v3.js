@@ -10,6 +10,8 @@
 
   F.register("ccv3", (json, detection) => {
     const res = F.ccData.mapData(json.data, detection, json, F.ccData.KNOWN.concat(V3_ONLY));
+    // V3 nickname is additional character data; other V3-only keys are metadata/assets.
+    res.draft.customFields = res.draft.customFields.concat(F.helpers.customFromUnknown(json.data, F.ccData.KNOWN, "data", "ccv3").filter((x) => x.origin.path === "data.nickname"));
     const present = V3_ONLY.filter((k) => json.data[k] != null && !(Array.isArray(json.data[k]) && !json.data[k].length));
     if (present.length) {
       res.notes.push(note("info", "v3-preserved", `Поля V3 сохранены, но пока не используются: ${present.join(", ")}.`));
