@@ -4810,7 +4810,8 @@ async function perfTurn() {
       h.ctx.persona = () => ({ name: "Другой собеседник", description: "" });
       sims[2].res(ok()); sims[1].res(ok(jacket()));
       await until(() => sims.length === 4, "new observer after changed identity");
-      assert.ok(sims[3].instruction.includes("Другой собеседник"), "new model instruction uses current speaker name");
+      assert.strictEqual(sims[3].prov, processing, "changed identity causes a fresh call on Processing Provider");
+      assert.ok(sims[3].instruction.includes("Я снял шарф."), "fresh observer keeps the original user text");
       assert.strictEqual(rp.length, 1, "RP does not run before validated new observation");
       sims[3].res(ok());
       await until(() => rp.length === 2, "RP after updated observer");
