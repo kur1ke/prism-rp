@@ -78,7 +78,7 @@
       const options = { mode: c.mode, role: "user", text: source.slice(0, MAX_TEXT),
         speakerName: (ctx.persona() || {}).name };
       // A cancelled or stale turn simply discards this promise; it never commits.
-      return { options, promise: analyse(options, provider) };
+      return { chatId: c.id, providerId: provider && provider.id, options, promise: analyse(options, provider) };
     }
 
     async function observeMessage(msg, provider, opts) {
@@ -97,8 +97,9 @@
       // Reuse a read-only early result only when its interpretation inputs still
       // match. Changed persona/mode/text cannot silently inherit stale events.
       const prepared = opts && opts.prepared;
-      const sameInputs = prepared && prepared.options && ["mode", "role", "text", "speakerName"]
-        .every((key) => prepared.options[key] === options[key]);
+      const sameInputs = prepared && prepared.chatId === msg.chatId &&
+        prepared.providerId === (provider && provider.id) && prepared.options &&
+        ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]);
       const result = sameInputs ? await prepared.promise : await analyse(options, provider);
       // Высокоточные явные самоописания не должны исчезать только потому,
       // что Perchance вернул неполный JSON или не распознал простое предложение.
