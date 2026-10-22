@@ -4726,7 +4726,7 @@ async function perfTurn() {
       h.ctx.provider = () => role;
       h.ctx.processingProvider = () => processing;
       h.S.settings.images.drawPromptMode = "intent";
-      replies.push("Я покажу фото.\\n[draw: я снимаю вид на комнату из окна]");
+      replies.push("Я покажу фото.\n[draw: я снимаю вид на комнату из окна]");
       const p = h.gen.send("Покажи фото комнаты.");
       await until(() => sims.length === 1, "user observer"); sims[0].res(ok());
       await until(() => sims.length === 2, "assistant observer");
