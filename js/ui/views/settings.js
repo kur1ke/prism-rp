@@ -18,6 +18,13 @@
           <span class="radio"></span><div style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="ds">${esc(p.kind === "perchance" ? "Бесплатная модель Perchance, ключ не нужен" : `${p.baseUrl || "адрес не задан"}${p.model ? " · " + p.model : ""}`)}</div></div>
           ${p.kind === "openai" ? `<button class="btn btn-sm btn-ghost" data-act="prov-edit" data-id="${p.id}">Изменить</button>` : ""}</div>`).join("")}
         ${!m.providers.some((p) => p.kind === "perchance") ? `<p class="hint">Бесплатная модель Perchance появится здесь, когда приложение запущено как генератор на Perchance.</p>` : ""}
+        <div class="block-title" style="margin-top:20px">Модель обработки (Processing Provider)</div>
+        <p class="hint">StateTracker и подготовка промптов изображений. Отыгрыш персонажа остаётся на выбранной выше модели. По умолчанию используется та же модель — как и раньше. Разделение само по себе не делает запросы параллельными.</p>
+        <div class="presets">
+          <button class="preset ${!s.processingProvider ? "on" : ""}" data-act="pick-processing-provider" data-id=""><b>Как у персонажа</b><small>совместимый режим по умолчанию</small></button>
+          ${m.providers.map((p) => `<button class="preset ${s.processingProvider === p.id ? "on" : ""}" data-act="pick-processing-provider" data-id="${esc(p.id)}"><b>${esc(p.name)}</b><small>${esc(p.kind === "perchance" ? "Perchance AI" : (p.model || p.baseUrl || "API"))}</small></button>`).join("")}
+        </div>
+        ${s.processingProvider && !m.providers.some((p) => p.id === s.processingProvider) ? `<p class="hint">Указанная модель обработки сейчас недоступна; временно используется RP-модель. Проверьте настройку после подключения провайдера.</p>` : ""}
         ${editing ? providerForm(editing) : `<div class="block-title" style="margin-top:20px">Подключить API</div>
           <div class="presets">${OA.PRESETS.map((pr) => `<button class="preset" data-act="prov-add" data-preset="${pr.id}"><b>${esc(pr.name)}</b><small>${pr.local ? "на этом компьютере" : pr.id === "custom" ? "любой совместимый" : "облачный API"}</small></button>`).join("")}</div>`}`;
     } else if (section === "gen") {
