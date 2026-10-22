@@ -16,7 +16,6 @@
         <button class="rail-item ${m.view === "characters" ? "active" : ""}" data-act="characters">${icon("card")}Персонажи</button>
         <button class="rail-item ${m.view === "assist" ? "active" : ""}" data-act="assist" title="Разговор с моделью вне игры: советы, карточки, разбор чата">${icon("assist")}Ассистент</button>
         <button class="rail-item ${m.view === "world" ? "active" : ""}" data-act="world" title="Общие паки мира для персонажей">${icon("globe")}Миры</button>
-        <button class="rail-item" data-act="import">${icon("upload")}Импорт карточки</button>
       </nav>
       <div class="rail-head"><span>Последнее взаимодействие</span></div>
       <div class="rail-chats">
