@@ -7,6 +7,7 @@
 
   const DEFAULTS = {
     activeProvider: "perchance",
+    processingProvider: "", // empty = inherit RP provider (legacy behavior)
     providers: [],
     samplerPreset: "balanced",
     sampler: { temperature: 0.9, top_p: 0.95, min_p: 0.05, top_k: 0, repetition_penalty: 1.05, max_tokens: 700 },
@@ -60,6 +61,12 @@
   function activeProvider(s, list) {
     return list.find((p) => p.id === s.activeProvider) || list[0] || null;
   }
+  // Processing Provider is independently selectable; empty or unavailable ID inherits RP.
+  // Never choose an unrelated provider by list position when a saved ID is missing.
+  function processingProvider(s, list) {
+    const id = s && s.processingProvider;
+    return (id && list.find((p) => p.id === id)) || activeProvider(s, list);
+  }
   // Объём контекста: для Perchance — из метаданных плагина, если включено; иначе из настроек.
   // perchanceMeta — объект или функция (вызывается, только если метаданные нужны).
   function contextTokens(s, provider, perchanceMeta) {
@@ -103,6 +110,6 @@
     return ic.promptMode !== "off" && !!String(ic.fixedPrompt || "").trim();
   }
 
-  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
+  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, processingProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
 })(typeof window !== "undefined" ? window : globalThis);
