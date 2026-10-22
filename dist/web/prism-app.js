@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "e888a0e0d56666a6ded194ee06dd5ef560f5c595";
+  window.PRISM_RP_BUILD_SHA = "a08db2edf5c6cf18a3c3947570d02ef2591f5492";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -8448,6 +8448,31 @@
       } finally { clearTimeout(timer); }
     }
 
+    // PERF-02B: model-only analysis can start while an earlier message is still
+    // being observed. It never writes state; observeMessage validates the active
+    // chat, path, swipe and text before any persistent commit.
+    async function analyse(options, provider) {
+      let result = { valid: false, events: [], issues: ["Текстовая модель недоступна"] };
+      if (provider) {
+        try {
+          const instruction = INT.instruction(options);
+          const raw = await simpleWithLimit(provider, instruction);
+          result = INT.parse(raw, options);
+        } catch (e) {
+          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
+        }
+      }
+      return result;
+    }
+    function prepareUser(text, provider) {
+      const c = ctx.chat(), source = String(text || "");
+      if (!c || !source.trim() || !INT.mayChangeState(source)) return null;
+      const options = { mode: c.mode, role: "user", text: source.slice(0, MAX_TEXT),
+        speakerName: (ctx.persona() || {}).name };
+      // A cancelled or stale turn simply discards this promise; it never commits.
+      return { chatId: c.id, providerId: provider && provider.id, options, promise: analyse(options, provider) };
+    }
+
     async function observeMessage(msg, provider, opts) {
       const c = ctx.chat();
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
@@ -8461,16 +8486,13 @@
       const chatId = c.id;
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name };
-      let result = { valid: false, events: [], issues: ["Текстовая модель недоступна"] };
-      if (provider) {
-        try {
-          const instruction = INT.instruction(options);
-          const raw = await simpleWithLimit(provider, instruction);
-          result = INT.parse(raw, options);
-        } catch (e) {
-          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
-        }
-      }
+      // Reuse a read-only early result only when its interpretation inputs still
+      // match. Changed persona/mode/text cannot silently inherit stale events.
+      const prepared = opts && opts.prepared;
+      const sameInputs = prepared && prepared.chatId === msg.chatId &&
+        prepared.providerId === (provider && provider.id) && prepared.options &&
+        ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]);
+      const result = sameInputs ? await prepared.promise : await analyse(options, provider);
       // Высокоточные явные самоописания не должны исчезать только потому,
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
@@ -8584,7 +8606,7 @@
       sw.stateCorrections = next.swipes[swIdx].stateCorrections;
       return { corrections: changes };
     }
-    return { snapshot, context, observeMessage, track, pending, settle, correct };
+    return { snapshot, context, prepareUser, observeMessage, track, pending, settle, correct };
   }
   PRP.stateService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
@@ -9024,7 +9046,16 @@
       // Ход, ждущий в другом чате, отменяется: его текст вернётся в тот чат.
       if (S.turn) cancelTurn();
       const pressedAt = now();
-      const w0 = state() && state().pending(c.id);
+      const st = state(), w0 = st && st.pending(c.id);
+      // PERF-02B: only with a separately configured processing provider, overlap
+      // the read-only user interpretation with an already-running assistant
+      // observer. The user message is NOT inserted until the branch gate passes.
+      // Provider and input are snapped at send time; stale/cancelled previews
+      // have no persistent effect.
+      const observerProvider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
+      const roleProvider = ctx.provider();
+      const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
+        observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
       let turn;
       if (w0) {
         const w = await waitForState("send", { text: body, extra: extra || null, pressedAt });
@@ -9046,7 +9077,7 @@
         ui.renderFeed();
         ui.scrollBottom();
         // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
-        if (state()) { await state().track(sent, ctx.processingProvider ? ctx.processingProvider() : ctx.provider()); await state().settle(c.id); }
+        if (st) { await st.track(sent, observerProvider, prepared ? { prepared } : undefined); await st.settle(c.id); }
         // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
         if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
         turn.phase = "generating";
