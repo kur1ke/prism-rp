@@ -22,7 +22,7 @@
   // Promote plain, unrecognised character facts to *disabled* custom data. Preserve
   // technical/instruction-shaped and structured values only in imported source.
   // Shape-based inference is deliberately conservative; no LLM or execution.
-  const TECHNICAL_KEY = /(?:system|prompt|instruction|directive|override|script|code|config|setting|metadata|^meta|password|api.?key|access.?key|token|uuid|^id$|^source$|^assets?$|^image|^lora|^model|^spec|^version|^extension|^regex|^depth|^timestamp|^created|^updated|^tool|^plugin|^format|^url$|^uri$|^file|^path|^schema|^state|^log|^debug|^hash|^signature|creator|author|sampling|seed|temperature)/i;
+  const TECHNICAL_KEY = /(?:system|prompt|instruction|directive|override|script|code|config|setting|metadata|^meta|password|api.?key|access.?key|secret.?key|private.?key|token|uuid|^id$|^source$|^assets?$|^image|^lora|^model|^spec|^version|^extension|^regex|^depth|^timestamp|^created|^updated|^tool|^plugin|^format|^url$|^uri$|^file|^path|^schema|^state|^log|^debug|^hash|^signature|creator|author|sampling|seed|temperature)/i;
   const LABELS = { occupation: "Профессия", profession: "Профессия", hobbies: "Увлечения", hobby: "Увлечения", fears: "Страхи", likes: "Нравится", dislikes: "Не нравится", skills: "Навыки", secrets: "Секреты", relationships: "Отношения", goals: "Цели", habits: "Привычки", preferences: "Предпочтения", nickname: "Прозвище" };
   function customFromUnknown(obj, known, prefix, format) {
     if (!isObj(obj)) return [];
