@@ -1087,6 +1087,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   const DEFAULTS = {
     activeProvider: "perchance",
+    processingProvider: "", // empty = inherit RP provider (legacy behavior)
     providers: [],
     samplerPreset: "balanced",
     sampler: { temperature: 0.9, top_p: 0.95, min_p: 0.05, top_k: 0, repetition_penalty: 1.05, max_tokens: 700 },
@@ -1140,6 +1141,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   function activeProvider(s, list) {
     return list.find((p) => p.id === s.activeProvider) || list[0] || null;
   }
+  // Processing Provider is independently selectable; empty or unavailable ID inherits RP.
+  // Never choose an unrelated provider by list position when a saved ID is missing.
+  function processingProvider(s, list) {
+    const id = s && s.processingProvider;
+    return (id && list.find((p) => p.id === id)) || activeProvider(s, list);
+  }
   // Объём контекста: для Perchance — из метаданных плагина, если включено; иначе из настроек.
   // perchanceMeta — объект или функция (вызывается, только если метаданные нужны).
   function contextTokens(s, provider, perchanceMeta) {
@@ -1183,7 +1190,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return ic.promptMode !== "off" && !!String(ic.fixedPrompt || "").trim();
   }
 
-  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
+  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, processingProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -7737,6 +7744,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           <span class="radio"></span><div style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="ds">${esc(p.kind === "perchance" ? "Бесплатная модель Perchance, ключ не нужен" : `${p.baseUrl || "адрес не задан"}${p.model ? " · " + p.model : ""}`)}</div></div>
           ${p.kind === "openai" ? `<button class="btn btn-sm btn-ghost" data-act="prov-edit" data-id="${p.id}">Изменить</button>` : ""}</div>`).join("")}
         ${!m.providers.some((p) => p.kind === "perchance") ? `<p class="hint">Бесплатная модель Perchance появится здесь, когда приложение запущено как генератор на Perchance.</p>` : ""}
+        <div class="block-title" style="margin-top:20px">Модель обработки (Processing Provider)</div>
+        <p class="hint">StateTracker и подготовка промптов изображений. Отыгрыш персонажа остаётся на выбранной выше модели. По умолчанию используется та же модель — как и раньше. Разделение само по себе не делает запросы параллельными.</p>
+        <div class="presets">
+          <button class="preset ${!s.processingProvider ? "on" : ""}" data-act="pick-processing-provider" data-id=""><b>Как у персонажа</b><small>совместимый режим по умолчанию</small></button>
+          ${m.providers.map((p) => `<button class="preset ${s.processingProvider === p.id ? "on" : ""}" data-act="pick-processing-provider" data-id="${esc(p.id)}"><b>${esc(p.name)}</b><small>${esc(p.kind === "perchance" ? "Perchance AI" : (p.model || p.baseUrl || "API"))}</small></button>`).join("")}
+        </div>
+        ${s.processingProvider && !m.providers.some((p) => p.id === s.processingProvider) ? `<p class="hint">Указанная модель обработки сейчас недоступна; временно используется RP-модель. Проверьте настройку после подключения провайдера.</p>` : ""}
         ${editing ? providerForm(editing) : `<div class="block-title" style="margin-top:20px">Подключить API</div>
           <div class="presets">${OA.PRESETS.map((pr) => `<button class="preset" data-act="prov-add" data-preset="${pr.id}"><b>${esc(pr.name)}</b><small>${pr.local ? "на этом компьютере" : pr.id === "custom" ? "любой совместимый" : "облачный API"}</small></button>`).join("")}</div>`}`;
     } else if (section === "gen") {
@@ -8972,7 +8986,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const { S, DB, ui } = ctx;
     const chat = () => ctx.svc.chat;
 
-    function textGen(instruction) { return LLM.simple(ctx.provider(), instruction); }
+    function textGen(instruction) { return LLM.simple(ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), instruction); }
 
     // Подсказка переводчику: кто это и какие теги уже добавятся сами.
     function identityFor(cd) {
@@ -9002,7 +9016,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!origin) { ui.toast("Исходное сообщение или свайп недоступны для изображения.", true); return; }
       const cfg = JSON.parse(JSON.stringify(S.settings.images)), cd = JSON.parse(JSON.stringify(ctx.card()));
       const pers = JSON.parse(JSON.stringify(ctx.persona()));
-      const provider = ctx.provider();
+      // Snapshot the processing provider for the whole image operation; RP model remains independent.
+      const provider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
       const generateText = (instruction) => LLM.simple(provider, instruction);
       if (!cfg.enabled) { ui.toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
@@ -9410,7 +9425,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
          якорь не меняют. */
       const prefixKey = () => { const p = chat().path(), i = p.indexOf(msg); return i < 0 ? null : turnKey(p.slice(0, i + 1)); };
       const anchor = prefixKey();
-      const analysed = st && msg && text.trim() ? st.track(msg, prov) : Promise.resolve(null);
+      const observerProvider = ctx.processingProvider ? ctx.processingProvider() : prov;
+      const analysed = st && msg && text.trim() ? st.track(msg, observerProvider) : Promise.resolve(null);
       return analysed.then((res) => {
         if (!draw) return null;
         const c = ctx.chat();
@@ -9807,7 +9823,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ui.renderFeed();
         ui.scrollBottom();
         // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
-        if (state()) { await state().track(sent, ctx.provider()); await state().settle(c.id); }
+        if (state()) { await state().track(sent, ctx.processingProvider ? ctx.processingProvider() : ctx.provider()); await state().settle(c.id); }
         // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
         if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
         turn.phase = "generating";
@@ -11007,7 +11023,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
         const edited = S.messages.find((x) => x.id === t.dataset.id);
         // Разбор правки — управляемая задача (дедуп, без отклонений); ожидающая отправка дождётся его.
-        if (svc.state && edited) await svc.state.track(edited, ctx.provider());
+        if (svc.state && edited) await svc.state.track(edited, ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
         await afterBranchChange();
       },
       "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },
@@ -11471,6 +11487,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (t.closest("[data-act=prov-edit]")) return;
         S.settings.activeProvider = t.dataset.id; await save(); ui.closePop(); ui.refreshAfterSettings();
       },
+      "pick-processing-provider": async (t) => {
+        const id = t.dataset.id || "";
+        if (id && !ctx.providers().some((p) => p.id === id)) return;
+        S.settings.processingProvider = id;
+        await save();
+        S.modal.keepScroll = true;
+        ui.refreshAfterSettings();
+      },
       "pick-model": async (t) => {
         const p = S.settings.providers.find((x) => x.id === ctx.provider().id);
         p.model = t.dataset.model; await save(); ui.closePop(); ui.refreshAfterSettings();
@@ -11499,6 +11523,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (!confirm(`Удалить «${p.name}»?`)) return;
         S.settings.providers = S.settings.providers.filter((x) => x !== p);
         if (S.settings.activeProvider === p.id) S.settings.activeProvider = (ctx.providers()[0] || {}).id || "";
+        if (S.settings.processingProvider === p.id) S.settings.processingProvider = "";
         S.editProviderId = null;
         await save(); ui.refreshAfterSettings();
       },
@@ -11893,7 +11918,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (S.gen || !svc.state || svc.state.pending(S.chatId)) return;
         const path = svc.chat.path(), last = path[path.length - 1];
         if (!last) return;
-        const job = svc.state.track(last, ctx.provider(), { force: true });
+        const job = svc.state.track(last, ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), { force: true });
         ui.renderDrawer();
         let result;
         try { result = await job; }
@@ -12017,6 +12042,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     persona: () => ST.persona(S.settings),
     providers: () => ST.providerList(S.settings, PC.available()),
     provider: () => ST.activeProvider(S.settings, ctx.providers()),
+    processingProvider: () => ST.processingProvider(S.settings, ctx.providers()),
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
     // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
