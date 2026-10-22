@@ -10,6 +10,20 @@
     const { $ } = ui;
     const op = (...a) => svc.chat.op(...a);
 
+    // Copy only the currently open Debug section, not other tabs or hidden
+    // application state. A legacy fallback is needed in embedded Perchance frames.
+    function copyLegacy(value) {
+      const field = document.createElement("textarea");
+      field.value = value;
+      field.setAttribute("readonly", "");
+      field.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+      document.body.appendChild(field);
+      try {
+        field.select();
+        if (!document.execCommand || !document.execCommand("copy")) throw new Error("Буфер обмена недоступен в этом браузере");
+      } finally { field.remove(); }
+    }
+
     // Ручные изменения сцены → в ветку; затем Prism, панель и шапка.
     async function applySceneOps(ops) {
       if (!(await svc.chat.applySceneOps(ops))) {
@@ -62,6 +76,20 @@
       tab: (t) => { collectExp(); collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
       "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
+      "debug-copy": async () => {
+        if (!S.modal || S.modal.kind !== "debug") return;
+        const body = $(".debug-modal .debug-body");
+        if (!body) return;
+        const title = { prism: "Prism", tracker: "Трекер", events: "События", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
+        const content = (body.innerText || body.textContent || "").trim();
+        const value = "Debug — " + ((ctx.card() || {}).name || "чат") + " / " + title + "\n\n" + content;
+        const clipboard = typeof navigator !== "undefined" && navigator.clipboard;
+        if (clipboard && clipboard.writeText) {
+          try { await clipboard.writeText(value); }
+          catch (_) { copyLegacy(value); }
+        } else copyLegacy(value);
+        ui.toast("Раздел Debug скопирован.");
+      },
       "open-prism": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "prism-preview": () => { svc.prism.refresh(); if (S.modal && S.modal.kind === "debug") ui.renderModal(); else ui.renderDrawer(); },
       // Сцена
