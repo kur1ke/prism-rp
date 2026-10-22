@@ -337,6 +337,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
 /* Композер */
 .composer-wrap { padding: 8px 18px 16px; }
+.turn-status { max-width: 820px; margin: 0 auto 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--muted); padding: 6px 10px; border: 1px dashed var(--line); border-radius: var(--r-m); background: var(--surface); }
+.turn-status.quiet { border-style: none; background: none; padding: 2px 10px; font-size: 12.5px; }
+.turn-status .turn-text { color: var(--text, inherit); overflow-wrap: anywhere; min-width: 0; flex: 1 1 160px; }
+.turn-status .btn { margin-left: auto; }
+.turn-status .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: turn-spin .9s linear infinite; flex: none; }
+@keyframes turn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .turn-status .spin { animation: none; } }
 .composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }
 .app.messenger .composer { max-width: 660px; }
 .composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
@@ -1178,6 +1185,43 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>/* js/core/perf.js */
+/* Prism RP — PERF-01: журнал длительностей этапов хода (только в памяти, только числа).
+   Метрики: userStateMs, roleplayMs, assistantStateMs, imagePrepareMs, readyAfterReplyMs,
+   sendToRoleplayMs, stateWaitTimeout, postReplyError. Никаких текстов сообщений, ключей,
+   данных карточки и памяти: запись — имя метрики, число, id сообщения/чата и короткий исход.
+   Не сохраняется в IndexedDB и не попадает в бэкап. Показ — Debug → «Тайминги» (режим разработчика). */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const MAX = 80;
+  const clean = (v, n) => (v == null ? "" : String(v).replace(/[^\w:.\-а-яё ]/gi, "").slice(0, n));
+
+  // list — массив, в который пишутся записи (S.perf); возвращается функция записи.
+  function create(list) {
+    return function record(metric, ms, meta) {
+      const m = meta || {};
+      list.push({ metric: clean(metric, 40), ms: Math.max(0, Math.round(Number(ms) || 0)), at: Date.now(),
+        msgId: clean(m.msgId, 40), chatId: clean(m.chatId, 40), outcome: clean(m.outcome, 40) });
+      while (list.length > MAX) list.shift();
+    };
+  }
+
+  // Сводка: по каждой метрике — число замеров, последнее и медиана.
+  function summary(list) {
+    const by = {};
+    for (const r of list || []) (by[r.metric] = by[r.metric] || []).push(r.ms);
+    return Object.keys(by).map((metric) => {
+      const a = by[metric], s = a.slice().sort((x, y) => x - y);
+      return { metric, count: a.length, last: a[a.length - 1], median: s[Math.floor(s.length / 2)] };
+    });
+  }
+
+  PRP.perfLog = { create, summary, MAX };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.perfLog;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -7328,8 +7372,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const p = m.provider;
     const preset = SAMPLER_PRESETS.find((x) => x.id === m.settings.samplerPreset);
     const r = m.lastPrism && m.lastPrism.report;
-    return `<div class="composer-wrap"><div class="composer">
-      <textarea id="input" rows="1" placeholder="${m.chat.mode === "messenger" ? "Сообщение" : `Что делает и говорит ${esc(m.persona.name)}…`}" aria-label="Сообщение"></textarea>
+    // PERF-01: статус хода — видимое ожидание разбора, без узла в дереве сообщений.
+    const t = m.turn;
+    const status = t && t.phase === "waiting-state"
+      ? `<div class="turn-status" role="status"><span class="spin" aria-hidden="true"></span><span>${t.kind === "send" ? "Разбираю предыдущий ответ — сообщение отправится автоматически" : "Разбираю предыдущий ответ — действие начнётся автоматически"}</span>${t.kind === "send" ? `<span class="turn-text">«${esc(String(t.text || "").slice(0, 80))}${String(t.text || "").length > 80 ? "…" : ""}»</span>` : ""}<button class="btn btn-sm btn-ghost" data-act="send-cancel">Отменить</button></div>`
+      : t && t.phase === "user-state" ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ваше сообщение перед ответом…</span></div>`
+      : !t && m.statePending && !m.gen ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ответ — можно писать</span></div>` : "";
+    return `<div class="composer-wrap">${status}<div class="composer">
+      <textarea id="input" data-chat="${esc(m.chat.id)}" rows="1" placeholder="${m.chat.mode === "messenger" ? "Сообщение" : `Что делает и говорит ${esc(m.persona.name)}…`}" aria-label="Сообщение">${esc(m.draft || "")}</textarea>
       <div class="composer-bar">
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}
@@ -7603,13 +7653,29 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <div class="code">${p.messages.map((x) => `<span class="role">${esc(x.role)}</span>\n${esc(x.content)}`).join("\n\n")}</div></div>`;
   }
 
+  /* PERF-01: длительности этапов хода (в памяти, только числа). readyAfterReplyMs — от показа ответа до того,
+     как переписка снова принимает ввод; sendToRoleplayMs — от нажатия «Отправить» до запроса к модели. */
+  const TIMING = { userStateMs: "Разбор реплики пользователя", roleplayMs: "Запрос к RP-модели", assistantStateMs: "Разбор ответа персонажа",
+    imagePrepareMs: "Подготовка промпта изображения", readyAfterReplyMs: "Ответ показан → можно писать", sendToRoleplayMs: "«Отправить» → запрос к модели",
+    stateWaitTimeout: "Ожидание разбора прервано по времени", postReplyError: "Ошибка обработки после ответа" };
+  function timingTab(m) {
+    const sum = m.perfSummary || [];
+    const rows = (m.perfLog || []).slice(-30).reverse();
+    return '<div class="block"><div class="block-title">Сводка <small>в памяти, последние ' + (m.perfLog || []).length + '</small></div>'
+      + (sum.length ? '<dl class="kv">' + sum.map((x) => '<dt>' + esc(TIMING[x.metric] || x.metric) + ' <small>' + esc(x.metric) + '</small></dt><dd>' + x.last + ' мс · медиана ' + x.median + ' мс · ' + x.count + '×</dd>').join("") + '</dl>'
+        : '<p class="empty-note">Замеров пока нет: отправьте сообщение.</p>') + '</div>'
+      + (rows.length ? '<div class="block"><div class="block-title">Последние замеры</div><ul class="wc-list">' + rows.map((r) =>
+        '<li><b>' + esc(r.metric) + '</b> · ' + r.ms + ' мс' + (r.outcome ? ' · ' + esc(r.outcome) : '') + '<small> ' + esc(r.msgId || "") + '</small></li>').join("") + '</ul></div>' : '');
+  }
+
   function debugModal(m, modal) {
     const section = modal.section || "prism";
-    const names = [["prism", "Prism"], ["tracker", "Трекер"], ["events", "События"], ["errors", "Ошибки"]];
+    const names = [["prism", "Prism"], ["tracker", "Трекер"], ["events", "События"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
     const v = m.messengerView;
     const status = v && v.stateStatus;
     let content = "";
     if (section === "prism") content = prismTab(m);
+    else if (section === "timing") content = timingTab(m);
     else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
     else if (section === "tracker") {
       const w = v.world || {};
@@ -8930,6 +8996,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
     async function draw(msg, sw, d, reuse, opts) {
       const o = opts || {};
+      const prepT0 = Date.now(); // PERF-01: длительность подготовки промпта (только число)
       const currentChat = ctx.chat();
       const origin = currentChat && imageOrigin(S.messages, msg, sw, currentChat.id);
       if (!origin) { ui.toast("Исходное сообщение или свайп недоступны для изображения.", true); return; }
@@ -8995,6 +9062,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
+        if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
@@ -9204,6 +9272,57 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       updateUi();
       return { events, issues: result.issues, status };
     }
+    /* PERF-01: разбор сообщения как управляемая задача.
+       • Одна задача на (чат, сообщение, свайп, текст): повторный вызов возвращает ту же.
+       • Никогда не отклоняется: ошибка хранилища или наблюдателя → { error } (нет unhandled rejection).
+       • Проверка актуальности — прежняя, внутри observeMessage; здесь не ослабляется.
+       • S.tracking = есть незавершённые задачи (совместимость с панелью переписки).
+       Ожидание ограничено таймаутом наблюдателя (simpleWithLimit) плюс запас в settle(). */
+    const jobs = new Map();
+    const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+    const jobKey = (msg) => [msg.chatId, msg.id, msg.swipeIdx || 0, String(TR.activeSwipe(msg).text || "")].join("\u0001");
+    function sync() {
+      S.tracking = jobs.size > 0;
+      if (ctx.ui && typeof ctx.ui.renderComposer === "function") ctx.ui.renderComposer();
+    }
+    function track(msg, provider, opts) {
+      if (!msg || !msg.swipes) return Promise.resolve({ skipped: "not-message" });
+      const k = jobKey(msg), existing = jobs.get(k);
+      if (existing && !(opts && opts.force)) return existing.promise;
+      const job = { key: k, chatId: msg.chatId, msgId: msg.id, role: msg.role, startedAt: now() };
+      job.promise = Promise.resolve()
+        .then(() => observeMessage(msg, provider, opts))
+        .catch((e) => ({ error: String(e && e.message || e).slice(0, 200) }))
+        .then((r) => {
+          const res = r || {};
+          // Тайминг — только числа и роль; без текста сообщения.
+          res.ms = Math.round(now() - job.startedAt);
+          if (typeof ctx.perf === "function") ctx.perf(msg.role === "user" ? "userStateMs" : "assistantStateMs", res.ms, { msgId: msg.id, chatId: msg.chatId, outcome: res.status || res.skipped || (res.error ? "error" : "") });
+          return res;
+        })
+        .finally(() => { if (jobs.get(k) === job) jobs.delete(k); sync(); });
+      jobs.set(k, job);
+      sync();
+      return job.promise;
+    }
+    // Сколько разборов этого чата ещё не завершено.
+    function pending(chatId) { let n = 0; for (const j of jobs.values()) if (!chatId || j.chatId === chatId) n++; return n; }
+    /* Дождаться всех разборов чата (и тех, что добавятся за время ожидания). Ограничено: каждый разбор
+       сам ограничен таймаутом наблюдателя; settle добавляет общий предел и сообщает, если он истёк. */
+    async function settle(chatId, maxMs) {
+      const limit = Math.max(500, Number(maxMs) || (Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || 20000)) + 5000));
+      const t0 = now();
+      let timer;
+      const deadline = new Promise((r) => { timer = setTimeout(() => r("timeout"), limit); });
+      try {
+        for (;;) {
+          const list = [...jobs.values()].filter((j) => j.chatId === chatId).map((j) => j.promise);
+          if (!list.length) return { waitedMs: Math.round(now() - t0), timedOut: false };
+          if ((await Promise.race([Promise.all(list), deadline])) === "timeout") return { waitedMs: Math.round(now() - t0), timedOut: true };
+        }
+      } finally { clearTimeout(timer); }
+    }
+
     async function correct(patch) {
       const c = ctx.chat();
       const path = chat().path(), m = path[path.length - 1];
@@ -9226,7 +9345,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       sw.stateCorrections = next.swipes[swIdx].stateCorrections;
       return { corrections: changes };
     }
-    return { snapshot, context, observeMessage, correct };
+    return { snapshot, context, observeMessage, track, pending, settle, correct };
   }
   PRP.stateService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
@@ -9261,22 +9380,91 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const INI = PRP.messengerInitiative, U = PRP.util;
   // Ключ активного контекста: чат + сообщения пути и их выбранные варианты (сверка перед записью).
   const pathKey = (p) => (p || []).map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">");
+  /* PERF-01: ключ контекста ожидающего хода — путь, выбранные свайпы И текст каждого сообщения пути
+     (отпечаток FNV-1a + длина). Правка любого сообщения истории, пока ход ждёт, — это другой контекст:
+     реплика не отправляется, текст возвращается в поле ввода. */
+  function fnv(str) { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); }
+  const turnKey = (p) => (p || []).map((m) => { const t = String(TR.activeSwipe(m).text || ""); return m.id + ":" + (m.swipeIdx || 0) + ":" + t.length + ":" + fnv(t); }).join(">");
+
+  const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
 
   function create(ctx) {
     const { S, ui } = ctx;
-    const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images;
+    const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images, state = () => ctx.svc.state;
+    const perf = (metric, ms, meta) => { if (typeof ctx.perf === "function") ctx.perf(metric, ms, meta); };
+    const renderComposer = () => { if (typeof ui.renderComposer === "function") ui.renderComposer(); else ui.renderFeed(); };
+
+    /* PERF-01: обработка после ответа. Ответ уже записан и показан, замок генерации снят.
+       Разбор ответа — задача сервиса состояния (track: дедуп, без отклонений, ограничена по времени);
+       картинка — строго ПОСЛЕ разбора, как и раньше (её снимок состояния включает события ответа).
+       Возвращается Promise, который никогда не отклоняется. */
+    function afterReply(msg, prov, draw) {
+      const st = state();
+      /* Источник картинки фиксируется в момент ответа: этот вариант (объект свайпа), его номер и текст.
+         Директива [draw:] принадлежит ИМЕННО этому варианту: если за время разбора выбран другой свайп,
+         вариант изменён, изменился путь до него или сообщение ушло с активной ветки — авто-картинка не рисуется. */
+      const sw = TR.activeSwipe(msg), swIdx = msg.swipeIdx || 0, text = String(sw.text || "");
+      /* Якорь происхождения: весь активный путь ДО и включая это сообщение (id, выбранные свайпы, текст).
+         Смена свайпа или правка ПРЕДКА не убирает сообщение с пути (путь строится по parentId), но меняет
+         контекст, в котором был дан ответ, — тогда авто-картинка тоже пропускается. Потомки (ход из очереди)
+         якорь не меняют. */
+      const prefixKey = () => { const p = chat().path(), i = p.indexOf(msg); return i < 0 ? null : turnKey(p.slice(0, i + 1)); };
+      const anchor = prefixKey();
+      const analysed = st && msg && text.trim() ? st.track(msg, prov) : Promise.resolve(null);
+      return analysed.then((res) => {
+        if (!draw) return null;
+        const c = ctx.chat();
+        const same = c && c.id === msg.chatId && (msg.swipeIdx || 0) === swIdx && msg.swipes[swIdx] === sw &&
+          String(sw.text || "") === text && (sw.draws || []).some((d) => d === draw || (d && d.prompt === draw.prompt && d.ratio === draw.ratio)) &&
+          anchor != null && prefixKey() === anchor && !(res && res.skipped === "stale-branch");
+        if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: res && res.skipped === "stale-branch" ? "analysis-stale" : "source-changed" }); return null; }
+        if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
+        return images().draw(msg, sw, draw);
+      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
+    }
+
+    /* PERF-01: операция, которой нужно полное состояние чата, ждёт незавершённых разборов этого чата —
+       видимо (S.turn, фаза "waiting-state") и ограниченно (state.settle). После ожидания контекст сверяется:
+       тот же чат и тот же путь (сообщения + выбранные свайпы). Иначе операция не выполняется.
+       → { turn } | { refused } */
+    async function waitForState(kind, extra) {
+      const c = ctx.chat(), st = state();
+      const turn = Object.assign({ chatId: c.id, kind, key: turnKey(chat().path()), phase: "waiting-state", at: now() }, extra || {});
+      S.turn = turn;
+      renderComposer();
+      // Отмена прерывает ожидание сразу: ход не висит до конца чужого разбора.
+      const cancelled = new Promise((r) => { turn.onCancel = () => r({ waitedMs: Math.round(now() - turn.at), timedOut: false, cancelled: true }); });
+      const w = st && st.pending(c.id) ? await Promise.race([st.settle(c.id), cancelled]) : { waitedMs: 0, timedOut: false };
+      turn.waitedMs = w.waitedMs;
+      if (w.timedOut) perf("stateWaitTimeout", w.waitedMs, { chatId: c.id });
+      if (S.turn !== turn || turn.cancelled) return { refused: "cancelled", turn };
+      if (S.chatId !== turn.chatId || !ctx.chat() || turnKey(chat().path()) !== turn.key) return { refused: "context-changed", turn };
+      return { turn };
+    }
+    const releaseTurn = (turn) => { if (turn && S.turn === turn) { S.turn = null; renderComposer(); } };
     // Сервис среды — только для переписки.
     const messenger = () => { const c = ctx.chat(); return c && c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger : null; };
 
-    async function generate(msgId, mode) {
-      if (S.gen || S.tracking) return;
+    async function generate(msgId, mode, opts) {
+      const o = opts || {};
+      if (S.gen) return;
+      // Ход уже принят (ждёт разбора или идёт) — вторая операция не запускается; своя операция хода проходит.
+      if (S.turn && S.turn !== o.turn && S.turn.chatId === S.chatId) return;
       const c = ctx.chat(), cd = ctx.card();
       const prov = ctx.provider();
       if (!c || !cd) return;
+      // Незавершённый разбор предыдущих сообщений этого чата: сначала дождаться его (видимо, ограниченно).
+      if (!o.turn && state() && state().pending(c.id)) {
+        const w = await waitForState(mode || (msgId ? "regen" : "new"));
+        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат, ветка или текст истории изменились — действие отменено.", true); return; }
+        let reply = null;
+        try { reply = await generate(msgId, mode, { turn: w.turn }); return reply; }
+        finally { releaseTurn(w.turn); ready(reply); }
+      }
       if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return; }
       mode = mode || (msgId ? "regen" : "new");
       // Другой вариант сообщения-инициативы — снова проверка инициативы (тот же смысл операции, та же логическая единица).
-      if (mode === "regen" && c.mode === "messenger" && INI.isInitiative(S.messages.find((m) => m.id === msgId))) return initiative(msgId);
+      if (mode === "regen" && c.mode === "messenger" && INI.isInitiative(S.messages.find((m) => m.id === msgId))) return initiative(msgId, { turn: o.turn });
       const full = chat().path();
       // Пустой чат: отвечать не на что — это начало сцены.
       if (mode === "opening" || (mode === "new" && !full.length)) return opening(prov);
@@ -9319,6 +9507,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
       const onDelta = (d) => { S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
       let raw = "", reasoning = "", error = null;
+      const rpT0 = now();
       try {
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
@@ -9330,6 +9519,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         reasoning = S.gen.reasoning;
         if (e.name !== "AbortError") error = e.message || String(e);
       }
+      perf("roleplayMs", Math.round(now() - rpT0), { msgId: target.id, chatId: c.id, outcome: error ? "error" : mode });
       const th = OA.splitThink(raw || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
@@ -9366,14 +9556,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (!error && sw.text && ctx.svc.state) {
-        S.tracking = true;
-        try { await ctx.svc.state.observeMessage(target, prov); }
-        finally { S.tracking = false; }
-      }
-      if (!error && dr.draws.length && ctx.chat() && ctx.chat().id === target.chatId &&
-          chat().path().some((m) => m.id === target.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
-        images().draw(target, TR.activeSwipe(target), dr.draws[0]);
+      const shownAt = now();
+      // Ответ сохранён и показан, замок снят: разбор и картинка идут отдельно и не держат переписку.
+      const post = !error && sw.text ? afterReply(target, prov, dr.draws.length ? dr.draws[0] : null) : Promise.resolve(null);
+      const reply = { msgId: target.id, shownAt, post };
+      if (!o.turn) ready(reply); // без хода ничего больше не держит ввод
+      return reply;
     }
 
     // Записать сборку для вкладки Prism; при переполнении — сообщить и вернуть true (запрос не уходит).
@@ -9459,16 +9647,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (ctx.svc.state) {
-        S.tracking = true;
-        try { await ctx.svc.state.observeMessage(m, prov); }
-        finally { S.tracking = false; }
-      }
-      const sw = TR.activeSwipe(m);
-      if (dr.draws.length && ctx.chat() && ctx.chat().id === m.chatId &&
-          chat().path().some((x) => x.id === m.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
-        images().draw(m, sw, dr.draws[0]);
-      return { ok: true, msgId: m.id };
+      const shownAt = now();
+      return { ok: true, msgId: m.id, shownAt, post: afterReply(m, prov, dr.draws.length ? dr.draws[0] : null) };
     }
 
     /* Проверка инициативы (FOUNDATION-D): только переписка и только по явному действию пользователя.
@@ -9479,7 +9659,18 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        ответ, смена чата/ветки — ничего не записывают (ни сообщения, ни варианта, ни метки времени).
        Среда, договорённости, мир, опыт, сцена и карточка не меняются никогда.
        → { ok, outcome: "sent" | "declined" | "ineligible" | "overflow" | "error" | "aborted" | "empty" | "malformed" | "stale", code?, msgId? } */
-    async function initiative(regenId) {
+    async function initiative(regenId, opts) {
+      const o = opts || {};
+      const c0 = ctx.chat();
+      // Ход уже принят в этом чате — проверка не запускается; незавершённый разбор — сначала дождаться (видимо).
+      if (c0 && !o.turn && S.turn && S.turn.chatId === c0.id) return { ok: false, outcome: "ineligible", code: "busy" };
+      if (c0 && !o.turn && !S.gen && state() && state().pending(c0.id)) {
+        const w = await waitForState("initiative");
+        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат или ветка изменились — проверка не запущена.", true); return { ok: false, outcome: "stale" }; }
+        let r = null;
+        try { r = await initiative(regenId, { turn: w.turn }); return r; }
+        finally { releaseTurn(w.turn); ready(r); }
+      }
       const c = ctx.chat(), cd = ctx.card(), prov = ctx.provider();
       const ms = messenger();
       const full = c ? chat().path() : [];
@@ -9574,20 +9765,80 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (ctx.svc.state) {
-        S.tracking = true;
-        try { await ctx.svc.state.observeMessage(msg, prov); }
-        finally { S.tracking = false; }
+      return Object.assign(done("sent"), { msgId: msg.id, shownAt: now(), post: afterReply(msg, prov, dr.draws.length ? dr.draws[0] : null) });
+    }
+
+    /* PERF-01: отправка реплики пользователя как один ход.
+       Реплика принимается сразу, даже пока разбирается предыдущий ответ: она держится в памяти (S.turn),
+       узла в дереве нет. Ход привязан к чату и пути (сообщения + свайпы) на момент нажатия.
+       Порядок: дождаться разборов этого чата → сверить чат и путь → записать реплику → разобрать её
+       (следующей генерации нужны её события) → генерация. Отмена, смена чата/ветки/свайпа — реплика
+       не пишется, текст возвращается в поле ввода своего чата (ui.restoreDraft). Двойное нажатие —
+       одна реплика: пока ход этого чата не завершён, второй не принимается.
+       extra: { messengerAt } — метка переписки, снятая в момент нажатия.
+       → { outcome: "busy" | "sent" | "cancelled" | "context-changed" | "left-chat", msgId?, reply? } */
+    async function send(text, extra) {
+      const c = ctx.chat();
+      const body = String(text || "").trim();
+      if (!c || !body) return { outcome: "busy" };
+      if (S.gen || (S.turn && S.turn.chatId === c.id)) return { outcome: "busy" };
+      // Ход, ждущий в другом чате, отменяется: его текст вернётся в тот чат.
+      if (S.turn) cancelTurn();
+      const pressedAt = now();
+      const w0 = state() && state().pending(c.id);
+      let turn;
+      if (w0) {
+        const w = await waitForState("send", { text: body, extra: extra || null, pressedAt });
+        turn = w.turn;
+        if (w.refused) {
+          if (!turn.cancelled) restore(turn, w.refused === "context-changed" ? "Пока разбирался предыдущий ответ, чат, ветка или текст истории изменились — сообщение не отправлено, текст возвращён в поле ввода." : "");
+          releaseTurn(turn);
+          return { outcome: w.refused };
+        }
+      } else {
+        turn = S.turn = { chatId: c.id, kind: "send", key: turnKey(chat().path()), text: body, extra: extra || null, pressedAt, phase: "user-state", at: pressedAt, waitedMs: 0 };
+        renderComposer();
       }
-      if (dr.draws.length && ctx.chat() && ctx.chat().id === msg.chatId &&
-          chat().path().some((x) => x.id === msg.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
-        images().draw(msg, TR.activeSwipe(msg), dr.draws[0]);
-      return Object.assign(done("sent"), { msgId: msg.id });
+      let reply = null;
+      try {
+        turn.phase = "user-state";
+        renderComposer();
+        const sent = await chat().addUserMessage(body, extra || null);
+        ui.renderFeed();
+        ui.scrollBottom();
+        // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
+        if (state()) { await state().track(sent, ctx.provider()); await state().settle(c.id); }
+        // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
+        if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
+        turn.phase = "generating";
+        perf("sendToRoleplayMs", Math.round(now() - pressedAt), { chatId: c.id, msgId: sent.id, outcome: w0 ? "queued" : "direct" });
+        reply = await generate(null, "new", { turn });
+        return { outcome: "sent", msgId: sent.id, reply };
+      } finally {
+        releaseTurn(turn);
+        ready(reply);
+      }
+    }
+    // Ответ показан → переписка снова принимает ввод: сколько прошло (мс). Только число.
+    function ready(reply) { if (reply && reply.shownAt != null) perf("readyAfterReplyMs", Math.round(now() - reply.shownAt), { msgId: reply.msgId }); }
+    function restore(turn, message) {
+      if (typeof ui.restoreDraft === "function") ui.restoreDraft(turn.chatId, turn.text);
+      if (message) ui.toast(message, true);
+    }
+    // Отменить ход, ожидающий разбора (кнопка «Отменить» у поля ввода или новый ход в другом чате).
+    function cancelTurn() {
+      const t = S.turn;
+      if (!t || t.phase !== "waiting-state") return false;
+      t.cancelled = true;
+      if (typeof t.onCancel === "function") t.onCancel();
+      if (t.kind === "send") restore(t);
+      releaseTurn(t);
+      return true;
     }
 
     function stop() { if (S.gen) S.gen.ctrl.abort(); }
 
-    return { generate, initiative, stop, OPENING, INITIATIVE_ID };
+    return { generate, initiative, send, cancelTurn, stop, OPENING, INITIATIVE_ID };
   }
 
   PRP.generationService = { create };
@@ -10231,7 +10482,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const stateStatus = last && last.swipes && last.swipes[last.swipeIdx || 0] && last.swipes[last.swipeIdx || 0].stateStatus || null;
       return { env, now: t, world: w.world, events: w.events, warnings: w.warnings.concat(conv.warnings),
         conversation: conv, canBranch: path.length > 0, stateStatus,
-        statePending: !!S.tracking && !(stateStatus && last && stateStatus.sourceText === last.swipes[last.swipeIdx || 0].text) };
+        statePending: !!(ctx.svc.state && ctx.svc.state.pending && ctx.chat() ? ctx.svc.state.pending(ctx.chat().id) : S.tracking) && !(stateStatus && last && stateStatus.sourceText === last.swipes[last.swipeIdx || 0].text) };
     }
 
     return { load, current, now, worldAt, context, snapshot, stampForNew, createFor, checkSetup, setTime, advance, commitEvent, addMarker, markerStatus, removeForChat, checkBackup, view, STORE };
@@ -10410,6 +10661,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         lensPreview: S.modal && S.modal.kind === "card" && S.modal.section === "world" && S.modal.lens ? svc().world.preview(S.modal.lens) : null,
         assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
         assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
+        // PERF-01: ход этого чата (ожидает разбора / пишет реплику / генерирует), идёт ли разбор, возвращённый текст.
+        turn: S.turn && ctx.chat() && S.turn.chatId === ctx.chat().id ? S.turn : null,
+        statePending: ctx.chat() && svc().state && svc().state.pending ? svc().state.pending(ctx.chat().id) > 0 : false,
+        draft: ctx.chat() && S.sendDrafts ? S.sendDrafts[ctx.chat().id] || "" : "",
+        perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
       };
     }
 
@@ -10420,17 +10676,40 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }
     function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 240) + "px"; }
     function renderRail() { $("#rail").innerHTML = V.rail(vm()); }
+    /* PERF-01: текст поля ввода принадлежит своему чату (data-chat). При перерисовке в ДРУГОМ чате набранное
+       не переносится туда, а сохраняется черновиком своего чата (S.sendDrafts) и вернётся при его открытии. */
+    function takeInput() {
+      const i = $("#input");
+      if (!i) return null;
+      return { v: i.value, s: i.selectionStart, f: document.activeElement === i, chat: i.dataset.chat || null };
+    }
+    function putInput(keep) {
+      const i = $("#input");
+      if (!i || !keep) return;
+      const here = i.dataset.chat || null;
+      if (keep.chat && here !== keep.chat) {
+        if (keep.v.trim()) { S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v; }
+        autoGrow(i);
+        return;
+      }
+      i.value = keep.v || i.value; autoGrow(i);
+      if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+    }
     function renderStage() {
       const app = $("#app");
       const m = vm();
-      const input = $("#input");
-      const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
+      const keep = takeInput();
+      // Уход из поля ввода чата в любой другой вид (другой чат, ассистент, «Персонажи», мир, главная):
+      // набранное сохраняется черновиком своего чата и вернётся при его открытии.
+      if (keep && keep.chat && keep.v.trim() && !(S.view === "chat" && m.chat && m.chat.id === keep.chat)) {
+        S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v;
+      }
       const feedEl = $("#feed");
       const scroll = feedEl ? feedEl.scrollTop : null;
       if (S.view === "assist" && S.assist) {
         $("#stage").innerHTML = V.assist(m);
         app.classList.remove("messenger");
-        if (keep) {
+        if (keep && !keep.chat) {
           const i = $("#input"); i.value = keep.v; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }
@@ -10438,8 +10717,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       } else if (S.view === "chat" && m.chat && m.card) {
         $("#stage").innerHTML = V.chat(m);
         app.classList.toggle("messenger", m.chat.mode === "messenger");
-        if (keep) {
-          const i = $("#input"); i.value = keep.v; autoGrow(i);
+        // Поле ввода из того же чата сохраняется; из другого чата (или ассистента) сюда не переносится.
+        if (keep && keep.chat) putInput(keep);
+        else if (keep) {
+          // Поле без чата (ассистент): прежнее поведение — набранное переносится, если в поле чата пусто.
+          const i = $("#input"); i.value = i.value || keep.v; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }
         if (scroll != null) $("#feed").scrollTop = scroll;
@@ -10465,17 +10747,38 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (head) head.outerHTML = V.chatHead(vm());
       const comp = $(".composer-wrap");
       if (comp) {
-        const i = $("#input");
-        const keep = i ? i.value : "";
-        const focused = document.activeElement === i;
+        const keep = takeInput();
         comp.outerHTML = V.composer(vm());
-        const ni = $("#input"); ni.value = keep; autoGrow(ni);
-        if (focused) ni.focus();
+        putInput(keep);
       }
       $("#app").classList.toggle("generating", !!S.gen);
       if (S.find) applyFind(false);
     }
     function renderHead() { const head = $(".chat-head"); if (head) head.outerHTML = V.chatHead(vm()); }
+    // PERF-01: только поле ввода (статус ожидающей отправки), с сохранением набранного текста и фокуса.
+    function renderComposer() {
+      if (S.view !== "chat") return;
+      const comp = $(".composer-wrap");
+      if (!comp) return;
+      const keep = takeInput();
+      comp.outerHTML = V.composer(vm());
+      putInput(keep);
+      $("#app").classList.toggle("generating", !!S.gen);
+    }
+    /* Текст не отправленного хода — обратно в поле ввода его чата. Если этот чат открыт — сразу в поле
+       (перед уже набранным); иначе — в черновик, который покажется при открытии чата. */
+    function restoreDraft(chatId, text) {
+      if (!text) return;
+      const i = $("#input");
+      if (S.view === "chat" && S.chatId === chatId && i && i.dataset.chat === chatId) {
+        i.value = i.value.trim() ? text + "\n" + i.value : text;
+        autoGrow(i);
+        return;
+      }
+      S.sendDrafts = S.sendDrafts || {};
+      S.sendDrafts[chatId] = S.sendDrafts[chatId] ? text + "\n" + S.sendDrafts[chatId] : text;
+    }
+    function clearDraft(chatId) { if (S.sendDrafts) delete S.sendDrafts[chatId]; }
     function renderDrawer() {
       const d = $("#drawer");
       d.classList.toggle("open", S.drawerOpen && S.view === "chat");
@@ -10634,7 +10937,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     return {
       $, $$, narrow, toast, vm, applyLook, autoGrow,
-      renderRail, renderStage, renderFeed, renderHead, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
+      renderRail, renderStage, renderFeed, renderHead, renderComposer, restoreDraft, clearDraft, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
       openSettings, refreshAfterSettings, openPop, closePop, applyFind, runFind, paintStreaming, paintAssist, rememberUi,
     };
   }
@@ -10656,27 +10959,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const { S, ui, svc, nav } = ctx;
     const { $ } = ui;
 
+    /* PERF-01: отправка принимается и во время разбора предыдущего ответа. Порядок хода (дождаться разбора,
+       сверить чат и ветку, записать реплику, разобрать её, сгенерировать) — в сервисе генерации (gen.send). */
     async function sendUser() {
       const input = $("#input");
       if (!input) return;
       const text = input.value.trim();
-      if (!text || S.gen || S.tracking) return;
-      if (S.view === "assist") { input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
+      if (!text) return;
+      if (S.view === "assist") { if (S.gen) return; input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
+      const c = ctx.chat();
+      // Ход этого чата уже принят или идёт ответ: второе нажатие ничего не отправляет, текст остаётся в поле.
+      if (!c || S.gen || (S.turn && S.turn.chatId === c.id)) return;
       input.value = "";
       ui.autoGrow(input);
-      // Переписка: у отправленного сообщения — неизменяемая метка времени и положения (её даёт сервис переписки).
-      const c = ctx.chat();
-      const stamp = c && c.mode === "messenger" ? svc.messenger.stampForNew() : null;
-      const sent = await svc.chat.addUserMessage(text, stamp ? { messengerAt: stamp } : null);
-      // Интерпретация событий — служебный этап, пользователь не заполняет трекер.
-      if (svc.state) {
-        S.tracking = true;
-        try { await svc.state.observeMessage(sent, ctx.provider()); }
-        finally { S.tracking = false; }
-      }
-      ui.renderFeed();
-      ui.scrollBottom();
-      await svc.gen.generate();
+      ui.clearDraft(c.id);
+      // Переписка: метка времени и положения — на момент нажатия (её даёт сервис переписки).
+      const stamp = c.mode === "messenger" ? svc.messenger.stampForNew() : null;
+      await svc.gen.send(text, stamp ? { messengerAt: stamp } : null);
     }
     async function afterBranchChange() {
       svc.prism.refresh();
@@ -10686,6 +10985,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     const actions = {
       send: sendUser,
+      // Отменить отправку, ожидающую разбора предыдущего ответа: текст вернётся в поле ввода.
+      "send-cancel": () => svc.gen.cancelTurn(),
       stop: () => svc.gen.stop(),
       // Модель начинает сцену — только по этой кнопке, никогда сама при открытии чата.
       opening: () => { if (!S.gen) return svc.gen.generate(null, "opening"); },
@@ -10705,7 +11006,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         S.editingMsg = null;
         await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
         const edited = S.messages.find((x) => x.id === t.dataset.id);
-        if (svc.state && edited) await svc.state.observeMessage(edited, ctx.provider());
+        // Разбор правки — управляемая задача (дедуп, без отклонений); ожидающая отправка дождётся его.
+        if (svc.state && edited) await svc.state.track(edited, ctx.provider());
         await afterBranchChange();
       },
       "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },
@@ -10748,7 +11050,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     };
 
     function input(t) {
-      if (t.id === "input") ui.autoGrow(t);
+      if (t.id === "input") { ui.autoGrow(t); if (S.chatId) ui.clearDraft(S.chatId); }
       if (t.id === "find-q") { S.find.q = t.value; S.find.idx = 0; ui.runFind(true); }
     }
     function key(e, t) {
@@ -11588,14 +11890,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       // Однократная явная повторная попытка при ошибке интерпретатора;
       // никакого заполнения среды или изменения канона вручную.
       "state-retry": async () => {
-        if (S.tracking || S.gen || !svc.state) return;
+        if (S.gen || !svc.state || svc.state.pending(S.chatId)) return;
         const path = svc.chat.path(), last = path[path.length - 1];
         if (!last) return;
-        S.tracking = true;
+        const job = svc.state.track(last, ctx.provider(), { force: true });
         ui.renderDrawer();
         let result;
-        try { result = await svc.state.observeMessage(last, ctx.provider(), { force: true }); }
-        finally { S.tracking = false; ui.renderDrawer(); }
+        try { result = await job; }
+        finally { ui.renderDrawer(); }
         if (result && result.status === "error") ui.toast("Не удалось извлечь состояние: проверьте подробности анализа.", true);
       },
       "ms-create": async () => {
@@ -11691,7 +11993,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const S = {
     settings: null, cards: [], chats: [],
     view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [],
-    gen: null, tracking: false, lastPrism: null, editingMsg: null, expDraft: null,
+    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null, expDraft: null,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
@@ -11717,6 +12019,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     provider: () => ST.activeProvider(S.settings, ctx.providers()),
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
+    // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
+    perf: PRP.perfLog.create(S.perf),
     svc: {},
     nav: {},
   };
