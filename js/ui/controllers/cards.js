@@ -59,7 +59,26 @@
           source: imported ? "imported" : prev.source === "derived" ? "derived" : "manual", reviewed: imported ? !!(rv && rv.checked) : true };
         d.prismCore = core.identity || core.traits.length || core.voice.length || core.durableContext.length ? core : null;
       }
-      PRP.lensForm.collect(S.modal, $$);
+      if (S.modal.section === "main") {
+        d.customFields = (d.customFields || []).map((f) => Object.assign({}, f));
+        $("[data-custom]").forEach((el) => {
+          const f = d.customFields[+el.dataset.custom];
+          if (!f) return;
+          const key = el.dataset.k;
+          if (key === "enabled") f.enabled = el.checked;
+          else if (["label", "text", "mode"].includes(key)) f[key] = el.value;
+        });
+        d.customFields = PRP.cardModel.normalizeCustomFields(d.customFields);
+      }
+      if (S.modal.section === "images") {
+        d.image = Object.assign({}, d.image);
+        d.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, d.image.loraAdvanced || {});
+        $("[data-lora-advanced]").forEach((el) => {
+          if (el.dataset.loraAdvanced === "enabled") d.image.loraAdvanced.enabled = el.checked;
+          if (el.dataset.loraAdvanced === "rules") d.image.loraAdvanced.rules = el.value;
+        });
+      }
+      PRP.lensForm.collect(S.modal, $);
       return d;
     }
     const keepScroll = () => { S.modal.keepScroll = true; ui.renderModal(); };
@@ -103,6 +122,8 @@
       "core-clear": () => { const d = collectCard(); d.prismCore = null; keepScroll(); },
       "alt-add": () => { const d = collectCard(); d.altGreetings = (d.altGreetings || []).concat([""]); keepScroll(); setTimeout(() => { const el = $(`[data-alt="${d.altGreetings.length - 1}"]`); if (el) el.focus(); }, 30); },
       "alt-del": (t) => { const d = collectCard(); d.altGreetings.splice(+t.dataset.i, 1); keepScroll(); },
+      "custom-add": () => { const d = collectCard(); d.customFields = (d.customFields || []).concat([{ id: "custom-" + Date.now().toString(36), label: "", text: "", mode: "relevant", enabled: false }]); keepScroll(); },
+      "custom-del": (t) => { const d = collectCard(); (d.customFields || []).splice(+t.dataset.i, 1); keepScroll(); },
       "card-lora-add": () => { const d = collectCard(); d.image = d.image || {}; d.image.loras = (d.image.loras || []).concat([{ name: "", weight: 0.8 }]); keepScroll(); },
       "card-lora-del": (t) => { const d = collectCard(); d.image.loras.splice(+t.dataset.i, 1); keepScroll(); },
       "card-json": () => { const e = svc.cards.exportJson(collectCard()); ctx.files.download(e.name, e.text, "application/json"); },
@@ -129,6 +150,7 @@
       }
       if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await ctx.files.readFile(t.files[0], "dataurl"); t.value = ""; ui.renderModal(); return true; }
       if (t.dataset.lore !== undefined && t.dataset.k === "selective" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
+      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
       return false;
     }
 
