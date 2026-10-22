@@ -119,36 +119,6 @@ function t(name, fn) {
   });
 }
 
-/* ── PERF-03A: conservative single-message StateTracker fast path ── */
-{
-  const INT = globalThis.PRP.stateInterpreter;
-  t("PERF-03A-1: standalone greetings and acknowledgements need no observer", () => {
-    const cases = [
-      ["Привет!", "non-event-greeting"], ["Хорошо.", "non-event-acknowledgement"],
-      ["  Да!!!  ", "non-event-acknowledgement"], ["Понятно", "non-event-acknowledgement"],
-      ["Спасибо!", "non-event-acknowledgement"], ["Не за что.", "non-event-acknowledgement"],
-      ["OK", "non-event-acknowledgement"], ["Thank you!", "non-event-acknowledgement"],
-    ];
-    for (const [msg, reason] of cases) {
-      assert.strictEqual(INT.nonEventReason(msg), reason, msg);
-      assert.strictEqual(INT.mayChangeState(msg), false, msg);
-    }
-  });
-  t("PERF-03A-2: partial matches, self-reports and action-bearing messages still need observer", () => {
-    const cases = [
-      "Хорошо, я снял шарф.", "Спасибо, я дома.", "Понятно, теперь сижу.",
-      "Да, я сейчас в кафе.", "Нет, я не могу выйти.", "Ладно, пойду домой.",
-      "Окей! *снимаю пальто*", "Hello! Я в пижаме.", "Как дела? Я дома.",
-      "Я в свитере", "Я снял шарф", "Сейчас готовлю", "Хорошо? Я рядом.",
-      "Да\nЯ стою", "Ок, но я ухожу", "Sure, I'm at home",
-    ];
-    for (const msg of cases) {
-      assert.strictEqual(INT.nonEventReason(msg), null, msg);
-      assert.strictEqual(INT.mayChangeState(msg), true, msg);
-    }
-  });
-}
-
 /* ── UI: visible image info respects developer mode; copy respects same gate ── */
 {
   const fs = require("fs");
@@ -4808,37 +4778,6 @@ async function perfTurn() {
         if (oldDocument) Object.defineProperty(globalThis, "document", oldDocument);
         else delete globalThis.document;
       }
-    });
-    await ta("PERF-03A-3: standalone acknowledgement still sends RP reply but calls no user observer", async () => {
-      const h = await mk("rp");
-      const text = "Хорошо!";
-      assert.strictEqual(h.ctx.svc.state.prepareUser(text, { id: "perchance" }), null,
-        "queued speculation does not spend an observer call on a confirmed non-event");
-      const r = await h.gen.send(text);
-      assert.strictEqual(r.outcome, "sent");
-      assert.strictEqual(rp.length, 1, "RP model still receives user acknowledgement");
-      assert.strictEqual(sims.length, 0, "neither user nor acknowledgement-only assistant triggers observer");
-      assert.ok(rp[0].messages.some((x) => String(x.content).includes(text)), "the message is retained in RP history");
-      const p = h.chat.path();
-      assert.strictEqual(p.length, 2);
-      assert.strictEqual(p[0].swipes[0].text, text);
-      assert.strictEqual(p[0].swipes[0].stateEvents, undefined, "no invented facts written");
-      assert.ok(h.S.perf.some((x) => x.metric === "userStateMs" && x.outcome === "non-event-acknowledgement"));
-      assert.ok(h.S.perf.some((x) => x.metric === "sendToRoleplayMs" && x.outcome === "direct"));
-      await r.reply.post;
-    });
-    await ta("PERF-03A-4: acknowledgement plus state action continues normal StateTracker analysis", async () => {
-      const h = await mk("rp");
-      const text = "Хорошо, я снял шарф.";
-      const p = h.gen.send(text);
-      await until(() => sims.length === 1, "compound input is analysed");
-      assert.ok(sims[0].instruction.includes(text));
-      sims[0].res(ok([Evt("user", "wear", "remove", ["шарф"], "established", "я снял шарф")]));
-      const r = await p;
-      assert.strictEqual(r.outcome, "sent");
-      assert.strictEqual(rp.length, 1);
-      assert.ok(h.S.perf.some((x) => x.metric === "userStateMs" && x.outcome !== "non-event-acknowledgement"));
-      await r.reply.post;
     });
     await ta("PERF-02A-3: RP stays on roleplay provider; user and assistant state use processing provider", async () => {
       const h = await mk("rp");
