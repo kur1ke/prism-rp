@@ -246,8 +246,10 @@
   // Keep the actual shot details (clothing, location, framing) intact.
   function embodiedShot(scene, card) {
     const clean = stripIdentityAliases(String(scene || ""), card || {});
-    const omit = /^(?:[1-9](?:girls?|boys?)|solo|female|male|adult|young adult|young woman|young man|portrait|full[- ]body|looking at viewer|third[- ]person view|standing|lying on back|sitting)$/i;
-    const tags = splitTags(clean).filter((tag) => !omit.test(tag.trim()));
+    const omit = /^(?:[1-9](?:girls?|boys?)|solo|female|male|adult|young adult|young woman|young man|portrait|full[- ]body|looking at viewer|third[- ]person view)$/i;
+    const cameraPose = { standing: "standing viewpoint", sitting: "seated viewpoint", "lying on back": "reclining viewpoint" };
+    const tags = splitTags(clean).filter((tag) => !omit.test(tag.trim()))
+      .map((tag) => cameraPose[tag.trim().toLowerCase()] || tag);
     if (!tags.some((tag) => /^(?:pov|first[- ]person view)$/i.test(tag.trim()))) tags.unshift("pov");
     return tags.join(", ");
   }
@@ -302,7 +304,9 @@
       actors.reason = "camera-owner";
     }
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
-    const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
+    // The camera holder still has canonical physical wear even if no full
+    // external character should be rendered into this shot.
+    const owner = (actors.owner || cameraOwner) ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
     const outfit = owner && Array.isArray(owner.wear) ? owner.wear.join(", ") : "";
     const userOutfit = user && Array.isArray(user.wear) ? user.wear.join(", ") : "";
@@ -328,8 +332,8 @@
     if (actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
     // Tracked physical state is independent from the camera shot.
     const established = [];
-    if (actors.owner && messenger && outfit && !wardrobe) established.push("clothing: " + outfit);
-    if (actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
+    if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe) established.push("clothing: " + outfit);
+    if ((actors.owner || cameraOwner) && owner && owner.pose) established.push((cameraOwner ? "camera pose: " : "pose: ") + owner.pose);
     if (actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
     if (actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
     if (actors.user && user && user.pose) bits.push("user pose: " + user.pose);
@@ -366,7 +370,7 @@
       subjects: actors,
       userPresent: actors.user,
       stale,
-      visualWear: messenger && actors.owner ? outfit : "",
+      visualWear: messenger && (actors.owner || cameraOwner) ? outfit : "",
       provenance: { subjects: actors, cameraRole: cameraOwner ? "owner" : "external", card: (actors.owner || cameraOwner) ? card.name : null, user: actors.user ? persona.name : null,
         outfit: outfit || null, userOutfit: userOutfit || null, messenger: messenger || false,
         imageLayers: {
@@ -470,7 +474,7 @@
     let scene = String(o.compiled == null ? c.scene : o.compiled);
     if (c.cameraOwner) scene = embodiedShot(scene, o.card);
     else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
-    if (c.provenance && c.provenance.messenger && c.ownerPresent !== false && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
+    if (c.provenance && c.provenance.messenger && (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
     const present = c.ownerPresent !== false;
     const trigger = present ? uniqueTrigger(o.card || {}) : "";
