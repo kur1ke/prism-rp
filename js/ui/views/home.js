@@ -27,7 +27,7 @@
           const date = when ? new Date(when) : null;
           const exact = date && Number.isFinite(date.getTime())
             ? date.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
-          const time = exact ? R.ago(when) : "Время неизвестно";
+          const time = exact ? R.ago(when) + " · " + date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "Время неизвестно";
           return `<div class="rail-chat ${m.chat && m.chat.id === c.id && m.view === "chat" ? "active" : ""}" data-act="open-chat" data-id="${c.id}" role="button" tabindex="0">
             ${R.avatar(cd, 34)}
             <div style="min-width:0"><div class="t1" title="${esc(cd.name)}">${esc(cd.name)}</div><div class="t2" title="${esc(exact)}">${esc(time)}</div></div>
