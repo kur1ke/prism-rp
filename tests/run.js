@@ -4574,23 +4574,41 @@ t("CARD-Q: V3 nickname is custom info; technical V3 fields are not active", () =
     files.forEach((path) => vm.runInNewContext(fs.readFileSync(J(path), "utf8"), context));
     return context.PRP.views;
   }
-  t("CARD-UX-1: home keeps recent section, catalog omits it, tile shows latest time", () => {
+  t("CARD-UX-1: home shows only welcome, catalog shows only cards, rail shows last activity", () => {
     const V = uiViews(["ui/views/home.js"]);
     const card = { id: "card-a", name: "Lilith", tags: ["goth"] };
     const chats = [
-      { id: "chat-1", cardId: "card-a", mode: "rp", preview: "Past", updatedAt: 1000000000000 },
-      { id: "chat-2", cardId: "card-a", mode: "messenger", preview: "Latest", updatedAt: 1780000000000 },
+      { id: "chat-1", cardId: "card-a", mode: "rp", preview: "Do not repeat message text", updatedAt: 1000000000000 },
+      { id: "chat-2", cardId: "card-a", mode: "messenger", preview: "Latest hidden preview", updatedAt: 1780000000000 },
     ];
     const m = { cards: [card], chats, provider: null, view: "home", homeQuery: "" };
     const home = V.home(m);
-    assert.ok(home.includes("Продолжить"), home.slice(0, 800));
-    assert.ok(home.includes("Последнее взаимодействие"));
-    assert.ok(home.includes("data-mode=\"messenger\"") && home.includes("data-mode=\"rp\""));
-    assert.ok(!home.includes("2 чата"));
-    const catalog = V.home(Object.assign({}, m, { view: "characters" }));
-    assert.ok(!catalog.includes('<div class="section-title">Продолжить</div>'));
+    assert.ok(home.includes("Добро пожаловать в Prism RP"));
+    assert.ok(home.includes('data-act="characters"'));
+    assert.ok(!home.includes("Продолжить") && !home.includes("tile") && !home.includes("rail-chat"));
+    assert.ok(!home.includes('data-act="open-chat"'));
+    const catalog = V.characters(Object.assign({}, m, { view: "characters" }));
     assert.ok(catalog.includes("Последнее взаимодействие") && catalog.includes("Персонажи"));
-    assert.ok(V.rail(m).includes('data-act="characters"'));
+    assert.ok(catalog.includes('data-mode="messenger"') && catalog.includes('data-mode="rp"'));
+    assert.ok(!catalog.includes('<div class="section-title">Продолжить</div>') && !catalog.includes("Latest hidden preview"));
+    const rail = V.rail(m);
+    assert.ok(rail.includes('data-act="characters"'));
+    assert.ok(rail.includes("Последнее взаимодействие"));
+    assert.ok(rail.includes("data-act=\"open-chat\"") && rail.includes('aria-label="Переписка"'));
+    assert.ok(!rail.includes("Do not repeat message text") && !rail.includes("Latest hidden preview"));
+    assert.ok(rail.includes('title="') && rail.includes("class=\"t2\""));
+    const active = V.rail(Object.assign({}, m, { view: "chat", chat: { id: "chat-2" } }));
+    assert.ok(active.includes('data-act="home">') || active.includes('data-act="home"'));
+    assert.ok(active.includes('data-act="home"') && active.includes('Главная'));
+  });
+  t("CARD-UX-1b: friendly entry state with no selected dialogue", () => {
+    const V = uiViews(["ui/views/home.js"]);
+    const welcome = V.home({ cards: [], chats: [] });
+    assert.ok(welcome.includes("Добро пожаловать"));
+    assert.ok(welcome.includes('data-act="characters"'));
+    assert.ok(welcome.includes('data-act="import"'));
+    const catalog = V.characters({ cards: [], chats: [], homeQuery: "" });
+    assert.ok(catalog.includes("Персонажей пока нет") && catalog.includes('data-act="new-card"'));
   });
   t("CARD-UX-2: card editor restores disclosure state from modal and labels custom detail", () => {
     const V = uiViews(["ui/views/card-editor.js"]);
