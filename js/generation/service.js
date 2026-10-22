@@ -26,6 +26,11 @@
   const INI = PRP.messengerInitiative, U = PRP.util;
   // Ключ активного контекста: чат + сообщения пути и их выбранные варианты (сверка перед записью).
   const pathKey = (p) => (p || []).map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">");
+  /* PERF-01: ключ контекста ожидающего хода — путь, выбранные свайпы И текст каждого сообщения пути
+     (отпечаток FNV-1a + длина). Правка любого сообщения истории, пока ход ждёт, — это другой контекст:
+     реплика не отправляется, текст возвращается в поле ввода. */
+  function fnv(str) { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); }
+  const turnKey = (p) => (p || []).map((m) => { const t = String(TR.activeSwipe(m).text || ""); return m.id + ":" + (m.swipeIdx || 0) + ":" + t.length + ":" + fnv(t); }).join(">");
 
   const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
 
@@ -41,11 +46,19 @@
        Возвращается Promise, который никогда не отклоняется. */
     function afterReply(msg, prov, draw) {
       const st = state();
-      const analysed = st && msg && String(TR.activeSwipe(msg).text || "").trim() ? st.track(msg, prov) : Promise.resolve(null);
+      /* Источник картинки фиксируется в момент ответа: этот вариант (объект свайпа), его номер и текст.
+         Директива [draw:] принадлежит ИМЕННО этому варианту: если за время разбора выбран другой свайп,
+         вариант изменён или сообщение ушло с активной ветки — авто-картинка не рисуется ни в какой вариант. */
+      const sw = TR.activeSwipe(msg), swIdx = msg.swipeIdx || 0, text = String(sw.text || "");
+      const analysed = st && msg && text.trim() ? st.track(msg, prov) : Promise.resolve(null);
       return analysed.then(() => {
-        if (!draw || !ctx.chat() || ctx.chat().id !== msg.chatId || !chat().path().some((m) => m.id === msg.id)) return null;
+        if (!draw) return null;
+        const c = ctx.chat();
+        const same = c && c.id === msg.chatId && (msg.swipeIdx || 0) === swIdx && msg.swipes[swIdx] === sw &&
+          String(sw.text || "") === text && (sw.draws || []).some((d) => d === draw || (d && d.prompt === draw.prompt && d.ratio === draw.ratio)) && chat().path().includes(msg);
+        if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: "source-changed" }); return null; }
         if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
-        return images().draw(msg, TR.activeSwipe(msg), draw);
+        return images().draw(msg, sw, draw);
       }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
     }
 
@@ -55,7 +68,7 @@
        → { turn } | { refused } */
     async function waitForState(kind, extra) {
       const c = ctx.chat(), st = state();
-      const turn = Object.assign({ chatId: c.id, kind, key: pathKey(chat().path()), phase: "waiting-state", at: now() }, extra || {});
+      const turn = Object.assign({ chatId: c.id, kind, key: turnKey(chat().path()), phase: "waiting-state", at: now() }, extra || {});
       S.turn = turn;
       renderComposer();
       // Отмена прерывает ожидание сразу: ход не висит до конца чужого разбора.
@@ -64,7 +77,7 @@
       turn.waitedMs = w.waitedMs;
       if (w.timedOut) perf("stateWaitTimeout", w.waitedMs, { chatId: c.id });
       if (S.turn !== turn || turn.cancelled) return { refused: "cancelled", turn };
-      if (S.chatId !== turn.chatId || !ctx.chat() || pathKey(chat().path()) !== turn.key) return { refused: "context-changed", turn };
+      if (S.chatId !== turn.chatId || !ctx.chat() || turnKey(chat().path()) !== turn.key) return { refused: "context-changed", turn };
       return { turn };
     }
     const releaseTurn = (turn) => { if (turn && S.turn === turn) { S.turn = null; renderComposer(); } };
@@ -82,7 +95,7 @@
       // Незавершённый разбор предыдущих сообщений этого чата: сначала дождаться его (видимо, ограниченно).
       if (!o.turn && state() && state().pending(c.id)) {
         const w = await waitForState(mode || (msgId ? "regen" : "new"));
-        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат или ветка изменились — действие отменено.", true); return; }
+        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат, ветка или текст истории изменились — действие отменено.", true); return; }
         let reply = null;
         try { reply = await generate(msgId, mode, { turn: w.turn }); return reply; }
         finally { releaseTurn(w.turn); ready(reply); }
@@ -417,12 +430,12 @@
         const w = await waitForState("send", { text: body, extra: extra || null, pressedAt });
         turn = w.turn;
         if (w.refused) {
-          if (!turn.cancelled) restore(turn, w.refused === "context-changed" ? "Пока разбирался предыдущий ответ, чат или ветка изменились — сообщение не отправлено, текст возвращён в поле ввода." : "");
+          if (!turn.cancelled) restore(turn, w.refused === "context-changed" ? "Пока разбирался предыдущий ответ, чат, ветка или текст истории изменились — сообщение не отправлено, текст возвращён в поле ввода." : "");
           releaseTurn(turn);
           return { outcome: w.refused };
         }
       } else {
-        turn = S.turn = { chatId: c.id, kind: "send", key: pathKey(chat().path()), text: body, extra: extra || null, pressedAt, phase: "user-state", at: pressedAt, waitedMs: 0 };
+        turn = S.turn = { chatId: c.id, kind: "send", key: turnKey(chat().path()), text: body, extra: extra || null, pressedAt, phase: "user-state", at: pressedAt, waitedMs: 0 };
         renderComposer();
       }
       let reply = null;

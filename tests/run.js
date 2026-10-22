@@ -4892,6 +4892,91 @@ async function perfTurn() {
       const iAst = h.S.perf.findIndex((x) => x.metric === "assistantStateMs");
       assert.ok(iReady >= 0 && iAst > iReady, "ввод освобождается раньше, чем завершается разбор ответа");
     });
+    await ta("PERF-12 (review MAJOR): смена свайпа во время разбора — старый [draw:] не рисуется ни в новый, ни в старый вариант", async () => {
+      const h = await mk("rp", true);
+      replies.push("Вот, смотри: я надела синюю куртку.\n[draw: 1girl, orihime, blue jacket, sitting, cafe]");
+      const p = h.gen.send("Покажи фото, пожалуйста: я сижу в кафе.");
+      await until(() => sims.length === 1, "разбор");
+      sims[0].res(ok());
+      await until(() => sims.length === 2, "разбор ответа");
+      const r = await p;
+      const a = h.chat.path()[1];
+      assert.strictEqual(a.swipes[0].draws.length, 1);
+      // пользователь листает на другой вариант (без директивы), пока идёт разбор
+      a.swipes.push({ text: "Совсем другой ответ.", sceneOps: [], draws: [], createdAt: Date.now() }); a.swipeIdx = 1; await h.chat.putMsg(a);
+      sims[1].res(ok(jacket("я надела синюю куртку")));
+      await r.reply.post;
+      assert.strictEqual(imgs.length, 0, "картинка не нарисована");
+      assert.ok(!a.swipes[1].images || !a.swipes[1].images.length, "в новый вариант ничего не попало");
+      assert.ok(!a.swipes[0].images || !a.swipes[0].images.length, "в скрытый вариант — тоже");
+      assert.ok(h.S.perf.some((x) => x.metric === "imageSkipped" && x.outcome === "source-changed"));
+      // контроль: тот же сценарий без смены свайпа рисует ровно в исходный вариант
+      const h2 = await mk("rp", true);
+      replies.push("Вот, смотри: я надела синюю куртку.\n[draw: 1girl, orihime, blue jacket, sitting, cafe]");
+      const p2 = h2.gen.send("Покажи фото, пожалуйста: я сижу в кафе.");
+      await until(() => sims.length === 1, "разбор"); sims[0].res(ok());
+      await until(() => sims.length === 2, "разбор ответа");
+      const r2 = await p2; sims[1].res(ok()); await r2.reply.post;
+      const a2 = h2.chat.path()[1];
+      assert.strictEqual(imgs.length, 1);
+      assert.strictEqual(a2.swipes[0].images.length, 1);
+      // и уход-возврат на тот же вариант до конца разбора не мешает (тот же объект, тот же текст)
+      const h3 = await mk("rp", true);
+      replies.push("Вот, смотри: я надела синюю куртку.\n[draw: 1girl, orihime, blue jacket, sitting, cafe]");
+      const p3 = h3.gen.send("Покажи фото, пожалуйста: я сижу в кафе.");
+      await until(() => sims.length === 1, "разбор"); sims[0].res(ok());
+      await until(() => sims.length === 2, "разбор ответа");
+      const r3 = await p3;
+      const a3 = h3.chat.path()[1];
+      a3.swipes.push({ text: "Другой.", sceneOps: [], createdAt: Date.now() }); a3.swipeIdx = 1; a3.swipeIdx = 0;
+      sims[1].res(ok()); await r3.reply.post;
+      assert.strictEqual(imgs.length, 1, "вернулись на исходный вариант — картинка в нём");
+      assert.strictEqual(a3.swipes[0].images.length, 1);
+      assert.ok(!a3.swipes[1].images);
+    });
+    await ta("PERF-13 (review MAJOR): правка истории во время ожидающей отправки — реплика не уходит, текст возвращается", async () => {
+      // правка уже разобранной реплики пользователя (не того сообщения, что разбирается)
+      const h = await mk("rp");
+      await firstTurn(h);
+      const n = h.store.messages.size, nRp = rp.length;
+      const u = h.chat.path()[0];
+      const p2 = h.gen.send("Я снял шарф.");
+      await tick();
+      assert.strictEqual(h.S.turn.phase, "waiting-state");
+      await h.chat.saveEdit(u.id, "Я стою на улице.");
+      h.ctx.svc.state.track(u, { id: "mock" }); // так делает контроллер правки
+      sims[1].res(ok());
+      await until(() => sims.length === 3, "разбор правки");
+      sims[2].res(ok());
+      const r = await p2;
+      assert.strictEqual(r.outcome, "context-changed");
+      assert.strictEqual(h.store.messages.size, n, "реплика не записана");
+      assert.strictEqual(rp.length, nRp, "генерация не запущена");
+      assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
+      assert.ok(h.toasts.some((x) => /текст истории/.test(x.t)));
+      // правка ответа, который сейчас разбирается
+      const h2 = await mk("rp");
+      await firstTurn(h2);
+      const a = h2.chat.path()[1];
+      const q = h2.gen.send("Я снял шарф.");
+      await tick();
+      await h2.chat.saveEdit(a.id, "Я в пижаме.");
+      sims[1].res(ok(jacket()));
+      const r2 = await q;
+      assert.strictEqual(r2.outcome, "context-changed");
+      assert.strictEqual(stored(h2, a.id).swipes[0].stateEvents, undefined, "устаревший разбор не записан");
+      assert.strictEqual(h2.chat.path().length, 2);
+      // контроль: правка вне активной ветки на ход не влияет — отправка уходит
+      const h3 = await mk("rp");
+      await firstTurn(h3);
+      const off = h3.chat.newMsg("assistant", null, "Ветка в стороне."); await h3.chat.putMsg(off);
+      const q3 = h3.gen.send("Я снял шарф.");
+      await tick();
+      off.swipes[0].text = "Ветка в стороне, правлена.";
+      sims[1].res(ok());
+      await until(() => sims.length === 3, "разбор реплики"); sims[2].res(ok());
+      assert.strictEqual((await q3).outcome, "sent");
+    });
     await ta("PERF-11: переписка — инициатива во время разбора ждёт видимо; Messenger не пишет сцену", async () => {
       const h = await mk("messenger");
       await h.ctx.svc.messenger.createFor(h.chatId, { timeZone: "UTC", timeMode: "live" });

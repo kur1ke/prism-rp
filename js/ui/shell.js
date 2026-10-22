@@ -64,17 +64,36 @@
     }
     function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 240) + "px"; }
     function renderRail() { $("#rail").innerHTML = V.rail(vm()); }
+    /* PERF-01: текст поля ввода принадлежит своему чату (data-chat). При перерисовке в ДРУГОМ чате набранное
+       не переносится туда, а сохраняется черновиком своего чата (S.sendDrafts) и вернётся при его открытии. */
+    function takeInput() {
+      const i = $("#input");
+      if (!i) return null;
+      return { v: i.value, s: i.selectionStart, f: document.activeElement === i, chat: i.dataset.chat || null };
+    }
+    function putInput(keep) {
+      const i = $("#input");
+      if (!i || !keep) return;
+      const here = i.dataset.chat || null;
+      if (keep.chat && here !== keep.chat) {
+        if (keep.v.trim()) { S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v; }
+        autoGrow(i);
+        return;
+      }
+      i.value = keep.v || i.value; autoGrow(i);
+      if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+    }
     function renderStage() {
       const app = $("#app");
       const m = vm();
-      const input = $("#input");
-      const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
+      const keep = takeInput();
       const feedEl = $("#feed");
       const scroll = feedEl ? feedEl.scrollTop : null;
       if (S.view === "assist" && S.assist) {
         $("#stage").innerHTML = V.assist(m);
         app.classList.remove("messenger");
-        if (keep) {
+        if (keep && keep.chat && keep.v.trim()) { S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v; }
+        else if (keep && !keep.chat) {
           const i = $("#input"); i.value = keep.v; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }
@@ -82,9 +101,11 @@
       } else if (S.view === "chat" && m.chat && m.card) {
         $("#stage").innerHTML = V.chat(m);
         app.classList.toggle("messenger", m.chat.mode === "messenger");
-        if (keep) {
-          // Пустое поле не затирает возвращённый текст не отправленного хода (PERF-01, черновик чата).
-          const i = $("#input"); i.value = keep.v || i.value; autoGrow(i);
+        // Поле ввода из того же чата сохраняется; из другого чата (или ассистента) сюда не переносится.
+        if (keep && keep.chat) putInput(keep);
+        else if (keep) {
+          // Поле без чата (ассистент): прежнее поведение — набранное переносится, если в поле чата пусто.
+          const i = $("#input"); i.value = i.value || keep.v; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }
         if (scroll != null) $("#feed").scrollTop = scroll;
@@ -110,12 +131,9 @@
       if (head) head.outerHTML = V.chatHead(vm());
       const comp = $(".composer-wrap");
       if (comp) {
-        const i = $("#input");
-        const keep = i ? i.value : "";
-        const focused = document.activeElement === i;
+        const keep = takeInput();
         comp.outerHTML = V.composer(vm());
-        const ni = $("#input"); ni.value = keep || ni.value; autoGrow(ni);
-        if (focused) ni.focus();
+        putInput(keep);
       }
       $("#app").classList.toggle("generating", !!S.gen);
       if (S.find) applyFind(false);
@@ -126,12 +144,9 @@
       if (S.view !== "chat") return;
       const comp = $(".composer-wrap");
       if (!comp) return;
-      const i = $("#input");
-      const keep = i ? i.value : "";
-      const focused = document.activeElement === i;
+      const keep = takeInput();
       comp.outerHTML = V.composer(vm());
-      const ni = $("#input");
-      if (ni) { ni.value = keep || ni.value; autoGrow(ni); if (focused) ni.focus(); }
+      putInput(keep);
       $("#app").classList.toggle("generating", !!S.gen);
     }
     /* Текст не отправленного хода — обратно в поле ввода его чата. Если этот чат открыт — сразу в поле
@@ -139,7 +154,7 @@
     function restoreDraft(chatId, text) {
       if (!text) return;
       const i = $("#input");
-      if (S.view === "chat" && S.chatId === chatId && i) {
+      if (S.view === "chat" && S.chatId === chatId && i && i.dataset.chat === chatId) {
         i.value = i.value.trim() ? text + "\n" + i.value : text;
         autoGrow(i);
         return;

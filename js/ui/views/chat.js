@@ -234,7 +234,7 @@
       : t && t.phase === "user-state" ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ваше сообщение перед ответом…</span></div>`
       : !t && m.statePending && !m.gen ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ответ — можно писать</span></div>` : "";
     return `<div class="composer-wrap">${status}<div class="composer">
-      <textarea id="input" rows="1" placeholder="${m.chat.mode === "messenger" ? "Сообщение" : `Что делает и говорит ${esc(m.persona.name)}…`}" aria-label="Сообщение">${esc(m.draft || "")}</textarea>
+      <textarea id="input" data-chat="${esc(m.chat.id)}" rows="1" placeholder="${m.chat.mode === "messenger" ? "Сообщение" : `Что делает и говорит ${esc(m.persona.name)}…`}" aria-label="Сообщение">${esc(m.draft || "")}</textarea>
       <div class="composer-bar">
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}

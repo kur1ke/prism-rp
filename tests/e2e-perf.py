@@ -102,14 +102,40 @@ try:
         first_chat = ids["chat"]
         page.evaluate(f"PRP.app.ctx.nav.newChat('rp', '{ids['card']}')")
         page.wait_for_function(f"PRP.app.S.chatId !== '{first_chat}'")
+        second_chat = page.evaluate("PRP.app.S.chatId")
+        page.wait_for_selector(".composer #input")
+        page.fill("#input", "Текст второго чата.")  # пользователь уже пишет во втором чате, пока первый ход ждёт
         page.wait_for_function("!PRP.app.S.turn", timeout=10000)
         page.wait_for_timeout(300)
+        b_input = page.input_value("#input")
         n_other = page.evaluate("async () => (await PRP.app.ctx.DB.byIndex('messages', 'chatId', PRP.app.S.chatId)).length")
         page.evaluate(f"PRP.app.ctx.nav.openChat('{first_chat}')")
         page.wait_for_function(f"PRP.app.S.chatId === '{first_chat}'")
         page.wait_for_timeout(300)
-        check("PERF-E7: смена чата — реплика не записана ни туда, ни сюда; текст вернулся в поле своего чата",
-              n_other == 0 and "Это не должно уйти в другой чат." not in user_msgs(page) and page.input_value("#input") == "Это не должно уйти в другой чат.")
+        check("PERF-E7: смена чата — реплика не записана ни туда, ни сюда; текст вернулся в поле своего чата, а не в поле второго",
+              n_other == 0 and "Это не должно уйти в другой чат." not in user_msgs(page) and page.input_value("#input") == "Это не должно уйти в другой чат."
+              and b_input == "Текст второго чата.")
+        # Поле ввода принадлежит своему чату: набранное не переносится в другой чат и возвращается при возврате.
+        page.fill("#input", "Черновик первого чата.")
+        page.evaluate(f"PRP.app.ctx.nav.openChat('{second_chat}')")
+        page.wait_for_function(f"PRP.app.S.chatId === '{second_chat}'")
+        page.wait_for_timeout(200)
+        in_b = page.input_value("#input")
+        page.evaluate(f"PRP.app.ctx.nav.openChat('{first_chat}')")
+        page.wait_for_function(f"PRP.app.S.chatId === '{first_chat}'")
+        page.wait_for_timeout(200)
+        in_a = page.input_value("#input")
+        page.evaluate("PRP.app.ctx.nav.goHome()")
+        page.evaluate(f"PRP.app.ctx.nav.openChat('{second_chat}')")
+        page.wait_for_function(f"PRP.app.S.chatId === '{second_chat}'")
+        page.wait_for_timeout(200)
+        in_b2 = page.input_value("#input")
+        check("PERF-E7b: черновики по чатам — текст первого не попадает во второй, у каждого свой после переходов (в т. ч. через главный экран)",
+              in_b == "Текст второго чата." and in_a == "Черновик первого чата." and in_b2 == "Текст второго чата.")
+        page.fill("#input", "")
+        page.evaluate(f"PRP.app.ctx.nav.openChat('{first_chat}')")
+        page.wait_for_function(f"PRP.app.S.chatId === '{first_chat}'")
+        page.wait_for_timeout(200)
         page.fill("#input", "")
         page.dispatch_event("#input", "input")
 
