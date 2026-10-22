@@ -61,7 +61,7 @@
       }
       if (S.modal.section === "main") {
         d.customFields = (d.customFields || []).map((f) => Object.assign({}, f));
-        $("[data-custom]").forEach((el) => {
+        $$("[data-custom]").forEach((el) => {
           const f = d.customFields[+el.dataset.custom];
           if (!f) return;
           const key = el.dataset.k;
@@ -73,12 +73,12 @@
       if (S.modal.section === "images") {
         d.image = Object.assign({}, d.image);
         d.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, d.image.loraAdvanced || {});
-        $("[data-lora-advanced]").forEach((el) => {
+        $$("[data-lora-advanced]").forEach((el) => {
           if (el.dataset.loraAdvanced === "enabled") d.image.loraAdvanced.enabled = el.checked;
           if (el.dataset.loraAdvanced === "rules") d.image.loraAdvanced.rules = el.value;
         });
       }
-      PRP.lensForm.collect(S.modal, $);
+      PRP.lensForm.collect(S.modal, $$);
       return d;
     }
     const keepScroll = () => { S.modal.keepScroll = true; ui.renderModal(); };
