@@ -27,7 +27,7 @@
         if (S.gen || !svc.state || svc.state.pending(S.chatId)) return;
         const path = svc.chat.path(), last = path[path.length - 1];
         if (!last) return;
-        const job = svc.state.track(last, ctx.provider(), { force: true });
+        const job = svc.state.track(last, ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), { force: true });
         ui.renderDrawer();
         let result;
         try { result = await job; }
