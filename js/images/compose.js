@@ -476,7 +476,9 @@
     else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
     if (c.provenance && c.provenance.messenger && (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
-    const present = c.ownerPresent !== false;
+    // A camera held by the character may show their own body without a separate portrait.
+    // Keep their trigger and LoRA, but don't force head/face appearance into this shot.
+    const present = c.ownerPresent !== false || !!c.cameraOwner;
     const trigger = present ? uniqueTrigger(o.card || {}) : "";
     // Стилевые теги персонажа — только те, о которых просит сцена.
     const style = present ? splitTags(im.styleTrigger).filter((t) => mentions(bareTag(t), scene)).join(", ") : "";
@@ -485,9 +487,14 @@
     // Веса LoRA из карточки авторитетнее случайных дубликатов в [draw:] и переводе.
     if (loras) scene = withoutConfiguredLora(scene, activeLoras);
     const keep = loras ? withoutConfiguredLora(c.keep, activeLoras) : c.keep;
-    // Character identity must precede variable shot details: later tags are less reliable anchors.
-    // Do not inject the trigger for scenes in which the card owner is absent.
-    const body = [trigger, keep, scene, loras, style, c.tail].filter(Boolean).join(", ");
+    // Optional LoRA-specific associations: never interpret unkeyed text as a directive.
+    // Disabled advanced mode must not affect generation even when its text is preserved.
+    const advanced = im.loraAdvanced && im.loraAdvanced.enabled === true && loras
+      ? parseMap(im.loraAdvanced.rules).filter(({ key }) => key && !isBase(key) && !isSuffix(key) &&
+          bestVariant(key, scene).score > 0).map(({ tags }) => tags).join(", ")
+      : "";
+    // Character identity must precede variable shot details; do not add it when absent.
+    const body = [trigger, keep, advanced, scene, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
