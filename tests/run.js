@@ -4719,6 +4719,26 @@ async function perfTurn() {
       assert.strictEqual(sims[1].prov, processing, "assistant observer uses processing provider");
       sims[1].res(ok()); await r.reply.post;
     });
+    await ta("PERF-02A-4: image intent compiler calls processing provider, not RP provider", async () => {
+      const h = await mk("rp", true);
+      const role = { id: "local", kind: "openai" };
+      const processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role;
+      h.ctx.processingProvider = () => processing;
+      h.S.settings.images.drawPromptMode = "intent";
+      replies.push("Я покажу фото.\\n[draw: я снимаю вид на комнату из окна]");
+      const p = h.gen.send("Покажи фото комнаты.");
+      await until(() => sims.length === 1, "user observer"); sims[0].res(ok());
+      await until(() => sims.length === 2, "assistant observer");
+      const r = await p;
+      assert.strictEqual(rp[0].prov, role);
+      sims[1].res(ok());
+      await until(() => sims.length >= 3, "image compiler request");
+      assert.strictEqual(sims[2].prov, processing, "visual prompt uses Processing Provider");
+      sims[2].res("window view, tidy room, soft daylight");
+      await r.reply.post;
+      assert.strictEqual(imgs.length, 1, "image backend completed after processing");
+    });
     await ta("PERF-1 (сл. 1, 3): ответ сохранён и ввод свободен, пока разбор ответа не завершён; затем события записываются", async () => {
       const h = await mk("rp");
       const r = await firstTurn(h);
