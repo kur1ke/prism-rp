@@ -653,3 +653,35 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 /* Keep technical custom-field details hidden regardless of inherited form styles. */
 .custom-field-extra[hidden]{display:none !important}
 .custom-field-extra{margin-top:10px;padding-top:10px;border-top:1px solid var(--line, rgba(255,255,255,.12))}
+
+/* Card editor: fixed desktop geometry prevents reflow on expanding sections. */
+.modal.card-modal { height: min(780px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); }
+.card-modal .modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.card-edit { display: block; }
+.card-identity { display: flex; align-items: flex-start; gap: 22px; margin-bottom: 22px; }
+.card-identity .portrait { width: 116px; flex: 0 0 116px; }
+.card-identity .portrait .chg { font-size: 11px; gap: 4px; padding: 6px; }
+.card-identity-name { flex: 1; min-width: 0; }
+.card-fields { min-width: 0; }
+.image-settings-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.image-settings-grid > .card-disclosure { margin: 0; min-width: 0; }
+.image-settings-grid .card-disclosure .field { min-width: 0; }
+.tile-last { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; color: rgba(255,255,255,.84); font-size: 11px; line-height: 1.25; }
+.tile-last time, .tile-last .tile-last-none { font-weight: 600; font-size: 12px; color: #fff; }
+.tile-actions { position: absolute; top: 42px; left: 9px; display: flex; gap: 5px; flex-wrap: wrap; max-width: calc(100% - 18px); z-index: 3; opacity: 0; transition: opacity .12s ease; }
+.tile-actions .tile-action { font: 600 11px var(--ui); border-radius: 7px; padding: 5px 6px; border: 1px solid rgba(255,255,255,.2); color: #fff; background: rgba(10,6,20,.75); backdrop-filter: blur(5px); cursor: pointer; }
+.tile-actions .tile-action:hover { background: var(--accent); }
+.tile:hover .tile-actions, .tile:focus-within .tile-actions { opacity: 1; }
+@media (hover: none) { .tile-actions { opacity: 1; } }
+@media (max-width: 1100px) {
+  .image-settings-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .modal.card-modal { height: min(780px, calc(100dvh - 48px)); }
+  .card-identity { gap: 14px; }
+}
+@media (max-width: 600px) {
+  .modal.card-modal { height: 100dvh; max-height: 100dvh; }
+  .card-identity .portrait { width: 90px; flex-basis: 90px; }
+  .card-identity .portrait .chg { left: 4px; right: 4px; bottom: 4px; }
+}
