@@ -83,6 +83,7 @@
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
     if (saveUi.chatId && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
     else if (saveUi.view === "assist") openAssist(saveUi.assistId, null, true);
+    else if (saveUi.view === "characters") goCharacters();
   }
 
   /* ── Навигация ───────────────────────────────────────────────────── */
@@ -106,6 +107,13 @@
   }
   function goHome() {
     S.view = "home";
+    S.find = null;
+    ui.rememberUi();
+    $("#rail").classList.remove("open");
+    ui.renderAll();
+  }
+  function goCharacters() {
+    S.view = "characters";
     S.find = null;
     ui.rememberUi();
     $("#rail").classList.remove("open");
@@ -147,13 +155,14 @@
     $("#rail").classList.remove("open");
     ui.renderAll();
   }
-  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist, openWorld });
+  Object.assign(ctx.nav, { loadAll, openChat, goHome, goCharacters, newChat, openCard, openAssist, openWorld });
 
   /* ── Контроллеры и разбор событий ─────────────────────────────────── */
   const C = PRP.controllers;
   const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world, C.messenger].map((make) => make(ctx));
   const ACTS = Object.assign({
     home: goHome,
+    characters: goCharacters,
     "open-chat": (t) => openChat(t.dataset.id),
     rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
     "reload-page": () => location.reload(),
