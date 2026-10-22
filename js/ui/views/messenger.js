@@ -14,10 +14,11 @@
 
   // Окно новой переписки: режим выбран (переписка), задаётся только время.
   function newMessengerModal(m, modal) {
+    const targetCard = ((m.cards || []).find((c) => c.id === modal.cardId)) || m.card;
     const tz = modal.timeZone || MT.systemTimeZone();
     const manual = modal.timeMode === "manual";
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow ms-new" role="dialog" aria-modal="true" aria-label="Новая переписка">
-      <div class="modal-head"><h2>Новая переписка${m.card ? " с " + esc(m.card.name) : ""}</h2>
+      <div class="modal-head"><h2>Новая переписка${targetCard ? " с " + esc(targetCard.name) : ""}</h2>
         <button class="icon-btn" data-act="modal-close" title="Отмена">${icon("x")}</button></div>
       <div class="modal-body"><p class="lead">Переписка — отдельный мир: режим потом не меняется. Сцену с этим персонажем можно начать отдельно.</p>
         <div class="field"><label>Часовой пояс переписки</label><input id="ms-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
