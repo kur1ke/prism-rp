@@ -665,6 +665,38 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .custom-field-extra[hidden]{display:none !important}
 .custom-field-extra{margin-top:10px;padding-top:10px;border-top:1px solid var(--line, rgba(255,255,255,.12))}
 
+/* Card editor: fixed desktop geometry prevents reflow on expanding sections. */
+.modal.card-modal { height: min(780px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); }
+.card-modal .modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.card-edit { display: block; }
+.card-identity { display: flex; align-items: flex-start; gap: 22px; margin-bottom: 22px; }
+.card-identity .portrait { width: 116px; flex: 0 0 116px; }
+.card-identity .portrait .chg { font-size: 11px; gap: 4px; padding: 6px; }
+.card-identity-name { flex: 1; min-width: 0; }
+.card-fields { min-width: 0; }
+.image-settings-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.image-settings-grid > .card-disclosure { margin: 0; min-width: 0; }
+.image-settings-grid .card-disclosure .field { min-width: 0; }
+.tile-last { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; color: rgba(255,255,255,.84); font-size: 11px; line-height: 1.25; }
+.tile-last time, .tile-last .tile-last-none { font-weight: 600; font-size: 12px; color: #fff; }
+.tile-actions { position: absolute; top: 42px; left: 9px; display: flex; gap: 5px; flex-wrap: wrap; max-width: calc(100% - 18px); z-index: 3; opacity: 0; transition: opacity .12s ease; }
+.tile-actions .tile-action { font: 600 11px var(--ui); border-radius: 7px; padding: 5px 6px; border: 1px solid rgba(255,255,255,.2); color: #fff; background: rgba(10,6,20,.75); backdrop-filter: blur(5px); cursor: pointer; }
+.tile-actions .tile-action:hover { background: var(--accent); }
+.tile:hover .tile-actions, .tile:focus-within .tile-actions { opacity: 1; }
+@media (hover: none) { .tile-actions { opacity: 1; } }
+@media (max-width: 900px) {
+  .image-settings-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .modal.card-modal { height: min(780px, calc(100dvh - 48px)); }
+  .card-identity { gap: 14px; }
+}
+@media (max-width: 600px) {
+  .modal.card-modal { height: 100dvh; max-height: 100dvh; }
+  .card-identity .portrait { width: 90px; flex-basis: 90px; }
+  .card-identity .portrait .chg { left: 4px; right: 4px; bottom: 4px; }
+}
+
 </style>
 </head>
 <body>
@@ -6961,7 +6993,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return `
       <button class="brand" data-act="home" title="На главную">${R.GLYPH}<span>Prism RP</span></button>
       <nav class="rail-nav">
-        <button class="rail-item ${m.view === "home" ? "active" : ""}" data-act="home">${icon("home")}Персонажи</button>
+        <button class="rail-item ${m.view === "home" ? "active" : ""}" data-act="home">${icon("home")}Главная</button>
+        <button class="rail-item ${m.view === "characters" ? "active" : ""}" data-act="characters">${icon("card")}Персонажи</button>
         <button class="rail-item ${m.view === "assist" ? "active" : ""}" data-act="assist" title="Разговор с моделью вне игры: советы, карточки, разбор чата">${icon("assist")}Ассистент</button>
         <button class="rail-item ${m.view === "world" ? "active" : ""}" data-act="world" title="Общие паки мира для персонажей">${icon("globe")}Миры</button>
         <button class="rail-item" data-act="import">${icon("upload")}Импорт карточки</button>
@@ -6986,6 +7019,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   /* ── Главный экран ────────────────────────────────────────────────── */
   function home(m) {
+    const catalog = m.view === "characters";
     const q = (m.homeQuery || "").toLowerCase();
     const cards = m.cards.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.tags || []).join(" ").toLowerCase().includes(q));
     const prov = m.provider;
@@ -7000,15 +7034,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const recent = m.chats.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 6);
     return `<div class="home"><div class="home-inner">
       <div class="home-top">
-        <div><h1>${m.cards.length ? "Персонажи" : "Добро пожаловать в Prism RP"}</h1>
-          <p class="sub">${m.cards.length ? `${m.cards.length} ${R.plural(m.cards.length, "персонаж", "персонажа", "персонажей")}. Выберите, с кем продолжить.` : "Среда для ролевой игры, где персонаж реагирует на сцену через свой характер и пережитый опыт, а время, место и одежду ведёт приложение."}</p></div>
+        <div><h1>${catalog ? "Персонажи" : m.cards.length ? "Главная" : "Добро пожаловать в Prism RP"}</h1>
+          <p class="sub">${m.cards.length ? `${m.cards.length} ${R.plural(m.cards.length, "персонаж", "персонажа", "персонажей")}.${catalog ? " Выберите карточку или начните новый чат." : " Выберите, с кем продолжить."}` : "Среда для ролевой игры, где персонаж реагирует на сцену через свой характер и пережитый опыт, а время, место и одежду ведёт приложение."}</p></div>
         ${m.cards.length ? `<div class="home-tools">
           <label class="search">${icon("search")}<input id="home-q" placeholder="Найти по имени или тегу" value="${esc(m.homeQuery || "")}"></label>
           <button class="btn" data-act="import">${icon("upload")}Импорт</button>
           <button class="btn btn-primary" data-act="new-card">${icon("plus")}Создать</button></div>` : ""}
       </div>
       ${welcome}
-      ${recent.length ? `<div class="section-title">Продолжить</div>
+      ${!catalog && recent.length ? `<div class="section-title">Продолжить</div>
         <div class="gallery" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
         ${recent.map((c) => {
           const cd = m.cards.find((x) => x.id === c.cardId);
@@ -7017,15 +7051,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
             <div style="min-width:0"><div class="t1">${esc(cd.name)} <span class="tag">${c.mode === "messenger" ? "переписка" : "сцена"}</span></div><div class="t2">${esc(c.preview || "Новый чат")}</div></div>
             <span class="t2">${esc(R.ago(c.updatedAt))}</span></div>`;
         }).join("")}</div>` : ""}
-      ${m.cards.length ? `<div class="section-title">Все персонажи</div>` : ""}
+      ${m.cards.length && !catalog ? `<div class="section-title">Персонажи</div>` : ""}
       <div class="gallery">
         ${cards.map((cd) => {
-          const n = m.chats.filter((c) => c.cardId === cd.id).length;
+          const last = m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+          const at = last && last.updatedAt ? new Date(last.updatedAt) : null;
+          const dateLabel = at && Number.isFinite(at.getTime()) ? at.toLocaleString("ru-RU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
           return `<div class="tile" data-act="open-card" data-id="${cd.id}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
             ${R.art(cd)}<div class="tile-shade"></div>
-            ${n ? `<span class="tile-count">${n} ${R.plural(n, "чат", "чата", "чатов")}</span>` : ""}
+            <div class="tile-actions" role="group" aria-label="Новый чат с ${esc(cd.name)}">
+              <button class="tile-action" data-act="new-card-chat" data-id="${cd.id}" data-mode="rp" title="Новая сцена">Сцена</button>
+              <button class="tile-action" data-act="new-card-chat" data-id="${cd.id}" data-mode="messenger" title="Новая переписка">Переписка</button>
+            </div>
             <button class="tile-edit" data-act="edit-card" data-id="${cd.id}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
-            <div class="tile-body"><div class="tile-name">${esc(cd.name)}</div><div class="tile-tags">${esc((cd.tags || []).slice(0, 4).join(", ") || cd.creator || " ")}</div></div>
+            <div class="tile-body"><div class="tile-name">${esc(cd.name)}</div><div class="tile-tags">${esc((cd.tags || []).slice(0, 4).join(", ") || cd.creator || " ")}</div>
+              <div class="tile-last"><span>Последнее взаимодействие</span>
+                ${dateLabel ? `<time title="${esc(dateLabel)}" datetime="${at.toISOString()}">${esc(R.ago(last.updatedAt))} · ${esc(at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }))}</time>` : '<span class="tile-last-none">Ещё не было</span>'}
+              </div></div>
           </div>`;
         }).join("")}
         ${m.cards.length ? `<div class="tile tile-new" role="group">
@@ -7761,11 +7803,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <label class="check"><input type="checkbox" data-cf-dir="${k}" ${x.enabled ? "checked" : ""}><span>Включено — отправлять модели</span></label>
         <span class="help">${help}</span></div>`;
     };
+    const state = m.modal || {};
     let body = "";
     if (section === "main") {
-      body = `<div class="card-edit"><div><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
-          <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div></div>
-        <div>${f("cf-name", "Имя", "name", d.name)}
+      body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
+          <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div>
+          <div class="card-identity-name">${f("cf-name", "Имя", "name", d.name)}</div></div>
+        <div class="card-fields">
           ${f("cf-desc", "Описание", "description", d.description, 7, "Кто это — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
           ${f("cf-app", "Внешность", "", d.appearance, 3, "При экспорте в Character Card добавляется в description абзацем «Внешность».")}
           ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
@@ -7778,7 +7822,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           <summary>Пользовательские поля (${(d.customFields || []).length})</summary>
           <p class="hint">Поля — дополнительные сведения, а не инструкции. Передача модели включается для каждого поля отдельно. Импортированные поля всегда выключены.</p>
           ${(d.customFields || []).map((field, i) => {
-            const detailOpen = !!(m.expandedCustom && m.expandedCustom[field.id]);
+            const detailOpen = !!(state.expandedCustom && state.expandedCustom[field.id]);
             const origin = field.origin;
             return `
             <div class="lore">
@@ -7838,7 +7882,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
       const adv = im.loraAdvanced || {};
       body = `<p class="lead">Изображения: настройки для генератора, отдельно от RP-внешности персонажа.</p>
-        <details class="card-disclosure" id="image-base-panel" ${m.imageBaseOpen !== false ? "open" : ""}><summary>Базовая генерация</summary>
+        <div class="image-settings-grid"><details class="card-disclosure" id="image-base-panel" ${state.imageBaseOpen !== false ? "open" : ""}><summary>Базовая генерация</summary>
           ${fi("look", "Внешность — теги", 3, "base: — всегда; «ключ: теги» — если ключ присутствует в сцене.", "base: brown eyes, long orange hair")}
           ${fi("wardrobe", "Гардероб", 5, "Наряды по ключам из текущей сцены, без автоматической смены одежды.", "худи | hoodie: grey hoodie")}
           ${fi("styleTrigger", "Стилевые теги", 1, "Применяются, только если сцена их упоминает.")}
@@ -7846,17 +7890,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный.")}
           ${fi("nsfw", "Модификаторы по ключам сцены", 3, "Не запускаются автоматически по одежде.", "ключ: соответствующие теги")}
         </details>
-        <details class="card-disclosure" id="image-lora-panel" ${m.imageLoraOpen ? "open" : ""}><summary>LoRA</summary>
+        <details class="card-disclosure" id="image-lora-panel" ${state.imageLoraOpen ? "open" : ""}><summary>LoRA</summary>
           ${fi("trigger", "Основной триггер LoRA", 2, "Точное ключевое слово автора. Старые карточки с несколькими тегами остаются совместимыми.", "lilithx")}
           <div class="field"><label>Подключённые LoRA</label>${loraRows("card-lora", im.loras || [])}<span class="help">Имя файла и вес; поддерживается Forge/A1111.</span>
           <datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
           ${fi("aliases", "Другие имена в сценах", 0, "Варианты упоминания персонажа.", "orihime, hime")}
           <label class="check"><input type="checkbox" data-lora-advanced="enabled" ${adv.enabled ? "checked" : ""}><span>Продвинутый режим — использовать дополнительные правила LoRA</span></label>
-          <details class="card-disclosure" ${adv.enabled ? "open" : ""}><summary>Расширенные параметры LoRA</summary>
+          <details class="card-disclosure lora-advanced-panel" ${adv.enabled ? "open" : ""}><summary>Расширенные параметры LoRA</summary>
             <p class="hint">Дополнительные правила активны только с галочкой. Они не заменяют основной триггер. Формат «ключ сцены: теги».</p>
             <textarea data-lora-advanced="rules" rows="5" placeholder="уши | ears: black cat ears&#10;хвост | tail: fluffy black cat tail">${esc(adv.rules || "")}</textarea>
           </details>
-        </details>`;
+        </details></div>`;
     } else {
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
@@ -7867,7 +7911,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ${d.id ? `<div class="block-title" style="margin-top:28px">Удаление</div><p class="hint">Удалит персонажа вместе со всеми чатами и опытом.</p>
         <button class="btn btn-danger" data-act="card-del">${icon("trash")}Удалить ${esc(d.name)}</button>` : ""}`;
     }
-    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="Персонаж">
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal card-modal" role="dialog" aria-modal="true" aria-label="Персонаж">
       <div class="modal-head"><h2>${esc(d.name || "Новый персонаж")}</h2>
         <button class="btn btn-primary btn-sm" data-act="card-save">${icon("check")}Сохранить</button>
         <button class="icon-btn" data-act="modal-close" title="Закрыть без сохранения">${icon("x")}</button></div>
@@ -8147,10 +8191,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   // Окно новой переписки: режим выбран (переписка), задаётся только время.
   function newMessengerModal(m, modal) {
+    const targetCard = ((m.cards || []).find((c) => c.id === modal.cardId)) || m.card;
     const tz = modal.timeZone || MT.systemTimeZone();
     const manual = modal.timeMode === "manual";
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow ms-new" role="dialog" aria-modal="true" aria-label="Новая переписка">
-      <div class="modal-head"><h2>Новая переписка${m.card ? " с " + esc(m.card.name) : ""}</h2>
+      <div class="modal-head"><h2>Новая переписка${targetCard ? " с " + esc(targetCard.name) : ""}</h2>
         <button class="icon-btn" data-act="modal-close" title="Отмена">${icon("x")}</button></div>
       <div class="modal-body"><p class="lead">Переписка — отдельный мир: режим потом не меняется. Сцену с этим персонажем можно начать отдельно.</p>
         <div class="field"><label>Часовой пояс переписки</label><input id="ms-tz" list="tz-list" value="${esc(tz)}">${zoneList()}</div>
@@ -10987,6 +11032,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       "import-cancel": () => { S.modal = null; ui.renderModal(); },
       "new-card": () => openCardEditor(null),
       "open-card": (t) => nav.openCard(t.dataset.id),
+      "new-card-chat": async (t) => {
+        // Each chat has an immutable mode. Messenger must first configure its time.
+        const cardId = t.dataset.id;
+        if (!S.cards.some((c) => c.id === cardId)) return ui.toast("Персонаж не найден.", true);
+        if (t.dataset.mode === "messenger") {
+          S.modal = { kind: "new-messenger", cardId, timeMode: "live" };
+          ui.renderModal();
+          return;
+        }
+        await nav.newChat("rp", cardId);
+      },
       "edit-card": (t) => { ui.closePop(); const id = t.dataset.id; openCardEditor(id ? S.cards.find((x) => x.id === id) : ctx.card()); },
       "card-section": (t) => { collectCard(); S.modal.section = t.dataset.section; ui.renderModal(); },
       "card-save": async () => {
@@ -11044,7 +11100,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (content) content.hidden = !t.checked;
         return true;
       }
-      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
+      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") {
+        // Do not rebuild the editor: focus, scroll and the open LoRA panel must survive.
+        collectCard();
+        const group = t.closest("#image-lora-panel");
+        const details = group && group.querySelector(".lora-advanced-panel");
+        if (details) details.open = t.checked;
+        return true;
+      }
       return false;
     }
 
@@ -11677,8 +11740,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
-    if (saveUi.chatId && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
+    if (saveUi.chatId && (!saveUi.view || saveUi.view === "chat") && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
     else if (saveUi.view === "assist") openAssist(saveUi.assistId, null, true);
+    else if (saveUi.view === "characters") goCharacters();
   }
 
   /* ── Навигация ───────────────────────────────────────────────────── */
@@ -11702,6 +11766,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
   function goHome() {
     S.view = "home";
+    S.find = null;
+    ui.rememberUi();
+    $("#rail").classList.remove("open");
+    ui.renderAll();
+  }
+  function goCharacters() {
+    S.view = "characters";
     S.find = null;
     ui.rememberUi();
     $("#rail").classList.remove("open");
@@ -11743,13 +11814,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     $("#rail").classList.remove("open");
     ui.renderAll();
   }
-  Object.assign(ctx.nav, { loadAll, openChat, goHome, newChat, openCard, openAssist, openWorld });
+  Object.assign(ctx.nav, { loadAll, openChat, goHome, goCharacters, newChat, openCard, openAssist, openWorld });
 
   /* ── Контроллеры и разбор событий ─────────────────────────────────── */
   const C = PRP.controllers;
   const controllers = [C.chat, C.drawer, C.cards, C.settings, C.images, C.assist, C.world, C.messenger].map((make) => make(ctx));
   const ACTS = Object.assign({
     home: goHome,
+    characters: goCharacters,
     "open-chat": (t) => openChat(t.dataset.id),
     rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
     "reload-page": () => location.reload(),
