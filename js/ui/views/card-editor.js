@@ -88,24 +88,26 @@
       const im = d.image || {};
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
       const adv = im.loraAdvanced || {};
-      body = `<p class="lead">Как рисовать ${esc(d.name || "персонажа")}. Настройки разделены на базовые и LoRA. Дополнительные правила работают только при включённой галочке.</p>
+      body = `<p class="lead">Изображения: настройки для генератора, отдельно от RP-внешности персонажа.</p>
         <details class="card-disclosure" open><summary>Базовая генерация</summary>
-        ${fi("trigger", "Триггер — кто это", 2, "Имя персонажа в модели и 2–4 главные приметы. Идёт в каждую картинку с ним.", "orihime inoue, long orange hair, brown eyes, hair ornament")}
-        ${fi("aliases", "Другие имена в сценах", 0, "Через запятую: как модель может назвать персонажа в [draw:] (латиницей).", "orihime, hime")}
-        ${fi("styleTrigger", "Стилевые теги", 1, "Добавляются, только если сцена их упоминает.")}
-        ${fi("negative", "Негатив персонажа", 1, "", "short hair, flat chest")}
+          ${fi("look", "Внешность — теги", 3, "base: — всегда; «ключ: теги» — если ключ присутствует в сцене.", "base: brown eyes, long orange hair")}
+          ${fi("wardrobe", "Гардероб", 5, "Наряды по ключам из текущей сцены, без автоматической смены одежды.", "худи | hoodie: grey hoodie")}
+          ${fi("styleTrigger", "Стилевые теги", 1, "Применяются, только если сцена их упоминает.")}
+          ${fi("negative", "Негатив персонажа", 1, "", "short hair")}
+          ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный.")}
+          ${fi("nsfw", "Модификаторы по ключам сцены", 3, "Не запускаются автоматически по одежде.", "ключ: соответствующие теги")}
         </details>
-        <details class="card-disclosure"><summary>LoRA персонажа</summary>
-        <div class="field"><label>LoRA персонажа</label>${loraRows("card-lora", im.loras || [])}<span class="help">Вес обычно 0.6–1. Применяются, только когда персонаж в кадре. Стилевые LoRA тоже ставьте сюда — у каждого персонажа свой набор.</span><datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
-        ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный. Кнопкой у картинки можно закрепить удачный.")}
-        ${fi("look", "Внешность", 3, "base: — всегда; «ключ: теги» — когда ключ есть в сцене (улыбка: gentle smile).", "base: brown eyes, large breasts\nочки | glasses: round glasses")}
-        ${fi("wardrobe", "Гардероб", 5, "Образ подбирается по одежде из панели сцены: «худи | hoodie: теги». Теги идут в промпт без перевода — как их знает ваша LoRA. Если сцена одевает иначе, образ не добавляется.", "школьная форма | school uniform: serafuku, red neckerchief, pleated skirt\nхуди | hoodie: grey hoodie, denim shorts, <lora:outfit:0.7>")}
-        ${fi("nsfw", "Откровенные модификаторы", 3, "Срабатывают только по тексту самой сцены, никогда по одежде из трекера.", "голая | nude: nude, nipples, navel")}
-        <label class="check"><input type="checkbox" data-lora-advanced="enabled" ${adv.enabled ? "checked" : ""}><span>Продвинутый режим LoRA — применять дополнительные правила</span></label>
-        <details class="card-disclosure" ${adv.enabled ? "open" : ""}><summary>Дополнительные теги LoRA</summary>
-          <p class="hint">Формат: «ключ сцены: теги». Правила применяются только когда продвинутый режим включён и ключ найден в сцене. Текст сохраняется и при выключении режима.</p>
-          <textarea data-lora-advanced="rules" rows="5" placeholder="уши | ears: black cat ears&#10;хвост | tail: fluffy black cat tail">${esc(adv.rules || "")}</textarea>
-        </details></details>`;
+        <details class="card-disclosure" open><summary>LoRA</summary>
+          ${fi("trigger", "Основной триггер LoRA", 2, "Точное ключевое слово автора. Старые карточки с несколькими тегами остаются совместимыми.", "lilithx")}
+          <div class="field"><label>Подключённые LoRA</label>${loraRows("card-lora", im.loras || [])}<span class="help">Имя файла и вес; поддерживается Forge/A1111.</span>
+          <datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
+          <label class="check"><input type="checkbox" data-lora-advanced="enabled" ${adv.enabled ? "checked" : ""}><span>Продвинутый режим — использовать дополнительные правила LoRA</span></label>
+          <details class="card-disclosure" ${adv.enabled ? "open" : ""}><summary>Расширенные параметры LoRA</summary>
+            ${fi("aliases", "Другие имена в сценах", 0, "Варианты упоминания персонажа; действуют независимо от продвинутого режима.", "orihime, hime")}
+            <p class="hint">Дополнительные правила активны только с галочкой. Они не заменяют основной триггер. Формат «ключ сцены: теги».</p>
+            <textarea data-lora-advanced="rules" rows="5" placeholder="уши | ears: black cat ears&#10;хвост | tail: fluffy black cat tail">${esc(adv.rules || "")}</textarea>
+          </details>
+        </details>`;
     } else {
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
