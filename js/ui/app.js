@@ -81,7 +81,7 @@
     await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
-    if (saveUi.chatId && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
+    if (saveUi.chatId && (!saveUi.view || saveUi.view === "chat") && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
     else if (saveUi.view === "assist") openAssist(saveUi.assistId, null, true);
     else if (saveUi.view === "characters") goCharacters();
   }
