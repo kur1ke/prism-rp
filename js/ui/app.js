@@ -23,7 +23,7 @@
   const S = {
     settings: null, cards: [], chats: [],
     view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [],
-    gen: null, tracking: false, lastPrism: null, editingMsg: null, expDraft: null,
+    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null, expDraft: null,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
@@ -49,6 +49,8 @@
     provider: () => ST.activeProvider(S.settings, ctx.providers()),
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
+    // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
+    perf: PRP.perfLog.create(S.perf),
     svc: {},
     nav: {},
   };

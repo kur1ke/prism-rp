@@ -77,6 +77,7 @@
     // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
     async function draw(msg, sw, d, reuse, opts) {
       const o = opts || {};
+      const prepT0 = Date.now(); // PERF-01: длительность подготовки промпта (только число)
       const currentChat = ctx.chat();
       const origin = currentChat && imageOrigin(S.messages, msg, sw, currentChat.id);
       if (!origin) { ui.toast("Исходное сообщение или свайп недоступны для изображения.", true); return; }
@@ -142,6 +143,7 @@
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
+        if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]

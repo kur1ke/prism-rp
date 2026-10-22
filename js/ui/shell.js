@@ -49,6 +49,11 @@
         lensPreview: S.modal && S.modal.kind === "card" && S.modal.section === "world" && S.modal.lens ? svc().world.preview(S.modal.lens) : null,
         assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
         assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
+        // PERF-01: ход этого чата (ожидает разбора / пишет реплику / генерирует), идёт ли разбор, возвращённый текст.
+        turn: S.turn && ctx.chat() && S.turn.chatId === ctx.chat().id ? S.turn : null,
+        statePending: ctx.chat() && svc().state && svc().state.pending ? svc().state.pending(ctx.chat().id) > 0 : false,
+        draft: ctx.chat() && S.sendDrafts ? S.sendDrafts[ctx.chat().id] || "" : "",
+        perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
       };
     }
 
@@ -59,17 +64,40 @@
     }
     function autoGrow(t) { if (!t) return; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 240) + "px"; }
     function renderRail() { $("#rail").innerHTML = V.rail(vm()); }
+    /* PERF-01: текст поля ввода принадлежит своему чату (data-chat). При перерисовке в ДРУГОМ чате набранное
+       не переносится туда, а сохраняется черновиком своего чата (S.sendDrafts) и вернётся при его открытии. */
+    function takeInput() {
+      const i = $("#input");
+      if (!i) return null;
+      return { v: i.value, s: i.selectionStart, f: document.activeElement === i, chat: i.dataset.chat || null };
+    }
+    function putInput(keep) {
+      const i = $("#input");
+      if (!i || !keep) return;
+      const here = i.dataset.chat || null;
+      if (keep.chat && here !== keep.chat) {
+        if (keep.v.trim()) { S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v; }
+        autoGrow(i);
+        return;
+      }
+      i.value = keep.v || i.value; autoGrow(i);
+      if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
+    }
     function renderStage() {
       const app = $("#app");
       const m = vm();
-      const input = $("#input");
-      const keep = input ? { v: input.value, s: input.selectionStart, f: document.activeElement === input } : null;
+      const keep = takeInput();
+      // Уход из поля ввода чата в любой другой вид (другой чат, ассистент, «Персонажи», мир, главная):
+      // набранное сохраняется черновиком своего чата и вернётся при его открытии.
+      if (keep && keep.chat && keep.v.trim() && !(S.view === "chat" && m.chat && m.chat.id === keep.chat)) {
+        S.sendDrafts = S.sendDrafts || {}; S.sendDrafts[keep.chat] = keep.v;
+      }
       const feedEl = $("#feed");
       const scroll = feedEl ? feedEl.scrollTop : null;
       if (S.view === "assist" && S.assist) {
         $("#stage").innerHTML = V.assist(m);
         app.classList.remove("messenger");
-        if (keep) {
+        if (keep && !keep.chat) {
           const i = $("#input"); i.value = keep.v; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }
@@ -77,8 +105,11 @@
       } else if (S.view === "chat" && m.chat && m.card) {
         $("#stage").innerHTML = V.chat(m);
         app.classList.toggle("messenger", m.chat.mode === "messenger");
-        if (keep) {
-          const i = $("#input"); i.value = keep.v; autoGrow(i);
+        // Поле ввода из того же чата сохраняется; из другого чата (или ассистента) сюда не переносится.
+        if (keep && keep.chat) putInput(keep);
+        else if (keep) {
+          // Поле без чата (ассистент): прежнее поведение — набранное переносится, если в поле чата пусто.
+          const i = $("#input"); i.value = i.value || keep.v; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }
         if (scroll != null) $("#feed").scrollTop = scroll;
@@ -104,17 +135,38 @@
       if (head) head.outerHTML = V.chatHead(vm());
       const comp = $(".composer-wrap");
       if (comp) {
-        const i = $("#input");
-        const keep = i ? i.value : "";
-        const focused = document.activeElement === i;
+        const keep = takeInput();
         comp.outerHTML = V.composer(vm());
-        const ni = $("#input"); ni.value = keep; autoGrow(ni);
-        if (focused) ni.focus();
+        putInput(keep);
       }
       $("#app").classList.toggle("generating", !!S.gen);
       if (S.find) applyFind(false);
     }
     function renderHead() { const head = $(".chat-head"); if (head) head.outerHTML = V.chatHead(vm()); }
+    // PERF-01: только поле ввода (статус ожидающей отправки), с сохранением набранного текста и фокуса.
+    function renderComposer() {
+      if (S.view !== "chat") return;
+      const comp = $(".composer-wrap");
+      if (!comp) return;
+      const keep = takeInput();
+      comp.outerHTML = V.composer(vm());
+      putInput(keep);
+      $("#app").classList.toggle("generating", !!S.gen);
+    }
+    /* Текст не отправленного хода — обратно в поле ввода его чата. Если этот чат открыт — сразу в поле
+       (перед уже набранным); иначе — в черновик, который покажется при открытии чата. */
+    function restoreDraft(chatId, text) {
+      if (!text) return;
+      const i = $("#input");
+      if (S.view === "chat" && S.chatId === chatId && i && i.dataset.chat === chatId) {
+        i.value = i.value.trim() ? text + "\n" + i.value : text;
+        autoGrow(i);
+        return;
+      }
+      S.sendDrafts = S.sendDrafts || {};
+      S.sendDrafts[chatId] = S.sendDrafts[chatId] ? text + "\n" + S.sendDrafts[chatId] : text;
+    }
+    function clearDraft(chatId) { if (S.sendDrafts) delete S.sendDrafts[chatId]; }
     function renderDrawer() {
       const d = $("#drawer");
       d.classList.toggle("open", S.drawerOpen && S.view === "chat");
@@ -273,7 +325,7 @@
 
     return {
       $, $$, narrow, toast, vm, applyLook, autoGrow,
-      renderRail, renderStage, renderFeed, renderHead, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
+      renderRail, renderStage, renderFeed, renderHead, renderComposer, restoreDraft, clearDraft, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
       openSettings, refreshAfterSettings, openPop, closePop, applyFind, runFind, paintStreaming, paintAssist, rememberUi,
     };
   }

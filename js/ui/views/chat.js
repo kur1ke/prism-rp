@@ -227,8 +227,14 @@
     const p = m.provider;
     const preset = SAMPLER_PRESETS.find((x) => x.id === m.settings.samplerPreset);
     const r = m.lastPrism && m.lastPrism.report;
-    return `<div class="composer-wrap"><div class="composer">
-      <textarea id="input" rows="1" placeholder="${m.chat.mode === "messenger" ? "Сообщение" : `Что делает и говорит ${esc(m.persona.name)}…`}" aria-label="Сообщение"></textarea>
+    // PERF-01: статус хода — видимое ожидание разбора, без узла в дереве сообщений.
+    const t = m.turn;
+    const status = t && t.phase === "waiting-state"
+      ? `<div class="turn-status" role="status"><span class="spin" aria-hidden="true"></span><span>${t.kind === "send" ? "Разбираю предыдущий ответ — сообщение отправится автоматически" : "Разбираю предыдущий ответ — действие начнётся автоматически"}</span>${t.kind === "send" ? `<span class="turn-text">«${esc(String(t.text || "").slice(0, 80))}${String(t.text || "").length > 80 ? "…" : ""}»</span>` : ""}<button class="btn btn-sm btn-ghost" data-act="send-cancel">Отменить</button></div>`
+      : t && t.phase === "user-state" ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ваше сообщение перед ответом…</span></div>`
+      : !t && m.statePending && !m.gen ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ответ — можно писать</span></div>` : "";
+    return `<div class="composer-wrap">${status}<div class="composer">
+      <textarea id="input" data-chat="${esc(m.chat.id)}" rows="1" placeholder="${m.chat.mode === "messenger" ? "Сообщение" : `Что делает и говорит ${esc(m.persona.name)}…`}" aria-label="Сообщение">${esc(m.draft || "")}</textarea>
       <div class="composer-bar">
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}

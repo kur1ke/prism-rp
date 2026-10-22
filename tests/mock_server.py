@@ -6,6 +6,8 @@ LOG = []
 IMG_LOG = []
 # Детерминированный ответ на проверку инициативы (FOUNDATION-D): message | decline | error | slow — задаётся GET /initiative?mode=…
 INITIATIVE = {"mode": "message"}
+# PERF-01: задержка ответа на служебный разбор состояния (мс) — GET /state-delay?ms=…; по умолчанию без задержки.
+STATE = {"delay": 0, "calls": 0}
 # 2×3 PNG (серый) — достаточно, чтобы браузер его показал
 import base64, struct, zlib
 def tiny_png(w=2, h=3):
@@ -42,6 +44,11 @@ class H(BaseHTTPRequestHandler):
         for k, v in LISTS.items():
             if self.path.endswith("/sdapi/v1/" + k):
                 return self.json(v)
+        if "/state-delay?ms=" in self.path:
+            STATE["delay"] = int(self.path.split("ms=", 1)[1] or 0)
+            return self.json(STATE)
+        if self.path.endswith("/state-count"):
+            return self.json(STATE)
         if "/initiative?mode=" in self.path:
             INITIATIVE["mode"] = self.path.split("mode=", 1)[1]
             return self.json(INITIATIVE)
@@ -68,6 +75,13 @@ class H(BaseHTTPRequestHandler):
             return self.json({"images": [PNG_B64], "info": json.dumps(info)})
         LOG.append(req)
         user_last = next((m["content"] for m in reversed(req.get("messages", [])) if m["role"] == "user"), "")
+        if "извлекатель ДОКАЗАННЫХ ИЗМЕНЕНИЙ" in user_last:
+            STATE["calls"] += 1
+            time.sleep(STATE["delay"] / 1000.0)
+            body = json.dumps({"events": []})
+            self.send_response(200); self.cors(); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+            self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": body}}]}) + "\n\ndata: [DONE]\n\n").encode()); self.wfile.flush()
+            return
         if "Rewrite the scene" in user_last:
             text, reasoning = "1girl, orihime inoue, smiling, waving, cafe terrace, evening", ""
             self.send_response(200); self.cors(); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
