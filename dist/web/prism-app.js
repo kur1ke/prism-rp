@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "c3eeb0b1397af38f6cf9c41727a3c7171412e33c";
+  window.PRISM_RP_BUILD_SHA = "bd4c2fbe1c373f7280f1bc8ced3b9621b7ce996b";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6243,7 +6243,6 @@
         <button class="rail-item ${m.view === "characters" ? "active" : ""}" data-act="characters">${icon("card")}Персонажи</button>
         <button class="rail-item ${m.view === "assist" ? "active" : ""}" data-act="assist" title="Разговор с моделью вне игры: советы, карточки, разбор чата">${icon("assist")}Ассистент</button>
         <button class="rail-item ${m.view === "world" ? "active" : ""}" data-act="world" title="Общие паки мира для персонажей">${icon("globe")}Миры</button>
-        <button class="rail-item" data-act="import">${icon("upload")}Импорт карточки</button>
       </nav>
       <div class="rail-head"><span>Последнее взаимодействие</span></div>
       <div class="rail-chats">
