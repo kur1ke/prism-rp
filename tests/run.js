@@ -4839,6 +4839,23 @@ async function perfTurn() {
       if (sims[3]) sims[3].res(ok());
       await first.reply.post; await r.reply.post;
     });
+    await ta("PERF-02B-6: switching chats during early observation cannot create a message in either chat", async () => {
+      const h = await mk("rp");
+      h.ctx.provider = () => ({ id: "local", kind: "openai" });
+      h.ctx.processingProvider = () => ({ id: "perchance", kind: "perchance" });
+      const first = await firstTurn(h), n = h.store.messages.size, originalChat = h.chatId;
+      const next = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer before chat switch");
+      const other = await h.chat.createChat("rp", "c1");
+      assert.notStrictEqual(other, originalChat);
+      sims[2].res(ok()); sims[1].res(ok(jacket()));
+      const result = await next;
+      assert.strictEqual(result.outcome, "context-changed");
+      assert.strictEqual(h.store.messages.size, n, "no user messages leaked or persisted after context switch");
+      assert.strictEqual(rp.length, 1, "next RP never starts in the wrong chat");
+      assert.deepStrictEqual(h.restored, [{ chatId: originalChat, text: "Я снял шарф." }]);
+      await first.reply.post;
+    });
     await ta("PERF-1 (сл. 1, 3): ответ сохранён и ввод свободен, пока разбор ответа не завершён; затем события записываются", async () => {
       const h = await mk("rp");
       const r = await firstTurn(h);
