@@ -58,7 +58,7 @@
         await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
         const edited = S.messages.find((x) => x.id === t.dataset.id);
         // Разбор правки — управляемая задача (дедуп, без отклонений); ожидающая отправка дождётся его.
-        if (svc.state && edited) await svc.state.track(edited, ctx.provider());
+        if (svc.state && edited) await svc.state.track(edited, ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
         await afterBranchChange();
       },
       "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },
