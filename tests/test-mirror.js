@@ -57,14 +57,29 @@ async function run(reply,fail) {
   ok.scripts[1].onerror();
   assert.match(ok.boot.textContent,/оба источника недоступны/);
   const fallback=await run(null,true);
-  assert.ok(fallback.src.includes("@testing/dist/web/prism-app.js"));
+  assert.ok(fallback.src.includes("raw.githubusercontent.com/kur1ke/prism-rp/testing/dist/web/prism-app.js"));
   assert.match(fallback.badge.textContent,/SHA недоступен/);
   assert.match(fallback.src,/test_reload=\d+/,"branch fallback must bust CDN/browser cache");
   fallback.ctx.PRP={}; fallback.ctx.PRISM_RP_VERSION="test";
   fallback.scripts[0].onload();
-  assert.match(fallback.badge.textContent,/SHA неизвестен/,"never label an unverified branch as a pinned revision");
+  assert.match(fallback.badge.textContent,/SHA ветки недоступен/,"never label an unverified branch as a pinned revision");
+  assert.match(fallback.badge.textContent,/SHA сборки неизвестен/,"no embedded build SHA means no verification");
+  // The loaded bundle provides its own build provenance independently of GitHub API.
+  const stamped = await run(null,true);
+  stamped.ctx.PRP={};
+  stamped.ctx.PRISM_RP_VERSION="test";
+  stamped.ctx.PRISM_RP_BUILD_SHA=sha;
+  stamped.scripts[0].onload();
+  assert.match(stamped.badge.textContent,/сборка e338fa4/);
+  assert.match(stamped.badge.textContent,/SHA ветки недоступен/);
+  assert.ok(!stamped.badge.textContent.includes("резерв · e338fa4"));
+  // A failed raw load must fall back to the branch CDN without touching main.
+  const failover = await run(null,true);
+  failover.scripts[0].onerror();
+  assert.ok(failover.scripts[1].src.includes("@testing/dist/web/prism-app.js"));
+  assert.ok(!failover.scripts[1].src.includes("@main"));
   const malformed=await run("<script>",false);
   assert.ok(malformed.src.includes("@testing/dist/web/prism-app.js"));
   assert.match(malformed.src,/test_reload=\d+/);
-  console.log("Test mirror checks: storage isolation, pinned release, fallback, SHA validation — OK");
+  console.log("Test mirror checks: storage isolation, pinned release, raw first, CDN fallback, embedded build SHA — OK");
 })().catch(e=>{console.error(e);process.exitCode=1;});
