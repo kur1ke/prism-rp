@@ -51,7 +51,7 @@
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
     // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
-    perf: PRP.perfLog.create(S.perf),
+    perf: PRP.perfLog.create(S.perf, { activeChatId: () => S.chatId }),
     svc: {},
     nav: {},
   };
@@ -94,6 +94,9 @@
   async function openChat(chatId, quiet) {
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
+    // Timings describe one opened chat, not the whole app. Keep the array
+    // identity so the recorder and Debug view keep using the same log.
+    if (S.chatId !== chatId) PRP.perfLog.reset(S.perf);
     S.chatId = chatId;
     S.lastSelectedChatId = chatId;
     S.cardId = c.cardId;
