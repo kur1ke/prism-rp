@@ -85,7 +85,7 @@
             <button class="tile-edit" data-act="edit-card" data-id="${cd.id}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
             <div class="tile-body"><div class="tile-name">${esc(cd.name)}</div><div class="tile-tags">${esc((cd.tags || []).slice(0, 4).join(", ") || cd.creator || " ")}</div>
               <div class="tile-last"><span>Последнее взаимодействие</span>
-                ${dateLabel ? `<time title="${esc(dateLabel)}" datetime="${at.toISOString()}">${esc(R.ago(last.updatedAt))}</time>` : '<span class="tile-last-none">Ещё не было</span>'}
+                ${dateLabel ? `<time title="${esc(dateLabel)}" datetime="${at.toISOString()}">${esc(R.ago(last.updatedAt))} · ${esc(at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }))}</time>` : '<span class="tile-last-none">Ещё не было</span>'}
               </div></div>
           </div>`;
         }).join("")}
