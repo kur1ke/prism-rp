@@ -27,7 +27,7 @@ These data establish *what the pipeline requested*, not the precise stochastic c
 - **Contract:** distinguish `external` (character visible to a camera) from `owner` (character holds camera; their body may enter frame without a second full character).
 - **Explicit input:** the compact optional `camera=owner;` prefix in the `[draw:]` description. Strip metadata before translating/generating.
 - **Compatibility:** conservatively infer this mode from existing explicit self-body first-person descriptions naming the owner. A mere `pov`/“looking at viewer” tag does NOT imply owner-camera.
-- **Output:** retain the actual scene and visible body parts; suppress *automatically injected* whole-character identity, trigger, configured character LoRA and external-person count/portrait tags for the camera holder; add targeted anatomical negatives. Track `cameraRole` in `promptSources`.
+- **Output:** retain the actual scene and visible body parts; suppress *automatically injected* whole-character identity, trigger, configured character LoRA and external-person count/portrait tags for the camera holder; preserve established physical clothing and camera-holder pose (expressed as viewpoint), add targeted anatomical negatives. Track `cameraRole` in `promptSources`.
 - **Limit:** no image pixel inspection or geometry guarantee. A mirror selfie, a user-view scene, or a picture of a third person must continue to use external subject semantics unless explicitly resolved otherwise.
 - **Authority:** card appearance remains stable in the character domain; omitting unseen identity tags from one prompt does not remove identity or canon.
 - **Settings:** works for legacy `tags` and optional `intent`; compilation cache keys include camera mode to avoid cross-mode reuse.
@@ -45,7 +45,7 @@ These data establish *what the pipeline requested*, not the precise stochastic c
 ## Verification plan
 
 - Unit: explicit `camera=owner` vs old unambiguous Russian self-body description, external `pov` scene, screenshot, false-positive case.
-- Unit: `compose + finalise` must not inject full card trigger/look/LoRA into owner-camera shot, but must retain depicted legs/floor/garment and add negative anatomy hints.
+- Unit: `compose + finalise` must not inject full card trigger/look/LoRA into owner-camera shot, but must retain depicted legs/floor/garment, preserve established clothing and pose, and add negative anatomy hints.
 - Integration: image service passes camera mode into compilation, preserves provenance and does not modify `StateTracker`.
 - Required CI: `node tests/run.js`, `node tests/test-mirror.js`, `node build.js`.
 - Manual Perchance + Forge: generate 2–3 self-body shots with owner-camera, evaluate extra limbs and framing, compare to identical old prompts using same settings/seeds. **NOT RUN** without a real live test.
