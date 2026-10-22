@@ -4743,10 +4743,10 @@ async function perfTurn() {
       const h2 = await mk("rp");
       h2.ctx.observerTimeoutMs = 300;
       await firstTurn(h2);
-      const t0 = Date.now();
       const p3 = h2.gen.send("Я снял шарф.");
       await until(() => sims.length === 3, "очередь после таймаута");
-      assert.ok(Date.now() - t0 >= 250, "ждали ограниченное время");
+      const astMs = h2.S.perf.find((x) => x.metric === "assistantStateMs").ms;
+      assert.ok(astMs >= 290 && astMs < 5000, "ожидание ограничено таймаутом наблюдателя: " + astMs);
       assert.ok(/ожидания/.test(stored(h2, h2.chat.path()[1].id).swipes[0].stateStatus.issues.join(" ")));
       sims[2].res(ok());
       assert.strictEqual((await p3).outcome, "sent");
@@ -4819,6 +4819,10 @@ async function perfTurn() {
       const p2 = h.gen.send("Я снял шарф.");
       await tick();
       assert.strictEqual(h.gen.cancelTurn(), true);
+      // Отмена завершает ход сразу, не дожидаясь чужого разбора (sims[1] ещё не завершён).
+      let settled = false; p2.then(() => { settled = true; });
+      await tick(); await tick();
+      assert.ok(settled, "отменённый ход не висит до конца разбора");
       assert.strictEqual((await p2).outcome, "cancelled");
       assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
       sims[1].res(ok());
@@ -4883,9 +4887,10 @@ async function perfTurn() {
       const dump = JSON.stringify(h.S.perf);
       assert.ok(!/кафе|куртк|Орихимэ|Девушка/.test(dump), "тексты сообщений и карточки в журнал не попадают");
       assert.ok(h.S.perf.every((x) => Object.keys(x).sort().join() === "at,chatId,metric,ms,msgId,outcome"));
-      const ready = h.S.perf.find((x) => x.metric === "readyAfterReplyMs").ms;
-      const ast = h.S.perf.find((x) => x.metric === "assistantStateMs");
-      assert.ok(ready <= ast.ms, "ввод освобождается раньше, чем завершается разбор ответа");
+      // Порядок, а не миллисекунды: ввод освобождён (запись readyAfterReplyMs) раньше, чем завершился разбор ответа.
+      const iReady = h.S.perf.findIndex((x) => x.metric === "readyAfterReplyMs");
+      const iAst = h.S.perf.findIndex((x) => x.metric === "assistantStateMs");
+      assert.ok(iReady >= 0 && iAst > iReady, "ввод освобождается раньше, чем завершается разбор ответа");
     });
     await ta("PERF-11: переписка — инициатива во время разбора ждёт видимо; Messenger не пишет сцену", async () => {
       const h = await mk("messenger");

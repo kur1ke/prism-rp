@@ -58,7 +58,9 @@
       const turn = Object.assign({ chatId: c.id, kind, key: pathKey(chat().path()), phase: "waiting-state", at: now() }, extra || {});
       S.turn = turn;
       renderComposer();
-      const w = st && st.pending(c.id) ? await st.settle(c.id) : { waitedMs: 0, timedOut: false };
+      // Отмена прерывает ожидание сразу: ход не висит до конца чужого разбора.
+      const cancelled = new Promise((r) => { turn.onCancel = () => r({ waitedMs: Math.round(now() - turn.at), timedOut: false, cancelled: true }); });
+      const w = st && st.pending(c.id) ? await Promise.race([st.settle(c.id), cancelled]) : { waitedMs: 0, timedOut: false };
       turn.waitedMs = w.waitedMs;
       if (w.timedOut) perf("stateWaitTimeout", w.waitedMs, { chatId: c.id });
       if (S.turn !== turn || turn.cancelled) return { refused: "cancelled", turn };
@@ -454,6 +456,7 @@
       const t = S.turn;
       if (!t || t.phase !== "waiting-state") return false;
       t.cancelled = true;
+      if (typeof t.onCancel === "function") t.onCancel();
       if (t.kind === "send") restore(t);
       releaseTurn(t);
       return true;
