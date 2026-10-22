@@ -673,7 +673,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .tile-actions .tile-action:hover { background: var(--accent); }
 .tile:hover .tile-actions, .tile:focus-within .tile-actions { opacity: 1; }
 @media (hover: none) { .tile-actions { opacity: 1; } }
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .image-settings-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 900px) {
