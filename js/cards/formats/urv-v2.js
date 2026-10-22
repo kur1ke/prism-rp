@@ -7,7 +7,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const F = PRP.cardFormats, CM = PRP.cardModel;
-  const { clone, str, isObj, unmapped, loreEntry, note } = F.helpers;
+  const { clone, str, isObj, unmapped, customFromUnknown, loreEntry, note } = F.helpers;
 
   const DATA_KNOWN = ["id", "name", "description", "profile", "firstMessage", "reminderMessage", "userOverride", "lorebook", "exampleDialogue", "systemPrompt",
     "imageTrigger", "outfitTags", "imageStyleTrigger", "nsfwTags", "imageLoras"];
@@ -158,6 +158,9 @@
     if (data.imageLoras != null) { const v = loras(data.imageLoras); if (v) im.loras = v; else keep("imageLoras", "незнакомый вид"); }
     if (Object.keys(im).length) { d.image = im; notes.push(note("info", "image-mapped", "Настройки картинок перенесены: " + Object.keys(im).join(", ") + ".")); }
 
+    d.customFields = customFromUnknown(data, DATA_KNOWN, "data", "urv2")
+      .concat(customFromUnknown(prof, PROFILE_KNOWN, "data.profile", "urv2"));
+    if (d.customFields.length) notes.push(note("info", "custom-mapped", `${d.customFields.length} дополнительных полей перенесены в пользовательские (выключены).`));
     source.unmapped = unmapped(data, DATA_KNOWN, "data").concat(unmapped(prof, PROFILE_KNOWN, "data.profile"));
     if (source.unmapped.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${source.unmapped.join(", ")}.`));
     d.source = source;
