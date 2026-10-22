@@ -4560,6 +4560,67 @@ t("CARD-Q: V3 nickname is custom info; technical V3 fields are not active", () =
 });
 /* End CARD-Q. */
 
+/* ── CARD-UX: editor geometry/disclosures, home vs catalog and launches ── */
+{
+  const fs = require("fs");
+  const vm = require("vm");
+  function uiViews(files, opts) {
+    const context = { PRP: Object.assign({
+      render: RN, scene: {}, tree: {}, openai: {}, messengerTime: { systemTimeZone: () => "UTC" },
+      viewKit: { SAMPLER_PRESETS: [], THEMES: [], WEATHER: [], loraRows: () => "" },
+      cardContext: { normCore: () => null, core: () => ({ identity: "", personality: "", truncated: [] }) }, views: {}
+    }, opts || {}) };
+    context.globalThis = context;
+    files.forEach((path) => vm.runInNewContext(fs.readFileSync(J(path), "utf8"), context));
+    return context.PRP.views;
+  }
+  t("CARD-UX-1: home keeps recent section, catalog omits it, tile shows latest time", () => {
+    const V = uiViews(["ui/views/home.js"]);
+    const card = { id: "card-a", name: "Lilith", tags: ["goth"] };
+    const chats = [
+      { id: "chat-1", cardId: "card-a", mode: "rp", preview: "Past", updatedAt: 1000000000000 },
+      { id: "chat-2", cardId: "card-a", mode: "messenger", preview: "Latest", updatedAt: 1780000000000 },
+    ];
+    const m = { cards: [card], chats, provider: null, view: "home", homeQuery: "" };
+    const home = V.home(m);
+    assert.ok(home.includes("Продолжить"), home.slice(0, 800));
+    assert.ok(home.includes("Последнее взаимодействие"));
+    assert.ok(home.includes("data-mode=\"messenger\"") && home.includes("data-mode=\"rp\""));
+    assert.ok(!home.includes("2 чата"));
+    const catalog = V.home(Object.assign({}, m, { view: "characters" }));
+    assert.ok(!catalog.includes('<div class="section-title">Продолжить</div>'));
+    assert.ok(catalog.includes("Последнее взаимодействие") && catalog.includes("Персонажи"));
+    assert.ok(V.rail(m).includes('data-act="characters"'));
+  });
+  t("CARD-UX-2: card editor restores disclosure state from modal and labels custom detail", () => {
+    const V = uiViews(["ui/views/card-editor.js"]);
+    const d = Object.assign(CM.blank(), { id: "a", name: "Lilith", customFields: [
+      { id: "imported-a", label: "Hobby", text: "Art", enabled: false, mode: "relevant",
+        origin: { imported: true, format: "urv2", path: "data.profile.hobbies" } }
+    ], image: { trigger: "lilithx", loras: [], loraAdvanced: { enabled: true, rules: "feet: pedicure" } } });
+    const m = { modal: { imageBaseOpen: false, imageLoraOpen: true, expandedCustom: { "imported-a": true } }, imgLists: { loras: [] } };
+    const img = V.cardModal(m, d, "images");
+    assert.ok(img.includes('class="modal card-modal"'));
+    assert.ok(img.includes('class="image-settings-grid"'));
+    assert.ok(img.includes('id="image-lora-panel" open'));
+    assert.ok(!img.includes('id="image-base-panel" open'));
+    assert.ok(img.includes('class="card-disclosure lora-advanced-panel" open'));
+    const basic = V.cardModal(m, d, "main");
+    assert.ok(basic.includes('class="card-identity"'));
+    assert.ok(basic.includes('class="card-fields"'));
+    assert.ok(basic.includes('data-custom-more="imported-a" checked'));
+    assert.ok(basic.includes('data.profile.hobbies'));
+  });
+  t("CARD-UX-3: messenger start names the chosen card, not the previous active chat", () => {
+    const V = uiViews(["ui/views/messenger.js"]);
+    const markup = V.newMessengerModal({ cards: [{ id: "a", name: "Lilith" }],
+      card: { id: "b", name: "Orihime" } }, { cardId: "a", timeMode: "live" });
+    assert.ok(markup.includes("Новая переписка с Lilith"));
+    assert.ok(!markup.includes("Новая переписка с Orihime"));
+    assert.ok(markup.includes('data-act="ms-create"'));
+  });
+}
+
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
 // Do not let an unresolved async fixture finish Node with exit code 0.
