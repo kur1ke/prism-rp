@@ -67,6 +67,7 @@
       d.name = (d.name || "").trim();
       if (!d.name) return { error: "Дайте персонажу имя." };
       if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
+      d.customFields = CM.normalizeCustomFields(d.customFields);
       d.altGreetings = (d.altGreetings || []).map((g) => String(g || "").trim()).filter(Boolean);
       d.updatedAt = Date.now();
       const isNew = !d.id;

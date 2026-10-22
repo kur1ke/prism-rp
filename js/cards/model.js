@@ -27,6 +27,25 @@
     return String(text || "").trim() ? directive(text, "imported") : directive("", "authored");
   }
 
+  // Custom fields are user-controlled *data*, never elevated author directives.
+  // Imported fields are preserved but must be enabled explicitly in the editor.
+  function normalizeCustomFields(input, imported) {
+    return (Array.isArray(input) ? input : []).filter((f) => f && typeof f === "object" && !Array.isArray(f)).map((f, i) => ({
+      id: String(f.id || "custom-" + (i + 1)),
+      label: String(f.label || ""),
+      text: String(f.text || ""),
+      mode: f.mode === "always" ? "always" : "relevant",
+      enabled: !imported && f.enabled === true,
+      ...(f.origin && typeof f.origin === "object" && !Array.isArray(f.origin) ? {
+        origin: {
+          format: String(f.origin.format || ""),
+          path: String(f.origin.path || ""),
+          imported: f.origin.imported === true,
+        }
+      } : {}),
+    }));
+  }
+
   function blank() {
     const now = Date.now();
     return {
@@ -36,7 +55,7 @@
       scenario: "",
       firstMes: "", altGreetings: [],
       mesExample: "",
-      lore: [],
+      lore: [], customFields: [],
       directives: { system: directive("", "authored"), postHistory: directive("", "authored") },
       creator: "", creatorNotes: "", tags: [], version: "",
       image: undefined,
@@ -71,6 +90,7 @@
     c.altGreetings = Array.isArray(card.altGreetings) ? card.altGreetings : [];
     c.lore = Array.isArray(card.lore) ? card.lore : [];
     c.tags = Array.isArray(card.tags) ? card.tags : [];
+    c.customFields = normalizeCustomFields(card.customFields);
     c.directives = card.directives || {
       system: directive(card.systemPrompt || "", "authored"),
       postHistory: directive(card.postHistory || "", "authored"),
@@ -83,9 +103,9 @@
   // Поля, по которым видно, что в карточке есть содержание (не только имя).
   const CONTENT_FIELDS = ["description", "appearance", "personality", "background", "scenario", "firstMes", "mesExample"];
   function hasContent(card) {
-    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim());
+    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
   }
 
-  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
 })(typeof window !== "undefined" ? window : globalThis);

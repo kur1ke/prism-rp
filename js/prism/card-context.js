@@ -32,7 +32,7 @@
   const CHUNK_LIMIT = 4;      // кусков подробностей за ход
   const EXAMPLES = { fullUntil: 2, oneUntil: 5 };
   const FIELDS = ["description", "personality", "background", "appearance"];
-  const FIELD_WORD = { description: "описание", personality: "личность", background: "прошлое", appearance: "внешность" };
+  const FIELD_WORD = { description: "описание", personality: "личность", background: "прошлое", appearance: "внешность", custom: "дополнительные сведения" };
   // Признаки разговора о внешности (по основам слов; рус. и англ.).
   // Только начало слова: «рост» не должен находиться в «просто», «лица» — в «улица».
   const VISUAL = /(?:^|[^\p{L}])(?:внешн|выгляд|одежд|одет|оделас|наряд|плать|юбк|рубашк|футболк|джинс|волос|причёс|причес|глаз|лицо|лица|фигур|рост[ау]?(?![\p{L}])|фото|селфи|снимок|снимк|портрет|похож|look|hair|eyes|outfit|dress|wear|photo|selfie|picture)/iu;
@@ -135,6 +135,15 @@
     const src = { description: k.rest.description, personality: k.rest.personality, background: mm(str(cd.background)).trim(), appearance: mm(str(cd.appearance)).trim() };
     const out = [];
     for (const f of FIELDS) splitChunks(src[f]).forEach((text, i) => out.push({ id: `${f}#${i + 1}`, field: f, text, order: out.length }));
+    // Custom fields are opt-in card facts. Never interpret their labels as prompt roles.
+    (Array.isArray(cd.customFields) ? cd.customFields : []).forEach((f, i) => {
+      if (!f || f.enabled !== true || !str(f.label).trim() || !str(f.text).trim()) return;
+      splitChunks(mm(str(f.text))).forEach((part, j) => out.push({
+        id: `custom#${i + 1}#${j + 1}`, field: "custom",
+        text: str(f.label).trim() + ": " + part, order: out.length,
+        force: f.mode === "always",
+      }));
+    });
     return out;
   }
 
@@ -186,10 +195,11 @@
       if (tm.length) reasons.push("прозвучало: " + tm.slice(0, 3).join(", "));
       if (ov.length >= 2) reasons.push(`общих слов: ${ov.length}`);
       if (vis) reasons.push(x.visual && !visualCue ? "нужна зрительная опора" : "разговор о внешности");
-      const eligible = tm.length > 0 || ov.length >= 2 || vis;
-      return { id: c.id, field: c.field, chars: c.text.length, overlap: ov.length, terms: tm.length, visual: vis, reasons, eligible, selected: false, rank: null, omitted: eligible ? "" : "no-relation", text: c.text, order: c.order };
+      if (c.force) reasons.push("пользователь включил постоянную подачу");
+      const eligible = !!c.force || tm.length > 0 || ov.length >= 2 || vis;
+      return { id: c.id, field: c.field, chars: c.text.length, overlap: ov.length, terms: tm.length, visual: vis, force: !!c.force, reasons, eligible, selected: false, rank: null, omitted: eligible ? "" : "no-relation", text: c.text, order: c.order };
     });
-    const pool = rows.filter((r) => r.eligible).sort((a, b) => (b.terms - a.terms) || (b.overlap - a.overlap) || (b.visual - a.visual) || (a.order - b.order));
+    const pool = rows.filter((r) => r.eligible).sort((a, b) => (Number(b.force) - Number(a.force)) || (b.terms - a.terms) || (b.overlap - a.overlap) || (b.visual - a.visual) || (a.order - b.order));
     const limit = x.limit != null ? x.limit : CHUNK_LIMIT;
     pool.forEach((r, i) => { if (i < limit) { r.selected = true; r.rank = i + 1; } else r.omitted = "limit"; });
     return { rows, selected: pool.filter((r) => r.selected) };

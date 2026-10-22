@@ -6,10 +6,26 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const F = PRP.cardFormats, CM = PRP.cardModel;
-  const { clone, str, strList, isObj, unmapped, loreEntry, note } = F.helpers;
+  const { clone, str, strList, isObj, unmapped, customFromUnknown, loreEntry, note } = F.helpers;
 
   const KNOWN = ["name", "description", "personality", "scenario", "first_mes", "mes_example", "creator_notes", "system_prompt", "post_history_instructions",
     "alternate_greetings", "tags", "creator", "character_version", "character_book", "extensions"];
+
+  // Recognise only the explicit paragraphs emitted by our compatibility export.
+  // Do not guess appearance from prose in a foreign card.
+  function splitCompatDescription(value) {
+    const text = str(value);
+    const out = { description: [], appearance: [], background: [] };
+    let found = false;
+    for (const p of text.split(/\n\s*\n/)) {
+      const match = p.match(/^(Внешность|Прошлое):\s*\n([\s\S]*)$/);
+      if (match) {
+        const key = match[1] === "Внешность" ? "appearance" : "background";
+        out[key].push(match[2]); found = true;
+      } else if (p.trim()) out.description.push(p);
+    }
+    return found ? { description: out.description.join("\n\n"), appearance: out.appearance.join("\n\n"), background: out.background.join("\n\n") } : null;
+  }
 
   // data (V2/V3) → черновик; notes дополняются. known — разобранные ключи (V3 добавляет свои).
   function mapData(data, detection, json, known) {
@@ -28,8 +44,16 @@
       d.appearance = str(pf.appearance);
       d.background = str(pf.background);
     } else {
-      d.description = str(data.description);
-      if (pf) notes.push(note("info", "prism-fields-stale", "Описание менялось после экспорта из Prism: взято целиком из description."));
+      const split = splitCompatDescription(data.description);
+      if (split) {
+        d.description = split.description;
+        d.appearance = split.appearance;
+        d.background = split.background;
+        notes.push(note("info", "compat-paragraphs", "Раздельные внешность и прошлое восстановлены из явных секций стандартного description."));
+      } else {
+        d.description = str(data.description);
+        if (pf) notes.push(note("warning", "prism-fields-stale", "Стандартное описание изменено: раздельные поля не совпадают. Данные сохранены в исходнике — проверьте соответствие."));
+      }
     }
     d.personality = str(data.personality);
     d.scenario = str(data.scenario);
@@ -42,7 +66,15 @@
     d.version = str(data.character_version);
     const book = isObj(data.character_book) ? data.character_book : null;
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
-    if (isObj(prism.image)) d.image = clone(prism.image);
+    if (isObj(prism.image)) { d.image = clone(prism.image); if (isObj(d.image.loraAdvanced)) d.image.loraAdvanced.enabled = false; }
+    // Import cannot enable new model-facing custom data without local user approval.
+    d.customFields = CM.normalizeCustomFields(prism.customFields, true);
+    // Source fields often survive in CCv3's standard data alongside Prism's
+    // own custom-field extension. One origin path must not produce two entries.
+    for (const f of customFromUnknown(data, known, "data", detection.format)) {
+      if (!d.customFields.some((existing) => existing.origin && existing.origin.path === f.origin.path)) d.customFields.push(f);
+    }
+    if (d.customFields.length) notes.push(note("info", "prism-custom-fields", "Пользовательские поля сохранены, но передача модели выключена до явного включения."));
     // Ядро Prism из нашего расширения — данные, а не указание; приходит непроверенным и не используется,
     // пока пользователь не сохранит его в редакторе (до этого Prism собирает запасное ядро из полей).
     if (isObj(prism.prismCore)) {
