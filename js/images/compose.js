@@ -230,6 +230,30 @@
     if (t.some((x) => /^(?:[1-9]boys?|male|man|boy)$/.test(x))) return "boy";
     return null;
   }
+  // Owner embodied camera is different from persona.image.view='first':
+  // the latter is the *user* looking at an externally visible character.
+  // Prefer the explicit directive; keep a narrow compatibility path for
+  // already-authored first-person self-body descriptions.
+  function ownerCamera(card, shot) {
+    const raw = String(shot || "");
+    if (/^\s*camera\s*=\s*owner\s*[;,]/i.test(raw)) return true;
+    const firstPerson = /(?:фото\s+из\s+первого\s+лица|снимок\s+от\s+первого\s+лица|вид\s+от\s+первого\s+лица|first[- ]person\s+(?:view|photo|shot))/i.test(raw);
+    const ownBody = /(?:ступн|ног|бедр|колен|рук|ладон|feet|legs|thighs|knees|hands)/i.test(raw);
+    return firstPerson && ownBody && identityKeys(card).some((key) => mentions(key.replace(/[_-]/g, " "), raw.replace(/[_-]/g, " ")));
+  }
+
+  // Body-visible owner POV must not also request a separate full character.
+  // Keep the actual shot details (clothing, location, framing) intact.
+  function embodiedShot(scene, card) {
+    const clean = stripIdentityAliases(String(scene || ""), card || {});
+    const omit = /^(?:[1-9](?:girls?|boys?)|solo|female|male|adult|young adult|young woman|young man|portrait|full[- ]body|looking at viewer|third[- ]person view)$/i;
+    const cameraPose = { standing: "standing viewpoint", sitting: "seated viewpoint", "lying on back": "reclining viewpoint" };
+    const tags = splitTags(clean).filter((tag) => !omit.test(tag.trim()))
+      .map((tag) => cameraPose[tag.trim().toLowerCase()] || tag);
+    if (!tags.some((tag) => /^(?:pov|first[- ]person view)$/i.test(tag.trim()))) tags.unshift("pov");
+    return tags.join(", ");
+  }
+
   function frameActors(card, persona, draw, opts) {
     const raw = String(draw || "");
     const text = raw.replace(/[_-]/g, " ");
@@ -269,10 +293,20 @@
     const st = o.scene || { chars: {}, present: [] };
     const messenger = !!o.messenger;
     const subVars = (v) => String(v || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, persona.name || "Пользователь");
-    const draw = subVars(o.draw).trim();
+    const rawDraw = subVars(o.draw).trim();
+    const cameraOwner = !!o.cameraOwner || ownerCamera(card, rawDraw);
+    const draw = rawDraw.replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
     const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
+    if (cameraOwner) {
+      // The owner is the *camera holder*, not an externally rendered subject.
+      actors.owner = false;
+      actors.cameraOwner = true;
+      actors.reason = "camera-owner";
+    }
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
-    const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
+    // The camera holder still has canonical physical wear even if no full
+    // external character should be rendered into this shot.
+    const owner = (actors.owner || cameraOwner) ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
     const outfit = owner && Array.isArray(owner.wear) ? owner.wear.join(", ") : "";
     const userOutfit = user && Array.isArray(user.wear) ? user.wear.join(", ") : "";
@@ -298,8 +332,8 @@
     if (actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
     // Tracked physical state is independent from the camera shot.
     const established = [];
-    if (actors.owner && messenger && outfit && !wardrobe) established.push("clothing: " + outfit);
-    if (actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
+    if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe) established.push("clothing: " + outfit);
+    if ((actors.owner || cameraOwner) && owner && owner.pose) established.push((cameraOwner ? "camera pose: " : "pose: ") + owner.pose);
     if (actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
     if (actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
     if (actors.user && user && user.pose) bits.push("user pose: " + user.pose);
@@ -332,11 +366,12 @@
       keep: [look.join(", "), wardrobe, established.join(", "), userTags, nsfw].filter(Boolean).join(", "),
       tail: [tail.join(", "), userTail].filter(Boolean).join(", "),
       ownerPresent: actors.owner,
+      cameraOwner,
       subjects: actors,
       userPresent: actors.user,
       stale,
-      visualWear: messenger && actors.owner ? outfit : "",
-      provenance: { subjects: actors, card: actors.owner ? card.name : null, user: actors.user ? persona.name : null,
+      visualWear: messenger && (actors.owner || cameraOwner) ? outfit : "",
+      provenance: { subjects: actors, cameraRole: cameraOwner ? "owner" : "external", card: (actors.owner || cameraOwner) ? card.name : null, user: actors.user ? persona.name : null,
         outfit: outfit || null, userOutfit: userOutfit || null, messenger: messenger || false,
         imageLayers: {
           identity: actors.owner ? look.join(", ") : "",
@@ -437,8 +472,9 @@
     const s = o.settings || {}, im = (o.card && o.card.image) || {}, c = o.composed || {};
     const pinned = s.promptMode !== "off" && String(s.fixedPrompt || "").trim();
     let scene = String(o.compiled == null ? c.scene : o.compiled);
-    if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
-    if (c.provenance && c.provenance.messenger && c.ownerPresent !== false && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
+    if (c.cameraOwner) scene = embodiedShot(scene, o.card);
+    else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
+    if (c.provenance && c.provenance.messenger && (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
     const present = c.ownerPresent !== false;
     const trigger = present ? uniqueTrigger(o.card || {}) : "";
@@ -456,8 +492,9 @@
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
 
-    const pov = o.persona && o.persona.image && o.persona.image.view === "first";
-    const povNeg = pov ? POV_NEG.concat(subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : []) : [];
+    const pov = !!c.cameraOwner || (o.persona && o.persona.image && o.persona.image.view === "first");
+    const povNeg = pov ? POV_NEG.concat(c.cameraOwner ? ["third-person view", "duplicate body"] :
+      (subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : [])) : [];
     const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, povNeg.join(", "));
     return { prompt, negative };
   }
@@ -517,6 +554,7 @@
     const opts = o || {};
     if (opts.intentMode) return [
       "Если по контексту персонаж отправляет изображение, добавь [draw: короткое описание того, что показано].",
+      "Для вида собственного тела глазами персонажа начни описание с camera=owner; (не для фото персонажа со стороны).",
       "Сохраняй определённый диалогом формат (например, скриншот), объект и факты; не заменяй их портретом отправителя.",
       "Если на изображении виден персонаж карточки, явно назови его: " + (opts.characterName || "персонаж") + ". Если его нет в кадре, не называй.",
       "Не пиши технические теги, LoRA, качество, постоянную внешность из карточки.",
@@ -539,6 +577,7 @@
       "- Покажи действие, а не только позу, и сохрани градус сцены: ничего откровеннее и ничего целомудреннее, чем происходит. Обычный момент остаётся обычным.",
       "- Продолжая показанный момент, сохраняй его обстановку и одежду, если не было события, меняющего их; новый ракурс сам по себе не означает переодевание или перемещение.",
       "- Промпт всегда на английском; нелатинские имена — в латинской транскрипции.",
+      "- Если камера показывает собственное тело персонажа его глазами, начни описание с camera=owner; — в таком кадре персонаж не является отдельной фигурой.",
       "- В конце можно указать пропорции: [draw: <prompt>, 16:9]. Варианты: 16:9, 9:16, 4:3, 3:4, 1:1 (по умолчанию).",
       "- Не больше одной директивы за ответ, и только когда картинка действительно уместна или о ней просят.",
     ];
@@ -563,6 +602,7 @@
       opts.format === "description" ? "60 words or fewer." : "50 tags or fewer.",
     ];
     let txt = base + "\nRULES:\n" + rules.map((r, i) => `${i + 1}. ${r}`).join("\n");
+    if (opts.embodiedOwner) txt += "\nOWNER-CAMERA: the character owns the camera; show only the visible parts of their own body from their eyes, NOT the character as an external person. No portrait, full-body person, 1girl/1boy count for the camera holder or duplicate limbs. Keep described scene details.";
     if (opts.pov) txt += "\nFIRST-PERSON VIEW: the camera is the viewer's eyes. Start with pov; never describe the viewer; only one person in frame unless the scene shows the viewer's hands etc.";
     if (opts.frame) {
       const f = opts.frame;
@@ -579,7 +619,7 @@
   PRP.imgCompose = {
     words, wordFormMatch, mentions, parseMap, resolveWardrobe, resolveAppearance,
     splitTags, bareTag, normalizeTags, stripQuality, subjectCount, dropContradictorySolo, dedupe,
-    wardrobeConflicts, ownerPresent, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, loraTokens, sizeFor, perchanceResolution, openaiSize,
+    wardrobeConflicts, ownerPresent, ownerCamera, embodiedShot, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, loraTokens, sizeFor, perchanceResolution, openaiSize,
     parseDraws, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompose;

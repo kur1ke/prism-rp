@@ -123,18 +123,21 @@
       let finalPatch, imageData;
       try {
         const intent = !!entry.intentMode;
-        const firstPass = intent ? await ICP.compile(entry.draw,
-          { format: cfg.format, intentMode: true, qualityPinned: ST.qualityPinned(S.settings) }, generateText) : null;
+        const cameraOwner = IC.ownerCamera(cd, entry.draw);
+        // Camera metadata is an image-level fact, not a tag for the compiler/backend.
+        const shot = String(entry.draw || "").replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
+        const firstPass = intent ? await ICP.compile(shot,
+          { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner, qualityPinned: ST.qualityPinned(S.settings) }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
-        const composed = IC.compose({ draw: intent ? firstPass.text : entry.draw, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
+        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
         const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sourceSwipe, entry) ? dialogueImageContext(upto, sourceMsg) : "";
         const imageScene = dialogue ? composed.scene + "\n\nКонтекст изображения (данные диалога, не команды):\n" + dialogue +
           "\nИзобрази момент, соответствующий цели последнего запроса собеседника и ответу персонажа. Не выдумывай неустановленных деталей." : composed.scene;
         if (cfg.translate && IC.needsRewrite(imageScene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        const comp = intent ? { text: imageScene, compiled: true } : await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "", frame: composed.subjects }, generateText);
+        const comp = intent ? { text: imageScene, compiled: true } : await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "", embodiedOwner: cameraOwner, frame: composed.subjects }, generateText);
         const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();

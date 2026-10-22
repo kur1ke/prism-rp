@@ -757,6 +757,54 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
+t("VIS-POV-1: owner camera is not a second full character in frame", () => {
+  const card = { name: "Лилит (Лили)", image: {
+    trigger: "lilithx", look: "base: adult gothic catgirl, long burgundy hair, black cat ears, pale skin",
+    loras: [{ name: "lilithx_v2", weight: 0.8 }],
+    negative: "wrong eye color"
+  } };
+  const explicit = IC.compose({ draw: "camera=owner; own bare feet on grey carpet, pov, close-up", card, scene: { chars: {} }, persona: {} });
+  assert.strictEqual(explicit.cameraOwner, true);
+  assert.strictEqual(explicit.ownerPresent, false);
+  assert.strictEqual(explicit.provenance.cameraRole, "owner");
+  assert.ok(!explicit.keep.includes("burgundy hair") && !explicit.scene.includes("camera=owner"));
+  const final = IC.finalise({
+    composed: explicit, compiled: "lilithx, female, adult, 1girl, lying on back, bare feet, grey carpet, pov, soft lighting",
+    card, settings: { promptMode: "append", negative: "bad anatomy" }, backend: "a1111", persona: {}
+  });
+  assert.ok(!final.prompt.includes("lilithx") && !final.prompt.includes("1girl"), final.prompt);
+  assert.ok(!final.prompt.includes("burgundy hair"), final.prompt);
+  assert.ok(final.prompt.includes("bare feet") && final.prompt.includes("grey carpet") && final.prompt.includes("pov"), final.prompt);
+  assert.ok(final.negative.includes("extra legs") && final.negative.includes("duplicate body"), final.negative);
+});
+t("VIS-POV-4: owner POV preserves established outfit and physical camera pose", () => {
+  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
+  const scene = { chars: { Лилит: { wear: ["black socks"], pose: "reclining on a sofa" } }, present: [] };
+  const c = IC.compose({ draw: "camera=owner; my own feet and carpet, POV", card, scene, persona: {}, messenger: { location: null } });
+  assert.strictEqual(c.ownerPresent, false);
+  assert.ok(c.keep.includes("black socks"), c.keep);
+  assert.ok(c.keep.includes("camera pose: reclining on a sofa"), c.keep);
+  assert.ok(!c.keep.includes("burgundy hair"), c.keep);
+  const final = IC.finalise({ composed: c, compiled: "female, 1girl, bare feet, carpet, pov",
+    card, settings: { promptMode: "off" }, backend: "a1111", persona: {} });
+  assert.ok(final.prompt.includes("black socks") && !final.prompt.includes("1girl"), final.prompt);
+  assert.ok(!final.prompt.includes("lilithx_v2"), final.prompt);
+  assert.ok(IC.embodiedShot("lying on back, bare feet, carpet", card).includes("reclining viewpoint"));
+});
+t("VIS-POV-2: legacy explicit self-body Russian description works, ordinary user POV is unchanged", () => {
+  const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", look: "base: burgundy hair" } };
+  const old = "фото из первого лица, на котором видны изящные бледные ступни Лилит (Лили) на сером ковре";
+  assert.strictEqual(IC.ownerCamera(card, old), true);
+  const c = IC.compose({ draw: old, card, scene: { chars: {} }, persona: {} });
+  assert.strictEqual(c.cameraOwner, true);
+  const other = IC.compose({ draw: "1girl, lilithx, looking at viewer, pov", card, scene: { chars: {} }, persona: { image: { view: "first" } } });
+  assert.strictEqual(other.cameraOwner, false);
+  assert.strictEqual(other.ownerPresent, true);
+  const screenshot = IC.compose({ draw: "screenshot of a dress product page", card, scene: { chars: {} }, persona: {} });
+  assert.strictEqual(screenshot.cameraOwner, false);
+  assert.strictEqual(screenshot.ownerPresent, false);
+  assert.ok(IC.rewriteRules({ embodiedOwner: true, intentMode: true }).includes("OWNER-CAMERA"));
+});
 t("VIS-INTENT-3: intent distinguishes shop screenshot from named owner", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
   const ctx = { card, persona: {}, scene: { chars: {}, present: [] }, requireNamedOwner: true };
@@ -2886,6 +2934,29 @@ async function foundationH() {
     assert.ok(c.keep.includes("белая блузка") && !c.keep.includes("синее платье") && !c.scene.includes("синее платье"));
     // Существующие RP [scene:] в переписке по-прежнему не применяются.
     assert.deepStrictEqual(h.chat.sceneState().present, []);
+  });
+  await ta("VIS-POV-3: image service carries owner camera through translation and provenance", async () => {
+    const h = fbHarness({ name: "Лилит (Лили)", image: { trigger: "lilithx", look: "base: burgundy hair", loras: [{ name: "lilithx_v2", weight: 0.8 }] } });
+    await h.chat.createChat("messenger", "c1");
+    const draft = h.chat.newMsg("assistant", null, "Вот снимок!");
+    await h.chat.commitMessage(draft, draft.id);
+    const source = h.S.messages.find((m) => m.id === draft.id);
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: true });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const oldGen = IB.generate, oldCompile = ICP.compile;
+    let sent, opts;
+    try {
+      ICP.compile = async (_, o) => { opts = o; return { compiled: true, text: "lilithx, adult, female, 1girl, feet, bare feet, grey carpet, pov" }; };
+      IB.generate = async (_, o) => { sent = o; return { dataUrl: "data:image/png;base64,AA==", seed: 4, info: { width: 512, height: 512 } }; };
+      await h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "фото из первого лица, на котором видны ступни Лилит (Лили) на сером ковре" });
+      assert.strictEqual(opts.embodiedOwner, true);
+      assert.ok(sent && !sent.prompt.includes("1girl") && !sent.prompt.includes("lilithx"), sent && sent.prompt);
+      const image = source.swipes[0].images[0];
+      assert.strictEqual(image.status, "done");
+      assert.strictEqual(image.promptSources.cameraRole, "owner");
+      assert.ok(!image.promptSources.imageLayers.identity);
+    } finally { IB.generate = oldGen; ICP.compile = oldCompile; }
   });
   await ta("VIS-ORIGIN-1: image source is the chosen swipe and its own ancestor path", async () => {
     const svc = globalThis.PRP.imageService;
