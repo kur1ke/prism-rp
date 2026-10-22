@@ -2911,6 +2911,7 @@ async function foundationH() {
     const later = h.chat.newMsg("assistant", first.id, "Я переоделась в синее платье");
     later.swipes[0].stateEvents = [{ actor: "char", field: "wear", action: "set", value: ["синее платье"], certainty: "reported", evidence: "Я переоделась в синее платье" }];
     await h.chat.commitMessage(later, later.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
     h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
     h.S.drawing = new Set(); h.S.imgUrls = {};
     h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
@@ -2918,9 +2919,9 @@ async function foundationH() {
     let prompt;
     try {
       IB.generate = async (_, o) => { prompt = o.prompt; return { dataUrl: "data:image/png;base64,AA==", seed: 1, info: { width: 512, height: 512 } }; };
-      await h.ctx.svc.images.draw(first, first.swipes[0], { prompt: "1girl, lilithx, selfie", ratio: "1:1" });
+      await h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, selfie", ratio: "1:1" });
       assert.ok(prompt.includes("блузка") && !prompt.includes("платье"), prompt);
-      assert.strictEqual(first.swipes[0].images[0].status, "done");
+      assert.strictEqual(source.swipes[0].images[0].status, "done");
     } finally { IB.generate = oldGen; }
   });
   await ta("VIS-ORIGIN-3: async completion does not pollute a newly selected chat", async () => {
@@ -2928,6 +2929,7 @@ async function foundationH() {
     await h.chat.createChat("messenger", "c1");
     const first = h.chat.newMsg("assistant", null, "Вот фото");
     await h.chat.commitMessage(first, first.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
     h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
     h.S.drawing = new Set(); h.S.imgUrls = {};
     h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
@@ -2937,7 +2939,7 @@ async function foundationH() {
     const pending = new Promise((r) => { done = r; });
     try {
       IB.generate = async () => { entered(); return pending; };
-      const run = h.ctx.svc.images.draw(first, first.swipes[0], { prompt: "1girl, lilithx, portrait" });
+      const run = h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, portrait" });
       await started;
       h.S.chats.push({ id: "elsewhere", mode: "messenger" });
       h.S.chatId = "elsewhere"; h.S.messages = [];
@@ -2954,6 +2956,7 @@ async function foundationH() {
     await h.chat.createChat("messenger", "c1");
     const first = h.chat.newMsg("assistant", null, "Покажу себя");
     await h.chat.commitMessage(first, first.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
     h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
     h.S.drawing = new Set(); h.S.imgUrls = {};
     h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
@@ -2963,13 +2966,13 @@ async function foundationH() {
     const pending = new Promise((r) => { done = r; });
     try {
       IB.generate = async () => { entered(); return pending; };
-      const run = h.ctx.svc.images.draw(first, first.swipes[0], { prompt: "1girl, lilithx, portrait" });
+      const run = h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, portrait" });
       await started;
       await h.ctx.DB.del("messages", first.id);
       done({ dataUrl: "data:image/png;base64,AA==", seed: 3, info: { width: 512, height: 512 } });
       await run;
       assert.strictEqual(await h.ctx.DB.get("messages", first.id), undefined, "deleted source must stay deleted");
-      assert.strictEqual(await h.ctx.DB.get("images", first.swipes[0].images[0].id), undefined, "orphan image must not be saved");
+      assert.strictEqual(await h.ctx.DB.get("images", source.swipes[0].images[0].id), undefined, "orphan image must not be saved");
     } finally { IB.generate = oldGen; }
   });
   await ta("VIS-ORIGIN-5: edited source during async generation remains edited and gets no new image blob", async () => {
@@ -2977,6 +2980,7 @@ async function foundationH() {
     await h.chat.createChat("messenger", "c1");
     const first = h.chat.newMsg("assistant", null, "Оригинальный текст");
     await h.chat.commitMessage(first, first.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
     h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
     h.S.drawing = new Set(); h.S.imgUrls = {};
     h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
@@ -2986,7 +2990,7 @@ async function foundationH() {
     const pending = new Promise((r) => { done = r; });
     try {
       IB.generate = async () => { entered(); return pending; };
-      const run = h.ctx.svc.images.draw(first, first.swipes[0], { prompt: "1girl, lilithx, portrait" });
+      const run = h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, portrait" });
       await started;
       const updated = await h.ctx.DB.get("messages", first.id);
       updated.swipes[0].text = "Отредактированный текст";
@@ -2996,7 +3000,7 @@ async function foundationH() {
       const persisted = await h.ctx.DB.get("messages", first.id);
       assert.strictEqual(persisted.swipes[0].text, "Отредактированный текст");
       assert.strictEqual(persisted.swipes[0].images[0].status, "pending", "late result must not overwrite an edited source");
-      assert.strictEqual(await h.ctx.DB.get("images", first.swipes[0].images[0].id), undefined);
+      assert.strictEqual(await h.ctx.DB.get("images", source.swipes[0].images[0].id), undefined);
     } finally { IB.generate = oldGen; }
   });
   await ta("VC-9: images/service использует визуальный snapshot сообщения, а не нынешнюю одежду", async () => {
@@ -4388,6 +4392,9 @@ async function unifiedTracker() {
 
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
+// Do not let an unresolved async fixture finish Node with exit code 0.
+// The suite normally completes in seconds; a pending test must fail CI.
+setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
 foundationB().then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(() => {
   if (BASELINE.length) {
     console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
