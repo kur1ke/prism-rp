@@ -76,6 +76,49 @@ function t(name, fn) {
   });
 }
 
+/* ── DEBUG-QOL: per-chat measurements and copy affordance ── */
+{
+  const PERF = globalThis.PRP.perfLog;
+  t("DEBUG-QOL-1: changing chat clears measurements in place but reopening same chat does not", () => {
+    const log = [];
+    const record = PERF.create(log);
+    record("roleplayMs", 17045, { chatId: "local" });
+    const original = log;
+    PERF.resetOnChatChange(log, "local", "local");
+    assert.strictEqual(log.length, 1, "same dialog keeps its sample");
+    PERF.resetOnChatChange(log, "local", "perchance");
+    assert.strictEqual(log, original, "recorder's existing array reference survives reset");
+    assert.strictEqual(PERF.summary(log).length, 0, "old median disappears");
+    record("roleplayMs", 4845, { chatId: "perchance" });
+    assert.strictEqual(PERF.summary(log)[0].median, 4845, "new dialog has its own median");
+  });
+  t("DEBUG-QOL-2: late observer results from prior chat cannot contaminate current samples", () => {
+    const log = [];
+    let current = "one";
+    const record = PERF.create(log, { activeChatId: () => current });
+    record("assistantStateMs", 3000, { chatId: "one" });
+    current = "two";
+    PERF.resetOnChatChange(log, "one", "two");
+    record("assistantStateMs", 12000, { chatId: "one" });
+    record("readyAfterReplyMs", 3, { msgId: "no-chat-id" });
+    record("assistantStateMs", 2000, { chatId: "two" });
+    assert.strictEqual(log.length, 1);
+    assert.strictEqual(log[0].chatId, "two");
+    assert.strictEqual(PERF.summary(log)[0].median, 2000);
+  });
+  t("DEBUG-QOL-3: copy is accessible in all five Debug sections, outside the copied content", () => {
+    require(J("ui/views/kit.js"));
+    require(J("ui/views/drawer.js"));
+    const render = globalThis.PRP.views.debugModal;
+    for (const section of ["prism", "tracker", "events", "errors", "timing"]) {
+      const html = render({ card: { name: "Sample" }, path: [], perfLog: [], perfSummary: [], messengerView: null }, { section });
+      assert.strictEqual((html.match(/data-act="debug-copy"/g) || []).length, 1, section);
+      assert.ok(html.indexOf('data-act="debug-copy"') < html.indexOf('class="modal-body debug-body"'), section);
+      assert.ok(html.includes('data-act="debug-section" data-section="' + section + '"'), section);
+    }
+  });
+}
+
 /* ── UI: visible image info respects developer mode; copy respects same gate ── */
 {
   const fs = require("fs");
@@ -4707,6 +4750,35 @@ async function perfTurn() {
   };
   const jacket = (ev) => [Evt("char", "wear", "set", ["синяя куртка"], "established", ev || "Я надела синюю куртку")];
   try {
+    await ta("DEBUG-QOL-4: copy selected Debug section to clipboard and fall back inside Perchance", async () => {
+      require(J("ui/controllers/drawer.js"));
+      let copied = "", legacyCopied = false, toast = "";
+      const S = { modal: { kind: "debug", section: "timing" } };
+      const ui = { $: () => ({ innerText: "Сводка: 4845 мс", textContent: "другое окно" }), toast: (text) => { toast = text; } };
+      const actions = PRPg.controllers.drawer({ S, ui, svc: { chat: { op: () => {} } }, card: () => ({ name: "Орихимэ" }) }).actions;
+      const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+      const oldDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+      try {
+        Object.defineProperty(globalThis, "navigator", { configurable: true, value: { clipboard: { writeText: async (text) => { copied = text; } } } });
+        await actions["debug-copy"]();
+        assert.ok(copied.includes("Орихимэ / Тайминги") && copied.includes("Сводка: 4845 мс"), copied);
+        assert.ok(!copied.includes("другое окно"), "copy includes only active visible section");
+        assert.ok(toast.includes("скопирован"));
+        Object.defineProperty(globalThis, "navigator", { configurable: true, value: { clipboard: { writeText: async () => { throw new Error("Permission denied"); } } } });
+        Object.defineProperty(globalThis, "document", { configurable: true, value: {
+          createElement: () => ({ value: "", style: {}, setAttribute() {}, select() {}, remove() {} }),
+          body: { appendChild(field) { legacyCopied = !!field.value.includes("Сводка: 4845 мс"); } },
+          execCommand: (cmd) => cmd === "copy"
+        } });
+        await actions["debug-copy"]();
+        assert.strictEqual(legacyCopied, true, "fallback copies active section after clipboard rejection");
+      } finally {
+        if (oldNavigator) Object.defineProperty(globalThis, "navigator", oldNavigator);
+        else delete globalThis.navigator;
+        if (oldDocument) Object.defineProperty(globalThis, "document", oldDocument);
+        else delete globalThis.document;
+      }
+    });
     await ta("PERF-02A-3: RP stays on roleplay provider; user and assistant state use processing provider", async () => {
       const h = await mk("rp");
       const role = { id: "local", kind: "openai" };

@@ -10,14 +10,22 @@
   const clean = (v, n) => (v == null ? "" : String(v).replace(/[^\w:.\-а-яё ]/gi, "").slice(0, n));
 
   // list — массив, в который пишутся записи (S.perf); возвращается функция записи.
-  function create(list) {
+  function create(list, opts) {
+    const activeChatId = opts && opts.activeChatId;
     return function record(metric, ms, meta) {
       const m = meta || {};
+      // Delayed observer/image callbacks from another chat must not pollute
+      // the active chat's diagnostic medians after a navigation reset.
+      if (typeof activeChatId === "function" && (!m.chatId || m.chatId !== activeChatId())) return;
       list.push({ metric: clean(metric, 40), ms: Math.max(0, Math.round(Number(ms) || 0)), at: Date.now(),
         msgId: clean(m.msgId, 40), chatId: clean(m.chatId, 40), outcome: clean(m.outcome, 40) });
       while (list.length > MAX) list.shift();
     };
   }
+
+  // Clear in place: all existing logger/view references retain the same list.
+  function reset(list) { list.length = 0; }
+  function resetOnChatChange(list, previousId, nextId) { if (previousId !== nextId) reset(list); }
 
   // Сводка: по каждой метрике — число замеров, последнее и медиана.
   function summary(list) {
@@ -29,6 +37,6 @@
     });
   }
 
-  PRP.perfLog = { create, summary, MAX };
+  PRP.perfLog = { create, reset, resetOnChatChange, summary, MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.perfLog;
 })(typeof window !== "undefined" ? window : globalThis);
