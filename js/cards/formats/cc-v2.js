@@ -43,6 +43,9 @@
     const book = isObj(data.character_book) ? data.character_book : null;
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
     if (isObj(prism.image)) d.image = clone(prism.image);
+    // Import cannot enable new model-facing custom data without local user approval.
+    d.customFields = CM.normalizeCustomFields(prism.customFields, true);
+    if (d.customFields.length) notes.push(note("info", "prism-custom-fields", "Пользовательские поля сохранены, но передача модели выключена до явного включения."));
     // Ядро Prism из нашего расширения — данные, а не указание; приходит непроверенным и не используется,
     // пока пользователь не сохранит его в редакторе (до этого Prism собирает запасное ядро из полей).
     if (isObj(prism.prismCore)) {
