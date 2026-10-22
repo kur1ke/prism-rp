@@ -41,6 +41,14 @@
         if (t.closest("[data-act=prov-edit]")) return;
         S.settings.activeProvider = t.dataset.id; await save(); ui.closePop(); ui.refreshAfterSettings();
       },
+      "pick-processing-provider": async (t) => {
+        const id = t.dataset.id || "";
+        if (id && !ctx.providers().some((p) => p.id === id)) return;
+        S.settings.processingProvider = id;
+        await save();
+        S.modal.keepScroll = true;
+        ui.refreshAfterSettings();
+      },
       "pick-model": async (t) => {
         const p = S.settings.providers.find((x) => x.id === ctx.provider().id);
         p.model = t.dataset.model; await save(); ui.closePop(); ui.refreshAfterSettings();
@@ -69,6 +77,7 @@
         if (!confirm(`Удалить «${p.name}»?`)) return;
         S.settings.providers = S.settings.providers.filter((x) => x !== p);
         if (S.settings.activeProvider === p.id) S.settings.activeProvider = (ctx.providers()[0] || {}).id || "";
+        if (S.settings.processingProvider === p.id) S.settings.processingProvider = "";
         S.editProviderId = null;
         await save(); ui.refreshAfterSettings();
       },
