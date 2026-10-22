@@ -663,8 +663,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .card-identity .portrait .chg { font-size: 11px; gap: 4px; padding: 6px; }
 .card-identity-name { flex: 1; min-width: 0; }
 .card-fields { min-width: 0; }
-.image-settings-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.image-settings-grid > .card-disclosure { margin: 0; min-width: 0; }
+.image-settings-grid { display: block; }
+.image-settings-grid > .card-disclosure { margin: 0 0 14px; min-width: 0; }
 .image-settings-grid .card-disclosure .field { min-width: 0; }
 .tile-last { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; color: rgba(255,255,255,.84); font-size: 11px; line-height: 1.25; }
 .tile-last time, .tile-last .tile-last-none { font-weight: 600; font-size: 12px; color: #fff; }
@@ -673,9 +673,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .tile-actions .tile-action:hover { background: var(--accent); }
 .tile:hover .tile-actions, .tile:focus-within .tile-actions { opacity: 1; }
 @media (hover: none) { .tile-actions { opacity: 1; } }
-@media (max-width: 900px) {
-  .image-settings-grid { grid-template-columns: minmax(0, 1fr); }
-}
+
 @media (max-width: 900px) {
   .modal.card-modal { height: min(780px, calc(100dvh - 48px)); }
   .card-identity { gap: 14px; }
@@ -685,3 +683,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   .card-identity .portrait { width: 90px; flex-basis: 90px; }
   .card-identity .portrait .chg { left: 4px; right: 4px; bottom: 4px; }
 }
+
+/* Home is a focused entry point, not a second list of cards or conversations. */
+.home-welcome { display: flex; align-items: center; justify-content: center; }
+.home-welcome .home-inner { width: 100%; max-width: 720px; padding: 30px 20px; }
+.home-greeting { text-align: center; margin: 0 auto; }
+.home-greeting .sub { margin: 12px auto 0; max-width: 540px; line-height: 1.6; }
+.home-greeting-mark { display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
+.home-greeting-mark .brand-glyph { width: 56px; height: 56px; }
+.home-greeting-actions { justify-content: center; margin-top: 24px; }
+.rail-chat .t2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
