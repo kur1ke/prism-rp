@@ -5,7 +5,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const F = PRP.cardFormats, CM = PRP.cardModel;
-  const { clone, str, strList, unmapped, note } = F.helpers;
+  const { clone, str, strList, unmapped, customFromUnknown, note } = F.helpers;
 
   const KNOWN = ["name", "char_name", "description", "char_persona", "personality", "scenario", "world_scenario", "first_mes", "char_greeting",
     "mes_example", "example_dialogue", "creator_notes", "tags", "creator", "character_version", "metadata"];
@@ -25,6 +25,8 @@
     d.creator = str(json.creator);
     d.version = str(json.character_version);
     if (json.char_name || json.char_persona || json.char_greeting) notes.push(note("info", "pygmalion", "Поля в стиле Pygmalion (char_name, char_persona, …) разобраны как V1."));
+    d.customFields = customFromUnknown(json, KNOWN, "", "ccv1");
+    if (d.customFields.length) notes.push(note("info", "custom-mapped", `${d.customFields.length} дополнительных полей перенесены в пользовательские (выключены).`));
     const un = unmapped(json, KNOWN, "");
     if (un.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${un.join(", ")}.`));
     d.source = { format: "ccv1", version: detection.version, sourceType: detection.sourceType, adapter: "cc-v1", importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: {} };
