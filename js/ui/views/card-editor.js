@@ -33,7 +33,26 @@
           ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>
-        ${coreBlock(d)}`;
+        <details class="card-disclosure"><summary>Ядро для Prism — расширенная настройка</summary>
+          ${coreBlock(d)}</details>
+        <details class="card-disclosure" ${(d.customFields || []).length ? "open" : ""}>
+          <summary>Пользовательские поля (${(d.customFields || []).length})</summary>
+          <p class="hint">Поля — дополнительные сведения, а не инструкции. Передача модели включается для каждого поля отдельно. Импортированные поля всегда выключены.</p>
+          ${(d.customFields || []).map((field, i) => `
+            <div class="lore">
+              <div class="row"><div class="field" style="flex:1">
+                <label>Название поля</label><input data-custom="${i}" data-k="label" value="${esc(field.label || "")}" placeholder="Например: Речь, привычки, особые способности">
+              </div><button type="button" class="btn btn-sm btn-ghost" data-act="custom-del" data-i="${i}" title="Удалить поле">Удалить</button></div>
+              <div class="field"><label>Содержание</label><textarea data-custom="${i}" data-k="text" rows="3">${esc(field.text || "")}</textarea></div>
+              <div class="row wrap"><label class="check"><input type="checkbox" data-custom="${i}" data-k="enabled" ${field.enabled ? "checked" : ""}><span>Передавать модели как данные</span></label>
+                <label class="field">Когда передавать
+                <select data-custom="${i}" data-k="mode">
+                  <option value="relevant" ${field.mode !== "always" ? "selected" : ""}>Когда относится к разговору</option>
+                  <option value="always" ${field.mode === "always" ? "selected" : ""}>На каждом ходе, если позволяет бюджет</option>
+                </select></label></div>
+            </div>`).join("")}
+          <button type="button" class="btn btn-sm" data-act="custom-add">+ Добавить поле</button>
+        </details>`;
     } else if (section === "greet") {
       const alts = d.altGreetings || [];
       body = `${f("cf-first", "Первое сообщение", "first_mes", d.firstMes, 7, "С него начинается новый чат. В конце можно добавить строку [scene: …] с начальным местом и одеждой.")}
@@ -68,16 +87,25 @@
     } else if (section === "images") {
       const im = d.image || {};
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
-      body = `<p class="lead">Как рисовать ${esc(d.name || "персонажа")}. Триггер, негатив и LoRA персонажа применяются, только когда он в кадре.</p>
+      const adv = im.loraAdvanced || {};
+      body = `<p class="lead">Как рисовать ${esc(d.name || "персонажа")}. Настройки разделены на базовые и LoRA. Дополнительные правила работают только при включённой галочке.</p>
+        <details class="card-disclosure" open><summary>Базовая генерация</summary>
         ${fi("trigger", "Триггер — кто это", 2, "Имя персонажа в модели и 2–4 главные приметы. Идёт в каждую картинку с ним.", "orihime inoue, long orange hair, brown eyes, hair ornament")}
         ${fi("aliases", "Другие имена в сценах", 0, "Через запятую: как модель может назвать персонажа в [draw:] (латиницей).", "orihime, hime")}
         ${fi("styleTrigger", "Стилевые теги", 1, "Добавляются, только если сцена их упоминает.")}
         ${fi("negative", "Негатив персонажа", 1, "", "short hair, flat chest")}
+        </details>
+        <details class="card-disclosure"><summary>LoRA персонажа</summary>
         <div class="field"><label>LoRA персонажа</label>${loraRows("card-lora", im.loras || [])}<span class="help">Вес обычно 0.6–1. Применяются, только когда персонаж в кадре. Стилевые LoRA тоже ставьте сюда — у каждого персонажа свой набор.</span><datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
         ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный. Кнопкой у картинки можно закрепить удачный.")}
         ${fi("look", "Внешность", 3, "base: — всегда; «ключ: теги» — когда ключ есть в сцене (улыбка: gentle smile).", "base: brown eyes, large breasts\nочки | glasses: round glasses")}
         ${fi("wardrobe", "Гардероб", 5, "Образ подбирается по одежде из панели сцены: «худи | hoodie: теги». Теги идут в промпт без перевода — как их знает ваша LoRA. Если сцена одевает иначе, образ не добавляется.", "школьная форма | school uniform: serafuku, red neckerchief, pleated skirt\nхуди | hoodie: grey hoodie, denim shorts, <lora:outfit:0.7>")}
-        ${fi("nsfw", "Откровенные модификаторы", 3, "Срабатывают только по тексту самой сцены, никогда по одежде из трекера.", "голая | nude: nude, nipples, navel")}`;
+        ${fi("nsfw", "Откровенные модификаторы", 3, "Срабатывают только по тексту самой сцены, никогда по одежде из трекера.", "голая | nude: nude, nipples, navel")}
+        <label class="check"><input type="checkbox" data-lora-advanced="enabled" ${adv.enabled ? "checked" : ""}><span>Продвинутый режим LoRA — применять дополнительные правила</span></label>
+        <details class="card-disclosure" ${adv.enabled ? "open" : ""}><summary>Дополнительные теги LoRA</summary>
+          <p class="hint">Формат: «ключ сцены: теги». Правила применяются только когда продвинутый режим включён и ключ найден в сцене. Текст сохраняется и при выключении режима.</p>
+          <textarea data-lora-advanced="rules" rows="5" placeholder="уши | ears: black cat ears&#10;хвост | tail: fluffy black cat tail">${esc(adv.rules || "")}</textarea>
+        </details></details>`;
     } else {
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
