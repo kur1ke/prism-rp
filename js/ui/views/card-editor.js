@@ -38,19 +38,29 @@
         <details class="card-disclosure" ${(d.customFields || []).length ? "open" : ""}>
           <summary>Пользовательские поля (${(d.customFields || []).length})</summary>
           <p class="hint">Поля — дополнительные сведения, а не инструкции. Передача модели включается для каждого поля отдельно. Импортированные поля всегда выключены.</p>
-          ${(d.customFields || []).map((field, i) => `
+          ${(d.customFields || []).map((field, i) => {
+            const detailOpen = !!(m.expandedCustom && m.expandedCustom[field.id]);
+            const origin = field.origin;
+            return `
             <div class="lore">
               <div class="row"><div class="field" style="flex:1">
                 <label>Название поля</label><input data-custom="${i}" data-k="label" value="${esc(field.label || "")}" placeholder="Например: Речь, привычки, особые способности">
               </div><button type="button" class="btn btn-sm btn-ghost" data-act="custom-del" data-i="${i}" title="Удалить поле">Удалить</button></div>
               <div class="field"><label>Содержание</label><textarea data-custom="${i}" data-k="text" rows="3">${esc(field.text || "")}</textarea></div>
-              <div class="row wrap"><label class="check"><input type="checkbox" data-custom="${i}" data-k="enabled" ${field.enabled ? "checked" : ""}><span>Передавать модели как данные</span></label>
-                <label class="field">Когда передавать
-                <select data-custom="${i}" data-k="mode">
-                  <option value="relevant" ${field.mode !== "always" ? "selected" : ""}>Когда относится к разговору</option>
-                  <option value="always" ${field.mode === "always" ? "selected" : ""}>На каждом ходе, если позволяет бюджет</option>
-                </select></label></div>
-            </div>`).join("")}
+              <div class="row wrap">
+                <label class="check"><input type="checkbox" data-custom="${i}" data-k="enabled" ${field.enabled ? "checked" : ""}><span>Передавать модели</span></label>
+                <label class="check"><input type="checkbox" data-custom-more="${esc(field.id)}" ${detailOpen ? "checked" : ""}><span>Подробнее</span></label>
+              </div>
+              <div class="custom-field-extra" ${detailOpen ? "" : "hidden"}>
+                <div class="field"><label for="cf-custom-mode-${i}">Когда передавать</label>
+                  <select id="cf-custom-mode-${i}" data-custom="${i}" data-k="mode">
+                    <option value="relevant" ${field.mode !== "always" ? "selected" : ""}>Когда относится к разговору</option>
+                    <option value="always" ${field.mode === "always" ? "selected" : ""}>На каждом ходе, если позволяет бюджет</option>
+                  </select></div>
+                <p class="hint">Происхождение: ${origin && origin.imported ? `импортировано из ${esc(origin.format || "другого формата")}; исходное поле <code>${esc(origin.path || "неизвестно")}</code>.` : "создано пользователем."}</p>
+              </div>
+            </div>`;
+          }).join("")}
           <button type="button" class="btn btn-sm" data-act="custom-add">+ Добавить поле</button>
         </details>`;
     } else if (section === "greet") {
