@@ -81,7 +81,7 @@
     await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
-    if (saveUi.chatId && (!saveUi.view || saveUi.view === "chat") && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
+    if (saveUi.chatId && (!saveUi.view || saveUi.view === "chat" || saveUi.view === "home") && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
     else if (saveUi.view === "assist") openAssist(saveUi.assistId, null, true);
     else if (saveUi.view === "characters") goCharacters();
   }
@@ -105,7 +105,13 @@
     $("#rail").classList.remove("open");
     ui.syncScrim();
   }
-  function goHome() {
+  async function goHome() {
+    // «Главная» is the selected dialogue, not a duplicate catalog.
+    // If no dialogue is selected, show a dedicated welcome screen.
+    if (S.chatId && S.chats.some((c) => c.id === S.chatId)) {
+      if (S.view === "chat") return;
+      return openChat(S.chatId);
+    }
     S.view = "home";
     S.find = null;
     ui.rememberUi();
