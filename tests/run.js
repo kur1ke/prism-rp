@@ -602,7 +602,8 @@ t("карточка: V2 → PNG → обратно без потерь, extensio
   const back = C.cardJsonFromPng(png);
   assert.strictEqual(back.spec, "chara_card_v3");
   assert.strictEqual(back.data.name, "Химэ ✿");
-  assert.deepStrictEqual(back.data.extensions, { foo: { bar: 1 } });
+  assert.strictEqual(back.data.extensions.foo.bar, 1);
+  assert.deepStrictEqual(back.data.extensions.prism_rp.fields, { description: "Описание", appearance: "", background: "" });
   assert.strictEqual(back.data.character_book.entries[0].content, "Город");
   // повторная запись не плодит чанки
   const png2 = C.embedInPng(png, card);
@@ -772,7 +773,8 @@ t("VIS-POV-1: owner camera is not a second full character in frame", () => {
     composed: explicit, compiled: "lilithx, female, adult, 1girl, lying on back, bare feet, grey carpet, pov, soft lighting",
     card, settings: { promptMode: "append", negative: "bad anatomy" }, backend: "a1111", persona: {}
   });
-  assert.ok(!final.prompt.includes("lilithx") && !final.prompt.includes("1girl"), final.prompt);
+  assert.ok(final.prompt.includes("lilithx") && !final.prompt.includes("1girl"), final.prompt);
+  assert.ok(final.prompt.includes("<lora:lilithx_v2:0.8>"), final.prompt);
   assert.ok(!final.prompt.includes("burgundy hair"), final.prompt);
   assert.ok(final.prompt.includes("bare feet") && final.prompt.includes("grey carpet") && final.prompt.includes("pov"), final.prompt);
   assert.ok(final.negative.includes("extra legs") && final.negative.includes("duplicate body"), final.negative);
@@ -788,7 +790,7 @@ t("VIS-POV-4: owner POV preserves established outfit and physical camera pose", 
   const final = IC.finalise({ composed: c, compiled: "female, 1girl, bare feet, carpet, pov",
     card, settings: { promptMode: "off" }, backend: "a1111", persona: {} });
   assert.ok(final.prompt.includes("black socks") && !final.prompt.includes("1girl"), final.prompt);
-  assert.ok(!final.prompt.includes("lilithx_v2"), final.prompt);
+  assert.ok(final.prompt.includes("<lora:lilithx_v2:0.8>"), final.prompt);
   assert.ok(IC.embodiedShot("lying on back, bare feet, carpet", card).includes("reclining viewpoint"));
 });
 t("VIS-POV-2: legacy explicit self-body Russian description works, ordinary user POV is unchanged", () => {
@@ -2951,7 +2953,8 @@ async function foundationH() {
       IB.generate = async (_, o) => { sent = o; return { dataUrl: "data:image/png;base64,AA==", seed: 4, info: { width: 512, height: 512 } }; };
       await h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "фото из первого лица, на котором видны ступни Лилит (Лили) на сером ковре" });
       assert.strictEqual(opts.embodiedOwner, true);
-      assert.ok(sent && !sent.prompt.includes("1girl") && !sent.prompt.includes("lilithx"), sent && sent.prompt);
+      assert.ok(sent && !sent.prompt.includes("1girl") && sent.prompt.includes("lilithx"), sent && sent.prompt);
+      assert.ok(sent.prompt.includes("<lora:lilithx_v2:0.8>"), sent.prompt);
       const image = source.swipes[0].images[0];
       assert.strictEqual(image.status, "done");
       assert.strictEqual(image.promptSources.cameraRole, "owner");
