@@ -18,7 +18,7 @@ function storeName(flag) {
 assert.equal(storeName(true), "prism-rp-testing");
 assert.equal(storeName(false), "prism-rp");
 assert.equal(storeName(undefined), "prism-rp");
-const html = fs.readFileSync(path.join(ROOT, "dist/perchance/loader-testing.html"), "utf8");
+const html = fs.readFileSync(path.join(ROOT, "templates/loader-testing.html"), "utf8");
 assert.match(html, /__PRP_TEST_MIRROR = true/);
 assert.match(html, /PRISM_RP_CHANNEL = "testing"/);
 assert.match(html, /api\.github\.com\/repos\/kur1ke\/prism-rp\/branches\/testing/);
