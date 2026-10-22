@@ -89,7 +89,7 @@
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
       const adv = im.loraAdvanced || {};
       body = `<p class="lead">Изображения: настройки для генератора, отдельно от RP-внешности персонажа.</p>
-        <details class="card-disclosure" open><summary>Базовая генерация</summary>
+        <details class="card-disclosure" id="image-base-panel" ${m.imageBaseOpen !== false ? "open" : ""}><summary>Базовая генерация</summary>
           ${fi("look", "Внешность — теги", 3, "base: — всегда; «ключ: теги» — если ключ присутствует в сцене.", "base: brown eyes, long orange hair")}
           ${fi("wardrobe", "Гардероб", 5, "Наряды по ключам из текущей сцены, без автоматической смены одежды.", "худи | hoodie: grey hoodie")}
           ${fi("styleTrigger", "Стилевые теги", 1, "Применяются, только если сцена их упоминает.")}
@@ -97,7 +97,7 @@
           ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный.")}
           ${fi("nsfw", "Модификаторы по ключам сцены", 3, "Не запускаются автоматически по одежде.", "ключ: соответствующие теги")}
         </details>
-        <details class="card-disclosure" open><summary>LoRA</summary>
+        <details class="card-disclosure" id="image-lora-panel" ${m.imageLoraOpen ? "open" : ""}><summary>LoRA</summary>
           ${fi("trigger", "Основной триггер LoRA", 2, "Точное ключевое слово автора. Старые карточки с несколькими тегами остаются совместимыми.", "lilithx")}
           <div class="field"><label>Подключённые LoRA</label>${loraRows("card-lora", im.loras || [])}<span class="help">Имя файла и вес; поддерживается Forge/A1111.</span>
           <datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
