@@ -191,7 +191,7 @@
           });
         }),
       });
-    } else delete data.character_book;
+    } else data.character_book = Object.assign({}, oldBook, { entries: [], extensions: oldBook.extensions || {} });
     // Пространство Prism в extensions: картинки, раздельные поля, выключенные указания.
     const ext = Object.assign({}, data.extensions);
     const pr = Object.assign({}, ext.prism_rp);
