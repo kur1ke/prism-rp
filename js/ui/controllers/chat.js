@@ -10,27 +10,23 @@
     const { S, ui, svc, nav } = ctx;
     const { $ } = ui;
 
+    /* PERF-01: отправка принимается и во время разбора предыдущего ответа. Порядок хода (дождаться разбора,
+       сверить чат и ветку, записать реплику, разобрать её, сгенерировать) — в сервисе генерации (gen.send). */
     async function sendUser() {
       const input = $("#input");
       if (!input) return;
       const text = input.value.trim();
-      if (!text || S.gen || S.tracking) return;
-      if (S.view === "assist") { input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
+      if (!text) return;
+      if (S.view === "assist") { if (S.gen) return; input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
+      const c = ctx.chat();
+      // Ход этого чата уже принят или идёт ответ: второе нажатие ничего не отправляет, текст остаётся в поле.
+      if (!c || S.gen || (S.turn && S.turn.chatId === c.id)) return;
       input.value = "";
       ui.autoGrow(input);
-      // Переписка: у отправленного сообщения — неизменяемая метка времени и положения (её даёт сервис переписки).
-      const c = ctx.chat();
-      const stamp = c && c.mode === "messenger" ? svc.messenger.stampForNew() : null;
-      const sent = await svc.chat.addUserMessage(text, stamp ? { messengerAt: stamp } : null);
-      // Интерпретация событий — служебный этап, пользователь не заполняет трекер.
-      if (svc.state) {
-        S.tracking = true;
-        try { await svc.state.observeMessage(sent, ctx.provider()); }
-        finally { S.tracking = false; }
-      }
-      ui.renderFeed();
-      ui.scrollBottom();
-      await svc.gen.generate();
+      ui.clearDraft(c.id);
+      // Переписка: метка времени и положения — на момент нажатия (её даёт сервис переписки).
+      const stamp = c.mode === "messenger" ? svc.messenger.stampForNew() : null;
+      await svc.gen.send(text, stamp ? { messengerAt: stamp } : null);
     }
     async function afterBranchChange() {
       svc.prism.refresh();
@@ -40,6 +36,8 @@
 
     const actions = {
       send: sendUser,
+      // Отменить отправку, ожидающую разбора предыдущего ответа: текст вернётся в поле ввода.
+      "send-cancel": () => svc.gen.cancelTurn(),
       stop: () => svc.gen.stop(),
       // Модель начинает сцену — только по этой кнопке, никогда сама при открытии чата.
       opening: () => { if (!S.gen) return svc.gen.generate(null, "opening"); },
@@ -59,7 +57,8 @@
         S.editingMsg = null;
         await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
         const edited = S.messages.find((x) => x.id === t.dataset.id);
-        if (svc.state && edited) await svc.state.observeMessage(edited, ctx.provider());
+        // Разбор правки — управляемая задача (дедуп, без отклонений); ожидающая отправка дождётся его.
+        if (svc.state && edited) await svc.state.track(edited, ctx.provider());
         await afterBranchChange();
       },
       "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },
@@ -102,7 +101,7 @@
     };
 
     function input(t) {
-      if (t.id === "input") ui.autoGrow(t);
+      if (t.id === "input") { ui.autoGrow(t); if (S.chatId) ui.clearDraft(S.chatId); }
       if (t.id === "find-q") { S.find.q = t.value; S.find.idx = 0; ui.runFind(true); }
     }
     function key(e, t) {

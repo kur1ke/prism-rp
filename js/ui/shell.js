@@ -49,6 +49,11 @@
         lensPreview: S.modal && S.modal.kind === "card" && S.modal.section === "world" && S.modal.lens ? svc().world.preview(S.modal.lens) : null,
         assistCard: S.assist && S.assist.ctx.cardId ? S.cards.find((c) => c.id === S.assist.ctx.cardId) || null : null,
         assistChat: S.assist && S.assist.ctx.chatId ? S.chats.find((c) => c.id === S.assist.ctx.chatId) || null : null,
+        // PERF-01: ход этого чата (ожидает разбора / пишет реплику / генерирует), идёт ли разбор, возвращённый текст.
+        turn: S.turn && ctx.chat() && S.turn.chatId === ctx.chat().id ? S.turn : null,
+        statePending: ctx.chat() && svc().state && svc().state.pending ? svc().state.pending(ctx.chat().id) > 0 : false,
+        draft: ctx.chat() && S.sendDrafts ? S.sendDrafts[ctx.chat().id] || "" : "",
+        perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
       };
     }
 
@@ -78,7 +83,8 @@
         $("#stage").innerHTML = V.chat(m);
         app.classList.toggle("messenger", m.chat.mode === "messenger");
         if (keep) {
-          const i = $("#input"); i.value = keep.v; autoGrow(i);
+          // Пустое поле не затирает возвращённый текст не отправленного хода (PERF-01, черновик чата).
+          const i = $("#input"); i.value = keep.v || i.value; autoGrow(i);
           if (keep.f) { i.focus(); try { i.setSelectionRange(keep.s, keep.s); } catch (e) {} }
         }
         if (scroll != null) $("#feed").scrollTop = scroll;
@@ -108,13 +114,40 @@
         const keep = i ? i.value : "";
         const focused = document.activeElement === i;
         comp.outerHTML = V.composer(vm());
-        const ni = $("#input"); ni.value = keep; autoGrow(ni);
+        const ni = $("#input"); ni.value = keep || ni.value; autoGrow(ni);
         if (focused) ni.focus();
       }
       $("#app").classList.toggle("generating", !!S.gen);
       if (S.find) applyFind(false);
     }
     function renderHead() { const head = $(".chat-head"); if (head) head.outerHTML = V.chatHead(vm()); }
+    // PERF-01: только поле ввода (статус ожидающей отправки), с сохранением набранного текста и фокуса.
+    function renderComposer() {
+      if (S.view !== "chat") return;
+      const comp = $(".composer-wrap");
+      if (!comp) return;
+      const i = $("#input");
+      const keep = i ? i.value : "";
+      const focused = document.activeElement === i;
+      comp.outerHTML = V.composer(vm());
+      const ni = $("#input");
+      if (ni) { ni.value = keep || ni.value; autoGrow(ni); if (focused) ni.focus(); }
+      $("#app").classList.toggle("generating", !!S.gen);
+    }
+    /* Текст не отправленного хода — обратно в поле ввода его чата. Если этот чат открыт — сразу в поле
+       (перед уже набранным); иначе — в черновик, который покажется при открытии чата. */
+    function restoreDraft(chatId, text) {
+      if (!text) return;
+      const i = $("#input");
+      if (S.view === "chat" && S.chatId === chatId && i) {
+        i.value = i.value.trim() ? text + "\n" + i.value : text;
+        autoGrow(i);
+        return;
+      }
+      S.sendDrafts = S.sendDrafts || {};
+      S.sendDrafts[chatId] = S.sendDrafts[chatId] ? text + "\n" + S.sendDrafts[chatId] : text;
+    }
+    function clearDraft(chatId) { if (S.sendDrafts) delete S.sendDrafts[chatId]; }
     function renderDrawer() {
       const d = $("#drawer");
       d.classList.toggle("open", S.drawerOpen && S.view === "chat");
@@ -273,7 +306,7 @@
 
     return {
       $, $$, narrow, toast, vm, applyLook, autoGrow,
-      renderRail, renderStage, renderFeed, renderHead, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
+      renderRail, renderStage, renderFeed, renderHead, renderComposer, restoreDraft, clearDraft, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
       openSettings, refreshAfterSettings, openPop, closePop, applyFind, runFind, paintStreaming, paintAssist, rememberUi,
     };
   }

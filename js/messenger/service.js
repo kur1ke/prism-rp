@@ -222,7 +222,7 @@
       const stateStatus = last && last.swipes && last.swipes[last.swipeIdx || 0] && last.swipes[last.swipeIdx || 0].stateStatus || null;
       return { env, now: t, world: w.world, events: w.events, warnings: w.warnings.concat(conv.warnings),
         conversation: conv, canBranch: path.length > 0, stateStatus,
-        statePending: !!S.tracking && !(stateStatus && last && stateStatus.sourceText === last.swipes[last.swipeIdx || 0].text) };
+        statePending: !!(ctx.svc.state && ctx.svc.state.pending && ctx.chat() ? ctx.svc.state.pending(ctx.chat().id) : S.tracking) && !(stateStatus && last && stateStatus.sourceText === last.swipes[last.swipeIdx || 0].text) };
     }
 
     return { load, current, now, worldAt, context, snapshot, stampForNew, createFor, checkSetup, setTime, advance, commitEvent, addMarker, markerStatus, removeForChat, checkBackup, view, STORE };

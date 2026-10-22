@@ -44,6 +44,7 @@ require(J("images/backends.js"));
 require(J("images/compile.js"));
 require(J("assist/assist.js"));
 require(J("core/settings.js"));
+require(J("core/perf.js"));
 require(J("ui/render.js"));
 const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG, cardModel: CM, cardFormats: CF, cardImport: IMP, cardValidate: VAL } = globalThis.PRP;
 // Импорт карточки из объекта → черновик (для тестов, где важен только результат).
@@ -4640,12 +4641,276 @@ t("CARD-Q: V3 nickname is custom info; technical V3 fields are not active", () =
   });
 }
 
+/* ── PERF-01: ответ не ждёт служебного разбора; отправка во время разбора — очередь хода ── */
+async function perfTurn() {
+  const PRPg = globalThis.PRP, IBo = PRPg.imgBackends, gen0 = IBo.generate;
+  const Evt = (actor, field, action, value, certainty, evidence) => ({ actor, field, action, value, certainty, evidence });
+  const tick = () => new Promise((r) => setImmediate(r));
+  // Сначала микрошаги (без задержек), затем — реальное время (для таймаутов), не дольше 5 с.
+  const until = async (f, what) => {
+    for (let i = 0; i < 300; i++) { if (f()) return; await tick(); }
+    const t0 = Date.now();
+    while (Date.now() - t0 < 5000) { if (f()) return; await new Promise((r) => setTimeout(r, 2)); }
+    throw new Error("не дождались: " + what);
+  };
+  const unhandled = [];
+  const onUnhandled = (e) => unhandled.push(e);
+  process.on("unhandledRejection", onUnhandled);
+  let sims = [], rp = [], imgs = [];
+  // Разбор состояния — управляемые «обещания»: тест сам решает, когда и чем они завершатся.
+  PRPg.llm.simple = (prov, instruction) => new Promise((res, rej) => sims.push({ instruction, res, rej, user: /сообщение пользователя|role":"user|Автор: пользователь/i.test(instruction) }));
+  IBo.generate = async (cfg, req) => { imgs.push(req); return { dataUrl: "data:image/png;base64,AA", seed: 1, info: {} }; };
+  const replies = [];
+  fbLLM = async (prov, messages) => { rp.push({ messages, at: sims.length }); const t = replies.shift() || "Хорошо."; return { text: t, reasoning: "" }; };
+  const ok = (events) => JSON.stringify({ events: events || [] });
+  const mk = async (mode, imagesOn) => {
+    sims = []; rp = []; imgs = []; replies.length = 0;
+    const settings = { images: Object.assign(STG.merge({}).images, { enabled: !!imagesOn, backend: "a1111", url: "http://img.test", autoDraw: true, modelDrawPolicy: "contextual" }) };
+    const h = fbHarness({ name: "Орихимэ", description: "Девушка." }, { settings });
+    h.S.drawing = new Set(); h.S.imgUrls = {}; h.S.perf = []; h.ctx.perf = PRPg.perfLog.create(h.S.perf);
+    h.restored = []; h.ctx.ui.restoreDraft = (chatId, text) => h.restored.push({ chatId, text });
+    h.ctx.ui.renderComposer = () => {}; h.ctx.ui.renderHead = () => {};
+    h.ctx.svc.state = PRPg.stateService.create(h.ctx);
+    h.ctx.svc.images = PRPg.imageService.create(h.ctx);
+    h.chatId = await h.chat.createChat(mode, "c1");
+    return h;
+  };
+  const stored = (h, id) => h.store.messages.get(id);
+  // Первый ход: реплика пользователя разобрана, ответ персонажа показан, его разбор ещё идёт (sims[1]).
+  const firstTurn = async (h, reply) => {
+    replies.push(reply || "Я надела синюю куртку и сижу у окна.");
+    const p = h.gen.send("Я сижу в кафе.");
+    await until(() => sims.length === 1, "разбор реплики пользователя");
+    sims[0].res(ok());
+    await until(() => sims.length === 2, "разбор ответа");
+    const r = await p;
+    return r;
+  };
+  const jacket = (ev) => [Evt("char", "wear", "set", ["синяя куртка"], "established", ev || "Я надела синюю куртку")];
+  try {
+    await ta("PERF-1 (сл. 1, 3): ответ сохранён и ввод свободен, пока разбор ответа не завершён; затем события записываются", async () => {
+      const h = await mk("rp");
+      const r = await firstTurn(h);
+      assert.strictEqual(r.outcome, "sent");
+      const a = h.chat.path()[1];
+      assert.strictEqual(a.role, "assistant");
+      assert.strictEqual(stored(h, a.id).swipes[0].text, "Я надела синюю куртку и сижу у окна.", "ответ записан до разбора");
+      assert.deepStrictEqual([h.S.gen, h.S.turn, h.S.tracking, h.ctx.svc.state.pending(h.chatId)], [null, null, true, 1], "ввод свободен, разбор идёт");
+      assert.strictEqual(stored(h, a.id).swipes[0].stateEvents, undefined);
+      sims[1].res(ok(jacket()));
+      await r.reply.post;
+      assert.deepStrictEqual(stored(h, a.id).swipes[0].stateEvents.map((e) => e.value), [["синяя куртка"]]);
+      assert.deepStrictEqual([h.S.tracking, h.ctx.svc.state.pending(h.chatId)], [false, 0]);
+    });
+    await ta("PERF-2 (сл. 2, 9): отправка во время разбора принята, узла в дереве нет; следующая генерация — только после разбора и с его событиями", async () => {
+      const h = await mk("rp");
+      await firstTurn(h);
+      const nMsgs = h.store.messages.size, nRp = rp.length;
+      const p2 = h.gen.send("Я снял шарф.");
+      await tick(); await tick();
+      assert.ok(h.S.turn && h.S.turn.phase === "waiting-state" && h.S.turn.text === "Я снял шарф.", "ход принят и виден");
+      assert.strictEqual(h.store.messages.size, nMsgs, "фиктивного сообщения в дереве нет");
+      assert.strictEqual(h.chat.path().length, 2);
+      assert.strictEqual(rp.length, nRp, "RP-запрос не ушёл на неполном состоянии");
+      assert.strictEqual((await h.gen.send("ещё раз")).outcome, "busy", "второй ход того же чата не принимается");
+      sims[1].res(ok(jacket()));
+      await until(() => sims.length === 3, "разбор второй реплики");
+      assert.strictEqual(h.chat.path().length, 3, "реплика записана после разбора ответа");
+      assert.strictEqual(rp.length, nRp, "генерация ждёт и разбор новой реплики");
+      sims[2].res(ok());
+      const r2 = await p2;
+      assert.strictEqual(r2.outcome, "sent");
+      assert.strictEqual(rp.length, nRp + 1);
+      const prompt = rp[rp.length - 1].messages.map((m) => m.content).join("\n");
+      assert.ok(prompt.includes("синяя куртка"), "в сборку вошли события разобранного ответа");
+      assert.ok(h.S.perf.some((x) => x.metric === "sendToRoleplayMs" && x.outcome === "queued"));
+      sims[3] && sims[3].res(ok());
+      await r2.reply.post;
+    });
+    await ta("PERF-3 (сл. 4): ошибка и таймаут разбора не трогают ответ, очередь продолжает, unhandled rejection нет", async () => {
+      const h = await mk("rp");
+      const r = await firstTurn(h);
+      const a = h.chat.path()[1];
+      const p2 = h.gen.send("Я снял шарф.");
+      sims[1].rej(new Error("сеть упала"));
+      await until(() => sims.length === 3, "очередь продолжилась после ошибки");
+      assert.strictEqual(stored(h, a.id).swipes[0].text, "Я надела синюю куртку и сижу у окна.");
+      assert.strictEqual(stored(h, a.id).swipes[0].stateStatus.status, "error");
+      sims[2].res(ok());
+      assert.strictEqual((await p2).outcome, "sent");
+      await r.reply.post;
+      // Таймаут: разбор так и не ответил — ожидание ограничено, ход всё равно продолжается.
+      const h2 = await mk("rp");
+      h2.ctx.observerTimeoutMs = 300;
+      await firstTurn(h2);
+      const t0 = Date.now();
+      const p3 = h2.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "очередь после таймаута");
+      assert.ok(Date.now() - t0 >= 250, "ждали ограниченное время");
+      assert.ok(/ожидания/.test(stored(h2, h2.chat.path()[1].id).swipes[0].stateStatus.issues.join(" ")));
+      sims[2].res(ok());
+      assert.strictEqual((await p3).outcome, "sent");
+      await tick();
+      assert.strictEqual(unhandled.length, 0, String(unhandled[0]));
+    });
+    await ta("PERF-4 (сл. 5): смена чата во время ожидания — реплика не пишется ни туда, ни сюда, текст возвращается своему чату", async () => {
+      const h = await mk("rp");
+      await firstTurn(h);
+      const n = h.store.messages.size;
+      const p2 = h.gen.send("Я снял шарф.");
+      await tick();
+      const other = await h.chat.createChat("rp", "c1"); // открывает другой чат
+      assert.strictEqual(h.S.chatId, other);
+      sims[1].res(ok(jacket()));
+      const r = await p2;
+      assert.strictEqual(r.outcome, "context-changed");
+      assert.strictEqual(h.store.messages.size, n, "ничего не записано");
+      assert.deepStrictEqual(h.restored, [{ chatId: h.chatId, text: "Я снял шарф." }]);
+      assert.strictEqual(h.S.turn, null);
+      assert.ok(h.toasts.some((x) => /не отправлено/.test(x.t)));
+    });
+    await ta("PERF-5 (сл. 6): смена свайпа во время разбора — результат не попадает в другой свайп, отправка не уходит в другой контекст", async () => {
+      const h = await mk("rp");
+      await firstTurn(h);
+      const a = h.chat.path()[1];
+      const p2 = h.gen.send("Я снял шарф.");
+      await tick();
+      a.swipes.push({ text: "Другой вариант.", sceneOps: [], createdAt: Date.now() }); a.swipeIdx = 1; await h.chat.putMsg(a);
+      sims[1].res(ok(jacket()));
+      const r = await p2;
+      assert.strictEqual(r.outcome, "context-changed");
+      assert.strictEqual(stored(h, a.id).swipes[0].stateEvents, undefined, "устаревший разбор отброшен");
+      assert.strictEqual(stored(h, a.id).swipes[1].stateEvents, undefined, "и не перенесён на другой свайп");
+      assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
+      assert.strictEqual(h.chat.path().length, 2);
+    });
+    await ta("PERF-6 (сл. 7): правка и удаление исходного сообщения во время разбора — результат отброшен, удалённое не воскресает", async () => {
+      const h = await mk("rp");
+      await firstTurn(h);
+      const a = h.chat.path()[1];
+      a.swipes[0].text = "Я в пижаме."; // правка во время разбора
+      sims[1].res(ok(jacket()));
+      await until(() => h.ctx.svc.state.pending(h.chatId) === 0, "разбор завершён");
+      assert.strictEqual(a.swipes[0].stateEvents, undefined);
+      // удаление: ход ждёт, сообщение удалено — реплика не пишется, запись разбора его не возвращает
+      const h2 = await mk("rp");
+      await firstTurn(h2);
+      const a2 = h2.chat.path()[1];
+      const p2 = h2.gen.send("Я снял шарф.");
+      await tick();
+      await h2.chat.deleteFrom(a2.id);
+      sims[1].res(ok(jacket()));
+      const r = await p2;
+      assert.strictEqual(r.outcome, "context-changed");
+      assert.strictEqual(stored(h2, a2.id), undefined, "удалённое сообщение не записано обратно");
+      assert.deepStrictEqual(h2.restored.map((x) => x.text), ["Я снял шарф."]);
+    });
+    await ta("PERF-7 (сл. 8): двойное нажатие и нажатие во время генерации не создают дубликатов; отмена возвращает текст", async () => {
+      const h = await mk("rp");
+      replies.push("Ответ.");
+      const p1 = h.gen.send("Я сижу в кафе.");
+      const p1b = h.gen.send("Я сижу в кафе.");
+      assert.strictEqual((await p1b).outcome, "busy");
+      await until(() => sims.length === 1, "разбор");
+      sims[0].res(ok());
+      await until(() => sims.length === 2, "разбор ответа");
+      await p1;
+      assert.strictEqual([...h.store.messages.values()].filter((m) => m.role === "user").length, 1);
+      const p2 = h.gen.send("Я снял шарф.");
+      await tick();
+      assert.strictEqual(h.gen.cancelTurn(), true);
+      assert.strictEqual((await p2).outcome, "cancelled");
+      assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
+      sims[1].res(ok());
+      await until(() => h.ctx.svc.state.pending(h.chatId) === 0, "разбор");
+      assert.strictEqual([...h.store.messages.values()].filter((m) => m.role === "user").length, 1, "отменённая реплика не записана");
+      // один и тот же разбор не запускается дважды
+      const u = h.chat.path()[0];
+      const before = sims.length;
+      const j1 = h.ctx.svc.state.track(u, { id: "mock" }, { force: true }), j2 = h.ctx.svc.state.track(u, { id: "mock" });
+      assert.strictEqual(j1, j2);
+      await tick();
+      assert.strictEqual(sims.length, before + 1);
+      sims[before].res(ok()); await j1;
+    });
+    await ta("PERF-8: «Другой вариант» во время разбора — видимое ожидание, затем обычная генерация", async () => {
+      const h = await mk("rp");
+      await firstTurn(h);
+      const a = h.chat.path()[1];
+      const n = rp.length;
+      replies.push("Второй вариант.");
+      const pr = h.gen.generate(a.id, "regen");
+      await tick();
+      assert.ok(h.S.turn && h.S.turn.phase === "waiting-state" && h.S.turn.kind === "regen");
+      assert.strictEqual(rp.length, n);
+      sims[1].res(ok());
+      const r = await pr;
+      assert.strictEqual(rp.length, n + 1);
+      assert.strictEqual(a.swipes.length, 2);
+      assert.strictEqual(h.S.turn, null);
+      sims[2] && sims[2].res(ok()); await r.post;
+    });
+    await ta("PERF-9 (сл. 10): авто-картинка — после разбора ответа и с его событиями; очередь отправки её не ломает", async () => {
+      const h = await mk("rp", true);
+      replies.push("Вот, смотри: я надела синюю куртку.\n[draw: 1girl, orihime, blue jacket, sitting, cafe]");
+      const p = h.gen.send("Покажи фото, пожалуйста: я сижу в кафе.");
+      await until(() => sims.length === 1, "разбор");
+      sims[0].res(ok());
+      await until(() => sims.length === 2, "разбор ответа");
+      const r = await p;
+      const a = h.chat.path()[1];
+      assert.ok((stored(h, a.id).swipes[0].draws || []).length === 1, "директива [draw:] разрешена и разобрана");
+      assert.strictEqual(imgs.length, 0, "картинка не рисуется до разбора ответа");
+      const p2 = h.gen.send("Красиво!");
+      await tick();
+      sims[1].res(ok(jacket("я надела синюю куртку")));
+      await r.reply.post;
+      assert.strictEqual(imgs.length, 1, "картинка нарисована после разбора");
+      const im = TR_.activeSwipe(h.chat.path()[1]).images[0];
+      assert.strictEqual(im.status, "done", im.error);
+      await until(() => sims.length >= 3, "разбор новой реплики");
+      sims[2].res(ok());
+      assert.strictEqual((await p2).outcome, "sent");
+      assert.ok(h.S.perf.some((x) => x.metric === "imagePrepareMs"));
+    });
+    await ta("PERF-10: тайминги — только числа и id, без текста; есть все этапы хода", async () => {
+      const h = await mk("rp");
+      const r = await firstTurn(h, "Я дома, в синей куртке.");
+      sims[1].res(ok());
+      await r.reply.post;
+      const metrics = new Set(h.S.perf.map((x) => x.metric));
+      for (const k of ["userStateMs", "roleplayMs", "assistantStateMs", "readyAfterReplyMs", "sendToRoleplayMs"]) assert.ok(metrics.has(k), k);
+      const dump = JSON.stringify(h.S.perf);
+      assert.ok(!/кафе|куртк|Орихимэ|Девушка/.test(dump), "тексты сообщений и карточки в журнал не попадают");
+      assert.ok(h.S.perf.every((x) => Object.keys(x).sort().join() === "at,chatId,metric,ms,msgId,outcome"));
+      const ready = h.S.perf.find((x) => x.metric === "readyAfterReplyMs").ms;
+      const ast = h.S.perf.find((x) => x.metric === "assistantStateMs");
+      assert.ok(ready <= ast.ms, "ввод освобождается раньше, чем завершается разбор ответа");
+    });
+    await ta("PERF-11: переписка — инициатива во время разбора ждёт видимо; Messenger не пишет сцену", async () => {
+      const h = await mk("messenger");
+      await h.ctx.svc.messenger.createFor(h.chatId, { timeZone: "UTC", timeMode: "live" });
+      await h.ctx.svc.messenger.load(h.chatId);
+      const r = await firstTurn(h, "Я дома.");
+      const pi = h.gen.initiative();
+      await tick();
+      assert.ok(h.S.turn && h.S.turn.kind === "initiative" && h.S.turn.phase === "waiting-state");
+      sims[1].res(ok());
+      await pi; await r.reply.post;
+      assert.strictEqual(h.S.turn, null);
+    });
+  } finally {
+    IBo.generate = gen0; delete PRPg.llm.simple;
+    process.removeListener("unhandledRejection", onUnhandled);
+  }
+}
+
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
 // Do not let an unresolved async fixture finish Node with exit code 0.
 // The suite normally completes in seconds; a pending test must fail CI.
 setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
-foundationB().then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(() => {
+foundationB().then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => {
   if (BASELINE.length) {
     console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
     for (const r of BASELINE) console.log(`  ${r.id.padEnd(30)} было ${String(r.old).padStart(5)} → ядро ${String(r.core).padStart(4)} + подробн. ${String(r.details).padStart(4)} + примеры ${String(r.examples).padStart(4)} = ${String(r.total).padStart(5)}; ядро: ${r.coreSource}${r.cut.length ? " (" + r.cut.join(", ") + ")" : ""}; вошло: ${r.selected.join(", ") || "—"}; не вошло: ${r.dropped.length}`);

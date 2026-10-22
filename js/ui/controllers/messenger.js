@@ -24,14 +24,14 @@
       // Однократная явная повторная попытка при ошибке интерпретатора;
       // никакого заполнения среды или изменения канона вручную.
       "state-retry": async () => {
-        if (S.tracking || S.gen || !svc.state) return;
+        if (S.gen || !svc.state || svc.state.pending(S.chatId)) return;
         const path = svc.chat.path(), last = path[path.length - 1];
         if (!last) return;
-        S.tracking = true;
+        const job = svc.state.track(last, ctx.provider(), { force: true });
         ui.renderDrawer();
         let result;
-        try { result = await svc.state.observeMessage(last, ctx.provider(), { force: true }); }
-        finally { S.tracking = false; ui.renderDrawer(); }
+        try { result = await job; }
+        finally { ui.renderDrawer(); }
         if (result && result.status === "error") ui.toast("Не удалось извлечь состояние: проверьте подробности анализа.", true);
       },
       "ms-create": async () => {

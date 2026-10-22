@@ -27,21 +27,68 @@
   // Ключ активного контекста: чат + сообщения пути и их выбранные варианты (сверка перед записью).
   const pathKey = (p) => (p || []).map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">");
 
+  const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+
   function create(ctx) {
     const { S, ui } = ctx;
-    const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images;
+    const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images, state = () => ctx.svc.state;
+    const perf = (metric, ms, meta) => { if (typeof ctx.perf === "function") ctx.perf(metric, ms, meta); };
+    const renderComposer = () => { if (typeof ui.renderComposer === "function") ui.renderComposer(); else ui.renderFeed(); };
+
+    /* PERF-01: обработка после ответа. Ответ уже записан и показан, замок генерации снят.
+       Разбор ответа — задача сервиса состояния (track: дедуп, без отклонений, ограничена по времени);
+       картинка — строго ПОСЛЕ разбора, как и раньше (её снимок состояния включает события ответа).
+       Возвращается Promise, который никогда не отклоняется. */
+    function afterReply(msg, prov, draw) {
+      const st = state();
+      const analysed = st && msg && String(TR.activeSwipe(msg).text || "").trim() ? st.track(msg, prov) : Promise.resolve(null);
+      return analysed.then(() => {
+        if (!draw || !ctx.chat() || ctx.chat().id !== msg.chatId || !chat().path().some((m) => m.id === msg.id)) return null;
+        if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
+        return images().draw(msg, TR.activeSwipe(msg), draw);
+      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
+    }
+
+    /* PERF-01: операция, которой нужно полное состояние чата, ждёт незавершённых разборов этого чата —
+       видимо (S.turn, фаза "waiting-state") и ограниченно (state.settle). После ожидания контекст сверяется:
+       тот же чат и тот же путь (сообщения + выбранные свайпы). Иначе операция не выполняется.
+       → { turn } | { refused } */
+    async function waitForState(kind, extra) {
+      const c = ctx.chat(), st = state();
+      const turn = Object.assign({ chatId: c.id, kind, key: pathKey(chat().path()), phase: "waiting-state", at: now() }, extra || {});
+      S.turn = turn;
+      renderComposer();
+      const w = st && st.pending(c.id) ? await st.settle(c.id) : { waitedMs: 0, timedOut: false };
+      turn.waitedMs = w.waitedMs;
+      if (w.timedOut) perf("stateWaitTimeout", w.waitedMs, { chatId: c.id });
+      if (S.turn !== turn || turn.cancelled) return { refused: "cancelled", turn };
+      if (S.chatId !== turn.chatId || !ctx.chat() || pathKey(chat().path()) !== turn.key) return { refused: "context-changed", turn };
+      return { turn };
+    }
+    const releaseTurn = (turn) => { if (turn && S.turn === turn) { S.turn = null; renderComposer(); } };
     // Сервис среды — только для переписки.
     const messenger = () => { const c = ctx.chat(); return c && c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger : null; };
 
-    async function generate(msgId, mode) {
-      if (S.gen || S.tracking) return;
+    async function generate(msgId, mode, opts) {
+      const o = opts || {};
+      if (S.gen) return;
+      // Ход уже принят (ждёт разбора или идёт) — вторая операция не запускается; своя операция хода проходит.
+      if (S.turn && S.turn !== o.turn && S.turn.chatId === S.chatId) return;
       const c = ctx.chat(), cd = ctx.card();
       const prov = ctx.provider();
       if (!c || !cd) return;
+      // Незавершённый разбор предыдущих сообщений этого чата: сначала дождаться его (видимо, ограниченно).
+      if (!o.turn && state() && state().pending(c.id)) {
+        const w = await waitForState(mode || (msgId ? "regen" : "new"));
+        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат или ветка изменились — действие отменено.", true); return; }
+        let reply = null;
+        try { reply = await generate(msgId, mode, { turn: w.turn }); return reply; }
+        finally { releaseTurn(w.turn); ready(reply); }
+      }
       if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return; }
       mode = mode || (msgId ? "regen" : "new");
       // Другой вариант сообщения-инициативы — снова проверка инициативы (тот же смысл операции, та же логическая единица).
-      if (mode === "regen" && c.mode === "messenger" && INI.isInitiative(S.messages.find((m) => m.id === msgId))) return initiative(msgId);
+      if (mode === "regen" && c.mode === "messenger" && INI.isInitiative(S.messages.find((m) => m.id === msgId))) return initiative(msgId, { turn: o.turn });
       const full = chat().path();
       // Пустой чат: отвечать не на что — это начало сцены.
       if (mode === "opening" || (mode === "new" && !full.length)) return opening(prov);
@@ -84,6 +131,7 @@
 
       const onDelta = (d) => { S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
       let raw = "", reasoning = "", error = null;
+      const rpT0 = now();
       try {
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
@@ -95,6 +143,7 @@
         reasoning = S.gen.reasoning;
         if (e.name !== "AbortError") error = e.message || String(e);
       }
+      perf("roleplayMs", Math.round(now() - rpT0), { msgId: target.id, chatId: c.id, outcome: error ? "error" : mode });
       const th = OA.splitThink(raw || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
@@ -131,14 +180,12 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (!error && sw.text && ctx.svc.state) {
-        S.tracking = true;
-        try { await ctx.svc.state.observeMessage(target, prov); }
-        finally { S.tracking = false; }
-      }
-      if (!error && dr.draws.length && ctx.chat() && ctx.chat().id === target.chatId &&
-          chat().path().some((m) => m.id === target.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
-        images().draw(target, TR.activeSwipe(target), dr.draws[0]);
+      const shownAt = now();
+      // Ответ сохранён и показан, замок снят: разбор и картинка идут отдельно и не держат переписку.
+      const post = !error && sw.text ? afterReply(target, prov, dr.draws.length ? dr.draws[0] : null) : Promise.resolve(null);
+      const reply = { msgId: target.id, shownAt, post };
+      if (!o.turn) ready(reply); // без хода ничего больше не держит ввод
+      return reply;
     }
 
     // Записать сборку для вкладки Prism; при переполнении — сообщить и вернуть true (запрос не уходит).
@@ -224,16 +271,8 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (ctx.svc.state) {
-        S.tracking = true;
-        try { await ctx.svc.state.observeMessage(m, prov); }
-        finally { S.tracking = false; }
-      }
-      const sw = TR.activeSwipe(m);
-      if (dr.draws.length && ctx.chat() && ctx.chat().id === m.chatId &&
-          chat().path().some((x) => x.id === m.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
-        images().draw(m, sw, dr.draws[0]);
-      return { ok: true, msgId: m.id };
+      const shownAt = now();
+      return { ok: true, msgId: m.id, shownAt, post: afterReply(m, prov, dr.draws.length ? dr.draws[0] : null) };
     }
 
     /* Проверка инициативы (FOUNDATION-D): только переписка и только по явному действию пользователя.
@@ -244,7 +283,18 @@
        ответ, смена чата/ветки — ничего не записывают (ни сообщения, ни варианта, ни метки времени).
        Среда, договорённости, мир, опыт, сцена и карточка не меняются никогда.
        → { ok, outcome: "sent" | "declined" | "ineligible" | "overflow" | "error" | "aborted" | "empty" | "malformed" | "stale", code?, msgId? } */
-    async function initiative(regenId) {
+    async function initiative(regenId, opts) {
+      const o = opts || {};
+      const c0 = ctx.chat();
+      // Ход уже принят в этом чате — проверка не запускается; незавершённый разбор — сначала дождаться (видимо).
+      if (c0 && !o.turn && S.turn && S.turn.chatId === c0.id) return { ok: false, outcome: "ineligible", code: "busy" };
+      if (c0 && !o.turn && !S.gen && state() && state().pending(c0.id)) {
+        const w = await waitForState("initiative");
+        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат или ветка изменились — проверка не запущена.", true); return { ok: false, outcome: "stale" }; }
+        let r = null;
+        try { r = await initiative(regenId, { turn: w.turn }); return r; }
+        finally { releaseTurn(w.turn); ready(r); }
+      }
       const c = ctx.chat(), cd = ctx.card(), prov = ctx.provider();
       const ms = messenger();
       const full = c ? chat().path() : [];
@@ -339,20 +389,79 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      if (ctx.svc.state) {
-        S.tracking = true;
-        try { await ctx.svc.state.observeMessage(msg, prov); }
-        finally { S.tracking = false; }
+      return Object.assign(done("sent"), { msgId: msg.id, shownAt: now(), post: afterReply(msg, prov, dr.draws.length ? dr.draws[0] : null) });
+    }
+
+    /* PERF-01: отправка реплики пользователя как один ход.
+       Реплика принимается сразу, даже пока разбирается предыдущий ответ: она держится в памяти (S.turn),
+       узла в дереве нет. Ход привязан к чату и пути (сообщения + свайпы) на момент нажатия.
+       Порядок: дождаться разборов этого чата → сверить чат и путь → записать реплику → разобрать её
+       (следующей генерации нужны её события) → генерация. Отмена, смена чата/ветки/свайпа — реплика
+       не пишется, текст возвращается в поле ввода своего чата (ui.restoreDraft). Двойное нажатие —
+       одна реплика: пока ход этого чата не завершён, второй не принимается.
+       extra: { messengerAt } — метка переписки, снятая в момент нажатия.
+       → { outcome: "busy" | "sent" | "cancelled" | "context-changed" | "left-chat", msgId?, reply? } */
+    async function send(text, extra) {
+      const c = ctx.chat();
+      const body = String(text || "").trim();
+      if (!c || !body) return { outcome: "busy" };
+      if (S.gen || (S.turn && S.turn.chatId === c.id)) return { outcome: "busy" };
+      // Ход, ждущий в другом чате, отменяется: его текст вернётся в тот чат.
+      if (S.turn) cancelTurn();
+      const pressedAt = now();
+      const w0 = state() && state().pending(c.id);
+      let turn;
+      if (w0) {
+        const w = await waitForState("send", { text: body, extra: extra || null, pressedAt });
+        turn = w.turn;
+        if (w.refused) {
+          if (!turn.cancelled) restore(turn, w.refused === "context-changed" ? "Пока разбирался предыдущий ответ, чат или ветка изменились — сообщение не отправлено, текст возвращён в поле ввода." : "");
+          releaseTurn(turn);
+          return { outcome: w.refused };
+        }
+      } else {
+        turn = S.turn = { chatId: c.id, kind: "send", key: pathKey(chat().path()), text: body, extra: extra || null, pressedAt, phase: "user-state", at: pressedAt, waitedMs: 0 };
+        renderComposer();
       }
-      if (dr.draws.length && ctx.chat() && ctx.chat().id === msg.chatId &&
-          chat().path().some((x) => x.id === msg.id) && ST.imagesOn(S.settings, ctx.env.perchanceImages()) && S.settings.images.autoDraw)
-        images().draw(msg, TR.activeSwipe(msg), dr.draws[0]);
-      return Object.assign(done("sent"), { msgId: msg.id });
+      let reply = null;
+      try {
+        turn.phase = "user-state";
+        renderComposer();
+        const sent = await chat().addUserMessage(body, extra || null);
+        ui.renderFeed();
+        ui.scrollBottom();
+        // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
+        if (state()) { await state().track(sent, ctx.provider()); await state().settle(c.id); }
+        // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
+        if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
+        turn.phase = "generating";
+        perf("sendToRoleplayMs", Math.round(now() - pressedAt), { chatId: c.id, msgId: sent.id, outcome: turn.waitedMs ? "queued" : "direct" });
+        reply = await generate(null, "new", { turn });
+        return { outcome: "sent", msgId: sent.id, reply };
+      } finally {
+        releaseTurn(turn);
+        ready(reply);
+      }
+    }
+    // Ответ показан → переписка снова принимает ввод: сколько прошло (мс). Только число.
+    function ready(reply) { if (reply && reply.shownAt != null) perf("readyAfterReplyMs", Math.round(now() - reply.shownAt), { msgId: reply.msgId }); }
+    function restore(turn, message) {
+      if (typeof ui.restoreDraft === "function") ui.restoreDraft(turn.chatId, turn.text);
+      if (message) ui.toast(message, true);
+    }
+    // Отменить ход, ожидающий разбора (кнопка «Отменить» у поля ввода или новый ход в другом чате).
+    function cancelTurn() {
+      const t = S.turn;
+      if (!t || t.phase !== "waiting-state") return false;
+      t.cancelled = true;
+      if (t.kind === "send") restore(t);
+      releaseTurn(t);
+      return true;
     }
 
     function stop() { if (S.gen) S.gen.ctrl.abort(); }
 
-    return { generate, initiative, stop, OPENING, INITIATIVE_ID };
+    return { generate, initiative, send, cancelTurn, stop, OPENING, INITIATIVE_ID };
   }
 
   PRP.generationService = { create };

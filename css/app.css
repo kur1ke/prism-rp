@@ -331,6 +331,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
 /* Композер */
 .composer-wrap { padding: 8px 18px 16px; }
+.turn-status { max-width: 820px; margin: 0 auto 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--muted); padding: 6px 10px; border: 1px dashed var(--line); border-radius: var(--r-m); background: var(--surface); }
+.turn-status.quiet { border-style: none; background: none; padding: 2px 10px; font-size: 12.5px; }
+.turn-status .turn-text { color: var(--text, inherit); overflow-wrap: anywhere; min-width: 0; flex: 1 1 160px; }
+.turn-status .btn { margin-left: auto; }
+.turn-status .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: turn-spin .9s linear infinite; flex: none; }
+@keyframes turn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .turn-status .spin { animation: none; } }
 .composer { max-width: 820px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 8px 8px 8px 14px; box-shadow: var(--shadow); }
 .app.messenger .composer { max-width: 660px; }
 .composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }

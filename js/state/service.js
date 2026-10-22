@@ -119,6 +119,57 @@
       updateUi();
       return { events, issues: result.issues, status };
     }
+    /* PERF-01: разбор сообщения как управляемая задача.
+       • Одна задача на (чат, сообщение, свайп, текст): повторный вызов возвращает ту же.
+       • Никогда не отклоняется: ошибка хранилища или наблюдателя → { error } (нет unhandled rejection).
+       • Проверка актуальности — прежняя, внутри observeMessage; здесь не ослабляется.
+       • S.tracking = есть незавершённые задачи (совместимость с панелью переписки).
+       Ожидание ограничено таймаутом наблюдателя (simpleWithLimit) плюс запас в settle(). */
+    const jobs = new Map();
+    const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+    const jobKey = (msg) => [msg.chatId, msg.id, msg.swipeIdx || 0, String(TR.activeSwipe(msg).text || "")].join("\u0001");
+    function sync() {
+      S.tracking = jobs.size > 0;
+      if (ctx.ui && typeof ctx.ui.renderComposer === "function") ctx.ui.renderComposer();
+    }
+    function track(msg, provider, opts) {
+      if (!msg || !msg.swipes) return Promise.resolve({ skipped: "not-message" });
+      const k = jobKey(msg), existing = jobs.get(k);
+      if (existing && !(opts && opts.force)) return existing.promise;
+      const job = { key: k, chatId: msg.chatId, msgId: msg.id, role: msg.role, startedAt: now() };
+      job.promise = Promise.resolve()
+        .then(() => observeMessage(msg, provider, opts))
+        .catch((e) => ({ error: String(e && e.message || e).slice(0, 200) }))
+        .then((r) => {
+          const res = r || {};
+          // Тайминг — только числа и роль; без текста сообщения.
+          res.ms = Math.round(now() - job.startedAt);
+          if (typeof ctx.perf === "function") ctx.perf(msg.role === "user" ? "userStateMs" : "assistantStateMs", res.ms, { msgId: msg.id, chatId: msg.chatId, outcome: res.status || res.skipped || (res.error ? "error" : "") });
+          return res;
+        })
+        .finally(() => { if (jobs.get(k) === job) jobs.delete(k); sync(); });
+      jobs.set(k, job);
+      sync();
+      return job.promise;
+    }
+    // Сколько разборов этого чата ещё не завершено.
+    function pending(chatId) { let n = 0; for (const j of jobs.values()) if (!chatId || j.chatId === chatId) n++; return n; }
+    /* Дождаться всех разборов чата (и тех, что добавятся за время ожидания). Ограничено: каждый разбор
+       сам ограничен таймаутом наблюдателя; settle добавляет общий предел и сообщает, если он истёк. */
+    async function settle(chatId, maxMs) {
+      const limit = Math.max(500, Number(maxMs) || (Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || 20000)) + 5000));
+      const t0 = now();
+      let timer;
+      const deadline = new Promise((r) => { timer = setTimeout(() => r("timeout"), limit); });
+      try {
+        for (;;) {
+          const list = [...jobs.values()].filter((j) => j.chatId === chatId).map((j) => j.promise);
+          if (!list.length) return { waitedMs: Math.round(now() - t0), timedOut: false };
+          if ((await Promise.race([Promise.all(list), deadline])) === "timeout") return { waitedMs: Math.round(now() - t0), timedOut: true };
+        }
+      } finally { clearTimeout(timer); }
+    }
+
     async function correct(patch) {
       const c = ctx.chat();
       const path = chat().path(), m = path[path.length - 1];
@@ -141,7 +192,7 @@
       sw.stateCorrections = next.swipes[swIdx].stateCorrections;
       return { corrections: changes };
     }
-    return { snapshot, context, observeMessage, correct };
+    return { snapshot, context, observeMessage, track, pending, settle, correct };
   }
   PRP.stateService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
