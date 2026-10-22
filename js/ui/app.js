@@ -96,7 +96,7 @@
     if (!c) return;
     // Timings describe one opened chat, not the whole app. Keep the array
     // identity so the recorder and Debug view keep using the same log.
-    if (S.chatId !== chatId) PRP.perfLog.reset(S.perf);
+    PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
     S.chatId = chatId;
     S.lastSelectedChatId = chatId;
     S.cardId = c.cardId;
