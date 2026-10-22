@@ -22,7 +22,7 @@
      Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111), legacyExperience. */
   const S = {
     settings: null, cards: [], chats: [],
-    view: "home", cardId: null, chatId: null, messages: [], experience: [],
+    view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [],
     gen: null, tracking: false, lastPrism: null, editingMsg: null, expDraft: null,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
@@ -81,7 +81,8 @@
     await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
-    if (saveUi.chatId && (!saveUi.view || saveUi.view === "chat") && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
+    S.lastSelectedChatId = S.chats.some((c) => c.id === saveUi.chatId) ? saveUi.chatId : null;
+    if (saveUi.chatId && (!saveUi.view || saveUi.view === "chat" || saveUi.view === "home") && S.chats.some((c) => c.id === saveUi.chatId)) await openChat(saveUi.chatId, true);
     else if (saveUi.view === "assist") openAssist(saveUi.assistId, null, true);
     else if (saveUi.view === "characters") goCharacters();
   }
@@ -91,6 +92,7 @@
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
     S.chatId = chatId;
+    S.lastSelectedChatId = chatId;
     S.cardId = c.cardId;
     S.view = "chat";
     S.messages = await svc.chat.loadMessages(chatId);
@@ -105,7 +107,14 @@
     $("#rail").classList.remove("open");
     ui.syncScrim();
   }
-  function goHome() {
+  async function goHome() {
+    // «Главная» is the selected dialogue, not a duplicate catalog.
+    // If no dialogue is selected, show a dedicated welcome screen.
+    const activeId = S.chatId || S.lastSelectedChatId;
+    if (activeId && S.chats.some((c) => c.id === activeId)) {
+      if (S.view === "chat" && S.chatId === activeId) return;
+      return openChat(activeId);
+    }
     S.view = "home";
     S.find = null;
     ui.rememberUi();

@@ -86,6 +86,9 @@
       } else if (S.view === "world") {
         app.classList.remove("messenger");
         $("#stage").innerHTML = V.worldLibrary(m);
+      } else if (S.view === "characters") {
+        app.classList.remove("messenger");
+        $("#stage").innerHTML = V.characters(m);
       } else {
         app.classList.remove("messenger");
         $("#stage").innerHTML = V.home(m);
