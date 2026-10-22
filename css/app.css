@@ -642,3 +642,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   .debug-tabs { padding: 8px; }
   .debug-body { padding: 16px; }
 }
+
+/* Card editor: native disclosure controls keep optional settings out of the default view. */
+.card-disclosure{border:1px solid var(--line, rgba(255,255,255,.12));border-radius:10px;padding:10px 12px;margin:14px 0}
+.card-disclosure>summary{cursor:pointer;font-weight:600;line-height:1.6;user-select:none}
+.card-disclosure[open]>summary{margin-bottom:12px}
+.card-disclosure .card-disclosure{margin:10px 0 0}
+.card-disclosure textarea{width:100%;box-sizing:border-box}
