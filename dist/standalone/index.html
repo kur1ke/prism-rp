@@ -654,6 +654,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   .debug-body { padding: 16px; }
 }
 
+/* Card editor: native disclosure controls keep optional settings out of the default view. */
+.card-disclosure{border:1px solid var(--line, rgba(255,255,255,.12));border-radius:10px;padding:10px 12px;margin:14px 0}
+.card-disclosure>summary{cursor:pointer;font-weight:600;line-height:1.6;user-select:none}
+.card-disclosure[open]>summary{margin-bottom:12px}
+.card-disclosure .card-disclosure{margin:10px 0 0}
+.card-disclosure textarea{width:100%;box-sizing:border-box}
+
+/* Keep technical custom-field details hidden regardless of inherited form styles. */
+.custom-field-extra[hidden]{display:none !important}
+.custom-field-extra{margin-top:10px;padding-top:10px;border-top:1px solid var(--line, rgba(255,255,255,.12))}
+
 </style>
 </head>
 <body>
@@ -1223,6 +1234,25 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return String(text || "").trim() ? directive(text, "imported") : directive("", "authored");
   }
 
+  // Custom fields are user-controlled *data*, never elevated author directives.
+  // Imported fields are preserved but must be enabled explicitly in the editor.
+  function normalizeCustomFields(input, imported) {
+    return (Array.isArray(input) ? input : []).filter((f) => f && typeof f === "object" && !Array.isArray(f)).map((f, i) => ({
+      id: String(f.id || "custom-" + (i + 1)),
+      label: String(f.label || ""),
+      text: String(f.text || ""),
+      mode: f.mode === "always" ? "always" : "relevant",
+      enabled: !imported && f.enabled === true,
+      ...(f.origin && typeof f.origin === "object" && !Array.isArray(f.origin) ? {
+        origin: {
+          format: String(f.origin.format || ""),
+          path: String(f.origin.path || ""),
+          imported: f.origin.imported === true,
+        }
+      } : {}),
+    }));
+  }
+
   function blank() {
     const now = Date.now();
     return {
@@ -1232,7 +1262,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       scenario: "",
       firstMes: "", altGreetings: [],
       mesExample: "",
-      lore: [],
+      lore: [], customFields: [],
       directives: { system: directive("", "authored"), postHistory: directive("", "authored") },
       creator: "", creatorNotes: "", tags: [], version: "",
       image: undefined,
@@ -1267,6 +1297,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     c.altGreetings = Array.isArray(card.altGreetings) ? card.altGreetings : [];
     c.lore = Array.isArray(card.lore) ? card.lore : [];
     c.tags = Array.isArray(card.tags) ? card.tags : [];
+    c.customFields = normalizeCustomFields(card.customFields);
     c.directives = card.directives || {
       system: directive(card.systemPrompt || "", "authored"),
       postHistory: directive(card.postHistory || "", "authored"),
@@ -1279,10 +1310,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // Поля, по которым видно, что в карточке есть содержание (не только имя).
   const CONTENT_FIELDS = ["description", "appearance", "personality", "background", "scenario", "firstMes", "mesExample"];
   function hasContent(card) {
-    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim());
+    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
   }
 
-  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -1481,17 +1512,22 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           });
         }),
       });
-    } else delete data.character_book;
+    } else data.character_book = Object.assign({}, oldBook, { entries: [], extensions: oldBook.extensions || {} });
     // Пространство Prism в extensions: картинки, раздельные поля, выключенные указания.
     const ext = Object.assign({}, data.extensions);
     const pr = Object.assign({}, ext.prism_rp);
-    delete pr.image; delete pr.fields; delete pr.disabledDirectives; delete pr.prismCore;
-    const im = card.image && Object.keys(card.image).length ? card.image : null;
-    if (im) pr.image = JSON.parse(JSON.stringify(im));
+    delete pr.image; delete pr.fields; delete pr.disabledDirectives; delete pr.prismCore; delete pr.customFields;
+    // Stable export shape: all editable image slots exist even when empty.
+    const imageDefaults = { trigger: "", aliases: "", styleTrigger: "", negative: "", seed: "", look: "", wardrobe: "", nsfw: "", loras: [], loraAdvanced: { enabled: false, rules: "" } };
+    pr.image = Object.assign(imageDefaults, card.image ? JSON.parse(JSON.stringify(card.image)) : {});
+    if (!Array.isArray(pr.image.loras)) pr.image.loras = [];
+    pr.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, pr.image.loraAdvanced && typeof pr.image.loraAdvanced === "object" && !Array.isArray(pr.image.loraAdvanced) ? pr.image.loraAdvanced : {});
     // Ядро Prism — только данные в своём расширении (никогда не в system_prompt): при импорте оно непроверенное.
     const core = PRP.cardContext && PRP.cardContext.normCore(card.prismCore);
-    if (core) pr.prismCore = { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext };
-    if (card.appearance || card.background) pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    pr.prismCore = core ? { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext } : null;
+    // Always include the Prism-specific slots, including empty fields.
+    pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    pr.customFields = CM.normalizeCustomFields(card.customFields);
     const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
     const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};
     if (CM.hasDisabledText(card, "system")) dis.system = card.directives.system.text;
@@ -1535,6 +1571,32 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return Object.keys(obj).filter((k) => !known.includes(k)).map((k) => (prefix ? prefix + "." : "") + k);
   }
 
+  // Promote plain, unrecognised character facts to *disabled* custom data. Preserve
+  // technical/instruction-shaped and structured values only in imported source.
+  // Shape-based inference is deliberately conservative; no LLM or execution.
+  const TECHNICAL_KEY = /(?:system|prompt|instruction|directive|override|script|code|config|setting|metadata|^meta|password|api.?key|access.?key|secret.?key|private.?key|token|uuid|^id$|^source$|^assets?$|^image|^lora|^model|^spec|^version|^extension|^regex|^depth|^timestamp|^created|^updated|^tool|^plugin|^format|^url$|^uri$|^file|^path|^schema|^state|^log|^debug|^hash|^signature|creator|author|sampling|seed|temperature)/i;
+  const LABELS = { occupation: "Профессия", profession: "Профессия", hobbies: "Увлечения", hobby: "Увлечения", fears: "Страхи", likes: "Нравится", dislikes: "Не нравится", skills: "Навыки", secrets: "Секреты", relationships: "Отношения", goals: "Цели", habits: "Привычки", preferences: "Предпочтения", nickname: "Прозвище" };
+  function customFromUnknown(obj, known, prefix, format) {
+    if (!isObj(obj)) return [];
+    return Object.keys(obj).filter((key) => !known.includes(key) && !TECHNICAL_KEY.test(key)).flatMap((key) => {
+      const raw = obj[key];
+      let value = "";
+      if (typeof raw === "string") value = raw;
+      else if (typeof raw === "number" && Number.isFinite(raw)) value = String(raw);
+      else if (Array.isArray(raw) && raw.length && raw.every((v) => typeof v === "string" || typeof v === "number" && Number.isFinite(v))) value = raw.join(", ");
+      else return [];
+      if (!value.trim() || value.length > 12000 || key.length > 100) return [];
+      return [{
+        id: "imported-" + prefix.replace(/[^a-z0-9]/gi, "-") + "-" + key.replace(/[^a-z0-9]/gi, "-"),
+        label: LABELS[key.toLowerCase()] || key.replace(/[_-]+/g, " "),
+        text: value,
+        mode: "relevant",
+        enabled: false,
+        origin: { format, path: (prefix ? prefix + "." : "") + key, imported: true },
+      }];
+    });
+  }
+
   // Запись лорбука в каноническом виде. raw — исходная запись (для экспорта и происхождения).
   function loreEntry(e, i, extra) {
     const x = isObj(e) ? e : { content: str(e) };
@@ -1556,7 +1618,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // Заметка адаптера: уровень (error | warning | info), код и текст для экрана проверки.
   const note = (level, code, message, extra) => Object.assign({ level, code, message }, extra || {});
 
-  PRP.cardFormats = Object.assign(PRP.cardFormats || {}, { adapters, register, helpers: { clone, str, strList, isObj, unmapped, loreEntry, note } });
+  PRP.cardFormats = Object.assign(PRP.cardFormats || {}, { adapters, register, helpers: { clone, str, strList, isObj, unmapped, customFromUnknown, loreEntry, note } });
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -1618,7 +1680,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const F = PRP.cardFormats, CM = PRP.cardModel;
-  const { clone, str, strList, unmapped, note } = F.helpers;
+  const { clone, str, strList, unmapped, customFromUnknown, note } = F.helpers;
 
   const KNOWN = ["name", "char_name", "description", "char_persona", "personality", "scenario", "world_scenario", "first_mes", "char_greeting",
     "mes_example", "example_dialogue", "creator_notes", "tags", "creator", "character_version", "metadata"];
@@ -1638,6 +1700,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     d.creator = str(json.creator);
     d.version = str(json.character_version);
     if (json.char_name || json.char_persona || json.char_greeting) notes.push(note("info", "pygmalion", "Поля в стиле Pygmalion (char_name, char_persona, …) разобраны как V1."));
+    d.customFields = customFromUnknown(json, KNOWN, "", "ccv1");
+    if (d.customFields.length) notes.push(note("info", "custom-mapped", `${d.customFields.length} дополнительных полей перенесены в пользовательские (выключены).`));
     const un = unmapped(json, KNOWN, "");
     if (un.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${un.join(", ")}.`));
     d.source = { format: "ccv1", version: detection.version, sourceType: detection.sourceType, adapter: "cc-v1", importedAt: Date.now(), raw: clone(json), unmapped: un, compiled: [], preserved: {} };
@@ -1655,10 +1719,26 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const F = PRP.cardFormats, CM = PRP.cardModel;
-  const { clone, str, strList, isObj, unmapped, loreEntry, note } = F.helpers;
+  const { clone, str, strList, isObj, unmapped, customFromUnknown, loreEntry, note } = F.helpers;
 
   const KNOWN = ["name", "description", "personality", "scenario", "first_mes", "mes_example", "creator_notes", "system_prompt", "post_history_instructions",
     "alternate_greetings", "tags", "creator", "character_version", "character_book", "extensions"];
+
+  // Recognise only the explicit paragraphs emitted by our compatibility export.
+  // Do not guess appearance from prose in a foreign card.
+  function splitCompatDescription(value) {
+    const text = str(value);
+    const out = { description: [], appearance: [], background: [] };
+    let found = false;
+    for (const p of text.split(/\n\s*\n/)) {
+      const match = p.match(/^(Внешность|Прошлое):\s*\n([\s\S]*)$/);
+      if (match) {
+        const key = match[1] === "Внешность" ? "appearance" : "background";
+        out[key].push(match[2]); found = true;
+      } else if (p.trim()) out.description.push(p);
+    }
+    return found ? { description: out.description.join("\n\n"), appearance: out.appearance.join("\n\n"), background: out.background.join("\n\n") } : null;
+  }
 
   // data (V2/V3) → черновик; notes дополняются. known — разобранные ключи (V3 добавляет свои).
   function mapData(data, detection, json, known) {
@@ -1677,8 +1757,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       d.appearance = str(pf.appearance);
       d.background = str(pf.background);
     } else {
-      d.description = str(data.description);
-      if (pf) notes.push(note("info", "prism-fields-stale", "Описание менялось после экспорта из Prism: взято целиком из description."));
+      const split = splitCompatDescription(data.description);
+      if (split) {
+        d.description = split.description;
+        d.appearance = split.appearance;
+        d.background = split.background;
+        notes.push(note("info", "compat-paragraphs", "Раздельные внешность и прошлое восстановлены из явных секций стандартного description."));
+      } else {
+        d.description = str(data.description);
+        if (pf) notes.push(note("warning", "prism-fields-stale", "Стандартное описание изменено: раздельные поля не совпадают. Данные сохранены в исходнике — проверьте соответствие."));
+      }
     }
     d.personality = str(data.personality);
     d.scenario = str(data.scenario);
@@ -1691,7 +1779,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     d.version = str(data.character_version);
     const book = isObj(data.character_book) ? data.character_book : null;
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
-    if (isObj(prism.image)) d.image = clone(prism.image);
+    if (isObj(prism.image)) { d.image = clone(prism.image); if (isObj(d.image.loraAdvanced)) d.image.loraAdvanced.enabled = false; }
+    // Import cannot enable new model-facing custom data without local user approval.
+    d.customFields = CM.normalizeCustomFields(prism.customFields, true);
+    // Source fields often survive in CCv3's standard data alongside Prism's
+    // own custom-field extension. One origin path must not produce two entries.
+    for (const f of customFromUnknown(data, known, "data", detection.format)) {
+      if (!d.customFields.some((existing) => existing.origin && existing.origin.path === f.origin.path)) d.customFields.push(f);
+    }
+    if (d.customFields.length) notes.push(note("info", "prism-custom-fields", "Пользовательские поля сохранены, но передача модели выключена до явного включения."));
     // Ядро Prism из нашего расширения — данные, а не указание; приходит непроверенным и не используется,
     // пока пользователь не сохранит его в редакторе (до этого Prism собирает запасное ядро из полей).
     if (isObj(prism.prismCore)) {
@@ -1744,6 +1840,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   F.register("ccv3", (json, detection) => {
     const res = F.ccData.mapData(json.data, detection, json, F.ccData.KNOWN.concat(V3_ONLY));
+    // V3 nickname is additional character data; other V3-only keys are metadata/assets.
+    for (const field of F.helpers.customFromUnknown(json.data, F.ccData.KNOWN, "data", "ccv3")) {
+      if (field.origin.path === "data.nickname" && !res.draft.customFields.some((f) => f.origin && f.origin.path === field.origin.path)) res.draft.customFields.push(field);
+    }
     const present = V3_ONLY.filter((k) => json.data[k] != null && !(Array.isArray(json.data[k]) && !json.data[k].length));
     if (present.length) {
       res.notes.push(note("info", "v3-preserved", `Поля V3 сохранены, но пока не используются: ${present.join(", ")}.`));
@@ -1764,7 +1864,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const F = PRP.cardFormats, CM = PRP.cardModel;
-  const { clone, str, isObj, unmapped, loreEntry, note } = F.helpers;
+  const { clone, str, isObj, unmapped, customFromUnknown, loreEntry, note } = F.helpers;
 
   const DATA_KNOWN = ["id", "name", "description", "profile", "firstMessage", "reminderMessage", "userOverride", "lorebook", "exampleDialogue", "systemPrompt",
     "imageTrigger", "outfitTags", "imageStyleTrigger", "nsfwTags", "imageLoras"];
@@ -1915,6 +2015,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (data.imageLoras != null) { const v = loras(data.imageLoras); if (v) im.loras = v; else keep("imageLoras", "незнакомый вид"); }
     if (Object.keys(im).length) { d.image = im; notes.push(note("info", "image-mapped", "Настройки картинок перенесены: " + Object.keys(im).join(", ") + ".")); }
 
+    d.customFields = customFromUnknown(data, DATA_KNOWN, "data", "urv2")
+      .concat(customFromUnknown(prof, PROFILE_KNOWN, "data.profile", "urv2"));
+    if (d.customFields.length) notes.push(note("info", "custom-mapped", `${d.customFields.length} дополнительных полей перенесены в пользовательские (выключены).`));
     source.unmapped = unmapped(data, DATA_KNOWN, "data").concat(unmapped(prof, PROFILE_KNOWN, "data.profile"));
     if (source.unmapped.length) notes.push(note("info", "unmapped", `Поля сохранены, но не используются: ${source.unmapped.join(", ")}.`));
     d.source = source;
@@ -4015,7 +4118,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const CHUNK_LIMIT = 4;      // кусков подробностей за ход
   const EXAMPLES = { fullUntil: 2, oneUntil: 5 };
   const FIELDS = ["description", "personality", "background", "appearance"];
-  const FIELD_WORD = { description: "описание", personality: "личность", background: "прошлое", appearance: "внешность" };
+  const FIELD_WORD = { description: "описание", personality: "личность", background: "прошлое", appearance: "внешность", custom: "дополнительные сведения" };
   // Признаки разговора о внешности (по основам слов; рус. и англ.).
   // Только начало слова: «рост» не должен находиться в «просто», «лица» — в «улица».
   const VISUAL = /(?:^|[^\p{L}])(?:внешн|выгляд|одежд|одет|оделас|наряд|плать|юбк|рубашк|футболк|джинс|волос|причёс|причес|глаз|лицо|лица|фигур|рост[ау]?(?![\p{L}])|фото|селфи|снимок|снимк|портрет|похож|look|hair|eyes|outfit|dress|wear|photo|selfie|picture)/iu;
@@ -4118,6 +4221,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const src = { description: k.rest.description, personality: k.rest.personality, background: mm(str(cd.background)).trim(), appearance: mm(str(cd.appearance)).trim() };
     const out = [];
     for (const f of FIELDS) splitChunks(src[f]).forEach((text, i) => out.push({ id: `${f}#${i + 1}`, field: f, text, order: out.length }));
+    // Custom fields are opt-in card facts. Never interpret their labels as prompt roles.
+    (Array.isArray(cd.customFields) ? cd.customFields : []).forEach((f, i) => {
+      if (!f || f.enabled !== true || !str(f.label).trim() || !str(f.text).trim()) return;
+      splitChunks(mm(str(f.text))).forEach((part, j) => out.push({
+        id: `custom#${i + 1}#${j + 1}`, field: "custom",
+        text: str(f.label).trim() + ": " + part, order: out.length,
+        force: f.mode === "always",
+      }));
+    });
     return out;
   }
 
@@ -4169,10 +4281,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (tm.length) reasons.push("прозвучало: " + tm.slice(0, 3).join(", "));
       if (ov.length >= 2) reasons.push(`общих слов: ${ov.length}`);
       if (vis) reasons.push(x.visual && !visualCue ? "нужна зрительная опора" : "разговор о внешности");
-      const eligible = tm.length > 0 || ov.length >= 2 || vis;
-      return { id: c.id, field: c.field, chars: c.text.length, overlap: ov.length, terms: tm.length, visual: vis, reasons, eligible, selected: false, rank: null, omitted: eligible ? "" : "no-relation", text: c.text, order: c.order };
+      if (c.force) reasons.push("пользователь включил постоянную подачу");
+      const eligible = !!c.force || tm.length > 0 || ov.length >= 2 || vis;
+      return { id: c.id, field: c.field, chars: c.text.length, overlap: ov.length, terms: tm.length, visual: vis, force: !!c.force, reasons, eligible, selected: false, rank: null, omitted: eligible ? "" : "no-relation", text: c.text, order: c.order };
     });
-    const pool = rows.filter((r) => r.eligible).sort((a, b) => (b.terms - a.terms) || (b.overlap - a.overlap) || (b.visual - a.visual) || (a.order - b.order));
+    const pool = rows.filter((r) => r.eligible).sort((a, b) => (Number(b.force) - Number(a.force)) || (b.terms - a.terms) || (b.overlap - a.overlap) || (b.visual - a.visual) || (a.order - b.order));
     const limit = x.limit != null ? x.limit : CHUNK_LIMIT;
     pool.forEach((r, i) => { if (i < limit) { r.selected = true; r.rank = i + 1; } else r.omitted = "limit"; });
     return { rows, selected: pool.filter((r) => r.selected) };
@@ -5832,7 +5945,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
     if (c.provenance && c.provenance.messenger && (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
-    const present = c.ownerPresent !== false;
+    // A camera held by the character may show their own body without a separate portrait.
+    // Keep their trigger and LoRA, but don't force head/face appearance into this shot.
+    const present = c.ownerPresent !== false || !!c.cameraOwner;
     const trigger = present ? uniqueTrigger(o.card || {}) : "";
     // Стилевые теги персонажа — только те, о которых просит сцена.
     const style = present ? splitTags(im.styleTrigger).filter((t) => mentions(bareTag(t), scene)).join(", ") : "";
@@ -5841,9 +5956,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // Веса LoRA из карточки авторитетнее случайных дубликатов в [draw:] и переводе.
     if (loras) scene = withoutConfiguredLora(scene, activeLoras);
     const keep = loras ? withoutConfiguredLora(c.keep, activeLoras) : c.keep;
-    // Character identity must precede variable shot details: later tags are less reliable anchors.
-    // Do not inject the trigger for scenes in which the card owner is absent.
-    const body = [trigger, keep, scene, loras, style, c.tail].filter(Boolean).join(", ");
+    // Optional LoRA-specific associations: never interpret unkeyed text as a directive.
+    // Disabled advanced mode must not affect generation even when its text is preserved.
+    const advanced = im.loraAdvanced && im.loraAdvanced.enabled === true && loras
+      ? parseMap(im.loraAdvanced.rules).filter(({ key }) => key && !isBase(key) && !isSuffix(key) &&
+          bestVariant(key, scene).score > 0).map(({ tags }) => tags).join(", ")
+      : "";
+    // Character identity must precede variable shot details; do not add it when absent.
+    const body = [trigger, keep, advanced, scene, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
@@ -7652,7 +7772,36 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>
-        ${coreBlock(d)}`;
+        <details class="card-disclosure"><summary>Ядро для Prism — расширенная настройка</summary>
+          ${coreBlock(d)}</details>
+        <details class="card-disclosure" ${(d.customFields || []).length ? "open" : ""}>
+          <summary>Пользовательские поля (${(d.customFields || []).length})</summary>
+          <p class="hint">Поля — дополнительные сведения, а не инструкции. Передача модели включается для каждого поля отдельно. Импортированные поля всегда выключены.</p>
+          ${(d.customFields || []).map((field, i) => {
+            const detailOpen = !!(m.expandedCustom && m.expandedCustom[field.id]);
+            const origin = field.origin;
+            return `
+            <div class="lore">
+              <div class="row"><div class="field" style="flex:1">
+                <label>Название поля</label><input data-custom="${i}" data-k="label" value="${esc(field.label || "")}" placeholder="Например: Речь, привычки, особые способности">
+              </div><button type="button" class="btn btn-sm btn-ghost" data-act="custom-del" data-i="${i}" title="Удалить поле">Удалить</button></div>
+              <div class="field"><label>Содержание</label><textarea data-custom="${i}" data-k="text" rows="3">${esc(field.text || "")}</textarea></div>
+              <div class="row wrap">
+                <label class="check"><input type="checkbox" data-custom="${i}" data-k="enabled" ${field.enabled ? "checked" : ""}><span>Передавать модели</span></label>
+                <label class="check"><input type="checkbox" data-custom-more="${esc(field.id)}" ${detailOpen ? "checked" : ""}><span>Подробнее</span></label>
+              </div>
+              <div class="custom-field-extra" ${detailOpen ? "" : "hidden"}>
+                <div class="field"><label for="cf-custom-mode-${i}">Когда передавать</label>
+                  <select id="cf-custom-mode-${i}" data-custom="${i}" data-k="mode">
+                    <option value="relevant" ${field.mode !== "always" ? "selected" : ""}>Когда относится к разговору</option>
+                    <option value="always" ${field.mode === "always" ? "selected" : ""}>На каждом ходе, если позволяет бюджет</option>
+                  </select></div>
+                <p class="hint">Происхождение: ${origin && origin.imported ? `импортировано из ${esc(origin.format || "другого формата")}; исходное поле <code>${esc(origin.path || "неизвестно")}</code>.` : "создано пользователем."}</p>
+              </div>
+            </div>`;
+          }).join("")}
+          <button type="button" class="btn btn-sm" data-act="custom-add">+ Добавить поле</button>
+        </details>`;
     } else if (section === "greet") {
       const alts = d.altGreetings || [];
       body = `${f("cf-first", "Первое сообщение", "first_mes", d.firstMes, 7, "С него начинается новый чат. В конце можно добавить строку [scene: …] с начальным местом и одеждой.")}
@@ -7687,16 +7836,27 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     } else if (section === "images") {
       const im = d.image || {};
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
-      body = `<p class="lead">Как рисовать ${esc(d.name || "персонажа")}. Триггер, негатив и LoRA персонажа применяются, только когда он в кадре.</p>
-        ${fi("trigger", "Триггер — кто это", 2, "Имя персонажа в модели и 2–4 главные приметы. Идёт в каждую картинку с ним.", "orihime inoue, long orange hair, brown eyes, hair ornament")}
-        ${fi("aliases", "Другие имена в сценах", 0, "Через запятую: как модель может назвать персонажа в [draw:] (латиницей).", "orihime, hime")}
-        ${fi("styleTrigger", "Стилевые теги", 1, "Добавляются, только если сцена их упоминает.")}
-        ${fi("negative", "Негатив персонажа", 1, "", "short hair, flat chest")}
-        <div class="field"><label>LoRA персонажа</label>${loraRows("card-lora", im.loras || [])}<span class="help">Вес обычно 0.6–1. Применяются, только когда персонаж в кадре. Стилевые LoRA тоже ставьте сюда — у каждого персонажа свой набор.</span><datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
-        ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный. Кнопкой у картинки можно закрепить удачный.")}
-        ${fi("look", "Внешность", 3, "base: — всегда; «ключ: теги» — когда ключ есть в сцене (улыбка: gentle smile).", "base: brown eyes, large breasts\nочки | glasses: round glasses")}
-        ${fi("wardrobe", "Гардероб", 5, "Образ подбирается по одежде из панели сцены: «худи | hoodie: теги». Теги идут в промпт без перевода — как их знает ваша LoRA. Если сцена одевает иначе, образ не добавляется.", "школьная форма | school uniform: serafuku, red neckerchief, pleated skirt\nхуди | hoodie: grey hoodie, denim shorts, <lora:outfit:0.7>")}
-        ${fi("nsfw", "Откровенные модификаторы", 3, "Срабатывают только по тексту самой сцены, никогда по одежде из трекера.", "голая | nude: nude, nipples, navel")}`;
+      const adv = im.loraAdvanced || {};
+      body = `<p class="lead">Изображения: настройки для генератора, отдельно от RP-внешности персонажа.</p>
+        <details class="card-disclosure" id="image-base-panel" ${m.imageBaseOpen !== false ? "open" : ""}><summary>Базовая генерация</summary>
+          ${fi("look", "Внешность — теги", 3, "base: — всегда; «ключ: теги» — если ключ присутствует в сцене.", "base: brown eyes, long orange hair")}
+          ${fi("wardrobe", "Гардероб", 5, "Наряды по ключам из текущей сцены, без автоматической смены одежды.", "худи | hoodie: grey hoodie")}
+          ${fi("styleTrigger", "Стилевые теги", 1, "Применяются, только если сцена их упоминает.")}
+          ${fi("negative", "Негатив персонажа", 1, "", "short hair")}
+          ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный.")}
+          ${fi("nsfw", "Модификаторы по ключам сцены", 3, "Не запускаются автоматически по одежде.", "ключ: соответствующие теги")}
+        </details>
+        <details class="card-disclosure" id="image-lora-panel" ${m.imageLoraOpen ? "open" : ""}><summary>LoRA</summary>
+          ${fi("trigger", "Основной триггер LoRA", 2, "Точное ключевое слово автора. Старые карточки с несколькими тегами остаются совместимыми.", "lilithx")}
+          <div class="field"><label>Подключённые LoRA</label>${loraRows("card-lora", im.loras || [])}<span class="help">Имя файла и вес; поддерживается Forge/A1111.</span>
+          <datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
+          ${fi("aliases", "Другие имена в сценах", 0, "Варианты упоминания персонажа.", "orihime, hime")}
+          <label class="check"><input type="checkbox" data-lora-advanced="enabled" ${adv.enabled ? "checked" : ""}><span>Продвинутый режим — использовать дополнительные правила LoRA</span></label>
+          <details class="card-disclosure" ${adv.enabled ? "open" : ""}><summary>Расширенные параметры LoRA</summary>
+            <p class="hint">Дополнительные правила активны только с галочкой. Они не заменяют основной триггер. Формат «ключ сцены: теги».</p>
+            <textarea data-lora-advanced="rules" rows="5" placeholder="уши | ears: black cat ears&#10;хвост | tail: fluffy black cat tail">${esc(adv.rules || "")}</textarea>
+          </details>
+        </details>`;
     } else {
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
@@ -9453,6 +9613,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       d.name = (d.name || "").trim();
       if (!d.name) return { error: "Дайте персонажу имя." };
       if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
+      d.customFields = CM.normalizeCustomFields(d.customFields);
       d.altGreetings = (d.altGreetings || []).map((g) => String(g || "").trim()).filter(Boolean);
       d.updatedAt = Date.now();
       const isNew = !d.id;
@@ -10782,6 +10943,28 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           source: imported ? "imported" : prev.source === "derived" ? "derived" : "manual", reviewed: imported ? !!(rv && rv.checked) : true };
         d.prismCore = core.identity || core.traits.length || core.voice.length || core.durableContext.length ? core : null;
       }
+      if (S.modal.section === "main") {
+        d.customFields = (d.customFields || []).map((f) => Object.assign({}, f));
+        $$("[data-custom]").forEach((el) => {
+          const f = d.customFields[+el.dataset.custom];
+          if (!f) return;
+          const key = el.dataset.k;
+          if (key === "enabled") f.enabled = el.checked;
+          else if (["label", "text", "mode"].includes(key)) f[key] = el.value;
+        });
+        d.customFields = PRP.cardModel.normalizeCustomFields(d.customFields);
+      }
+      if (S.modal.section === "images") {
+        const basePanel = $("#image-base-panel"), loraPanel = $("#image-lora-panel");
+        S.modal.imageBaseOpen = basePanel ? basePanel.open : true;
+        S.modal.imageLoraOpen = loraPanel ? loraPanel.open : false;
+        d.image = Object.assign({}, d.image);
+        d.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, d.image.loraAdvanced || {});
+        $$("[data-lora-advanced]").forEach((el) => {
+          if (el.dataset.loraAdvanced === "enabled") d.image.loraAdvanced.enabled = el.checked;
+          if (el.dataset.loraAdvanced === "rules") d.image.loraAdvanced.rules = el.value;
+        });
+      }
       PRP.lensForm.collect(S.modal, $$);
       return d;
     }
@@ -10826,6 +11009,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       "core-clear": () => { const d = collectCard(); d.prismCore = null; keepScroll(); },
       "alt-add": () => { const d = collectCard(); d.altGreetings = (d.altGreetings || []).concat([""]); keepScroll(); setTimeout(() => { const el = $(`[data-alt="${d.altGreetings.length - 1}"]`); if (el) el.focus(); }, 30); },
       "alt-del": (t) => { const d = collectCard(); d.altGreetings.splice(+t.dataset.i, 1); keepScroll(); },
+      "custom-add": () => { const d = collectCard(); d.customFields = (d.customFields || []).concat([{ id: "custom-" + Date.now().toString(36), label: "", text: "", mode: "relevant", enabled: false }]); keepScroll(); },
+      "custom-del": (t) => { const d = collectCard(); (d.customFields || []).splice(+t.dataset.i, 1); keepScroll(); },
       "card-lora-add": () => { const d = collectCard(); d.image = d.image || {}; d.image.loras = (d.image.loras || []).concat([{ name: "", weight: 0.8 }]); keepScroll(); },
       "card-lora-del": (t) => { const d = collectCard(); d.image.loras.splice(+t.dataset.i, 1); keepScroll(); },
       "card-json": () => { const e = svc.cards.exportJson(collectCard()); ctx.files.download(e.name, e.text, "application/json"); },
@@ -10852,6 +11037,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       }
       if (t.id === "file-avatar" && t.files[0]) { S.modal.draft.avatar = await ctx.files.readFile(t.files[0], "dataurl"); t.value = ""; ui.renderModal(); return true; }
       if (t.dataset.lore !== undefined && t.dataset.k === "selective" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
+      if (t.dataset.customMore !== undefined && S.modal && S.modal.kind === "card") {
+        const expanded = S.modal.expandedCustom = S.modal.expandedCustom || Object.create(null);
+        expanded[t.dataset.customMore] = t.checked;
+        const content = t.closest(".lore") && t.closest(".lore").querySelector(".custom-field-extra");
+        if (content) content.hidden = !t.checked;
+        return true;
+      }
+      if (t.dataset.loraAdvanced === "enabled" && S.modal && S.modal.kind === "card") { collectCard(); keepScroll(); return true; }
       return false;
     }
 
