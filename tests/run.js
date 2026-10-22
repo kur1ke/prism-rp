@@ -2887,6 +2887,122 @@ async function foundationH() {
     // Существующие RP [scene:] в переписке по-прежнему не применяются.
     assert.deepStrictEqual(h.chat.sceneState().present, []);
   });
+  await ta("VIS-ORIGIN-1: image source is the chosen swipe and its own ancestor path", async () => {
+    const svc = globalThis.PRP.imageService;
+    const root = { id: "root", chatId: "c1", parentId: null, swipeIdx: 1, swipes: [{ text: "A" }, { text: "B" }] };
+    const old = { id: "old", chatId: "c1", parentId: "root", swipeIdx: 1, swipes: [{ text: "first" }, { text: "second" }] };
+    const sibling = { id: "sibling", chatId: "c1", parentId: "root", swipeIdx: 0, swipes: [{ text: "other branch" }] };
+    const o = svc.imageOrigin([root, old, sibling], old, old.swipes[0], "c1");
+    assert.ok(o && o.path.map((m) => m.id).join("/") === "root/old");
+    assert.strictEqual(o.swipeIdx, 0);
+    assert.strictEqual(TR_.activeSwipe(o.path[1]).text, "first");
+    root.swipes[1].text = "edited after capture";
+    assert.strictEqual(TR_.activeSwipe(o.path[0]).text, "B", "source ancestry must be frozen");
+    assert.strictEqual(svc.imageOrigin([root, sibling], old, old.swipes[0], "c1"), null);
+    assert.strictEqual(svc.imageOrigin([root, old], old, old.swipes[0], "other-chat"), null);
+  });
+  await ta("VIS-ORIGIN-2: regenerating an old message never borrows wear from the current leaf", async () => {
+    const h = fbHarness({ name: "Лилит", image: { trigger: "lilithx" } });
+    await h.chat.createChat("messenger", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const first = h.chat.newMsg("assistant", null, "На мне белая блузка");
+    first.swipes[0].stateEvents = [{ actor: "char", field: "wear", action: "add", value: ["белая блузка"], certainty: "reported", evidence: "На мне белая блузка" }];
+    await h.chat.commitMessage(first, first.id);
+    const later = h.chat.newMsg("assistant", first.id, "Я переоделась в синее платье");
+    later.swipes[0].stateEvents = [{ actor: "char", field: "wear", action: "set", value: ["синее платье"], certainty: "reported", evidence: "Я переоделась в синее платье" }];
+    await h.chat.commitMessage(later, later.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const oldGen = IB.generate;
+    let prompt;
+    try {
+      IB.generate = async (_, o) => { prompt = o.prompt; return { dataUrl: "data:image/png;base64,AA==", seed: 1, info: { width: 512, height: 512 } }; };
+      await h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, selfie", ratio: "1:1" });
+      assert.ok(prompt.includes("блузка") && !prompt.includes("платье"), prompt);
+      assert.strictEqual(source.swipes[0].images[0].status, "done");
+    } finally { IB.generate = oldGen; }
+  });
+  await ta("VIS-ORIGIN-3: async completion does not pollute a newly selected chat", async () => {
+    const h = fbHarness({ name: "Лилит", image: { trigger: "lilithx" } });
+    await h.chat.createChat("messenger", "c1");
+    const first = h.chat.newMsg("assistant", null, "Вот фото");
+    await h.chat.commitMessage(first, first.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const oldGen = IB.generate;
+    let entered, done;
+    const started = new Promise((r) => { entered = r; });
+    const pending = new Promise((r) => { done = r; });
+    try {
+      IB.generate = async () => { entered(); return pending; };
+      const run = h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, portrait" });
+      await started;
+      h.S.chats.push({ id: "elsewhere", mode: "messenger" });
+      h.S.chatId = "elsewhere"; h.S.messages = [];
+      done({ dataUrl: "data:image/png;base64,AA==", seed: 4, info: { width: 512, height: 512 } });
+      await run;
+      assert.deepStrictEqual(h.S.messages, [], "late completion must not insert old chat messages in active UI");
+      const saved = await h.ctx.DB.get("messages", first.id);
+      assert.strictEqual(saved.swipes[0].images[0].status, "done");
+      assert.strictEqual((await h.ctx.DB.get("images", saved.swipes[0].images[0].id)).chatId, first.chatId);
+    } finally { IB.generate = oldGen; }
+  });
+  await ta("VIS-ORIGIN-4: delete or edit during generation cannot resurrect source or image", async () => {
+    const h = fbHarness({ name: "Лилит", image: { trigger: "lilithx" } });
+    await h.chat.createChat("messenger", "c1");
+    const first = h.chat.newMsg("assistant", null, "Покажу себя");
+    await h.chat.commitMessage(first, first.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const oldGen = IB.generate;
+    let entered, done;
+    const started = new Promise((r) => { entered = r; });
+    const pending = new Promise((r) => { done = r; });
+    try {
+      IB.generate = async () => { entered(); return pending; };
+      const run = h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, portrait" });
+      await started;
+      await h.ctx.DB.del("messages", first.id);
+      done({ dataUrl: "data:image/png;base64,AA==", seed: 3, info: { width: 512, height: 512 } });
+      await run;
+      assert.strictEqual(await h.ctx.DB.get("messages", first.id), undefined, "deleted source must stay deleted");
+      assert.strictEqual(await h.ctx.DB.get("images", source.swipes[0].images[0].id), undefined, "orphan image must not be saved");
+    } finally { IB.generate = oldGen; }
+  });
+  await ta("VIS-ORIGIN-5: edited source during async generation remains edited and gets no new image blob", async () => {
+    const h = fbHarness({ name: "Лилит", image: { trigger: "lilithx" } });
+    await h.chat.createChat("messenger", "c1");
+    const first = h.chat.newMsg("assistant", null, "Оригинальный текст");
+    await h.chat.commitMessage(first, first.id);
+    const source = h.S.messages.find((m) => m.id === first.id);
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const oldGen = IB.generate;
+    let entered, done;
+    const started = new Promise((r) => { entered = r; });
+    const pending = new Promise((r) => { done = r; });
+    try {
+      IB.generate = async () => { entered(); return pending; };
+      const run = h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "1girl, lilithx, portrait" });
+      await started;
+      const updated = await h.ctx.DB.get("messages", first.id);
+      updated.swipes[0].text = "Отредактированный текст";
+      await h.ctx.DB.put("messages", updated);
+      done({ dataUrl: "data:image/png;base64,AA==", seed: 3, info: { width: 512, height: 512 } });
+      await run;
+      const persisted = await h.ctx.DB.get("messages", first.id);
+      assert.strictEqual(persisted.swipes[0].text, "Отредактированный текст");
+      assert.strictEqual(persisted.swipes[0].images[0].status, "pending", "late result must not overwrite an edited source");
+      assert.strictEqual(await h.ctx.DB.get("images", source.swipes[0].images[0].id), undefined);
+    } finally { IB.generate = oldGen; }
+  });
   await ta("VC-9: images/service использует визуальный snapshot сообщения, а не нынешнюю одежду", async () => {
     const card = { name: "Химэ", image: { trigger: "orihime_inoue", wardrobe: "белая блузка: white blouse\nсинее платье: blue dress" } };
     const h = fbHarness(card);
@@ -4276,6 +4392,9 @@ async function unifiedTracker() {
 
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
+// Do not let an unresolved async fixture finish Node with exit code 0.
+// The suite normally completes in seconds; a pending test must fail CI.
+setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
 foundationB().then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(() => {
   if (BASELINE.length) {
     console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
