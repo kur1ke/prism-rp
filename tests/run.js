@@ -4593,6 +4593,7 @@ t("CARD-Q: V3 nickname is custom info; technical V3 fields are not active", () =
     assert.ok(!catalog.includes('<div class="section-title">Продолжить</div>') && !catalog.includes("Latest hidden preview"));
     const rail = V.rail(m);
     assert.ok(rail.includes('data-act="characters"'));
+    assert.ok(!rail.includes('data-act="import"'), "Import entry belongs to Characters, not the sidebar");
     assert.ok(rail.includes("Последнее взаимодействие"));
     assert.ok(rail.includes("data-act=\"open-chat\"") && rail.includes('aria-label="Переписка"'));
     assert.ok(!rail.includes("Do not repeat message text") && !rail.includes("Latest hidden preview"));
