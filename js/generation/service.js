@@ -56,7 +56,8 @@
          якорь не меняют. */
       const prefixKey = () => { const p = chat().path(), i = p.indexOf(msg); return i < 0 ? null : turnKey(p.slice(0, i + 1)); };
       const anchor = prefixKey();
-      const analysed = st && msg && text.trim() ? st.track(msg, prov) : Promise.resolve(null);
+      const observerProvider = ctx.processingProvider ? ctx.processingProvider() : prov;
+      const analysed = st && msg && text.trim() ? st.track(msg, observerProvider) : Promise.resolve(null);
       return analysed.then((res) => {
         if (!draw) return null;
         const c = ctx.chat();
@@ -453,7 +454,7 @@
         ui.renderFeed();
         ui.scrollBottom();
         // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
-        if (state()) { await state().track(sent, ctx.provider()); await state().settle(c.id); }
+        if (state()) { await state().track(sent, ctx.processingProvider ? ctx.processingProvider() : ctx.provider()); await state().settle(c.id); }
         // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
         if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
         turn.phase = "generating";
