@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "a08db2edf5c6cf18a3c3947570d02ef2591f5492";
+  window.PRISM_RP_BUILD_SHA = "febe6093f55c2458fc90273fcf158d6aa903be04";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -488,14 +488,22 @@
   const clean = (v, n) => (v == null ? "" : String(v).replace(/[^\w:.\-а-яё ]/gi, "").slice(0, n));
 
   // list — массив, в который пишутся записи (S.perf); возвращается функция записи.
-  function create(list) {
+  function create(list, opts) {
+    const activeChatId = opts && opts.activeChatId;
     return function record(metric, ms, meta) {
       const m = meta || {};
+      // Delayed observer/image callbacks from another chat must not pollute
+      // the active chat's diagnostic medians after a navigation reset.
+      if (typeof activeChatId === "function" && (!m.chatId || m.chatId !== activeChatId())) return;
       list.push({ metric: clean(metric, 40), ms: Math.max(0, Math.round(Number(ms) || 0)), at: Date.now(),
         msgId: clean(m.msgId, 40), chatId: clean(m.chatId, 40), outcome: clean(m.outcome, 40) });
       while (list.length > MAX) list.shift();
     };
   }
+
+  // Clear in place: all existing logger/view references retain the same list.
+  function reset(list) { list.length = 0; }
+  function resetOnChatChange(list, previousId, nextId) { if (previousId !== nextId) reset(list); }
 
   // Сводка: по каждой метрике — число замеров, последнее и медиана.
   function summary(list) {
@@ -507,7 +515,7 @@
     });
   }
 
-  PRP.perfLog = { create, summary, MAX };
+  PRP.perfLog = { create, reset, resetOnChatChange, summary, MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.perfLog;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -6950,7 +6958,9 @@
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
     }
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal debug-modal" role="dialog" aria-modal="true" aria-label="Debug">
-      <div class="modal-head"><h2>Debug — ${esc(m.card ? m.card.name : "чат")}</h2><button class="icon-btn" data-act="modal-close" title="Закрыть">${icon("x")}</button></div>
+      <div class="modal-head"><h2>Debug — ${esc(m.card ? m.card.name : "чат")}</h2>
+        <button class="btn btn-sm btn-ghost" data-act="debug-copy" title="Скопировать текущий раздел Debug">Копировать</button>
+        <button class="icon-btn" data-act="modal-close" title="Закрыть">${icon("x")}</button></div>
       <nav class="debug-tabs">${names.map(([id,title]) => `<button class="dtab ${id === section ? "on" : ""}" data-act="debug-section" data-section="${id}">${title}</button>`).join("")}</nav>
       <div class="modal-body debug-body">${content}</div></div></div>`;
   }
@@ -8681,7 +8691,7 @@
         if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: res && res.skipped === "stale-branch" ? "analysis-stale" : "source-changed" }); return null; }
         if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
         return images().draw(msg, sw, draw);
-      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
+      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, chatId: msg && msg.chatId, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
     }
 
     /* PERF-01: операция, которой нужно полное состояние чата, ждёт незавершённых разборов этого чата —
@@ -8820,7 +8830,7 @@
       const shownAt = now();
       // Ответ сохранён и показан, замок снят: разбор и картинка идут отдельно и не держат переписку.
       const post = !error && sw.text ? afterReply(target, prov, dr.draws.length ? dr.draws[0] : null) : Promise.resolve(null);
-      const reply = { msgId: target.id, shownAt, post };
+      const reply = { msgId: target.id, chatId: c.id, shownAt, post };
       if (!o.turn) ready(reply); // без хода ничего больше не держит ввод
       return reply;
     }
@@ -8909,7 +8919,7 @@
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
       const shownAt = now();
-      return { ok: true, msgId: m.id, shownAt, post: afterReply(m, prov, dr.draws.length ? dr.draws[0] : null) };
+      return { ok: true, msgId: m.id, chatId: c.id, shownAt, post: afterReply(m, prov, dr.draws.length ? dr.draws[0] : null) };
     }
 
     /* Проверка инициативы (FOUNDATION-D): только переписка и только по явному действию пользователя.
@@ -9026,7 +9036,7 @@
       ui.renderRail();
       if (S.drawerOpen) ui.renderDrawer();
       ui.scrollBottom();
-      return Object.assign(done("sent"), { msgId: msg.id, shownAt: now(), post: afterReply(msg, prov, dr.draws.length ? dr.draws[0] : null) });
+      return Object.assign(done("sent"), { msgId: msg.id, chatId: c.id, shownAt: now(), post: afterReply(msg, prov, dr.draws.length ? dr.draws[0] : null) });
     }
 
     /* PERF-01: отправка реплики пользователя как один ход.
@@ -9090,7 +9100,7 @@
       }
     }
     // Ответ показан → переписка снова принимает ввод: сколько прошло (мс). Только число.
-    function ready(reply) { if (reply && reply.shownAt != null) perf("readyAfterReplyMs", Math.round(now() - reply.shownAt), { msgId: reply.msgId }); }
+    function ready(reply) { if (reply && reply.shownAt != null) perf("readyAfterReplyMs", Math.round(now() - reply.shownAt), { msgId: reply.msgId, chatId: reply.chatId }); }
     function restore(turn, message) {
       if (typeof ui.restoreDraft === "function") ui.restoreDraft(turn.chatId, turn.text);
       if (message) ui.toast(message, true);
@@ -10344,6 +10354,20 @@
     const { $ } = ui;
     const op = (...a) => svc.chat.op(...a);
 
+    // Copy only the currently open Debug section, not other tabs or hidden
+    // application state. A legacy fallback is needed in embedded Perchance frames.
+    function copyLegacy(value) {
+      const field = document.createElement("textarea");
+      field.value = value;
+      field.setAttribute("readonly", "");
+      field.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+      document.body.appendChild(field);
+      try {
+        field.select();
+        if (!document.execCommand || !document.execCommand("copy")) throw new Error("Буфер обмена недоступен в этом браузере");
+      } finally { field.remove(); }
+    }
+
     // Ручные изменения сцены → в ветку; затем Prism, панель и шапка.
     async function applySceneOps(ops) {
       if (!(await svc.chat.applySceneOps(ops))) {
@@ -10396,6 +10420,20 @@
       tab: (t) => { collectExp(); collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
       "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
+      "debug-copy": async () => {
+        if (!S.modal || S.modal.kind !== "debug") return;
+        const body = $(".debug-modal .debug-body");
+        if (!body) return;
+        const title = { prism: "Prism", tracker: "Трекер", events: "События", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
+        const content = (body.innerText || body.textContent || "").trim();
+        const value = "Debug — " + ((ctx.card() || {}).name || "чат") + " / " + title + "\n\n" + content;
+        const clipboard = typeof navigator !== "undefined" && navigator.clipboard;
+        if (clipboard && clipboard.writeText) {
+          try { await clipboard.writeText(value); }
+          catch (_) { copyLegacy(value); }
+        } else copyLegacy(value);
+        ui.toast("Раздел Debug скопирован.");
+      },
       "open-prism": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "prism-preview": () => { svc.prism.refresh(); if (S.modal && S.modal.kind === "debug") ui.renderModal(); else ui.renderDrawer(); },
       // Сцена
@@ -11285,7 +11323,7 @@
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
     // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
-    perf: PRP.perfLog.create(S.perf),
+    perf: PRP.perfLog.create(S.perf, { activeChatId: () => S.chatId }),
     svc: {},
     nav: {},
   };
@@ -11328,6 +11366,9 @@
   async function openChat(chatId, quiet) {
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
+    // Timings describe one opened chat, not the whole app. Keep the array
+    // identity so the recorder and Debug view keep using the same log.
+    PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
     S.chatId = chatId;
     S.lastSelectedChatId = chatId;
     S.cardId = c.cardId;
