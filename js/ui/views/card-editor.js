@@ -22,11 +22,13 @@
         <label class="check"><input type="checkbox" data-cf-dir="${k}" ${x.enabled ? "checked" : ""}><span>Включено — отправлять модели</span></label>
         <span class="help">${help}</span></div>`;
     };
+    const state = m.modal || {};
     let body = "";
     if (section === "main") {
-      body = `<div class="card-edit"><div><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
-          <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div></div>
-        <div>${f("cf-name", "Имя", "name", d.name)}
+      body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
+          <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div>
+          <div class="card-identity-name">${f("cf-name", "Имя", "name", d.name)}</div></div>
+        <div class="card-fields">
           ${f("cf-desc", "Описание", "description", d.description, 7, "Кто это — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
           ${f("cf-app", "Внешность", "", d.appearance, 3, "При экспорте в Character Card добавляется в description абзацем «Внешность».")}
           ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
@@ -39,7 +41,7 @@
           <summary>Пользовательские поля (${(d.customFields || []).length})</summary>
           <p class="hint">Поля — дополнительные сведения, а не инструкции. Передача модели включается для каждого поля отдельно. Импортированные поля всегда выключены.</p>
           ${(d.customFields || []).map((field, i) => {
-            const detailOpen = !!(m.expandedCustom && m.expandedCustom[field.id]);
+            const detailOpen = !!(state.expandedCustom && state.expandedCustom[field.id]);
             const origin = field.origin;
             return `
             <div class="lore">
@@ -99,7 +101,7 @@
       const fi = (k, label, rows, help, ph) => `<div class="field"><label>${label}</label>${rows ? `<textarea data-ci="${k}" rows="${rows}" placeholder="${esc(ph || "")}">${esc(im[k] || "")}</textarea>` : `<input data-ci="${k}" value="${esc(im[k] != null ? im[k] : "")}" placeholder="${esc(ph || "")}">`}${help ? `<span class="help">${help}</span>` : ""}</div>`;
       const adv = im.loraAdvanced || {};
       body = `<p class="lead">Изображения: настройки для генератора, отдельно от RP-внешности персонажа.</p>
-        <details class="card-disclosure" id="image-base-panel" ${m.imageBaseOpen !== false ? "open" : ""}><summary>Базовая генерация</summary>
+        <div class="image-settings-grid"><details class="card-disclosure" id="image-base-panel" ${state.imageBaseOpen !== false ? "open" : ""}><summary>Базовая генерация</summary>
           ${fi("look", "Внешность — теги", 3, "base: — всегда; «ключ: теги» — если ключ присутствует в сцене.", "base: brown eyes, long orange hair")}
           ${fi("wardrobe", "Гардероб", 5, "Наряды по ключам из текущей сцены, без автоматической смены одежды.", "худи | hoodie: grey hoodie")}
           ${fi("styleTrigger", "Стилевые теги", 1, "Применяются, только если сцена их упоминает.")}
@@ -107,7 +109,7 @@
           ${fi("seed", "Закреплённый seed", 0, "Пусто — случайный.")}
           ${fi("nsfw", "Модификаторы по ключам сцены", 3, "Не запускаются автоматически по одежде.", "ключ: соответствующие теги")}
         </details>
-        <details class="card-disclosure" id="image-lora-panel" ${m.imageLoraOpen ? "open" : ""}><summary>LoRA</summary>
+        <details class="card-disclosure" id="image-lora-panel" ${state.imageLoraOpen ? "open" : ""}><summary>LoRA</summary>
           ${fi("trigger", "Основной триггер LoRA", 2, "Точное ключевое слово автора. Старые карточки с несколькими тегами остаются совместимыми.", "lilithx")}
           <div class="field"><label>Подключённые LoRA</label>${loraRows("card-lora", im.loras || [])}<span class="help">Имя файла и вес; поддерживается Forge/A1111.</span>
           <datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
@@ -117,7 +119,7 @@
             <p class="hint">Дополнительные правила активны только с галочкой. Они не заменяют основной триггер. Формат «ключ сцены: теги».</p>
             <textarea data-lora-advanced="rules" rows="5" placeholder="уши | ears: black cat ears&#10;хвост | tail: fluffy black cat tail">${esc(adv.rules || "")}</textarea>
           </details>
-        </details>`;
+        </details></div>`;
     } else {
       body = `${f("cf-creator", "Создатель", "creator", d.creator, 0, "", "ваш ник")}
         ${f("cf-version", "Версия персонажа", "character_version", d.version, 0, "", "1.0")}
@@ -128,7 +130,7 @@
         ${d.id ? `<div class="block-title" style="margin-top:28px">Удаление</div><p class="hint">Удалит персонажа вместе со всеми чатами и опытом.</p>
         <button class="btn btn-danger" data-act="card-del">${icon("trash")}Удалить ${esc(d.name)}</button>` : ""}`;
     }
-    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="Персонаж">
+    return `<div class="modal-wrap" data-act="modal-bg"><div class="modal card-modal" role="dialog" aria-modal="true" aria-label="Персонаж">
       <div class="modal-head"><h2>${esc(d.name || "Новый персонаж")}</h2>
         <button class="btn btn-primary btn-sm" data-act="card-save">${icon("check")}Сохранить</button>
         <button class="icon-btn" data-act="modal-close" title="Закрыть без сохранения">${icon("x")}</button></div>
