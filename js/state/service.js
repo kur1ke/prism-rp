@@ -86,8 +86,7 @@
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
       const sw = TR.activeSwipe(msg), sourceText = String(sw.text || ""), swipeIdx = msg.swipeIdx || 0;
       if (!sourceText.trim()) return { skipped: "empty" };
-      const nonEvent = INT.nonEventReason(sourceText);
-      if (nonEvent) return { skipped: nonEvent };
+      if (!INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
       if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) && sw.stateStatus.sourceText === sourceText && !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       if (!initialPath.includes(msg)) return { skipped: "off-path" };
