@@ -195,13 +195,17 @@
     // Пространство Prism в extensions: картинки, раздельные поля, выключенные указания.
     const ext = Object.assign({}, data.extensions);
     const pr = Object.assign({}, ext.prism_rp);
-    delete pr.image; delete pr.fields; delete pr.disabledDirectives; delete pr.prismCore;
-    const im = card.image && Object.keys(card.image).length ? card.image : null;
-    if (im) pr.image = JSON.parse(JSON.stringify(im));
+    delete pr.image; delete pr.fields; delete pr.disabledDirectives; delete pr.prismCore; delete pr.customFields;
+    // Stable export shape: all editable image slots exist even when empty.
+    const imageDefaults = { trigger: "", aliases: "", styleTrigger: "", negative: "", seed: "", look: "", wardrobe: "", nsfw: "", loras: [] };
+    pr.image = Object.assign(imageDefaults, card.image ? JSON.parse(JSON.stringify(card.image)) : {});
+    if (!Array.isArray(pr.image.loras)) pr.image.loras = [];
     // Ядро Prism — только данные в своём расширении (никогда не в system_prompt): при импорте оно непроверенное.
     const core = PRP.cardContext && PRP.cardContext.normCore(card.prismCore);
     if (core) pr.prismCore = { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext };
-    if (card.appearance || card.background) pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    // Always include the Prism-specific slots, including empty fields.
+    pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    pr.customFields = CM.normalizeCustomFields(card.customFields);
     const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
     const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};
     if (CM.hasDisabledText(card, "system")) dis.system = card.directives.system.text;
