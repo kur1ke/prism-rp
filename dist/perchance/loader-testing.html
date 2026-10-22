@@ -20,7 +20,11 @@
     window.PRISM_RP_TEST_REVISION = ref;
     // Branch fallback is not pinned. Bust browser/CDN caches and label it as unverified.
     var bust = ref === "testing" ? "?test_reload=" + Date.now() : "";
-    var urls = [cdn + encodeURIComponent(ref) + suffix + bust, raw + encodeURIComponent(ref) + suffix + bust];
+    // If GitHub's API is blocked, ask the branch directly (with a cache buster).
+    // An unpinned CDN alias is only the secondary source in that case.
+    var urls = ref === "testing"
+      ? [raw + "testing" + suffix + bust, cdn + "testing" + suffix + bust]
+      : [cdn + encodeURIComponent(ref) + suffix, raw + encodeURIComponent(ref) + suffix];
     function attempt(index) {
       status(index ? "резервный источник · " + ref.slice(0, 7) : (warning || ref.slice(0, 7)));
       var script = document.createElement("script");
@@ -31,7 +35,17 @@
       };
       script.onload = function () {
         if (!window.PRP || !window.PRISM_RP_VERSION) error("приложение не инициализировалось");
-        else status(ref === "testing" ? "testing · SHA неизвестен" : (index ? "резерв · " : "") + ref.slice(0, 7));
+        else {
+          // Embedded at build time by GitHub Actions: this is the source commit
+          // used to generate the bundle, not necessarily the bot's later dist commit.
+          var builtFrom = window.PRISM_RP_BUILD_SHA || "";
+          if (ref === "testing") {
+            var marker = /^[a-f0-9]{40}$/.test(builtFrom) ? "сборка " + builtFrom.slice(0, 7) : "SHA сборки неизвестен";
+            status("testing · " + marker + " · SHA ветки недоступен" + (index ? " · CDN" : ""));
+          } else {
+            status((index ? "резерв · " : "") + ref.slice(0, 7));
+          }
+        }
       };
       document.head.appendChild(script);
     }
