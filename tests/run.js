@@ -4800,6 +4800,44 @@ async function perfTurn() {
       assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
       await first.reply.post;
     });
+    await ta("PERF-02B-4: changed user identity invalidates early observer input and reanalyses before RP", async () => {
+      const h = await mk("rp");
+      const role = { id: "local", kind: "openai" }, processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role; h.ctx.processingProvider = () => processing;
+      const first = await firstTurn(h);
+      const next = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer before identity changes");
+      h.ctx.persona = () => ({ name: "Другой собеседник", description: "" });
+      sims[2].res(ok()); sims[1].res(ok(jacket()));
+      await until(() => sims.length === 4, "new observer after changed identity");
+      assert.ok(sims[3].instruction.includes("Другой собеседник"), "new model instruction uses current speaker name");
+      assert.strictEqual(rp.length, 1, "RP does not run before validated new observation");
+      sims[3].res(ok());
+      await until(() => rp.length === 2, "RP after updated observer");
+      const r = await next;
+      assert.strictEqual(r.outcome, "sent");
+      if (sims[4]) sims[4].res(ok());
+      await first.reply.post; await r.reply.post;
+    });
+    await ta("PERF-02B-5: failed early analysis follows existing error fallback without blocking RP", async () => {
+      const h = await mk("rp");
+      const role = { id: "local", kind: "openai" }, processing = { id: "perchance", kind: "perchance" };
+      h.ctx.provider = () => role; h.ctx.processingProvider = () => processing;
+      const first = await firstTurn(h);
+      const next = h.gen.send("Я снял шарф.");
+      await until(() => sims.length === 3, "early observer on failing API");
+      sims[2].rej(new Error("API offline"));
+      sims[1].res(ok(jacket()));
+      await until(() => rp.length === 2, "RP after failed early observer");
+      const user = h.chat.path()[2];
+      assert.ok(user.swipes[0].stateStatus.issues.some((x) => /API offline/.test(x)),
+        "normal observer error report is preserved");
+      assert.strictEqual(sims.filter((s) => s.instruction.includes("Я снял шарф.")).length, 1,
+        "failed early observation is not silently retried twice");
+      const r = await next;
+      if (sims[3]) sims[3].res(ok());
+      await first.reply.post; await r.reply.post;
+    });
     await ta("PERF-1 (сл. 1, 3): ответ сохранён и ввод свободен, пока разбор ответа не завершён; затем события записываются", async () => {
       const h = await mk("rp");
       const r = await firstTurn(h);
