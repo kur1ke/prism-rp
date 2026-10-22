@@ -115,7 +115,7 @@
           <datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
           ${fi("aliases", "Другие имена в сценах", 0, "Варианты упоминания персонажа.", "orihime, hime")}
           <label class="check"><input type="checkbox" data-lora-advanced="enabled" ${adv.enabled ? "checked" : ""}><span>Продвинутый режим — использовать дополнительные правила LoRA</span></label>
-          <details class="card-disclosure" ${adv.enabled ? "open" : ""}><summary>Расширенные параметры LoRA</summary>
+          <details class="card-disclosure lora-advanced-panel" ${adv.enabled ? "open" : ""}><summary>Расширенные параметры LoRA</summary>
             <p class="hint">Дополнительные правила активны только с галочкой. Они не заменяют основной триггер. Формат «ключ сцены: теги».</p>
             <textarea data-lora-advanced="rules" rows="5" placeholder="уши | ears: black cat ears&#10;хвост | tail: fluffy black cat tail">${esc(adv.rules || "")}</textarea>
           </details>
