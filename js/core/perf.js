@@ -23,7 +23,11 @@
     };
   }
 
-  // Clear in place: all existing logger/view references retain the same list.\n  function reset(list) { list.length = 0; }\n\n  // Сводка: по каждой метрике — число замеров, последнее и медиана.
+  // Clear in place: all existing logger/view references retain the same list.
+  function reset(list) { list.length = 0; }
+  function resetOnChatChange(list, previousId, nextId) { if (previousId !== nextId) reset(list); }
+
+  // Сводка: по каждой метрике — число замеров, последнее и медиана.
   function summary(list) {
     const by = {};
     for (const r of list || []) (by[r.metric] = by[r.metric] || []).push(r.ms);
@@ -33,6 +37,6 @@
     });
   }
 
-  PRP.perfLog = { create, reset, summary, MAX };
+  PRP.perfLog = { create, reset, resetOnChatChange, summary, MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.perfLog;
 })(typeof window !== "undefined" ? window : globalThis);
