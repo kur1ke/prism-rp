@@ -200,6 +200,7 @@
     const imageDefaults = { trigger: "", aliases: "", styleTrigger: "", negative: "", seed: "", look: "", wardrobe: "", nsfw: "", loras: [], loraAdvanced: { enabled: false, rules: "" } };
     pr.image = Object.assign(imageDefaults, card.image ? JSON.parse(JSON.stringify(card.image)) : {});
     if (!Array.isArray(pr.image.loras)) pr.image.loras = [];
+    pr.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, pr.image.loraAdvanced && typeof pr.image.loraAdvanced === "object" && !Array.isArray(pr.image.loraAdvanced) ? pr.image.loraAdvanced : {});
     // Ядро Prism — только данные в своём расширении (никогда не в system_prompt): при импорте оно непроверенное.
     const core = PRP.cardContext && PRP.cardContext.normCore(card.prismCore);
     pr.prismCore = core ? { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext } : null;
