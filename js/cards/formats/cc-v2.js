@@ -42,7 +42,7 @@
     d.version = str(data.character_version);
     const book = isObj(data.character_book) ? data.character_book : null;
     d.lore = book && Array.isArray(book.entries) ? book.entries.map((e, i) => loreEntry(e, i, { source: "character_book" })) : [];
-    if (isObj(prism.image)) d.image = clone(prism.image);
+    if (isObj(prism.image)) { d.image = clone(prism.image); if (isObj(d.image.loraAdvanced)) d.image.loraAdvanced.enabled = false; }
     // Import cannot enable new model-facing custom data without local user approval.
     d.customFields = CM.normalizeCustomFields(prism.customFields, true);
     if (d.customFields.length) notes.push(note("info", "prism-custom-fields", "Пользовательские поля сохранены, но передача модели выключена до явного включения."));
