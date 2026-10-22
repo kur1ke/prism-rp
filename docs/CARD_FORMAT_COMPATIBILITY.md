@@ -42,7 +42,9 @@ If parsing cannot determine ownership unambiguously, keep the original descripti
 - Defaults are disabled on import, and blank/inactive fields never enter the runtime context.
 - Selected fields compete with other optional details under the same budget and removal policy.
 - Explicit user activation is needed; a visible checkbox reflects real runtime behavior.
-- Unknown third-party fields remain preserved, disabled and reported in import review.
+- Unknown third-party scalar text/number or simple list fields are proposed as *disabled* custom character facts, with `origin.format` and `origin.path`. Instructions, configuration, keys, binary/structured values and unsupported types stay only in the original imported source and are not forwarded to the RP model. This distinction is conservative and is not a semantic guarantee about arbitrary external schemas.
+- Technical provenance and custom-field delivery rules appear in the editor only when that field's **«Подробнее»** checkbox is selected. This controls visibility only, never model delivery.
+- Unknown third-party fields remain preserved in the importer source record and reported in import review.
 
 ## Editor UX and image settings
 
