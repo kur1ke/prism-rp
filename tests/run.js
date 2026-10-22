@@ -4757,12 +4757,14 @@ async function perfTurn() {
       assert.strictEqual(h.store.messages.size, n, "early result has no state side effects");
       sims[1].res(ok(jacket()));
       await until(() => rp.length === rpBefore + 1, "next RP after both observers");
-      assert.strictEqual(sims.length, 3, "early interpretation is reused, not requested again");
+      assert.strictEqual(sims.filter((s) => s.instruction.includes("Я снял шарф.")).length, 1,
+        "early user interpretation is reused, not requested again");
       assert.ok(rp[1].messages.map((x) => x.content).join("\n").includes("синяя куртка"),
         "RP receives committed state of previous assistant");
       const result = await next;
       assert.strictEqual(result.outcome, "sent");
       assert.strictEqual(h.chat.path().length, 4);
+      if (sims[3]) sims[3].res(ok()); // next assistant may also require observation
       await first.reply.post; await result.reply.post;
     });
     await ta("PERF-02B-2: cancelling an overlapped user observation never commits its result", async () => {
