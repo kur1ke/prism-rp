@@ -37,6 +37,7 @@ require(J("cards/import.js"));
 require(J("providers/openai.js"));
 require(J("chat/tree.js"));
 require(J("state/tracker.js"));
+require(J("state/resolver.js"));
 require(J("state/interpreter.js"));
 require(J("state/service.js"));
 require(J("images/compose.js"));
