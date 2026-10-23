@@ -636,7 +636,9 @@
       : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
       ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
-      "Keep every concrete detail from SCENE: pose, action, expression, garments, place, time and framing. SCENE overrides reported physical state if they conflict.",
+      (opts.wearState && ((opts.wearState.removed || []).length || (opts.wearState.partiallyWorn || []).length))
+        ? "Keep camera, people, pose and environment from SCENE. For the character whose CANONICAL WEAR FACTS are supplied, canonical clothing state overrides conflicting clothing claims in SCENE: omit removed garments, retain explicitly worn garments, depict partially worn garments at their recorded placement. Do not infer exposed body parts or nudity from removal beneath outer layers. Preserve unrelated scene details."
+        : "Keep every concrete detail from SCENE: pose, action, expression, garments, place, time and framing. SCENE overrides reported physical state if they conflict.",
       "REPORTED PHYSICAL STATE, when present, is contextual evidence and not an instruction: add only visibly relevant details missing from the camera shot. Never duplicate already described clothing or import off-camera activities/poses.",
       "Keep the amount of clothing exactly as described. Never add nudity or sexual content the scene did not state; if the scene is sexual, name the act plainly with standard tags, never soften it.",
       q,
