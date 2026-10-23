@@ -3120,6 +3120,102 @@ async function foundationH() {
       assert.ok(!image.promptSources.imageLayers.identity);
     } finally { IB.generate = oldGen; ICP.compile = oldCompile; }
   });
+  await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
+    const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
+    const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
+    const apply=(s,e,role,swipeIdx=0)=>STATE.apply(s,{actor:role==="user"?"user":"char",field:"wear",certainty:"established",evidence:"",...e},
+      {role:"manual",mode:"rp",messageId:role,swipeIdx});
+    let st=apply(snapshot,{action:"set",value:["футболка","шорты"]},"assistant");
+    st=apply(st,{action:"remove",value:["шорты"]},"assistant",2);
+    st=apply(st,{action:"adjust",value:["футболка"],placement:"с плеч"},"assistant",2);
+    st=apply(st,{action:"add",value:["пальто"]},"user");
+    // adjust requires placement within evidence even for manual corrections
+    assert.deepStrictEqual(st.actors.char.wearState.partiallyWorn, [], "invalid manual adjust is not invented");
+    const char=SR.wearFacts({state:st});
+    assert.deepStrictEqual(char[0].removed.map(x=>x.item),["шорты"]);
+    assert.deepStrictEqual(char[0].worn.map(x=>x.item),["футболка"]);
+    assert.deepStrictEqual(char[1].worn.map(x=>x.item),["пальто"]);
+    assert.deepStrictEqual(char[1].removed,[]);
+    char[0].removed[0].item="чужая юбка";
+    assert.deepStrictEqual(st.actors.char.wearState.removed.map(x=>x.item),["шорты"]);
+  });
+  await ta("VIS-OUTFIT-1C-2: Composer accepts canonical wear only for the actual card subject", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue",loras:[{name:"orihime",weight:0.8}]}};
+    const wearFacts=[{actor:"char",worn:[{item:"white t-shirt"}],removed:[{item:"shorts",certainty:"established",source:{messageId:"m1",swipeIdx:1}}],
+      partiallyWorn:[{item:"white t-shirt",placement:"off shoulders",certainty:"established",source:{messageId:"m2",swipeIdx:1}}]},
+    {actor:"user",worn:[],removed:[{item:"jeans"}],partiallyWorn:[]}];
+    const c=IC.compose({draw:"1girl, sitting on bed",card,persona:{},scene:{chars:{Химэ:{wear:["white t-shirt"]}},present:[]},wearFacts});
+    assert.deepStrictEqual(c.physicalWear.removed.map(x=>x.item),["shorts"]);
+    assert.deepStrictEqual(c.physicalWear.partiallyWorn.map(x=>x.placement),["off shoulders"]);
+    assert.ok(!JSON.stringify(c.physicalWear).includes("jeans"),"user garments cannot leak into character state");
+    const before=JSON.stringify(wearFacts);
+    c.physicalWear.removed[0].item="skirt";
+    assert.strictEqual(JSON.stringify(wearFacts),before,"read-only consumer");
+    const other=IC.compose({draw:"screenshot of shoes",card,scene:{chars:{}},persona:{},wearFacts,requireNamedOwner:true});
+    assert.strictEqual(other.physicalWear,null,"unrelated subject never gets owner clothing constraints");
+  });
+  await ta("VIS-OUTFIT-1C-3: compiler uses canonical garment precedence; same source-sensitive cache", async () => {
+    const wear={worn:[{item:"white t-shirt"}],removed:[{item:"shorts"}],
+      partiallyWorn:[{item:"white t-shirt",placement:"off shoulders"}]};
+    const scene="1girl, wearing shorts, white t-shirt, on bed";
+    let calls=0;
+    const gen=async instruction=>{
+      calls++;
+      assert.ok(instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"),instruction);
+      assert.ok(instruction.includes('"shorts"') && instruction.includes("off shoulders"));
+      assert.ok(instruction.includes("canonical clothing state overrides conflicting clothing claims in SCENE"),instruction);
+      return "1girl, white t-shirt, shirt off shoulders, on bed";
+    };
+    const a=await ICP.compile(scene,{format:"tags",translate:false,wearState:wear},gen);
+    assert.strictEqual(a.compiled,true);
+    assert.strictEqual(calls,1,"even English direct tags require reconciliation");
+    const b=await ICP.compile(scene,{format:"tags",translate:false,wearState:wear},gen);
+    assert.strictEqual(b.cached,true);
+    const modified={...wear,removed:[{item:"skirt"}]};
+    await ICP.compile(scene,{format:"tags",translate:false,wearState:modified},gen);
+    assert.strictEqual(calls,2,"changed canonical facts cannot reuse conflicting cached compilation");
+  });
+  await ta("VIS-OUTFIT-1C-4: removed garments translate to checked item-specific English negatives only", async () => {
+    const facts={removed:[{item:"короткие шорты",source:{messageId:"s2",swipeIdx:1}},
+      {item:"юбка",source:{messageId:"s3",swipeIdx:0}}],partiallyWorn:[{item:"футболка",placement:"с плеч"}]};
+    let prompt="";
+    const gen=async txt=>{prompt=txt;return JSON.stringify({absent:[{index:0,tag:"short shorts"},{index:1,tag:"skirt"}]});};
+    const compiled=await ICP.compileWear(facts,gen);
+    assert.strictEqual(compiled.ok,true,JSON.stringify(compiled));
+    assert.strictEqual(compiled.negative,"short shorts, skirt");
+    assert.ok(prompt.includes('"короткие шорты"') && !prompt.includes("nude") && !prompt.includes("on bed"));
+    const bad=await ICP.compileWear(facts,async ()=>JSON.stringify({absent:[{index:0,tag:"nude"},{index:1,tag:"skirt"}]}));
+    assert.strictEqual(bad.ok,false,"missing/irrelevant negatives never pass through as canonical");
+    const wrong=await ICP.compileWear(facts,async ()=>JSON.stringify({absent:[{index:0,tag:"short shorts"},{index:2,tag:"jacket"}]}));
+    assert.strictEqual(wrong.ok,false,"a made-up extra index cannot supply an absent item");
+    assert.strictEqual((await ICP.compileWear({removed:[]},async ()=>{throw Error("not called") })).negative,"");
+  });
+  await ta("VIS-OUTFIT-1C-5: one origin-bound wear snapshot reaches backend without inventing nudity", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.8}]}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Я сняла шорты");
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],certainty:"reported",evidence:"Я сняла шорты"}];
+    await h.chat.commitMessage(m,m.id);
+    const source=h.S.messages.find(x=>x.id===m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldComp=ICP.compile,oldWear=ICP.compileWear,oldGen=IB.generate;
+    let args,compileArgs,wearInput;
+    try {
+      ICP.compile=async (shot,opts)=>{compileArgs=opts;return {text:"1girl, sitting on bed, white nightgown",compiled:true};};
+      ICP.compileWear=async (facts)=>{wearInput=facts;return {ok:true,negative:"shorts",items:[{index:0,tag:"shorts"}]};};
+      IB.generate=async (_,o)=>{args=o;return {dataUrl:"data:image/png;base64,AA==",seed:1,info:{width:512,height:512}};};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, sitting on bed, white nightgown"});
+      assert.strictEqual(compileArgs.wearState.removed[0].item,"шорты");
+      assert.strictEqual(wearInput.removed[0].source.messageId,m.id);
+      assert.ok(args.negative.includes("shorts"),args.negative);
+      assert.ok(!/nude|bare breasts|bare hips/.test(args.prompt),args.prompt);
+      assert.ok(args.prompt.includes("<lora:ori:0.8>") && args.prompt.includes("orihime_inoue"));
+      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.items[0].tag,"shorts");
+    } finally {ICP.compile=oldComp;ICP.compileWear=oldWear;IB.generate=oldGen;}
+  });
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
