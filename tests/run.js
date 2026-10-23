@@ -3286,6 +3286,29 @@ async function foundationH() {
     m.swipes[0].draws=[{prompt:"a screenshot of a shoe store"}];
     assert.strictEqual(make(0).actors.char.wearState.known,false,"edited draw invalidates previous visual provenance");
   });
+  await ta("VIS-DRAW-SOURCE-3B: continued swipe observes its newest authored photo, not a stale first draw",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const msg=h.chat.newMsg("assistant",null,"Два снимка");
+    msg.swipes[0].draws=[{prompt:"current selfie, blue hoodie",ratio:"1:1"},
+      {prompt:"current mirror selfie, red t-shirt",ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    const old=globalThis.PRP.llm.simple;let request="";
+    try{
+      globalThis.PRP.llm.simple=async (_,prompt)=>{
+        request=prompt;return JSON.stringify({events:[{actor:"char",field:"wear",action:"add",
+          value:["red t-shirt"],certainty:"reported",evidence:"red t-shirt",
+          evidenceType:"draw",visualScope:"current-self"}]});
+      };
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.ok(request.includes("current mirror selfie, red t-shirt"));
+      assert.ok(!request.includes("current selfie, blue hoodie"),
+        "the first photo in a continued swipe must not be mistaken for the latest");
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),["red t-shirt"]);
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
   await ta("VIS-DRAW-SOURCE-4: authored English draw is not vetoed by stale removed state or global negatives",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.8}],
       wardrobe:"base: blue dress",nsfw:"nude: nipples"}});
