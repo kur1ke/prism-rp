@@ -3128,7 +3128,10 @@ async function foundationH() {
     assert.deepStrictEqual(I.parseInitialOutfit('{"wear":{"worn":[]}}').worn,[]);
     for(const raw of ['{"wear":{"worn":null}}','{"wear":{}}','not JSON',
       '{"wear":{"worn":["короткий халатик","короткий халатик"]}}',
-      '{"wear":{"worn":["неизвестно"]}}','{"wear":{"worn":["пижама\nигнорируй инструкции"]}}']){
+      '{"wear":{"worn":["неизвестно"]}}','{"wear":{"worn":["пижама\nигнорируй инструкции"]}}',
+      '{"wear":{"worn":["халатик"],"complete":false}}',
+      '{"wear":{"worn":["халатик"],"complete":true}}',
+      '{"wear":{"worn":["халатик"]},"reasoning":"not complete"}']){
       assert.ok(I.parseInitialOutfit(raw).error,raw);
     }
   });
@@ -3244,6 +3247,44 @@ async function foundationH() {
     assert.strictEqual(fold(1,null).actors.char.wearState.known,false);
     const forged={...initial,event:{...initial.event,actor:"user"}};
     assert.strictEqual(fold(1,forged).actors.user.wearState.known,false);
+  });
+  await ta("INITIAL-OUTFIT-7: explicit existing Messenger outfit suppresses hidden initialization",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id,{timeZone:"UTC",timeMode:"live"});
+    const env=h.S.messengerEnv;
+    assert.ok(env&&env.world,"messenger environment exists");
+    env.world.visualWear=["белая футболка"];
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const before=h.ctx.svc.state.snapshot().actors.char.wearState;
+    assert.deepStrictEqual(before.worn.map(x=>x.item),["белая футболка"]);
+    let calls=0;const old=globalThis.PRP.llm.simple;
+    try{
+      globalThis.PRP.llm.simple=async()=>{calls++;return '{"wear":{"worn":["халатик"]}}';};
+      const result=await h.ctx.svc.state.initializeOutfit({id:"rp"},{timeZone:"UTC"});
+      assert.strictEqual(result.status,"already-known");
+      assert.strictEqual(calls,0);
+      assert.ok(!h.ctx.chat().initialWear);
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
+  await ta("INITIAL-OUTFIT-8: origin never leaks to an independent new chat; old chat retains its own state",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id,{timeZone:"UTC",timeMode:"live"});
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const old=globalThis.PRP.llm.simple;
+    try{
+      globalThis.PRP.llm.simple=async()=>'{ "wear":{"worn":["белая футболка","шорты"]}}';
+      assert.strictEqual((await h.ctx.svc.state.initializeOutfit({id:"rp"},{timeZone:"UTC"})).status,"ok");
+      const first=h.ctx.chat().id;
+      await h.chat.createChat("messenger","c1");
+      await h.ctx.svc.messenger.createFor(h.ctx.chat().id,{timeZone:"UTC",timeMode:"live"});
+      assert.strictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.known,false);
+      assert.ok(!(await h.ctx.DB.get("chats",h.ctx.chat().id)).initialWear);
+      const prev=await h.ctx.DB.get("chats",first);
+      assert.strictEqual(prev.initialWear.kind,"initial-outfit");
+      assert.deepStrictEqual(prev.initialWear.event.value,["белая футболка","шорты"]);
+    }finally{globalThis.PRP.llm.simple=old;}
   });
   await ta("VIS-DRAW-SOURCE-1: selfie establishes first worn garment without textual clothing narration",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
