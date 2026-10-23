@@ -169,15 +169,19 @@ never writes state. Canonical clothing changes force compiler reconciliation
 even if the shot is already English or general translation is disabled.
 When that reconciliation fails, backend generation does not run.
 
-For a single-character shot, the image adapter translates **only the current
-removed item names** to source-indexed English garment tags using a bounded
-strict-JSON compiler response. It must provide precisely one safe syntactic
-tag per known removed item, never invent a new absent item or exposed body
-part; malformed/missing translation fails before generation. These tags enter
-the image backend's global negative prompt. Multi-character shots cannot use
-a global garment negative safely; they use the canonical scene reconciliation
-instead. `partiallyWorn` is *positive placement information*, not an absent
-garment. No second canonical store, parser, or inventory is created.
+The existing Image Compiler uses **one model request** to translate the
+camera shot and, if a removed item is known, return a strict structured JSON
+response with the English positive `prompt` and source-indexed English
+`absent` garment tags. These two outputs are checked and cached **together**
+against the same canonical wear input; there is no second translation mechanism
+or per-garment model call. The response must map precisely one syntactically
+valid garment tag to each known removed item. Malformed or missing mappings
+fail before backend generation. Global garment negatives apply only in
+single-character shots; multi-character shots use canonical scene reconciliation
+without globally forbidding other people's clothing. `partiallyWorn` is
+positive placement information, not a removed garment. Existing lexical
+wardrobe filtering is bypassed for successfully canonical-compiled clothing.
+No new canonical state store, parser or inventory is created.
 
 The semantic correctness of model-produced English garment tags and the
 compiler's ability to remove all contradictory positive tokens are **NOT
