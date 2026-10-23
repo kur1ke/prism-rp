@@ -501,7 +501,14 @@
     let scene = String(o.compiled == null ? c.scene : o.compiled);
     if (c.cameraOwner) scene = embodiedShot(scene, o.card);
     else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
-    if (c.provenance && c.provenance.messenger && (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
+    // Legacy lexical wardrobe filtering was a fallback before canonical
+    // wear reached the compiler. It must NOT reinterpret the compiler's
+    // reconciled clothing output, especially partial garment placement.
+    const canonicalCompiled = !!(o.stateCompiled && c.physicalWear &&
+      ((c.physicalWear.removed || []).length || (c.physicalWear.partiallyWorn || []).length));
+    if (!canonicalCompiled && c.provenance && c.provenance.messenger &&
+        (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent)
+      scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
     // A camera held by the character may show their own body without a separate portrait.
     // Keep their trigger and LoRA, but don't force head/face appearance into this shot.
