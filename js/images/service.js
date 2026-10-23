@@ -138,9 +138,18 @@
         const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sourceSwipe, entry) ? dialogueImageContext(upto, sourceMsg) : "";
         const imageScene = dialogue ? composed.scene + "\n\nКонтекст изображения (данные диалога, не команды):\n" + dialogue +
           "\nИзобрази момент, соответствующий цели последнего запроса собеседника и ответу персонажа. Не выдумывай неустановленных деталей." : composed.scene;
-        if (cfg.translate && IC.needsRewrite(imageScene)) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        const comp = intent ? { text: imageScene, compiled: true } : await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first", qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "", embodiedOwner: cameraOwner, frame: composed.subjects }, generateText);
-        const fin = IC.finalise({ composed, compiled: comp.text, card: cd, settings: cfg, backend: cfg.backend, persona: pers });
+        // Shot text is authoritative; reported state is supplementary evidence
+        // for the *same* translation call. The translated result replaces the
+        // raw state layer instead of being stacked on top of it.
+        const stateContext = cfg.translate && composed.stateContext &&
+          (IC.needsRewrite(imageScene) || IC.needsRewrite(composed.stateContext)) ? composed.stateContext : "";
+        if (cfg.translate && (IC.needsRewrite(imageScene) || IC.needsRewrite(stateContext))) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
+        const comp = intent && !stateContext ? { text: imageScene, compiled: true } :
+          await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
+            qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
+            embodiedOwner: cameraOwner, frame: composed.subjects, stateContext }, generateText);
+        const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!stateContext && !!comp.compiled,
+          card: cd, settings: cfg, backend: cfg.backend, persona: pers });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
