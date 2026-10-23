@@ -3756,7 +3756,7 @@ async function foundationD() {
     await h2.gen.initiative();
     assert.strictEqual(modes[3], "message-body", "initiative must use message-body");
     const hrp = fbHarness({ name: "Лилит (Лили)", description: "Персонаж." });
-    await hrp.chat.createChat("rp", "rp1");
+    await hrp.chat.createChat("rp");
     await hrp.chat.addUserMessage("Привет");
     await hrp.gen.generate();
     assert.strictEqual(modes[4], null, "RP remains unchanged");
