@@ -39,6 +39,9 @@
         recent: prior.slice(-5).map((m) => ({
           messageId: m.id, swipeIdx: m.swipeIdx || 0, role: m.role,
           text: String(TR.activeSwipe(m).text || "").slice(0, 500),
+          ...(m.role === "assistant" && TR.activeSwipe(m).draws &&
+            TR.activeSwipe(m).draws[0] && TR.activeSwipe(m).draws[0].prompt
+            ? { draw: String(TR.activeSwipe(m).draws[0].prompt).slice(0, 400) } : {}),
         })),
         references: TRACK.references(state, actor, ["remove", "adjust"]),
       };
@@ -49,7 +52,7 @@
       return JSON.stringify((path || []).map((m) => [
         m.id, m.swipeIdx || 0, TR.activeSwipe(m).text,
         TR.activeSwipe(m).stateEvents, TR.activeSwipe(m).stateCorrections,
-        TR.activeSwipe(m).sceneOps,
+        TR.activeSwipe(m).sceneOps, TR.activeSwipe(m).draws,
       ]));
     }
 
@@ -109,15 +112,22 @@
       const c = ctx.chat();
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
       const sw = TR.activeSwipe(msg), sourceText = String(sw.text || ""), swipeIdx = msg.swipeIdx || 0;
-      if (!sourceText.trim()) return { skipped: "empty" };
-      if (!INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
-      if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) && sw.stateStatus.sourceText === sourceText && !(opts && opts.force)) return { skipped: "already-processed" };
+      // Only a current assistant-authored [draw:] is observational evidence;
+      // manual image prompts, rewritten tags and backend pixels never feed canon.
+      const sourceDraw = msg.role === "assistant" && Array.isArray(sw.draws) && sw.draws[0]
+        ? String(sw.draws[0].prompt || "") : "";
+      if (!sourceText.trim() && !sourceDraw.trim()) return { skipped: "empty" };
+      if (!sourceDraw && !INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
+      if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) &&
+          sw.stateStatus.sourceText === sourceText && (sw.stateStatus.sourceDraw || "") === sourceDraw &&
+          !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       const index = initialPath.indexOf(msg);
       if (index < 0) return { skipped: "off-path" };
       const originalKey = pathFingerprint(initialPath);
       const chatId = c.id;
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
+        ...(sourceDraw ? { draw: sourceDraw.slice(0, 1600), draws: [{ prompt: sourceDraw }] } : {}),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name,
         ...observationContext(initialPath.slice(0, index), msg.role) };
       // Reuse a read-only early result only when its interpretation inputs still
@@ -125,7 +135,7 @@
       const prepared = opts && opts.prepared;
       const sameInputs = prepared && prepared.chatId === msg.chatId &&
         prepared.providerId === (provider && provider.id) && prepared.options &&
-        ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]) &&
+        ["mode", "role", "text", "draw", "speakerName"].every((key) => prepared.options[key] === options[key]) &&
         JSON.stringify(prepared.options.recent) === JSON.stringify(options.recent);
       let result;
       if (sameInputs) {
@@ -143,6 +153,9 @@
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
+      // Grounded fallback intentionally reads only text. Image descriptions
+      // are interpreted by the SAME Observer and independently verified
+      // against their exact draw evidence on every StateTracker fold.
       const events = result.events.slice();
       // Compare common Russian inflections ('синяя куртка'/'синей куртке')
       // to avoid adding the same garment twice when model and fallback agree.
@@ -168,7 +181,7 @@
         return { skipped: "stale-branch" };
       }
       const status = !result.valid ? events.length ? "partial" : "error" : result.issues.length ? "partial" : events.length ? "ok" : "no-changes";
-      const stateStatus = { status, sourceText, issues: result.issues, at: Date.now(),
+      const stateStatus = { status, sourceText, sourceDraw, issues: result.issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length };
       const next = JSON.parse(JSON.stringify(msg));
       next.swipes[swipeIdx].stateEvents = events;
@@ -187,7 +200,8 @@
        Ожидание ограничено таймаутом наблюдателя (simpleWithLimit) плюс запас в settle(). */
     const jobs = new Map();
     const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
-    const jobKey = (msg) => [msg.chatId, msg.id, msg.swipeIdx || 0, String(TR.activeSwipe(msg).text || "")].join("\u0001");
+    const jobKey = (msg) => [msg.chatId, msg.id, msg.swipeIdx || 0, String(TR.activeSwipe(msg).text || ""),
+      msg.role === "assistant" ? JSON.stringify(TR.activeSwipe(msg).draws || []) : ""].join("\u0001");
     function sync() {
       S.tracking = jobs.size > 0;
       if (ctx.ui && typeof ctx.ui.renderComposer === "function") ctx.ui.renderComposer();
