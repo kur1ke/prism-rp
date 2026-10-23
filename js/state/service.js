@@ -175,6 +175,11 @@
           if (missing.length) events.push(Object.assign({}, e, { value: missing }));
         } else if (!sameField.length) events.push(e);
       }
+      // One message may assert clothing both in its caption and in the photo.
+      // Apply text observations first; the intentional current photo is the
+      // later visual observation of that same moment. Neither is a second
+      // canonical store. Preserve relative ordering within each evidence kind.
+      events.sort((a, b) => Number(a.evidenceType === "draw") - Number(b.evidenceType === "draw"));
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
           pathFingerprint(chat().path()) !== originalKey) {
