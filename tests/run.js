@@ -3216,12 +3216,10 @@ async function foundationH() {
     try{
       globalThis.PRP.llm.simple=async()=>new Promise(r=>{release=r});
       const task=h.ctx.svc.state.initializeOutfit(prov,{timeZone:"UTC"});
-      assert.strictEqual(await h.ctx.svc.state.initializeOutfit(prov,{timeZone:"UTC"}),await (async()=>{
-        const other=h.chat.createChat("messenger","c1");
-        release('{"wear":{"worn":["тёплые носки"]}}');
-        await other;
-        return {status:"stale"};
-      })());
+      const same=h.ctx.svc.state.initializeOutfit(prov,{timeZone:"UTC"});
+      assert.strictEqual(same,task,"parallel attempts must share the same in-flight request");
+      await h.chat.createChat("messenger","c1");
+      release('{"wear":{"worn":["тёплые носки"]}}');
       assert.strictEqual((await task).status,"stale");
       assert.ok(!(await h.ctx.DB.get("chats",id)).initialWear);
       assert.strictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.known,false);
