@@ -292,6 +292,7 @@
     const card = o.card || {}, im = card.image || {}, persona = o.persona || {}, pim = persona.image || {};
     const st = o.scene || { chars: {}, present: [] };
     const messenger = !!o.messenger;
+    const shotAuthored = !!o.shotAuthored;
     const subVars = (v) => String(v || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, persona.name || "Пользователь");
     const rawDraw = subVars(o.draw).trim();
     const cameraOwner = !!o.cameraOwner || ownerCamera(card, rawDraw);
@@ -322,7 +323,7 @@
     // A card wardrobe is a set of optional presets, NOT a second inventory.
     // If a garment has changed canonical status, a preset cannot reintroduce
     // the original full look as unconditional visual tags.
-    if (canonicalChanges) wardrobe = "";
+    if (canonicalChanges || shotAuthored) wardrobe = "";
     // Когда одежда подтверждена состоянием переписки, общий/базовый гардероб
     // карточки не должен подменять её другой формой. Используем словарь
     // образов только если нашёлся явный ключ конкретной одежды.
@@ -340,7 +341,7 @@
     const stale = !messenger && actors.owner && wardrobeConflicts(draw, wardrobe, outfit);
     if (stale) wardrobe = "";
     const bits = [];
-    if (actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
+    if (!shotAuthored && actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
     // Physical state is context for the shot, not a second free-form prompt
     // layer. In particular, an owner-camera photo does not depict the camera
     // holder's previous activity/pose, and clothing already described by the
@@ -352,21 +353,21 @@
     // A separate portrait may carry an explicit Messenger wardrobe override
     // even when the generated shot mentions the same garment category.
     const sameWornGarmentInShot = cameraOwner && shotGarments.some((g) => wornGarments.includes(g));
-    if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe && !sameWornGarmentInShot)
+    if (!shotAuthored && (actors.owner || cameraOwner) && messenger && outfit && !wardrobe && !sameWornGarmentInShot)
       established.push("clothing: " + outfit);
-    if (actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
-    if (actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
-    if (actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
-    if (actors.user && user && user.pose) bits.push("user pose: " + user.pose);
+    if (!shotAuthored && actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
+    if (!shotAuthored && actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
+    if (!shotAuthored && actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
+    if (!shotAuthored && actors.user && user && user.pose) bits.push("user pose: " + user.pose);
     let sceneText = [draw, bits.join(", ")].filter(Boolean).join(", ");
-    if (messenger && actors.owner && o.messenger.location && !/\b(?:cafe|room|park|street|city|house|home|bedroom|classroom|garden|hospital|library|hallway)\b/i.test(draw))
+    if (!shotAuthored && messenger && actors.owner && o.messenger.location && !/\b(?:cafe|room|park|street|city|house|home|bedroom|classroom|garden|hospital|library|hallway)\b/i.test(draw))
       sceneText += (sceneText ? ", " : "") + "location: " + o.messenger.location;
 
     const hay = sceneText.toLowerCase();
     const look = [], tail = [];
     if (actors.owner) for (const { key: k, tags } of parseMap(subVars(im.look))) {
       if (isSuffix(k)) { tail.push(tags); continue; }
-      if (!isBase(k) && !bestVariant(k, hay).score) continue;
+      if (!isBase(k) && (shotAuthored || !bestVariant(k, hay).score)) continue;
       const fresh = splitTags(tags).filter((p) => !hay.includes(p.toLowerCase()));
       if (fresh.length) look.push(fresh.join(", "));
     }
@@ -383,11 +384,12 @@
     // NSFW look presets are Card options, not proof of exposed body parts.
     // Do not let a shot-local keyword turn a known clothing change into an
     // independent undressing decision outside StateTracker.
-    const nsfw = actors.owner && !canonicalChanges ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
+    const nsfw = actors.owner && !canonicalChanges && !shotAuthored ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
     return {
       // The card owns stable appearance; the shot compiler must not rewrite it.
       scene: sceneText,
       physicalWear,
+      shotAuthored,
       keep: [look.join(", "), wardrobe, established.join(", "), userTags, nsfw].filter(Boolean).join(", "),
       // Only card-configured image tags bypass translation; reported physical
       // state passes through compile() if it needs translation.
@@ -406,7 +408,8 @@
           identity: actors.owner ? look.join(", ") : "",
           established: established.join(", "),
           wardrobePreset: wardrobe,
-          wardrobeSuppressed: canonicalChanges,
+          wardrobeSuppressed: canonicalChanges || shotAuthored,
+          drawAuthored: shotAuthored,
           shot: draw,
           shotExtras: bits.join(", "),
           outfitKnown: !!outfit,
@@ -509,7 +512,7 @@
     // reconciled clothing output, especially partial garment placement.
     const canonicalCompiled = !!(o.stateCompiled && c.physicalWear &&
       ((c.physicalWear.removed || []).length || (c.physicalWear.partiallyWorn || []).length));
-    if (!canonicalCompiled && c.provenance && c.provenance.messenger &&
+    if (!c.shotAuthored && !canonicalCompiled && c.provenance && c.provenance.messenger &&
         (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent)
       scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
