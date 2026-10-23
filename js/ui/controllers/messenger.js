@@ -35,6 +35,7 @@
         if (result && result.status === "error") ui.toast("Не удалось извлечь состояние: проверьте подробности анализа.", true);
       },
       "ms-create": async () => {
+        if (!S.modal || S.modal.kind !== "new-messenger" || S.modal.creating) return;
         const tz = $("#ms-tz").value.trim(), mode = radio("ms-mode") || "live";
         const manualNow = mode === "manual" ? MT.toIso(MT.fromLocal($("#ms-manual").value, tz)) : null;
         const setup = { timeZone: tz, timeMode: mode, manualNow };
