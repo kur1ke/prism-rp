@@ -438,6 +438,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .modal-body { overflow: auto; padding: 22px 26px 26px; }
 .modal-body h3 { font-size: 16px; margin: 0 0 4px; }
 .modal-body .lead { color: var(--text-2); margin: 0 0 18px; font-size: 14px; }
+.ms-new .ms-create-spin { width: 16px; height: 16px; margin-right: 8px; display: inline-block; vertical-align: -3px;
+  border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+  animation: turn-spin .9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ms-new .ms-create-spin { animation: none; } }
 .modal-foot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }
 .prov { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-m); background: var(--raised); margin-bottom: 8px; cursor: pointer; }
 .prov.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
@@ -5892,8 +5896,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
   function parseInitialOutfit(raw) {
     if (typeof raw !== "string" || raw.length > 8000) return { error: "Некорректный ответ инициализации" };
+    // Perchance/RP providers may wrap otherwise valid structured JSON in
+    // a single markdown code fence. Unwrap ONLY that exact envelope: do not
+    // salvage a plausible object from explanatory text or several candidates.
+    const trimmed = raw.trim();
+    const fenced = /^\x60\x60\x60(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n\x60\x60\x60$/i.exec(trimmed);
     let data;
-    try { data = JSON.parse(raw.trim()); } catch (_e) { return { error: "Ожидался JSON полного наряда" }; }
+    try { data = JSON.parse(fenced ? fenced[1].trim() : trimmed); }
+    catch (_e) { return { error: "Ожидался JSON полного наряда" }; }
     if (!data || typeof data !== "object" || Array.isArray(data) ||
         !data.wear || typeof data.wear !== "object" || Array.isArray(data.wear) ||
         !Array.isArray(data.wear.worn) ||
@@ -8224,7 +8234,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           '<li>' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
           : '<p class="empty-note">Нет.</p>') + '</div>';
     } else {
-      content = '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
+      const init = m.chat && m.chat.initialOutfitCheck;
+      const initIssue = init && init.status === "error"
+        ? '<div class="block"><div class="block-title">Начальная одежда: ошибка инициализации</div>'
+          + '<p class="hint">Начальный комплект не был записан. Одежда осталась неизвестной; это не означает отсутствие одежды.</p>'
+          + '<p>Причина: ' + esc(init.reason || "неизвестна") + '</p></div>'
+        : '';
+      content = initIssue + '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
         + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
         + '<button class="btn btn-sm" data-act="state-retry">Повторить анализ</button></div>'
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
@@ -8797,6 +8813,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const targetCard = ((m.cards || []).find((c) => c.id === modal.cardId)) || m.card;
     const tz = modal.timeZone || MT.systemTimeZone();
     const manual = modal.timeMode === "manual";
+    if (modal.creating) return `<div class="modal-wrap"><div class="modal narrow ms-new" role="dialog" aria-modal="true"
+      aria-label="Создание переписки" aria-busy="true">
+      <div class="modal-head"><h2>Создаём переписку${targetCard ? " с " + esc(targetCard.name) : ""}</h2></div>
+      <div class="modal-body"><div class="block" role="status" aria-live="polite">
+        <p class="lead"><span class="ms-create-spin" aria-hidden="true"></span>Определяем начальное состояние персонажа…</p>
+        <p class="hint">Выполняется один скрытый запрос к RP-модели. Сообщение в чат не добавляется.</p>
+        <p class="hint">Окно закроется, когда переписка будет готова.</p>
+      </div><div class="modal-foot"><button class="btn btn-primary" disabled aria-disabled="true">Создаём…</button></div></div>
+    </div></div>`;
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow ms-new" role="dialog" aria-modal="true" aria-label="Новая переписка">
       <div class="modal-head"><h2>Новая переписка${targetCard ? " с " + esc(targetCard.name) : ""}</h2>
         <button class="icon-btn" data-act="modal-close" title="Отмена">${icon("x")}</button></div>
@@ -9792,6 +9817,21 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         return Promise.resolve({ status: "unavailable" });
       if (initializing.has(c.id)) return initializing.get(c.id);
       const id = c.id, cardId = c.cardId;
+      // Diagnostics are metadata on the new chat, never a second source
+      // of outfit truth. Do not persist prompts, raw model outputs or secrets.
+      async function failed(reason) {
+        const current = ctx.chat();
+        if (!current || current.id !== id || current.cardId !== cardId ||
+            S.chatId !== id || S.cardId !== cardId || chat().path().length ||
+            (S.messages || []).length || current.initialWear)
+          return { status: "stale" };
+        const next = Object.assign({}, current, {
+          initialOutfitCheck: { status: "error", reason: String(reason).slice(0, 160) },
+        });
+        try { await ctx.DB.put("chats", next); Object.assign(current, next); }
+        catch (_e) { /* Non-canonical diagnostics cannot block chat creation. */ }
+        return { status: "error", reason };
+      }
       const instruction = INT.initialOutfitInstruction(card, setup || {});
       const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
         ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
@@ -9800,15 +9840,21 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const task = (async () => {
         let raw;
         try { raw = await simpleWithLimit(provider, instruction); }
-        catch (_e) { return { status: "error", reason: "model" }; }
+        catch (e) {
+          const message = String(e && e.message || e || "");
+          return failed(/превышено время ожидания/i.test(message) ? "timeout"
+            : /ai-text-plugin недоступен/i.test(message) ? "plugin-unavailable"
+            : /\b(?:401|403|429)\b/.test(message) ? "provider-rejected"
+            : "provider-error");
+        }
         const parsed = INT.parseInitialOutfit(raw);
-        if (parsed.error) return { status: "error", reason: parsed.error };
+        if (parsed.error) return failed(parsed.error);
         const event = TRACK.normalize({
           actor: "char", field: "wear", action: parsed.worn.length ? "set" : "clear",
           ...(parsed.worn.length ? { value: parsed.worn } : {}),
           certainty: "reported", evidence: "",
         }, { role: "initial", mode: "messenger" });
-        if (!event.event) return { status: "error", reason: event.error };
+        if (!event.event) return failed(event.error);
         // One origin event belongs to this exact new chat, never to a sibling
         // or to an already active conversation. A delayed response cannot
         // retroactively dress a character after the first message.
@@ -12677,14 +12723,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (result && result.status === "error") ui.toast("Не удалось извлечь состояние: проверьте подробности анализа.", true);
       },
       "ms-create": async () => {
+        if (!S.modal || S.modal.kind !== "new-messenger" || S.modal.creating) return;
         const tz = $("#ms-tz").value.trim(), mode = radio("ms-mode") || "live";
         const manualNow = mode === "manual" ? MT.toIso(MT.fromLocal($("#ms-manual").value, tz)) : null;
         const setup = { timeZone: tz, timeMode: mode, manualNow };
         const err = svc.messenger.checkSetup(setup);
         if (err) { ui.toast(err, true); return; }
-        const cardId = S.modal && S.modal.cardId;
-        S.modal = null; ui.renderModal();
-        await nav.newChat("messenger", cardId, setup);
+        // Keep the modal visible while the new chat and its hidden initial
+        // state are prepared. One active request = one click, not a toast loop.
+        if (!S.modal || S.modal.kind !== "new-messenger" || S.modal.creating) return;
+        const cardId = S.modal.cardId;
+        const pending = Object.assign({}, S.modal, { creating: true });
+        S.modal = pending;
+        ui.renderModal();
+        try {
+          await nav.newChat("messenger", cardId, setup);
+        } finally {
+          if (S.modal === pending) { S.modal = null; ui.renderModal(); }
+        }
       },
       "env-edit": () => { S.envEdit = { scope: svc.chat.path().length ? "branch" : "" }; ui.renderDrawer(); },
       "env-cancel": () => { S.envEdit = null; ui.renderDrawer(); },
@@ -12896,8 +12952,19 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       // message or changes an existing conversation.
       if (svc.state && typeof svc.state.initializeOutfit === "function") {
         const init = await svc.state.initializeOutfit(ctx.provider(), chosenSetup);
-        if (S.chatId === id && init && !["ok", "skipped", "already-known"].includes(init.status))
-          ui.toast("Начальную одежду определить не удалось; она пока неизвестна, а первое фото может её установить.", true);
+        if (S.chatId === id && init && !["ok", "skipped", "already-known", "stale"].includes(init.status)) {
+          const reasons = {
+            timeout: "истекло время ожидания RP-модели",
+            "plugin-unavailable": "Perchance ai-text-plugin недоступен",
+            "provider-rejected": "RP Provider отклонил запрос",
+            "provider-error": "RP Provider не ответил",
+            unavailable: "RP Provider не настроен",
+            overflow: "служебный запрос превышает бюджет контекста",
+            storage: "не удалось сохранить результат",
+          };
+          const detail = reasons[init.reason] || (init.reason && init.reason.length <= 160 ? init.reason : "ответ модели не прошёл проверку");
+          ui.toast("Переписка создана. Начальную одежду определить не удалось: " + detail + ". Подробности — в Debug.", true);
+        }
       }
     }
     // Another new-chat/navigation action may have replaced this request while
@@ -12940,8 +13007,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "open-chat": (t) => openChat(t.dataset.id),
     rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
     "reload-page": () => location.reload(),
-    "modal-bg": (t, e) => { if (e.target === t) { S.modal = null; ui.renderModal(); } },
-    "modal-close": () => { S.modal = null; ui.renderModal(); },
+    "modal-bg": (t, e) => { if (e.target === t && !(S.modal && S.modal.creating)) { S.modal = null; ui.renderModal(); } },
+    "modal-close": () => { if (S.modal && S.modal.creating) return; S.modal = null; ui.renderModal(); },
   }, ...controllers.map((c) => c.actions));
   const chatCtl = controllers[0];
 
@@ -12978,7 +13045,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (chatCtl.shortcut(e)) return;
     if (e.key === "Escape") {
       if (S.pop) return ui.closePop();
-      if (S.modal) { S.modal = null; return ui.renderModal(); }
+      if (S.modal) { if (S.modal.creating) return; S.modal = null; return ui.renderModal(); }
       if (S.editingMsg) { S.editingMsg = null; return ui.renderFeed(); }
       if (S.find) return ACTS["find-close"]();
       if (S.drawerOpen && ui.narrow()) return ACTS["drawer-close"]();
