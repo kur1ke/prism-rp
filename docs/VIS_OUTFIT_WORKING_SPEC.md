@@ -109,8 +109,9 @@ Test A1111/Forge with controlled model/seed/shot settings and compare **prompt c
 ## WS-1 canonical WearState consolidation (testing candidate)
 
 This batch is deliberately narrower than VIS-OUTFIT-1 closure. StateTracker now
-folds garment events into one derived `wearState` with `known`,
-`worn`, `removed` and `partiallyWorn`. `fields.wear` is rebuilt only
+folds garment events into one derived `wearState` with `known` (some
+positive garment knowledge), `complete` (explicit full outfit), `worn`,
+`removed` and `partiallyWorn`. `fields.wear` is rebuilt only
 from this state for legacy consumers. Each item has explicit certainty and
 source; `wear.adjust` includes a verbatim `placement` excerpt from
 current-message evidence. There is no new persisted inventory or schema
