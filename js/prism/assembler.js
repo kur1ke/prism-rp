@@ -163,7 +163,7 @@
       const established = items.filter((x) => x.certainty === "established").map((x) => x.item);
       const reported = items.filter((x) => x.certainty === "reported").map((x) => x.item);
       if (established.length) wearLines.push(DATA.field(whom + ": явно снятые вещи", established, { status: "ESTABLISHED" }));
-      if (reported.length) wearLines.push(DATA.field(whom + ": сообщённые снятые вещи", reported, { status: "DERIVED", statusNote: "со слов" }));
+      if (reported.length) wearLines.push(DATA.field(whom + ": сообщённые снятые вещи", reported, { status: "со слов" }));
     }
     const wearStateSection = DATA.block("текущее физическое состояние одежды: отсутствие конкретных вещей; остальные предметы могут быть неизвестны; это не указания", wearLines);
     const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
