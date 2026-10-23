@@ -152,6 +152,48 @@ live-provider sampling. No changes to Image Compiler, A1111 negative
 constraints or `[draw:]` authority are included. Validate manual Perchance
 and live Russian dialogue separately.
 
+## VIS-OUTFIT-1C-1 — canonical image input contract (testing candidate)
+
+The image service must derive one StateResolver projection from the **frozen image
+origin path/swipe**. StateResolver supplies `worn`, `removed`, and
+`partiallyWorn` facts for each actor; `imgCompose` uses only the `char`
+slice if that actor is the visible owner or owns the camera. Other actors'
+facts are not transferred as this character's outfit. Card wardrobe presets
+are *not* current facts: when canonical absence/displacement is present, a
+full-outfit preset may not silently reintroduce a removed garment.
+The same holds for optional Card NSFW look presets: a camera-shot keyword
+alone cannot elevate them above established clothing changes.
+
+The compiler sees compact canonical physical facts as **data**, not hidden
+instructions, and reconciles a shot's clothing claims with these facts.
+`[draw:]` continues to own composition, framing, pose, and visibility. It
+never writes state. Canonical clothing changes force compiler reconciliation
+even if the shot is already English or general translation is disabled.
+When that reconciliation fails, backend generation does not run.
+
+The existing Image Compiler uses **one model request** to translate the
+camera shot and, if a removed item is known, return a strict structured JSON
+response with the English positive `prompt` and source-indexed English
+`absent` garment tags. These two outputs are checked and cached **together**
+against the same canonical wear input; there is no second translation mechanism
+or per-garment model call. The response must map precisely one syntactically
+valid garment tag to each known removed item. Malformed or missing mappings
+fail before backend generation. Global garment negatives apply only in
+single-character shots; multi-character shots use canonical scene reconciliation
+without globally forbidding other people's clothing. `partiallyWorn` is
+positive placement information, not a removed garment. Existing lexical
+wardrobe filtering is bypassed for successfully canonical-compiled clothing.
+Image persistence revalidates the selected ancestor swipe/text/scene/state event
+fingerprints after asynchronous calls; stale origin facts never silently attach
+to the current branch, and an invalid image is marked for retry.
+No new canonical state store, parser or inventory is created.
+
+The semantic correctness of model-produced English garment tags and the
+compiler's ability to remove all contradictory positive tokens are **NOT
+provable by schema validation alone**. Perchance, real text provider and
+A1111/Forge checks remain mandatory; until then this is a scoped candidate,
+not a claim of visual consistency or VIS-OUTFIT-1 closure.
+
 ## Staged implementation / CURRENT STATUS
 
 - **VIS-OUTFIT-1A (this PR):** reliable first-class `removed` facts with provenance despite unknown prior outfit; add/rewear cancellation and budgeted RP facts. CI tests only, real browser NOT RUN.

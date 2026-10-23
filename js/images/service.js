@@ -35,6 +35,25 @@
     return !draws.some((d) => String(d && d.prompt || "").trim() === String(entry && entry.draw || "").trim());
   }
 
+  // Only the inputs determining branch-specific physical/scene state. Images
+  // and transient image status are deliberately excluded from this fingerprint.
+  function stateVersion(message, selectedSwipe) {
+    if (!message || !Array.isArray(message.swipes)) return "";
+    const index = selectedSwipe == null ? (message.swipeIdx || 0) : selectedSwipe;
+    const sw = message.swipes[index];
+    if (!sw) return "";
+    return JSON.stringify([
+      message.id, message.chatId, message.parentId || null, index,
+      sw.text, sw.sceneOps, sw.stateEvents, sw.stateCorrections, sw.messengerAt,
+    ]);
+  }
+
+  async function imageOriginStillCurrent(DB, origin) {
+    const before = origin.path.slice(0, -1);
+    const live = await Promise.all(before.map((m) => DB.get("messages", m.id)));
+    return before.every((m, i) => live[i] && stateVersion(live[i]) === stateVersion(m));
+  }
+
   // Capture the selected swipe and its ancestry once, before any async request.
   // This is a read-only generation source, NOT a new visual/canonical state.
   function imageOrigin(messages, msg, sw, chatId) {
@@ -46,7 +65,8 @@
     if (!path.length || path[path.length - 1] !== source || path.some((m) => m.chatId !== chatId)) return null;
     const frozen = JSON.parse(JSON.stringify(path));
     frozen[frozen.length - 1].swipeIdx = swipeIdx;
-    return { chatId, messageId: source.id, swipeIdx, sourceText: String(sw.text || ""), path: frozen };
+    return { chatId, messageId: source.id, swipeIdx, sourceText: String(sw.text || ""),
+      sourceStateVersion: stateVersion(frozen[frozen.length - 1], swipeIdx), path: frozen };
   }
 
   function create(ctx) {
@@ -130,7 +150,7 @@
           { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner, qualityPinned: ST.qualityPinned(S.settings) }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
-        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
+        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd, scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
         const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sourceSwipe, entry) ? dialogueImageContext(upto, sourceMsg) : "";
@@ -142,22 +162,46 @@
         const stateContext = cfg.translate && composed.stateContext &&
           (IC.needsRewrite(imageScene) || IC.needsRewrite(composed.stateContext)) ? composed.stateContext : "";
         if (cfg.translate && (IC.needsRewrite(imageScene) || IC.needsRewrite(stateContext))) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        const comp = intent && !stateContext ? { text: imageScene, compiled: true } :
+        const canonicalWear = composed.physicalWear;
+        const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
+        const comp = intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
-            embodiedOwner: cameraOwner, frame: composed.subjects, stateContext }, generateText);
-        const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!stateContext && !!comp.compiled,
-          card: cd, settings: cfg, backend: cfg.backend, persona: pers });
+            embodiedOwner: cameraOwner, frame: composed.subjects, stateContext,
+            wearState: canonicalWear }, generateText);
+        // An English input or disabled general translation must not bypass
+        // known physical changes. If reconciliation fails, don't send a
+        // contradictory unverified image to the backend.
+        if (changes && !comp.compiled) throw new Error("Не удалось согласовать одежду с текущим состоянием: " + (comp.error || "нет результата"));
+        if (changes && !comp.wearValidated)
+          throw new Error("Не удалось согласовать предметные ограничения с каноном.");
+        // The same compiler response binds English negative tags to the
+        // source-indexed removed garments. Never make a second model call.
+        const singleOwner = (composed.ownerPresent || composed.cameraOwner) &&
+          !composed.userPresent && IC.subjectCount(comp.text) <= 1;
+        const wearNegative = singleOwner ? String(comp.negative || "") : "";
+        if (changes && canonicalWear.removed && canonicalWear.removed.length &&
+            (!comp.negative || !Array.isArray(comp.wearItems)))
+          throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
+        const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
+          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
         if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
+        // A changed ancestor swipe or evidence during compilation invalidates
+        // this image before a potentially expensive backend request.
+        if (!(await imageOriginStillCurrent(DB, origin)))
+          throw new Error("Исходная ветка изменилась во время подготовки изображения. Повторите рисование.");
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
-          promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance, compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null } };
+          promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
+            compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null,
+            wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
+              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]) } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
         finalPatch = { status: "error", error: e.message || String(e) };
@@ -166,6 +210,17 @@
         const latest = await DB.get("messages", origin.messageId);
         const savedSwipe = latest && latest.chatId === origin.chatId && latest.swipes && latest.swipes[origin.swipeIdx];
         const savedImage = savedSwipe && (savedSwipe.images || []).find((im) => im.id === entry.id);
+        // Do not attach an image built from obsolete ancestor physical facts.
+        // A changed source state's events also invalidate it, even if its
+        // visible text has not changed.
+        const currentSource = latest && JSON.parse(JSON.stringify(latest));
+        if (currentSource) currentSource.swipeIdx = origin.swipeIdx;
+        const originValid = currentSource && stateVersion(currentSource, origin.swipeIdx) === origin.sourceStateVersion &&
+          await imageOriginStillCurrent(DB, origin);
+        if (finalPatch.status === "done" && !originValid) {
+          finalPatch = { status: "error", error: "Исходное состояние ветки или свайпа изменилось. Повторите рисование." };
+          imageData = null;
+        }
         // Deleted/edited messages and images cannot be resurrected by a late callback.
         if (savedSwipe && savedSwipe.text === origin.sourceText && savedImage) {
           Object.assign(savedImage, finalPatch);

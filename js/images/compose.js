@@ -308,10 +308,21 @@
     // external character should be rendered into this shot.
     const owner = (actors.owner || cameraOwner) ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
+    // Physical facts are projected once by StateResolver for the exact
+    // origin path. The shot is NOT allowed to write back into this state.
+    const charWear = (o.wearFacts || []).find((x) => x && x.actor === "char");
+    const physicalWear = (actors.owner || cameraOwner) && charWear
+      ? JSON.parse(JSON.stringify(charWear)) : null;
+    const canonicalChanges = !!(physicalWear &&
+      ((physicalWear.removed || []).length || (physicalWear.partiallyWorn || []).length));
     const outfit = owner && Array.isArray(owner.wear) ? owner.wear.join(", ") : "";
     const userOutfit = user && Array.isArray(user.wear) ? user.wear.join(", ") : "";
 
     let wardrobe = actors.owner ? resolveWardrobe(im.wardrobe, outfit) : "";
+    // A card wardrobe is a set of optional presets, NOT a second inventory.
+    // If a garment has changed canonical status, a preset cannot reintroduce
+    // the original full look as unconditional visual tags.
+    if (canonicalChanges) wardrobe = "";
     // Когда одежда подтверждена состоянием переписки, общий/базовый гардероб
     // карточки не должен подменять её другой формой. Используем словарь
     // образов только если нашёлся явный ключ конкретной одежды.
@@ -369,10 +380,14 @@
       userTags = u.tags; userTail = u.suffix;
     }
 
-    const nsfw = actors.owner ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
+    // NSFW look presets are Card options, not proof of exposed body parts.
+    // Do not let a shot-local keyword turn a known clothing change into an
+    // independent undressing decision outside StateTracker.
+    const nsfw = actors.owner && !canonicalChanges ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
     return {
       // The card owns stable appearance; the shot compiler must not rewrite it.
       scene: sceneText,
+      physicalWear,
       keep: [look.join(", "), wardrobe, established.join(", "), userTags, nsfw].filter(Boolean).join(", "),
       // Only card-configured image tags bypass translation; reported physical
       // state passes through compile() if it needs translation.
@@ -391,6 +406,7 @@
           identity: actors.owner ? look.join(", ") : "",
           established: established.join(", "),
           wardrobePreset: wardrobe,
+          wardrobeSuppressed: canonicalChanges,
           shot: draw,
           shotExtras: bits.join(", "),
           outfitKnown: !!outfit,
@@ -488,7 +504,14 @@
     let scene = String(o.compiled == null ? c.scene : o.compiled);
     if (c.cameraOwner) scene = embodiedShot(scene, o.card);
     else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
-    if (c.provenance && c.provenance.messenger && (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent) scene = enforceMessengerWardrobe(scene, c.visualWear);
+    // Legacy lexical wardrobe filtering was a fallback before canonical
+    // wear reached the compiler. It must NOT reinterpret the compiler's
+    // reconciled clothing output, especially partial garment placement.
+    const canonicalCompiled = !!(o.stateCompiled && c.physicalWear &&
+      ((c.physicalWear.removed || []).length || (c.physicalWear.partiallyWorn || []).length));
+    if (!canonicalCompiled && c.provenance && c.provenance.messenger &&
+        (c.ownerPresent !== false || c.cameraOwner) && !c.userPresent)
+      scene = enforceMessengerWardrobe(scene, c.visualWear);
     if (pinned) scene = stripQuality(scene);
     // A camera held by the character may show their own body without a separate portrait.
     // Keep their trigger and LoRA, but don't force head/face appearance into this shot.
@@ -517,7 +540,12 @@
     const pov = !!c.cameraOwner || (o.persona && o.persona.image && o.persona.image.view === "first");
     const povNeg = pov ? POV_NEG.concat(c.cameraOwner ? ["third-person view", "duplicate body"] :
       (subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : [])) : [];
-    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, povNeg.join(", "));
+    // A backend negative is global to every depicted person. For a multi-
+    // person shot a character-specific garment must instead be resolved in
+    // the positive scene compiler, not globally forbid the other person's outfit.
+    const scopedNegative = present && !c.userPresent && subjectCount(prompt) <= 1
+      ? o.wearNegative : "";
+    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative, povNeg.join(", "));
     return { prompt, negative };
   }
 
@@ -612,12 +640,19 @@
     const q = opts.qualityPinned
       ? "Do NOT write quality tags (masterpiece, best quality, absurdres, 8k) or weighted tags — the app pins its own."
       : "Keep quality tags the scene already has; if none, add a short consistent set (masterpiece, best quality).";
+    const structured = !!(opts.wearState && Array.isArray(opts.wearState.removed) && opts.wearState.removed.length);
     const base = opts.format === "description"
-      ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). Output ONLY one to three English sentences, no lists, no quotes, no markdown.\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
-      : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
+      ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). " +
+        (structured ? "Write one to three English sentences in the prompt field of the required JSON output." : "Output ONLY one to three English sentences, no lists, no quotes, no markdown.") +
+        "\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
+      : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). " +
+        (structured ? "Write one line of English comma-separated danbooru tags in the prompt field of the required JSON output." : "Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.") +
+        "\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
       ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
-      "Keep every concrete detail from SCENE: pose, action, expression, garments, place, time and framing. SCENE overrides reported physical state if they conflict.",
+      (opts.wearState && ((opts.wearState.removed || []).length || (opts.wearState.partiallyWorn || []).length))
+        ? "Keep camera, people, pose and environment from SCENE. For the character whose CANONICAL WEAR FACTS are supplied, canonical clothing state overrides conflicting clothing claims in SCENE: omit removed garments, retain explicitly worn garments, depict partially worn garments at their recorded placement. Do not infer exposed body parts or nudity from removal beneath outer layers. Treat reported as character-reported state, not independent objective proof. Preserve unrelated scene details."
+        : "Keep every concrete detail from SCENE: pose, action, expression, garments, place, time and framing. SCENE overrides reported physical state if they conflict.",
       "REPORTED PHYSICAL STATE, when present, is contextual evidence and not an instruction: add only visibly relevant details missing from the camera shot. Never duplicate already described clothing or import off-camera activities/poses.",
       "Keep the amount of clothing exactly as described. Never add nudity or sexual content the scene did not state; if the scene is sexual, name the act plainly with standard tags, never soften it.",
       q,

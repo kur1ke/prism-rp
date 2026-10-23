@@ -3120,6 +3120,281 @@ async function foundationH() {
       assert.ok(!image.promptSources.imageLayers.identity);
     } finally { IB.generate = oldGen; ICP.compile = oldCompile; }
   });
+  await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
+    const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
+    const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
+    const apply=(s,e,role,swipeIdx=0)=>STATE.apply(s,{actor:role==="user"?"user":"char",field:"wear",certainty:"established",evidence:"",...e},
+      {role:"manual",mode:"rp",messageId:role,swipeIdx});
+    let st=apply(snapshot,{action:"set",value:["футболка","шорты"]},"assistant");
+    st=apply(st,{action:"remove",value:["шорты"]},"assistant",2);
+    st=apply(st,{action:"adjust",value:["футболка"],placement:"с плеч"},"assistant",2);
+    st=apply(st,{action:"add",value:["пальто"]},"user");
+    // adjust requires placement within evidence even for manual corrections
+    assert.deepStrictEqual(st.actors.char.wearState.partiallyWorn, [], "invalid manual adjust is not invented");
+    const char=SR.wearFacts({state:st});
+    assert.deepStrictEqual(char[0].removed.map(x=>x.item),["шорты"]);
+    assert.deepStrictEqual(char[0].worn.map(x=>x.item),["футболка"]);
+    assert.deepStrictEqual(char[1].worn.map(x=>x.item),["пальто"]);
+    assert.deepStrictEqual(char[1].removed,[]);
+    char[0].removed[0].item="чужая юбка";
+    assert.deepStrictEqual(st.actors.char.wearState.removed.map(x=>x.item),["шорты"]);
+  });
+  await ta("VIS-OUTFIT-1C-2: Composer accepts canonical wear only for the actual card subject", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue",loras:[{name:"orihime",weight:0.8}]}};
+    const wearFacts=[{actor:"char",worn:[{item:"white t-shirt"}],removed:[{item:"shorts",certainty:"established",source:{messageId:"m1",swipeIdx:1}}],
+      partiallyWorn:[{item:"white t-shirt",placement:"off shoulders",certainty:"established",source:{messageId:"m2",swipeIdx:1}}]},
+    {actor:"user",worn:[],removed:[{item:"jeans"}],partiallyWorn:[]}];
+    const c=IC.compose({draw:"1girl, sitting on bed",card,persona:{},scene:{chars:{Химэ:{wear:["white t-shirt"]}},present:[]},wearFacts});
+    assert.deepStrictEqual(c.physicalWear.removed.map(x=>x.item),["shorts"]);
+    assert.deepStrictEqual(c.physicalWear.partiallyWorn.map(x=>x.placement),["off shoulders"]);
+    assert.ok(!JSON.stringify(c.physicalWear).includes("jeans"),"user garments cannot leak into character state");
+    const before=JSON.stringify(wearFacts);
+    c.physicalWear.removed[0].item="skirt";
+    assert.strictEqual(JSON.stringify(wearFacts),before,"read-only consumer");
+    const other=IC.compose({draw:"screenshot of shoes",card,scene:{chars:{}},persona:{},wearFacts,requireNamedOwner:true});
+    assert.strictEqual(other.physicalWear,null,"unrelated subject never gets owner clothing constraints");
+  });
+  await ta("VIS-OUTFIT-1C-3: compiler uses canonical garment precedence; same source-sensitive cache", async () => {
+    const wear={worn:[{item:"white t-shirt"}],removed:[{item:"shorts"}],
+      partiallyWorn:[{item:"white t-shirt",placement:"off shoulders"}]};
+    const scene="1girl, wearing shorts, white t-shirt, on bed";
+    let calls=0;
+    const gen=async instruction=>{
+      calls++;
+      assert.ok(instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"),instruction);
+      assert.ok(instruction.includes('"shorts"') && instruction.includes("off shoulders"));
+      assert.ok(instruction.includes("canonical clothing state overrides conflicting clothing claims in SCENE"),instruction);
+      return JSON.stringify({prompt:"1girl, white t-shirt, shirt off shoulders, on bed",absent:[{index:0,tag:"shorts"}]});
+    };
+    const a=await ICP.compile(scene,{format:"tags",translate:false,wearState:wear},gen);
+    assert.strictEqual(a.compiled,true);
+    assert.strictEqual(calls,1,"even English direct tags require reconciliation");
+    const b=await ICP.compile(scene,{format:"tags",translate:false,wearState:wear},gen);
+    assert.strictEqual(b.cached,true);
+    const modified={...wear,removed:[{item:"skirt"}]};
+    await ICP.compile(scene,{format:"tags",translate:false,wearState:modified},gen);
+    assert.strictEqual(calls,2,"changed canonical facts cannot reuse conflicting cached compilation");
+  });
+  await ta("VIS-OUTFIT-1C-4: one compiler validates origin-bound English negative mappings", async () => {
+    const facts={removed:[{item:"короткие шорты",source:{messageId:"s2",swipeIdx:1}},
+      {item:"юбка",source:{messageId:"s3",swipeIdx:0}}],partiallyWorn:[{item:"футболка",placement:"с плеч"}]};
+    const scene="1girl, posing in bedroom";
+    let instruction="";
+    const gen=async txt=>{
+      instruction=txt;
+      return JSON.stringify({prompt:"1girl, posing in bedroom",absent:[{index:0,tag:"short shorts"},{index:1,tag:"skirt"}]});
+    };
+    const opts={format:"tags",translate:false,wearState:facts};
+    const result=await ICP.compile(scene,opts,gen);
+    assert.strictEqual(result.compiled,true,JSON.stringify(result));
+    assert.strictEqual(result.wearValidated,true);
+    assert.strictEqual(result.negative,"short shorts, skirt");
+    assert.strictEqual(result.wearItems[0].item,"короткие шорты");
+    assert.ok(instruction.includes('"короткие шорты"') && instruction.includes("CANONICAL OUTPUT CONTRACT"));
+    assert.ok(instruction.includes("required JSON output") && !instruction.includes("Output ONLY one line"),
+      "one compiler contract must not demand incompatible response formats");
+    const cached=await ICP.compile(scene,opts,async ()=>{throw Error("must not call translator twice");});
+    assert.strictEqual(cached.cached,true);
+    assert.strictEqual(cached.negative,result.negative);
+    ICP.clear();
+    const bad=await ICP.compile(scene,opts,async ()=>JSON.stringify({
+      prompt:"1girl, posing in bedroom",absent:[{index:0,tag:"nude, bare hips"},{index:1,tag:"skirt"}]}));
+    assert.strictEqual(bad.compiled,false,"malformed item-specific negatives must fail before backend");
+    ICP.clear();
+    const wrong=await ICP.compile(scene,opts,async ()=>JSON.stringify({
+      prompt:"1girl, posing in bedroom",absent:[{index:0,tag:"short shorts"},{index:2,tag:"jacket"}]}));
+    assert.strictEqual(wrong.compiled,false,"unknown index cannot become a canonical absent garment");
+    assert.strictEqual((await ICP.compile("1girl, sitting",{translate:false,wearState:{removed:[],partiallyWorn:[]}},
+      async ()=>{throw Error("not called");})).compiled,false);
+  });
+  await ta("VIS-OUTFIT-1C-5: one origin-bound wear snapshot reaches backend without inventing nudity", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.8}]}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Я сняла шорты");
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],certainty:"reported",evidence:"Я сняла шорты"}];
+    await h.chat.commitMessage(m,m.id);
+    const source=h.S.messages.find(x=>x.id===m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldComp=ICP.compile,oldGen=IB.generate;
+    let args,compileArgs;
+    try {
+      ICP.compile=async (shot,opts)=>{compileArgs=opts;return {text:"1girl, sitting on bed, white nightgown",compiled:true,wearValidated:true,negative:"shorts",wearItems:[{index:0,tag:"shorts"}]};};
+      IB.generate=async (_,o)=>{args=o;return {dataUrl:"data:image/png;base64,AA==",seed:1,info:{width:512,height:512}};};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, sitting on bed, white nightgown"});
+      assert.strictEqual(compileArgs.wearState.removed[0].item,"шорты");
+      assert.strictEqual(compileArgs.wearState.removed[0].source.messageId,m.id);
+      assert.ok(args.negative.includes("shorts"),args.negative);
+      assert.ok(!/nude|bare breasts|bare hips/.test(args.prompt),args.prompt);
+      assert.ok(args.prompt.includes("<lora:ori:0.8>") && args.prompt.includes("orihime_inoue"));
+      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.items[0].tag,"shorts");
+    } finally {ICP.compile=oldComp;IB.generate=oldGen;}
+  });
+  await ta("VIS-OUTFIT-1C-6: no backend request on invalid translation of canonical removed garment", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Я сняла юбку");
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["юбку"],certainty:"reported",evidence:"Я сняла юбку"}];
+    await h.chat.commitMessage(m,m.id);
+    const source=h.S.messages.find(x=>x.id===m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const origC=ICP.compile,origGen=IB.generate;
+    let called=0;
+    try {
+      ICP.compile=async ()=>({text:"1girl, sitting on a bed",compiled:false,error:"invalid garment translation"});
+      IB.generate=async ()=>{called++;throw Error("must not submit");};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, sitting on a bed"});
+      assert.strictEqual(called,0);
+      assert.strictEqual(source.swipes[0].images[0].status,"error");
+      assert.ok(source.swipes[0].images[0].error.includes("согласовать одежду"));
+    } finally {ICP.compile=origC;IB.generate=origGen;}
+  });
+  await ta("VIS-OUTFIT-1C-7: global garment negative is not applied to another character", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.7}]}};
+    const base=IC.compose({draw:"2girls, Химэ and a friend, standing, park",card,scene:{chars:{}},persona:{},
+      wearFacts:[{actor:"char",worn:[],removed:[{item:"юбка"}],partiallyWorn:[]}]});
+    const f=IC.finalise({composed:base,compiled:"2girls, orihime_inoue, another girl, skirt, park",
+      backend:"a1111",card,settings:{promptMode:"off"},wearNegative:"skirt"});
+    assert.ok(!f.negative.split(",").map(x=>x.trim()).includes("skirt"),f.negative);
+    assert.ok(f.prompt.includes("orihime_inoue") && f.prompt.includes("<lora:ori:0.7>"),f.prompt);
+  });
+  await ta("VIS-OUTFIT-1C-8: same-turn partial position arrives at compiler without treating garment as removed", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const first=h.chat.newMsg("assistant",null,"На мне футболка и шорты");
+    first.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"set",value:["футболка","шорты"],
+      certainty:"reported",evidence:"На мне футболка и шорты"}];
+    await h.chat.commitMessage(first,first.id);
+    const second=h.chat.newMsg("assistant",first.id,"Я спустила футболку с плеч");
+    second.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"adjust",value:["футболка"],
+      placement:"с плеч",certainty:"reported",evidence:"Я спустила футболку с плеч"}];
+    await h.chat.commitMessage(second,second.id);
+    const source=h.S.messages.find(x=>x.id===second.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const savedC=ICP.compile,savedG=IB.generate;
+    let opts,backend;
+    try {
+      ICP.compile=async (_,o)=>{
+        opts=o;return {text:"1girl, white t-shirt, shirt off shoulders, shorts, bedroom",compiled:true,wearValidated:true,negative:"",wearItems:[]};
+      };
+      IB.generate=async (_,o)=>{backend=o;return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, bedroom"});
+      assert.strictEqual(source.swipes[0].images[0].status,"done",JSON.stringify(source.swipes[0].images[0]));
+      assert.deepStrictEqual(opts.wearState.removed,[]);
+      assert.deepStrictEqual(opts.wearState.partiallyWorn.map(x=>x.item),["футболка"]);
+      assert.deepStrictEqual(opts.wearState.partiallyWorn.map(x=>x.placement),["с плеч"]);
+      assert.strictEqual(opts.wearState.partiallyWorn[0].certainty,"reported");
+      assert.ok(backend.prompt.includes("shirt off shoulders"),backend.prompt);
+      assert.ok(!backend.negative.includes("shirt"),backend.negative);
+    } finally {ICP.compile=savedC;IB.generate=savedG;}
+  });
+  await ta("VIS-OUTFIT-1C-9: canonical compilation replaces the old lexical wardrobe postfilter", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue"}};
+    const c=IC.compose({draw:"1girl, selfie",card,scene:{chars:{Химэ:{wear:["футболка"]}},present:[]},
+      messenger:{location:""},wearFacts:[{actor:"char",worn:[],removed:[{item:"юбка"}],
+        partiallyWorn:[{item:"футболка",placement:"с плеч"}]}]});
+    const exact="1girl, hoodie pulled down off shoulders, indoors";
+    const out=IC.finalise({composed:c,compiled:exact,stateCompiled:true,card,
+      backend:"a1111",settings:{promptMode:"off"}});
+    assert.ok(out.prompt.includes("hoodie pulled down off shoulders"),out.prompt);
+    assert.ok(out.prompt.includes("orihime_inoue"));
+    // Old records lacking typed facts still use compatibility rules.
+    const legacy=IC.finalise({composed:{...c,physicalWear:null},compiled:exact,stateCompiled:true,card,
+      backend:"a1111",settings:{promptMode:"off"}});
+    assert.ok(!legacy.prompt.includes("hoodie pulled down off shoulders"),
+      "legacy lexical postfilter remains a backwards-compatible fallback");
+  });
+  await ta("VIS-OUTFIT-1C-10: changed ancestor swipe during backend invalidates image provenance", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    const a=h.chat.newMsg("assistant",null,"На мне футболка");
+    a.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["футболка"],
+      certainty:"reported",evidence:"На мне футболка"}];
+    await h.chat.commitMessage(a,a.id);
+    const last=h.chat.newMsg("assistant",a.id,"Вот фотография");
+    await h.chat.commitMessage(last,last.id);
+    const source=h.S.messages.find(x=>x.id===last.id);
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const old=IB.generate;
+    let entered,release;
+    const started=new Promise(r=>{entered=r;});
+    const backend=new Promise(r=>{release=r;});
+    try {
+      IB.generate=async ()=>{entered();return backend;};
+      const pending=h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, selfie"});
+      await started;
+      const parent=h.S.messages.find(x=>x.id===a.id);
+      parent.swipes.push({text:"На мне платье",sceneOps:[],stateEvents:[{actor:"char",field:"wear",
+        action:"add",value:["платье"],certainty:"reported",evidence:"На мне платье"}]});
+      parent.swipeIdx=1;
+      await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(parent)));
+      release({dataUrl:"data:image/png;base64,AA==",seed:1,info:{width:512,height:512}});
+      await pending;
+      const saved=await h.ctx.DB.get("messages",source.id);
+      assert.strictEqual(saved.swipes[0].images[0].status,"error");
+      assert.ok(/состояние ветки/.test(saved.swipes[0].images[0].error));
+      assert.strictEqual(await h.ctx.DB.get("images",saved.swipes[0].images[0].id),undefined,
+        "no image from the former ancestor swipe may be persisted");
+    } finally {IB.generate=old;}
+  });
+  await ta("VIS-OUTFIT-1C-11: changed ancestor evidence during compile skips backend", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    const a=h.chat.newMsg("assistant",null,"На мне футболка");
+    a.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["футболка"],
+      certainty:"reported",evidence:"На мне футболка"}];
+    await h.chat.commitMessage(a,a.id);
+    const last=h.chat.newMsg("assistant",a.id,"Я сняла шорты");
+    last.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],
+      certainty:"reported",evidence:"Я сняла шорты"}];
+    await h.chat.commitMessage(last,last.id);
+    const source=h.S.messages.find(x=>x.id===last.id);
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;
+    let backendCalls=0;
+    try {
+      ICP.compile=async ()=>{
+        const parent=h.S.messages.find(x=>x.id===a.id);
+        parent.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["платье"],
+          certainty:"reported",evidence:"На мне платье"}];
+        await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(parent)));
+        return {text:"1girl, selfie",compiled:true,wearValidated:true,
+          negative:"shorts",wearItems:[{index:0,item:"шорты",tag:"shorts"}]};
+      };
+      IB.generate=async ()=>{backendCalls++;throw Error("must not generate with stale ancestor facts");};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, selfie"});
+      assert.strictEqual(backendCalls,0);
+      assert.strictEqual(source.swipes[0].images[0].status,"error");
+    } finally {ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VIS-OUTFIT-1C-12: Card NSFW appearance presets cannot undress a canonically clothed subject", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue",look:"base: orange hair",
+      nsfw:"nude: nude, nipples",loras:[{name:"ori",weight:0.7}]}};
+    const canonical=[{actor:"char",known:true,complete:false,
+      worn:[{item:"white nightgown"}],removed:[{item:"shorts"}],partiallyWorn:[]}];
+    const c=IC.compose({draw:"1girl, nude, on bed",card,scene:{chars:{Химэ:{wear:["white nightgown"]}},present:[]},
+      wearFacts:canonical,persona:{}});
+    assert.ok(!c.keep.includes("nipples") && !c.fixedKeep.includes("nude"),
+      "a shot-local keyword must not activate Card wardrobe/NSFW authority");
+    const final=IC.finalise({composed:c,compiled:"1girl, white nightgown, on bed",
+      stateCompiled:true,backend:"a1111",card,settings:{promptMode:"off"}});
+    assert.ok(!final.prompt.includes("nipples") && !final.prompt.includes("nude"),final.prompt);
+    assert.ok(final.prompt.includes("<lora:ori:0.7>") && final.prompt.includes("orihime_inoue"));
+  });
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
