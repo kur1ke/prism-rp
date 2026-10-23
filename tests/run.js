@@ -4084,6 +4084,46 @@ async function unifiedTracker() {
     assert.strictEqual(second.actors.char.wearState.partiallyWorn[0].placement, "до талии");
     assert.strictEqual(second.actors.char.wearState.partiallyWorn[0].source.swipeIdx, 1);
   });
+  await ta("WS-1G: partial evidence does not claim the entire outfit is known", async () => {
+    const first = make("assistant","Я сняла шарф",[Evt("char","wear","remove",["шарф"],"reported","Я сняла шарф")],"first");
+    const add = make("assistant","На мне футболка",[Evt("char","wear","add",["футболка"],"reported","На мне футболка")],"add");
+    const set = make("assistant","На мне футболка и брюки",[Evt("char","wear","set",["футболка","брюки"],"reported","На мне футболка и брюки")],"set");
+    const unknown = STATE.fold({mode:"messenger",path:[first]});
+    const incomplete = STATE.fold({mode:"messenger",path:[first,add]});
+    const complete = STATE.fold({mode:"messenger",path:[first,add,set]});
+    assert.strictEqual(unknown.actors.char.wearState.complete, false);
+    assert.strictEqual(incomplete.actors.char.wearState.known, true);
+    assert.strictEqual(incomplete.actors.char.wearState.complete, false, "knowing one garment is not knowing the entire outfit");
+    assert.strictEqual(complete.actors.char.wearState.complete, true);
+    assert.deepStrictEqual(complete.actors.char.wearState.removed, [], "explicit full replacement retires earlier absence");
+  });
+  await ta("WS-1H: Scene reads canonical WearState, not a poisoned compatibility projection", async () => {
+    const st = STATE.fold({mode:"messenger",path:[make("assistant","На мне футболка",[Evt("char","wear","add",["футболка"],"reported","На мне футболка")],"a")]});
+    const clean = JSON.parse(JSON.stringify(st));
+    st.actors.char.fields.wear.value = ["чужое пальто"];
+    assert.deepStrictEqual(STATE.fieldOf(st,"char","wear").value, ["футболка"]);
+    const result = globalThis.PRP.stateResolver.scene({chars:{}}, {state:st},{char:"Орихимэ"});
+    assert.deepStrictEqual(result.chars["Орихимэ"].wear, ["футболка"]);
+    assert.deepStrictEqual(STATE.fieldOf(clean,"char","wear").value, ["футболка"]);
+  });
+  await ta("WS-1I: exact garment identity never merges similarly named distinct items", async () => {
+    const st = STATE.fold({mode:"rp",path:[
+      make("assistant","На мне топ и топорик",[Evt("char","wear","set",["топ","топорик"],"established","На мне топ и топорик")],"set"),
+      make("assistant","Сняла топ",[Evt("char","wear","remove",["топ"],"established","Сняла топ")],"remove"),
+    ]});
+    assert.deepStrictEqual(STATE.fieldOf(st,"char","wear").value, ["топорик"]);
+    assert.deepStrictEqual(st.actors.char.wearState.removed.map(x=>x.item), ["топ"]);
+    assert.deepStrictEqual(st.actors.user.wearState.worn, []);
+  });
+  await ta("WS-1J: partial garments remain removable via active-path references", async () => {
+    const partial = Object.assign(Evt("char","wear","adjust",["футболка"],"reported","Спустила футболка с плеч"),{placement:"с плеч"});
+    const s=STATE.fold({mode:"messenger",path:[make("assistant","Спустила футболка с плеч",[partial],"a")]});
+    const refs=STATE.references(s,"char");
+    assert.strictEqual(refs.length,1);
+    assert.strictEqual(refs[0].item,"футболка");
+    assert.strictEqual(refs[0].source.messageId,"a");
+    assert.deepStrictEqual(STATE.references(s,"user"),[]);
+  });
   await ta("UT-1: одно состояние в RP и Messenger, разные перспективы наблюдения", async () => {
     const evt = Evt("char", "location", "set", "дома", "reported", "Я дома");
     const ms = STATE.fold({ mode: "messenger", charName: "Орихимэ", userName: "Лёня", path: [make("assistant", "Я дома", [evt], "m1")] });
