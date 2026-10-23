@@ -4124,6 +4124,17 @@ async function unifiedTracker() {
     assert.strictEqual(refs[0].source.messageId,"a");
     assert.deepStrictEqual(STATE.references(s,"user"),[]);
   });
+  await ta("WS-1K: legacy Scene.add never asserts the full outfit is known", async () => {
+    const add=make("assistant","Накинула шарф",[],"a");
+    add.swipes[0].sceneOps = S.parseBody("Орихимэ.add=шарф");
+    const added=STATE.fold({mode:"rp",charName:"Орихимэ",path:[add]});
+    assert.deepStrictEqual(STATE.fieldOf(added,"char","wear").value, ["шарф"]);
+    assert.strictEqual(added.actors.char.wearState.complete, false);
+    const full=make("assistant","В полном наряде",[],"b");
+    full.swipes[0].sceneOps = S.parseBody("Орихимэ.wear=футболка, шарф");
+    const established=STATE.fold({mode:"rp",charName:"Орихимэ",path:[add,full]});
+    assert.strictEqual(established.actors.char.wearState.complete, true);
+  });
   await ta("UT-1: одно состояние в RP и Messenger, разные перспективы наблюдения", async () => {
     const evt = Evt("char", "location", "set", "дома", "reported", "Я дома");
     const ms = STATE.fold({ mode: "messenger", charName: "Орихимэ", userName: "Лёня", path: [make("assistant", "Я дома", [evt], "m1")] });
