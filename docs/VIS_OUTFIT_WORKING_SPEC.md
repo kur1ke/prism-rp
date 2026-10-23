@@ -18,7 +18,7 @@
 | Which garment pieces are worn, removed, displaced? | Scene/StateTracker derived WearState, with precise branch/swipe/evidence provenance |
 | What garments have been purchased/received and remain owned? | Future separate Wardrobe/Inventory registry, not part of VIS-OUTFIT-1 |
 | How/why did an outfit appear in story? | Experience is evidence, not exact canonical current clothing |
-| Which objects/body parts does the camera show? | `[draw:]` shot metadata only; never updates outfit canon |
+| Which objects/body parts does the camera show? | Character-authored `[draw:]` determines its own image; the same description can supply *validated* visual observations to StateTracker without directly writing Scene |
 | What identity/LoRA applies? | Card image configuration; never inferred from absent/worn facts |
 
 No character-specific rules. No fixed clothing vocabulary or guessing from untrusted raw imported data. Do not duplicate storage of the same physical facts in a new global registry.
@@ -54,12 +54,12 @@ ItemFact = {
 
 ## Establishing an initial outfit
 
-Priority by explicit evidence: scene state/direction -> clear narrative established wear event -> unequivocal first-message outfit -> explicitly configured default (if such configuration exists) -> unknown. Do not select the first wardrobe mapping merely by list order and do not promote a `[draw:]` description to Scene state. For a named Card wardrobe entry, use exact normalized label before any safe rule; ambiguous entries must not guess.
+Priority by explicit evidence: scene state/direction -> clear narrative established wear event -> unequivocal first-message outfit -> explicitly configured default (if such configuration exists) -> unknown. Do not select the first wardrobe mapping merely by list order. A raw or compiled image does not automatically write Scene, but a current self-photo's source-bound `[draw:]` may establish item-level WearState via Observer and the existing selected-swipe `stateEvents`. For a named Card wardrobe entry, use exact normalized label before any safe rule; ambiguous entries must not guess.
 
 ## Same-turn ordering
 
 If the assistant removes/adds/adjusts a garment and requests `[draw:]` in the same reply:
-1. Commit the accepted `stateEvents` / legacy Scene operations to the particular message swipe.
+1. Interpret both the text and the character-authored `[draw:]` as distinct evidence surfaces and commit the validated `stateEvents` / legacy Scene operations to the particular message swipe. Apply text evidence before newer current-photo evidence; do not let lexical fallback undo a confirmed visual removal.
 2. Fold state for that exact origin path/swipe (never the current leaf or another branch).
 3. Compose the image using updated current wear state and the shot-local camera metadata.
 4. Cache by snapshot-relevant inputs; editing/retrying/swiping may not reuse an image computed against a different active ancestor.
@@ -71,7 +71,7 @@ If the assistant removes/adds/adjusts a garment and requests `[draw:]` in the sa
 - `removed` has to become an explicit item-specific absence constraint; negative tags in the A1111 prompt are a **candidate translation**, not a guarantee that the model will obey. Ensure the negative label actually names the established item, not a guess.
 - `partiallyWorn` needs its own visual state; not identical to `removed`.
 - **Visibility is independent of physical state.** Removing underclothes beneath an opaque nightgown does not automatically make covered body parts visible. No speculative `nude`, `bare hips` or revealing shot merely because one item was removed.
-- Conflict resolution must be explicit: established current state should not be silently overridden by `[draw:]` hallucinations; however a specific explicit shot may describe visibility, camera position and body parts. Preserve diagnostic explanation when a conflict is suppressed.
+- Conflict resolution must be explicit: a character-authored `[draw:]` controls the image it actually sends, including visible outfit changes, and can update current WearState only through evidence-grounded Observer events. Older Tracker facts must not silently rewrite a correctly authored shot. Manual image generation without a current authored draw may use canonical Tracker reconciliation. Preserve exact source diagnostics.
 - LoRA/trigger/appearance of a card remains the separate authorized identity layer. Do not delete it when adjusting clothes.
 
 ## Visibility and debugging
@@ -193,6 +193,54 @@ compiler's ability to remove all contradictory positive tokens are **NOT
 provable by schema validation alone**. Perchance, real text provider and
 A1111/Forge checks remain mandatory; until then this is a scoped candidate,
 not a claim of visual consistency or VIS-OUTFIT-1 closure.
+
+## VIS-DRAW-SOURCE — photographic evidence and image authority correction (testing candidate)
+
+**Motivation:** A Messenger character may write only “Вот фото” while its authored
+`[draw:]` describes current clothes or a garment being lowered/removed. Requiring
+the character to repeat the details as ordinary chat text left Tracker blind,
+while forcing prior text-only WearState into the valid shot corrupted the image.
+
+**Ownership and trust:** `sw.draws[0].prompt` is the *author-generated visual
+assertion*, not the backend image, rewritten prompt, user-supplied manual image,
+Card preset or provider instruction. It can be source evidence for the character's
+**current own photograph**. The one existing Observer interprets both caption
+and original shot; only supported `wear` events with
+`evidenceType: "draw"`, `visualScope: "current-self"`, and a quote exactly
+present in the selected swipe's original draw are accepted. Messenger visual
+self-reports retain `certainty: "reported"`. Non-current, fantasy, old photos,
+screenshots, other actors, and absent/out-of-frame garments do not establish
+new current garment facts by default. When no entire outfit is known, `wear.add`
+establishes the particular visible item without inventing the rest. An actual
+removal or displacement is `remove` or `adjust`, never inferred merely from
+the camera not showing an item. `stateEvents` remain the only recorded facts.
+
+**Actor/item provenance:** `StateTracker.fold` revalidates `draw` event
+evidence against the original authored prompt on each active path and swipe;
+visual facts are not shared with siblings. Existing action-specific
+`referenceId` resolves already-known garments across languages and inflections
+without a hardcoded vocabulary or new fuzzy matching layer. A later visual
+change is applied after text assertions of the same swipe. Text-only lexical
+fallback cannot re-add uncorrelated garments over a confirmed visual change.
+This is a conservative fallback policy; the Observer remains responsible for
+correctly identifying all nonconflicting independently evidenced garments.
+
+**Image contract:** The character-authored shot is authoritative for the
+generated frame. Retain Card trigger, identity and LoRA but do not inject
+old Card wardrobe, optional NSFW preset or text-only Tracker corrections
+to rewrite a current authored `[draw:]`. English tagged authored shots
+must not need a second model translation; `drawPromptMode: "intent"` uses its
+single intent-to-shot conversion. Image origin guards continue to protect
+message/ancestor/swipe/draw provenance; unrelated Observer updates do not
+invalidate a previously authored shot. Manual/non-authored images may still
+use typed state reconciliation from VIS-OUTFIT-1C-1.
+
+**Remaining verification:** tests prove parsing/routing and branch replay,
+not real LLM identification of old versus current images or English/Russian
+reference success rate. Test the separate Perchance Messenger auto-photo path,
+backend prompt, next-turn Prism, regeneration and source editing. No separate
+visual inventory, no raw image OCR, no change to `main`. VIS-OUTFIT-1 remains
+NOT CLOSED without live model and Forge evidence.
 
 ## Staged implementation / CURRENT STATUS
 
