@@ -201,7 +201,7 @@ not a claim of visual consistency or VIS-OUTFIT-1 closure.
 the character to repeat the details as ordinary chat text left Tracker blind,
 while forcing prior text-only WearState into the valid shot corrupted the image.
 
-**Ownership and trust:** `sw.draws[0].prompt` is the *author-generated visual
+**Ownership and trust:** the latest `sw.draws` prompt is the *author-generated visual
 assertion*, not the backend image, rewritten prompt, user-supplied manual image,
 Card preset or provider instruction. It can be source evidence for the character's
 **current own photograph**. The one existing Observer interprets both caption
@@ -220,7 +220,9 @@ merely from the camera not showing an item. `stateEvents` remain the only record
 
 **Actor/item provenance:** `StateTracker.fold` revalidates `draw` event
 evidence against the original authored prompt on each active path and swipe;
-visual facts are not shared with siblings. Existing action-specific
+visual facts are not shared with siblings. If a continued swipe adds a newer
+photo, earlier visual quotes in that same swipe no longer establish its current
+outfit. Existing action-specific
 `referenceId` resolves already-known garments across languages and inflections
 without a hardcoded vocabulary or new fuzzy matching layer. A later visual
 change is applied after text assertions of the same swipe. Text-only lexical
