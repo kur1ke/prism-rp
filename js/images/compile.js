@@ -28,9 +28,10 @@
   async function compile(scene, opts, generateText) {
     const s = String(scene || "").trim();
     const o = opts || {};
-    if (!s || (!o.intentMode && (o.translate === false || !IC.needsRewrite(s))) || typeof generateText !== "function") return { text: s, compiled: false };
-    await warm();
     const stateContext = String(o.stateContext || "").trim();
+    if (!s || (!o.intentMode && (o.translate === false || (!IC.needsRewrite(s) && !IC.needsRewrite(stateContext)))) ||
+      typeof generateText !== "function") return { text: s, compiled: false };
+    await warm();
     const key = ["v5-visual-state-context", o.intentMode ? "intent" : "tags", o.embodiedOwner ? "owner-camera" : "external-camera", o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "", o.frame ? JSON.stringify(o.frame) : "", stateContext, s].join("\u0001");
     if (mem.has(key)) return { text: mem.get(key), compiled: true, cached: true };
     // The current shot is authoritative. Physical state is separate quoted
