@@ -130,7 +130,7 @@
           { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner, qualityPinned: ST.qualityPinned(S.settings) }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
-        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd, scene: st, persona: pers, messenger: visual, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
+        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd, scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
         const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sourceSwipe, entry) ? dialogueImageContext(upto, sourceMsg) : "";
@@ -142,12 +142,29 @@
         const stateContext = cfg.translate && composed.stateContext &&
           (IC.needsRewrite(imageScene) || IC.needsRewrite(composed.stateContext)) ? composed.stateContext : "";
         if (cfg.translate && (IC.needsRewrite(imageScene) || IC.needsRewrite(stateContext))) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        const comp = intent && !stateContext ? { text: imageScene, compiled: true } :
+        const canonicalWear = composed.physicalWear;
+        const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
+        const comp = intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
-            embodiedOwner: cameraOwner, frame: composed.subjects, stateContext }, generateText);
+            embodiedOwner: cameraOwner, frame: composed.subjects, stateContext,
+            wearState: canonicalWear }, generateText);
+        // An English input or disabled general translation must not bypass
+        // known physical changes. If reconciliation fails, don't send a
+        // contradictory unverified image to the backend.
+        if (changes && !comp.compiled) throw new Error("Не удалось согласовать одежду с текущим состоянием: " + (comp.error || "нет результата"));
+        // Backend negative prompts affect the ENTIRE frame, not one actor.
+        // Only single-owner shots can safely receive a garment-specific
+        // global absence; other shots rely on the canonical scene compiler.
+        const singleOwner = (composed.ownerPresent || composed.cameraOwner) &&
+          !composed.userPresent && IC.subjectCount(comp.text) <= 1;
+        let wearTranslation = { ok: true, negative: "", items: [] };
+        if (singleOwner && canonicalWear && canonicalWear.removed && canonicalWear.removed.length) {
+          wearTranslation = await ICP.compileWear(canonicalWear, generateText);
+          if (!wearTranslation.ok) throw new Error("Не удалось перевести снятую одежду: " + (wearTranslation.error || "неизвестная ошибка"));
+        }
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!stateContext && !!comp.compiled,
-          card: cd, settings: cfg, backend: cfg.backend, persona: pers });
+          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative: wearTranslation.negative });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
@@ -157,7 +174,10 @@
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
-          promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance, compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null } };
+          promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
+            compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null,
+            wearConstraints: { items: wearTranslation.items, negative: wearTranslation.negative,
+              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]) } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
         finalPatch = { status: "error", error: e.message || String(e) };
