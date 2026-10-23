@@ -3184,8 +3184,10 @@ async function foundationH() {
     assert.strictEqual(compiled.ok,true,JSON.stringify(compiled));
     assert.strictEqual(compiled.negative,"short shorts, skirt");
     assert.ok(prompt.includes('"короткие шорты"') && !prompt.includes("nude") && !prompt.includes("on bed"));
+    ICP.clear(); // force malformed-model cases through validation rather than the prior successful cache
     const bad=await ICP.compileWear(facts,async ()=>JSON.stringify({absent:[{index:0,tag:"nude, bare hips"},{index:1,tag:"skirt"}]}));
     assert.strictEqual(bad.ok,false,"missing/irrelevant negatives never pass through as canonical");
+    ICP.clear();
     const wrong=await ICP.compileWear(facts,async ()=>JSON.stringify({absent:[{index:0,tag:"short shorts"},{index:2,tag:"jacket"}]}));
     assert.strictEqual(wrong.ok,false,"a made-up extra index cannot supply an absent item");
     assert.strictEqual((await ICP.compileWear({removed:[]},async ()=>{throw Error("not called") })).negative,"");
