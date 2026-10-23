@@ -135,8 +135,8 @@
         // an explicit, non-referential early result or even its error. Only
         // retry when newly available references could change an unresolved
         // interpretation, or a previously resolved reference became stale.
-        const mayNeedReferences = early.valid && (!early.events.length ||
-          early.events.some((e) => e.reference));
+        const mayNeedReferences = early.valid && (early.events.some((e) => e.reference) ||
+          early.issues.some((issue) => issue.startsWith("Неоднозначная ссылка:")));
         result = refsSame || !mayNeedReferences ? early : await analyse(options, provider);
       } else result = await analyse(options, provider);
       // Высокоточные явные самоописания не должны исчезать только потому,
