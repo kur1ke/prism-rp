@@ -3250,6 +3250,41 @@ async function foundationH() {
     assert.ok(!f.negative.split(",").map(x=>x.trim()).includes("skirt"),f.negative);
     assert.ok(f.prompt.includes("orihime_inoue") && f.prompt.includes("<lora:ori:0.7>"),f.prompt);
   });
+  await ta("VIS-OUTFIT-1C-8: same-turn partial position arrives at compiler without treating garment as removed", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const first=h.chat.newMsg("assistant",null,"На мне футболка и шорты");
+    first.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"set",value:["футболка","шорты"],
+      certainty:"reported",evidence:"На мне футболка и шорты"}];
+    await h.chat.commitMessage(first,first.id);
+    const second=h.chat.newMsg("assistant",first.id,"Я спустила футболку с плеч");
+    second.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"adjust",value:["футболка"],
+      placement:"с плеч",certainty:"reported",evidence:"Я спустила футболку с плеч"}];
+    await h.chat.commitMessage(second,second.id);
+    const source=h.S.messages.find(x=>x.id===second.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const savedC=ICP.compile,savedW=ICP.compileWear,savedG=IB.generate;
+    let opts,negativeCalls=0,backend;
+    try {
+      ICP.compile=async (_,o)=>{
+        opts=o;return {text:"1girl, white t-shirt, shirt off shoulders, shorts, bedroom",compiled:true};
+      };
+      ICP.compileWear=async ()=>{negativeCalls++;throw Error("nothing was removed");};
+      IB.generate=async (_,o)=>{backend=o;return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, bedroom"});
+      assert.strictEqual(source.swipes[0].images[0].status,"done",JSON.stringify(source.swipes[0].images[0]));
+      assert.deepStrictEqual(opts.wearState.removed,[]);
+      assert.deepStrictEqual(opts.wearState.partiallyWorn.map(x=>x.item),["футболка"]);
+      assert.deepStrictEqual(opts.wearState.partiallyWorn.map(x=>x.placement),["с плеч"]);
+      assert.strictEqual(opts.wearState.partiallyWorn[0].certainty,"reported");
+      assert.strictEqual(negativeCalls,0);
+      assert.ok(backend.prompt.includes("shirt off shoulders"),backend.prompt);
+      assert.ok(!backend.negative.includes("shirt"),backend.negative);
+    } finally {ICP.compile=savedC;ICP.compileWear=savedW;IB.generate=savedG;}
+  });
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
