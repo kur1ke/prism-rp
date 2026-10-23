@@ -3191,6 +3191,8 @@ async function foundationH() {
     assert.strictEqual(result.negative,"short shorts, skirt");
     assert.strictEqual(result.wearItems[0].item,"короткие шорты");
     assert.ok(instruction.includes('"короткие шорты"') && instruction.includes("CANONICAL OUTPUT CONTRACT"));
+    assert.ok(instruction.includes("required JSON output") && !instruction.includes("Output ONLY one line"),
+      "one compiler contract must not demand incompatible response formats");
     const cached=await ICP.compile(scene,opts,async ()=>{throw Error("must not call translator twice");});
     assert.strictEqual(cached.cached,true);
     assert.strictEqual(cached.negative,result.negative);
