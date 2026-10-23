@@ -21,7 +21,7 @@
       aria-label="Создание переписки" aria-busy="true">
       <div class="modal-head"><h2>Создаём переписку${targetCard ? " с " + esc(targetCard.name) : ""}</h2></div>
       <div class="modal-body"><div class="block" role="status" aria-live="polite">
-        <p class="lead">${icon("clock")} Определяем начальное состояние персонажа…</p>
+        <p class="lead"><span class="ms-create-spin" aria-hidden="true"></span>Определяем начальное состояние персонажа…</p>
         <p class="hint">Выполняется один скрытый запрос к RP-модели. Сообщение в чат не добавляется.</p>
         <p class="hint">Окно закроется, когда переписка будет готова.</p>
       </div><div class="modal-foot"><button class="btn btn-primary" disabled aria-disabled="true">Создаём…</button></div></div>
