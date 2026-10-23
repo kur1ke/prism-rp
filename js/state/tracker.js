@@ -89,14 +89,20 @@
   }
   // Reference IDs are only meaningful inside one branch-derived snapshot.
   // The source of each item is the original reported/established event.
-  function references(state, actorId) {
+  function references(state, actorId, actions) {
     const actor = state && state.actors && state.actors[actorId];
     if (!actor || !actor.wearState || !Array.isArray(actor.wearState.worn)) return [];
-    return actor.wearState.worn.concat(actor.wearState.partiallyWorn || [])
-      .sort((a, b) => (a.order || 0) - (b.order || 0)).slice(0, 12).map((x, i) => ({
-      id: "wear:" + actorId + ":" + i, actor: actorId, field: "wear", action: "remove",
-      item: x.item, source: clone(x.source),
-    }));
+    // Existing remove reference IDs remain byte-for-byte compatible with
+    // stored VIS-REF-1 events. Adjustment gets a distinct typed ID, derived
+    // from the SAME bounded active-path garment facts, not a new registry.
+    const requested = Array.isArray(actions) ? actions : ["remove"];
+    const allowed = ["remove", "adjust"].filter((action) => requested.includes(action));
+    const items = actor.wearState.worn.concat(actor.wearState.partiallyWorn || [])
+      .sort((a, b) => (a.order || 0) - (b.order || 0)).slice(0, 12);
+    return items.flatMap((x, i) => allowed.map((action) => ({
+      id: "wear:" + actorId + ":" + i + (action === "adjust" ? ":adjust" : ""),
+      actor: actorId, field: "wear", action, item: x.item, source: clone(x.source),
+    })));
   }
   const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, scene: SC.emptyState(), diagnostics: [] });
 
@@ -124,7 +130,7 @@
       // Current message proves the action; previous state proves the item.
       if (!str(e.evidence) || !String(source.text).includes(e.evidence)) return "нет точного подтверждения в сообщении";
       if (e.reference) {
-        if (e.field !== "wear" || e.action !== "remove" || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
+        if (e.field !== "wear" || !["remove", "adjust"].includes(e.action) || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
         const candidates = Array.isArray(source.references) ? source.references : [];
         const match = candidates.find((x) => x.id === e.reference.id && x.actor === e.actor &&
           x.field === e.field && x.action === e.action && x.item === e.value[0] &&
@@ -181,7 +187,7 @@
   function apply(state, input, source) {
     const out = clone(state);
     const refSource = input && input.reference
-      ? Object.assign({}, source || {}, { references: references(out, input.actor) }) : source;
+      ? Object.assign({}, source || {}, { references: references(out, input.actor, [input.action]) }) : source;
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];

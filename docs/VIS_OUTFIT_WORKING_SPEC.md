@@ -124,11 +124,33 @@ references and real-provider evaluation before it can be enabled.
 Tracker can replay verified `wear.adjust` events; this does NOT establish
 live Observer support. Contextual `referenceId` remains restricted to
 `wear.remove`.
+
 StateResolver can expose typed partial facts without making Image Compiler
 interpret them. The composer does not yet implement positive partial-placement
 tags or garment-specific negative constraints; same-turn A1111/Forge and
 Perchance validation remain outstanding. Do not mark VIS-OUTFIT-1B/1C/D closed
 from this batch alone.
+
+### VIS-REF-2 — bounded action-specific adjust references (testing candidate)
+
+Observer now receives both remove and adjust references derived from the
+same active-path `worn + partiallyWorn` garment facts (at most 12 garments,
+with distinct action-qualified IDs). Existing `wear:actor:index` remove
+IDs retain their legacy format and meaning. A new `wear:actor:index:adjust`
+reference only supports `wear.adjust`; the model supplies a verbatim
+`placement` from its **current** message, while the application substitutes
+the exact item name and validates the referenced source during each fold.
+Both natural-language names and pronouns may use the same prior fact without
+copying a second item into WearState. Wrong actor/action/swipe, stale sources
+and ungrounded placement are rejected; ambiguous pronouns must be unresolved.
+This uses the existing StateTracker + Interpreter contract, not another
+matching engine or new canonical fact store.
+
+The WS-1 paragraph above records the state at that PR; this later candidate
+enables Observer extraction experimentally and DOES NOT assert successful
+live-provider sampling. No changes to Image Compiler, A1111 negative
+constraints or `[draw:]` authority are included. Validate manual Perchance
+and live Russian dialogue separately.
 
 ## Staged implementation / CURRENT STATUS
 
