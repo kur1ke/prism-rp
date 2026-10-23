@@ -308,10 +308,21 @@
     // external character should be rendered into this shot.
     const owner = (actors.owner || cameraOwner) ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
+    // Physical facts are projected once by StateResolver for the exact
+    // origin path. The shot is NOT allowed to write back into this state.
+    const charWear = (o.wearFacts || []).find((x) => x && x.actor === "char");
+    const physicalWear = (actors.owner || cameraOwner) && charWear
+      ? JSON.parse(JSON.stringify(charWear)) : null;
+    const canonicalChanges = !!(physicalWear &&
+      ((physicalWear.removed || []).length || (physicalWear.partiallyWorn || []).length));
     const outfit = owner && Array.isArray(owner.wear) ? owner.wear.join(", ") : "";
     const userOutfit = user && Array.isArray(user.wear) ? user.wear.join(", ") : "";
 
     let wardrobe = actors.owner ? resolveWardrobe(im.wardrobe, outfit) : "";
+    // A card wardrobe is a set of optional presets, NOT a second inventory.
+    // If a garment has changed canonical status, a preset cannot reintroduce
+    // the original full look as unconditional visual tags.
+    if (canonicalChanges) wardrobe = "";
     // Когда одежда подтверждена состоянием переписки, общий/базовый гардероб
     // карточки не должен подменять её другой формой. Используем словарь
     // образов только если нашёлся явный ключ конкретной одежды.
@@ -373,6 +384,7 @@
     return {
       // The card owns stable appearance; the shot compiler must not rewrite it.
       scene: sceneText,
+      physicalWear,
       keep: [look.join(", "), wardrobe, established.join(", "), userTags, nsfw].filter(Boolean).join(", "),
       // Only card-configured image tags bypass translation; reported physical
       // state passes through compile() if it needs translation.
@@ -391,6 +403,8 @@
           identity: actors.owner ? look.join(", ") : "",
           established: established.join(", "),
           wardrobePreset: wardrobe,
+          wardrobeSuppressed: canonicalChanges,
+          wearFacts: physicalWear,
           shot: draw,
           shotExtras: bits.join(", "),
           outfitKnown: !!outfit,
@@ -517,7 +531,12 @@
     const pov = !!c.cameraOwner || (o.persona && o.persona.image && o.persona.image.view === "first");
     const povNeg = pov ? POV_NEG.concat(c.cameraOwner ? ["third-person view", "duplicate body"] :
       (subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : [])) : [];
-    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, povNeg.join(", "));
+    // A backend negative is global to every depicted person. For a multi-
+    // person shot a character-specific garment must instead be resolved in
+    // the positive scene compiler, not globally forbid the other person's outfit.
+    const scopedNegative = present && !c.userPresent && subjectCount(prompt) <= 1
+      ? o.wearNegative : "";
+    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative, povNeg.join(", "));
     return { prompt, negative };
   }
 
