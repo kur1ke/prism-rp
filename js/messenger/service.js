@@ -64,6 +64,7 @@
           w.world[field] = known[field];
         }
         w.world.fieldStatus = known.fieldStatus;
+        w.world.visualWearRemoved = known.visualWearRemoved;
         w.world.intentions = known.intentions;
       }
       const conv = CONV.derive(path, { now: at, record: env });
@@ -215,6 +216,7 @@
           w.world[field] = known[field];
         }
         w.world.fieldStatus = known.fieldStatus;
+        w.world.visualWearRemoved = known.visualWearRemoved;
         w.world.intentions = known.intentions;
       }
       const conv = CONV.derive(path, { now: t, record: env });

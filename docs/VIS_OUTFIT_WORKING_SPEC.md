@@ -114,3 +114,11 @@ Test A1111/Forge with controlled model/seed/shot settings and compare **prompt c
 - **VIS-OUTFIT-1D (not yet implemented):** complete acceptance matrix, Debug inspectability and controlled Forge/live Perchance comparison.
 
 **VERDICT:** VIS-OUTFIT-1 NOT CLOSED until every required invariant, especially final negative image prompt and branch-consistent visual result, is verified.
+
+
+### VIS-REF-1 — reference-aware Observer (testing, pending live validation)
+
+- Observer sees only bounded recent messages of the active lineage and typed candidates derived from the current path snapshot. Prior messages are context data, not fresh actions.
+- For clothing `wear.remove`, the model may return `referenceId` to a *known worn item*. Code resolves the exact original item + original source, preserves the action quote from the current message, and validates the same reference again during every path fold. Unknown/foreign/edited/reassigned references are rejected, never silently guessed.
+- `state/service` protects the entire observed ancestry (text, swipes, state events and corrections) from changes during asynchronous analysis, including speculative preparsing.
+- Pronoun ambiguity is not deterministically decidable in all cases: the model must report `unresolved`, rather than invent an item. This is a safety contract and requires real model sampling. Other domains and `partiallyWorn` are not implemented by this batch.

@@ -29,6 +29,30 @@
       return { state, character: TRACK.forCharacter(state), userView: TRACK.forUser(state, ctx.chat() && ctx.chat().mode) };
     }
 
+    // Bounded, read-only references: never copy another chat, a sibling swipe,
+    // imported memory or a whole unbounded transcript into Observer.
+    function observationContext(path, role) {
+      const prior = Array.isArray(path) ? path : [];
+      const state = snapshot(prior);
+      const actor = role === "user" ? "user" : "char";
+      return {
+        recent: prior.slice(-5).map((m) => ({
+          messageId: m.id, swipeIdx: m.swipeIdx || 0, role: m.role,
+          text: String(TR.activeSwipe(m).text || "").slice(0, 500),
+        })),
+        references: TRACK.references(state, actor),
+      };
+    }
+    function pathFingerprint(path) {
+      // Including text and state events protects a contextual interpretation
+      // against a changed ancestor swipe, edited text, or corrected garment.
+      return JSON.stringify((path || []).map((m) => [
+        m.id, m.swipeIdx || 0, TR.activeSwipe(m).text,
+        TR.activeSwipe(m).stateEvents, TR.activeSwipe(m).stateCorrections,
+        TR.activeSwipe(m).sceneOps,
+      ]));
+    }
+
     /* Observe AFTER a committed text message, BEFORE continuing generation/drawing.
        If interpretation fails, no world fact is manufactured. A missing model leaves
        the normal chat functional. No model-output data can control another actor.
@@ -76,7 +100,7 @@
       const c = ctx.chat(), source = String(text || "");
       if (!c || !source.trim() || !INT.mayChangeState(source)) return null;
       const options = { mode: c.mode, role: "user", text: source.slice(0, MAX_TEXT),
-        speakerName: (ctx.persona() || {}).name };
+        speakerName: (ctx.persona() || {}).name, ...observationContext(chat().path(), "user") };
       // A cancelled or stale turn simply discards this promise; it never commits.
       return { chatId: c.id, providerId: provider && provider.id, options, promise: analyse(options, provider) };
     }
@@ -89,18 +113,32 @@
       if (!INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
       if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) && sw.stateStatus.sourceText === sourceText && !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
-      if (!initialPath.includes(msg)) return { skipped: "off-path" };
-      const originalKey = initialPath.map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">");
+      const index = initialPath.indexOf(msg);
+      if (index < 0) return { skipped: "off-path" };
+      const originalKey = pathFingerprint(initialPath);
       const chatId = c.id;
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
-        speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name };
+        speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name,
+        ...observationContext(initialPath.slice(0, index), msg.role) };
       // Reuse a read-only early result only when its interpretation inputs still
       // match. Changed persona/mode/text cannot silently inherit stale events.
       const prepared = opts && opts.prepared;
       const sameInputs = prepared && prepared.chatId === msg.chatId &&
         prepared.providerId === (provider && provider.id) && prepared.options &&
-        ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]);
-      const result = sameInputs ? await prepared.promise : await analyse(options, provider);
+        ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]) &&
+        JSON.stringify(prepared.options.recent) === JSON.stringify(options.recent);
+      let result;
+      if (sameInputs) {
+        const early = await prepared.promise;
+        const refsSame = JSON.stringify(prepared.options.references) === JSON.stringify(options.references);
+        // PERF-02B: if the prior assistant's state finished meanwhile, reuse
+        // an explicit, non-referential early result or even its error. Only
+        // retry when newly available references could change an unresolved
+        // interpretation, or a previously resolved reference became stale.
+        const mayNeedReferences = early.valid && (early.events.some((e) => e.reference) ||
+          early.issues.some((issue) => issue.startsWith("Неоднозначная ссылка:")));
+        result = refsSame || !mayNeedReferences ? early : await analyse(options, provider);
+      } else result = await analyse(options, provider);
       // Высокоточные явные самоописания не должны исчезать только потому,
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
@@ -126,7 +164,7 @@
       }
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
-          chat().path().map((m) => m.id + ":" + (m.swipeIdx || 0)).join(">") !== originalKey) {
+          pathFingerprint(chat().path()) !== originalKey) {
         return { skipped: "stale-branch" };
       }
       const status = !result.valid ? events.length ? "partial" : "error" : result.issues.length ? "partial" : events.length ? "ok" : "no-changes";

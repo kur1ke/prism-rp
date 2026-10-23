@@ -18,9 +18,19 @@
   // Wear facts are derived from the selected swipe path; there is no second
   // persisted inventory. A removed item remains explicitly absent even if
   // the rest of the outfit has never been established.
-  const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: { removed: [] }, intentions: [], notes: [] });
+  const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: { worn: [], removed: [] }, intentions: [], notes: [] });
   const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
+  // Reference IDs are only meaningful inside one branch-derived snapshot.
+  // The source of each item is the original reported/established event.
+  function references(state, actorId) {
+    const actor = state && state.actors && state.actors[actorId];
+    if (!actor || !actor.wearState || !Array.isArray(actor.wearState.worn)) return [];
+    return actor.wearState.worn.slice(0, 12).map((x, i) => ({
+      id: "wear:" + actorId + ":" + i, actor: actorId, field: "wear", action: "remove",
+      item: x.item, source: clone(x.source),
+    }));
+  }
   const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, scene: SC.emptyState(), diagnostics: [] });
 
   function validateEvent(e, source) {
@@ -39,10 +49,19 @@
       } else if (typeof e.value !== "string" || !e.value.trim() || e.value.length > 240) return "некорректное значение";
     }
     if (e.evidence != null && (typeof e.evidence !== "string" || e.evidence.length > 450)) return "некорректная цитата";
+    if (e.reference && (!source || source.text == null)) return "контекстная ссылка без текста действия";
     if (source && source.text != null) {
-      // Интерпретация обязательна с точной цитатой из исходного сообщения; отсутствие доказательства не применяется.
+      // Current message proves the action; previous state proves the item.
       if (!str(e.evidence) || !String(source.text).includes(e.evidence)) return "нет точного подтверждения в сообщении";
-      if (e.action !== "clear") {
+      if (e.reference) {
+        if (e.field !== "wear" || e.action !== "remove" || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
+        const candidates = Array.isArray(source.references) ? source.references : [];
+        const match = candidates.find((x) => x.id === e.reference.id && x.actor === e.actor &&
+          x.field === e.field && x.action === e.action && x.item === e.value[0] &&
+          JSON.stringify(x) === JSON.stringify(e.reference));
+        if (!match) return "ссылка не подтверждена текущей веткой";
+      }
+      if (e.action !== "clear" && !e.reference) {
         // Точная цитата сама по себе не гарантирует, что модель не придумала
         // значение. Требуем хотя бы один содержательный корень значения в
         // самой цитате; нормализованные словоформы допускаются.
@@ -84,12 +103,15 @@
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
       value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
+      ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
   }
 
   function apply(state, input, source) {
     const out = clone(state);
-    const n = normalize(input, source);
+    const refSource = input && input.reference
+      ? Object.assign({}, source || {}, { references: references(out, input.actor) }) : source;
+    const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
     let value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
@@ -114,7 +136,9 @@
           // Only an explicit *complete* outfit replacement or reset invalidates
           // old absence facts. Partial additions do not.
           actor.wearState.removed = [];
+          actor.wearState.worn = e.action === "set" ? e.value.map((item) => ({ item, source: clone(datum.source) })) : [];
         } else if (e.action === "remove") {
+          actor.wearState.worn = actor.wearState.worn.filter((x) => !e.value.some((item) => sameGarment(x.item, item)));
           const removed = actor.wearState.removed;
           for (const item of e.value) {
             const existing = removed.findIndex((x) => sameGarment(x.item, item));
@@ -123,6 +147,9 @@
           }
         } else if (e.action === "add") {
           actor.wearState.removed = actor.wearState.removed.filter((x) => !e.value.some((item) => sameGarment(x.item, item)));
+          for (const item of e.value) {
+            if (!actor.wearState.worn.some((x) => sameGarment(x.item, item))) actor.wearState.worn.push({ item, source: clone(datum.source) });
+          }
         }
         // A removal without established prior wear is *not* an empty outfit:
         // keep wear unknown and preserve only explicit negative facts.
@@ -146,6 +173,7 @@
       for (const [field, v] of Object.entries(compat)) {
         if (v == null || (Array.isArray(v) && !v.length) || (field === "availability" && v === "unknown")) continue;
         st.actors.char.fields[field] = { value: clone(v), certainty: "established", source: { kind: "legacy-manual" } };
+        if (field === "wear" && Array.isArray(v)) st.actors.char.wearState.worn = v.map((item) => ({ item, source: { kind: "legacy-manual" } }));
       }
     }
     let sceneCursor = null;
@@ -155,7 +183,10 @@
       st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
       // A legacy scene wear directive is an authoritative full resulting
       // state; old removed items must not override that explicit state.
-      if (field === "wear") st.actors[actorId].wearState.removed = [];
+      if (field === "wear") {
+        st.actors[actorId].wearState.removed = [];
+        st.actors[actorId].wearState.worn = (Array.isArray(sceneValue) ? sceneValue : []).map((item) => ({ item, source: clone(source) }));
+      }
     }
     function charInScene(cursor, actorName) {
       const key = Object.keys(cursor.chars || {}).find((n) => normName(n) === normName(actorName));
@@ -234,6 +265,6 @@
     view.intentions = char.intentions.slice();
     return view;
   }
-  PRP.stateTracker = { FIELDS, empty, validateEvent, normalize, apply, fold, fieldOf, forCharacter, forUser };
+  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);

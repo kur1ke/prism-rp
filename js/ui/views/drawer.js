@@ -256,7 +256,15 @@
     else if (section === "tracker") {
       const w = v.world || {};
       const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
-      content = '<div class="block"><div class="block-title">Текущее состояние</div><dl class="kv">' + pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>';
+      const removed = Array.isArray(w.visualWearRemoved) ? w.visualWearRemoved : [];
+      content = '<div class="block"><div class="block-title">Текущее состояние</div><dl class="kv">' + pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>'
+        + '<div class="block"><div class="block-title">Снятые вещи <small>' + removed.length + '</small></div>'
+        + (removed.length ? '<ul class="wc-list">' + removed.map(x => '<li><b>' + esc(x.item || "") + '</b>'
+          + '<div class="hint">' + esc(x.certainty === "established" ? "установлено" : "со слов") + ' · '
+          + esc(x.source && x.source.messageId || "ручной/старый источник")
+          + ' · swipe ' + esc(x.source && x.source.swipeIdx != null ? String(x.source.swipeIdx) : "?") + '</div>'
+          + (x.source && x.source.evidence ? '<small>' + esc(x.source.evidence) + '</small>' : "")
+          + '</li>').join("") + '</ul>' : '<p class="hint">Нет подтверждённых снятых вещей. Остальной наряд может быть неизвестен.</p>') + '</div>';
     } else if (section === "events") {
       const active = (m.path || []).flatMap(msg => {
         const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
