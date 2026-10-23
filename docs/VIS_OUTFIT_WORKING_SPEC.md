@@ -211,9 +211,12 @@ present in the selected swipe's original draw are accepted. Messenger visual
 self-reports retain `certainty: "reported"`. Non-current, fantasy, old photos,
 screenshots, other actors, and absent/out-of-frame garments do not establish
 new current garment facts by default. When no entire outfit is known, `wear.add`
-establishes the particular visible item without inventing the rest. An actual
-removal or displacement is `remove` or `adjust`, never inferred merely from
-the camera not showing an item. `stateEvents` remain the only recorded facts.
+establishes the particular visible item without inventing the rest. A visual
+source cannot issue a full outfit `set` or `clear`: even a full-body image does
+not prove hidden layers. An explicitly described current absence (e.g. `no shorts`)
+can establish that exact removed item, while simply failing to show an item
+cannot. An actual removal or displacement is `remove` or `adjust`, never inferred
+merely from the camera not showing an item. `stateEvents` remain the only recorded facts.
 
 **Actor/item provenance:** `StateTracker.fold` revalidates `draw` event
 evidence against the original authored prompt on each active path and swipe;
