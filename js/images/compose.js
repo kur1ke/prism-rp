@@ -380,7 +380,10 @@
       userTags = u.tags; userTail = u.suffix;
     }
 
-    const nsfw = actors.owner ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
+    // NSFW look presets are Card options, not proof of exposed body parts.
+    // Do not let a shot-local keyword turn a known clothing change into an
+    // independent undressing decision outside StateTracker.
+    const nsfw = actors.owner && !canonicalChanges ? resolveWardrobe(String(im.nsfw || "").split("\n").filter((l) => !isBase(l.split(":")[0])).join("\n"), sceneText) : "";
     return {
       // The card owns stable appearance; the shot compiler must not rewrite it.
       scene: sceneText,
