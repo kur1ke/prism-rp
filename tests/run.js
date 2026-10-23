@@ -3252,9 +3252,9 @@ async function foundationH() {
     const h=fbHarness({name:"Орихимэ"});
     await h.chat.createChat("messenger","c1");
     await h.ctx.svc.messenger.createFor(h.ctx.chat().id,{timeZone:"UTC",timeMode:"live"});
-    const env=h.S.messengerEnv;
-    assert.ok(env&&env.world,"messenger environment exists");
-    env.world.visualWear=["белая футболка"];
+    const saved=await h.ctx.svc.messenger.commitEvent({
+      scope:"chat",patch:{visualWear:["белая футболка"]},note:"явно задано пользователем"});
+    assert.ok(saved.event,JSON.stringify(saved));
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const before=h.ctx.svc.state.snapshot().actors.char.wearState;
     assert.deepStrictEqual(before.worn.map(x=>x.item),["белая футболка"]);
