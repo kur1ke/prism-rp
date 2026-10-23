@@ -194,8 +194,8 @@
     "open-chat": (t) => openChat(t.dataset.id),
     rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
     "reload-page": () => location.reload(),
-    "modal-bg": (t, e) => { if (e.target === t) { S.modal = null; ui.renderModal(); } },
-    "modal-close": () => { S.modal = null; ui.renderModal(); },
+    "modal-bg": (t, e) => { if (e.target === t && !(S.modal && S.modal.creating)) { S.modal = null; ui.renderModal(); } },
+    "modal-close": () => { if (S.modal && S.modal.creating) return; S.modal = null; ui.renderModal(); },
   }, ...controllers.map((c) => c.actions));
   const chatCtl = controllers[0];
 
@@ -232,7 +232,7 @@
     if (chatCtl.shortcut(e)) return;
     if (e.key === "Escape") {
       if (S.pop) return ui.closePop();
-      if (S.modal) { S.modal = null; return ui.renderModal(); }
+      if (S.modal) { if (S.modal.creating) return; S.modal = null; return ui.renderModal(); }
       if (S.editingMsg) { S.editingMsg = null; return ui.renderFeed(); }
       if (S.find) return ACTS["find-close"]();
       if (S.drawerOpen && ui.narrow()) return ACTS["drawer-close"]();
