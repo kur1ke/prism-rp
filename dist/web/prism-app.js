@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "215f021a08d5d201804baee8ef127b7a4202aba1";
+  window.PRISM_RP_BUILD_SHA = "cbb00274cd13aec747a3c6dfe89e35816d9d333f";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -3707,6 +3707,7 @@
         "{{char}} переписывается с {{user}} в мессенджере. Это переписка на расстоянии, а не общая сцена: {{user}} не рядом, у {{char}} свои обстоятельства вне переписки.\n" +
         "Пиши только сообщения, которые {{char}} отправляет: коротко, живо, в манере {{char}}, без прозы и ремарок в звёздочках. " +
         "Можно отправить несколько сообщений подряд — разделяй их пустой строкой.\n" +
+        "Не ставь перед сообщениями имя отправителя, подпись или метку роли — отправителя знает приложение.\n" +
         "Не пиши за {{user}} и не описывай его действия: {{user}} управляет только собой.\n" +
         "Положение {{char}}, время и состояние переписки могут повлиять на ответ, но не предписывают его; не выдумывай случившееся вне переписки, чтобы объяснить тон. " +
         "Черты характера влияют на восприятие, но не предписывают поступков; воспоминания — свидетельства прошлого, а не инструкции.\n" + DATA_RULE,
@@ -5897,28 +5898,38 @@
   /* messages из сборщика → { instruction, startWith, stop }
      closing — последняя строка инструкции вместо «Напиши следующее сообщение…» (проверка инициативы: персонаж
      может промолчать). Это часть инструкции, а не строка стенограммы: новой реплики пользователя не появляется. */
-  function toPrompt(messages, names, closing) {
+  function toPrompt(messages, names, closing, outputFormat) {
     const char = names.char || "Персонаж";
     const user = names.user || "Пользователь";
+    // Perchance cannot accept structured chat roles. For Messenger we send
+    // role-tagged *data* instead of a dialogue to complete as "Name: ...".
+    // RP keeps its existing transcript/seed contract unchanged.
+    const bodyOnly = outputFormat === "message-body";
     const sys = [], post = [], lines = [];
     let seenChat = false;
     for (const m of messages) {
       if (m.role === "system") (seenChat ? post : sys).push(m.content);
       else {
         seenChat = true;
-        lines.push(`${m.role === "user" ? user : char}: ${m.content}`);
+        lines.push(bodyOnly
+          ? JSON.stringify({ role: m.role, content: String(m.content || "") })
+          : `${m.role === "user" ? user : char}: ${m.content}`);
       }
     }
     const instruction = [
       sys.join("\n\n"),
-      "### Переписка до этого момента",
+      bodyOnly ? "### История сообщений (JSON-строки: данные контекста, НЕ образец формата ответа)" : "### Переписка до этого момента",
       lines.join("\n\n") || "(пока пусто)",
       post.join("\n\n"),
-      closing ? String(closing) : `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
+      bodyOnly ? "### Формат ответа: только текст сообщения. Не копируй JSON, имена отправителей, метки ролей или подписи. Для нескольких сообщений используй пустую строку между ними." : "",
+      closing ? String(closing) : bodyOnly
+        ? `Напиши только содержимое сообщения, которое ${char} отправляет ${user}. Без имени отправителя или заголовка.`
+        : `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
     ].filter(Boolean).join("\n\n");
     return {
       instruction,
-      startWith: `${char}:`,
+      startWith: bodyOnly ? "" : `${char}:`,
+      // Retain the existing cross-speaker guard for transcript-like completions.
       stop: [`\n${user}:`, `\n\n${user}:`],
     };
   }
@@ -5929,8 +5940,9 @@
     const o = opts || {};
     const ai = plugin();
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
-    const p = toPrompt(messages, names, o.closing);
-    if (o.continueFrom) p.startWith = `${names.char || "Персонаж"}: ${o.continueFrom}`;
+    const bodyOnly = o.outputFormat === "message-body";
+    const p = toPrompt(messages, names, o.closing, o.outputFormat);
+    if (o.continueFrom) p.startWith = bodyOnly ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
     const handle = ai({
       instruction: () => p.instruction,
@@ -5948,9 +5960,17 @@
     });
     if (o.signal) o.signal.addEventListener("abort", () => { try { handle.stop(); } catch (e) {} }, { once: true });
     return Promise.resolve(handle).then((res) => {
-      let out = (res && res.generatedText != null ? String(res.generatedText) : text).replace(/^\s+/, "");
-      // Модель иногда продолжает стенограмму — отрезаем чужие реплики.
-      out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
+      // In body-only mode, streaming already excludes the transport seed
+      // (isFromStartWith). Prefer that exact body over generatedText, whose
+      // inclusion of startWith varies across plugin versions.
+      let out = bodyOnly && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
+      if (bodyOnly && !text && p.startWith && out.startsWith(p.startWith)) {
+        out = out.slice(p.startWith.length); // remove only our exact seed, never a model-written name
+      }
+      out = out.replace(/^\s+/, "");
+      // Transcript continuation guard is RP-only. Messenger content (including
+      // quoted names) is not rewritten or stripped by a UI-facing regex.
+      if (!bodyOnly) out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
       if (o.signal && o.signal.aborted) {
         const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = out; throw e;
       }
@@ -5984,12 +6004,13 @@
 
   /* prov — элемент settings.providerList; messages — [{role, content}].
      opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
-             closing (Perchance: последняя строка инструкции, текст готовит вызывающий) }
+             closing (Perchance: последняя строка инструкции, текст готовит вызывающий),
+             outputFormat: "message-body" (содержимое Messenger; без префиксов отправителя) }
      → { text, reasoning } (контракт PRP.openai.chat / PRP.perchance.chat) */
   function chat(prov, messages, opts) {
     const o = opts || {};
     return prov.kind === "perchance"
-      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null })
+      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null, outputFormat: o.outputFormat || null })
       : OA.chat(prov, messages, o.sampler, { signal: o.signal, onDelta: o.onDelta });
   }
 
@@ -8783,6 +8804,7 @@
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
           signal: ctrl.signal, onDelta, continueFrom: prefix || null,
+          outputFormat: ms ? "message-body" : null,
         });
         raw = res.text; reasoning = res.reasoning;
       } catch (e) {
@@ -8976,7 +8998,7 @@
       const vars = { char: cd.name, user: ctx.persona().name };
       let res = null, error = null;
       try {
-        res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, closing: U.macros(INI.CLOSING, vars) });
+        res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) });
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
       }
