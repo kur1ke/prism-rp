@@ -4237,6 +4237,138 @@ async function unifiedTracker() {
     assert.deepStrictEqual(proj.world.visualWear, ["белая футболка", "шорты"]);
     assert.deepStrictEqual(proj.wearFacts[0].removed, []);
   });
+  /* VIS-REF-2: use the existing path-bound garment references for adjust, too. */
+  await ta("VIS-REF-2A: model adjusts an existing garment by exact reference, not a new inflected name", async () => {
+    const before = make("assistant", "На мне белая футболка и шорты",
+      [Evt("char", "wear", "set", ["белая футболка", "шорты"], "reported", "На мне белая футболка и шорты")], "before");
+    const initial = STATE.fold({ mode: "messenger", path: [before] });
+    const remove = STATE.references(initial, "char");
+    const candidates = STATE.references(initial, "char", ["remove", "adjust"]);
+    assert.deepStrictEqual(remove.map(x => x.id), ["wear:char:0", "wear:char:1"], "legacy removal IDs unchanged");
+    const ref = candidates.find(x => x.action === "adjust" && x.item === "белая футболка");
+    assert.ok(ref, "same canonical garment is available to adjust");
+    const text = "Я спустила её с плеч";
+    const opts = { mode: "messenger", role: "assistant", text, references: candidates };
+    const report = INTR.parse(JSON.stringify({ events: [{
+      actor: "char", field: "wear", action: "adjust", referenceId: ref.id,
+      placement: "с плеч", certainty: "reported", evidence: text,
+    }] }), opts);
+    assert.strictEqual(report.events.length, 1, JSON.stringify(report.issues));
+    assert.deepStrictEqual(report.events[0].value, ["белая футболка"]);
+    assert.strictEqual(report.events[0].reference.source.messageId, "before");
+    const after = STATE.fold({ mode: "messenger", path: [
+      before, make("assistant", text, report.events, "after"),
+    ] });
+    assert.deepStrictEqual(after.actors.char.wearState.worn.map(x => x.item), ["шорты"]);
+    assert.deepStrictEqual(after.actors.char.wearState.partiallyWorn.map(x => x.item), ["белая футболка"]);
+    assert.strictEqual(after.actors.char.wearState.partiallyWorn[0].placement, "с плеч");
+    assert.strictEqual(after.actors.char.wearState.partiallyWorn[0].source.messageId, "after");
+    assert.strictEqual(after.diagnostics.length, 0, JSON.stringify(after.diagnostics));
+  });
+  await ta("VIS-REF-2B: adjust references cannot forge an actor, garment, action or placement", async () => {
+    const initial = STATE.fold({ mode: "messenger", path: [
+      make("assistant", "Я ношу куртку", [Evt("char", "wear", "add", ["куртку"], "reported", "Я ношу куртку")], "a"),
+    ] });
+    const references = STATE.references(initial, "char", ["remove", "adjust"]);
+    const adj = references.find(x => x.action === "adjust");
+    const opts = { role: "assistant", mode: "messenger", text: "Я спустила её ниже", references };
+    const event = { actor: "char", field: "wear", action: "adjust",
+      referenceId: adj.id, placement: "ниже", certainty: "reported", evidence: opts.text };
+    assert.strictEqual(INTR.parse(JSON.stringify({ events: [event] }), opts).events.length, 1);
+    for (const corrupt of [
+      { ...event, referenceId: "wear:user:0:adjust" },
+      { ...event, referenceId: references.find(x => x.action === "remove").id },
+      { ...event, value: ["пальто"] },
+      { ...event, actor: "user" },
+      { ...event, placement: "на талии" },
+      { ...event, evidence: "чужие слова" },
+    ]) {
+      const report = INTR.parse(JSON.stringify({ events: [corrupt] }), opts);
+      assert.strictEqual(report.events.length, 0, JSON.stringify({corrupt, report}));
+    }
+  });
+  await ta("VIS-REF-2C: adjusting a partially worn garment again uses the current fact's origin", async () => {
+    const first = make("assistant", "На мне свитер", [Evt("char","wear","add",["свитер"],"established","На мне свитер")], "a");
+    const initial=STATE.fold({mode:"rp",path:[first]});
+    const beforeRef=STATE.references(initial,"char",["adjust"]).find(x=>x.action==="adjust");
+    const midText="Я спустила его с плеч";
+    const middle=make("assistant",midText,[{
+      ...Evt("char","wear","adjust",["свитер"],"established",midText),
+      placement:"с плеч",reference:beforeRef,
+    }],"b");
+    const mid=STATE.fold({mode:"rp",path:[first,middle]});
+    assert.strictEqual(mid.diagnostics.length,0,JSON.stringify(mid.diagnostics));
+    const afterRef=STATE.references(mid,"char",["adjust"]).find(x=>x.action==="adjust");
+    assert.strictEqual(afterRef.source.messageId,"b");
+    assert.notDeepStrictEqual(afterRef,beforeRef);
+    const lateText="Я подтянула его к шее";
+    const after=STATE.fold({mode:"rp",path:[first,middle,make("assistant",lateText,[{
+      ...Evt("char","wear","adjust",["свитер"],"established",lateText),
+      placement:"к шее",reference:afterRef,
+    }],"c")]});
+    assert.strictEqual(after.diagnostics.length,0,JSON.stringify(after.diagnostics));
+    assert.deepStrictEqual(after.actors.char.wearState.partiallyWorn.map(x=>x.item),["свитер"]);
+    assert.strictEqual(after.actors.char.wearState.partiallyWorn[0].placement,"к шее");
+    assert.strictEqual(after.actors.char.wearState.partiallyWorn[0].source.messageId,"c");
+  });
+  await ta("VIS-REF-2D: changed ancestor swipe invalidates already persisted adjustment reference", async () => {
+    const before={id:"m",role:"assistant",swipeIdx:0,swipes:[
+      {text:"На мне футболка",sceneOps:[],stateEvents:[Evt("char","wear","add",["футболка"],"reported","На мне футболка")]},
+      {text:"Я снова в футболке",sceneOps:[],stateEvents:[Evt("char","wear","add",["футболка"],"reported","Я снова в футболке")]},
+    ]};
+    const first=STATE.fold({mode:"messenger",path:[before]});
+    const reference=STATE.references(first,"char",["adjust"])[0];
+    const action="Спустила её с плеч";
+    const after=make("assistant",action,[{
+      ...Evt("char","wear","adjust",["футболка"],"reported",action),placement:"с плеч",reference,
+    }],"after");
+    const valid=STATE.fold({mode:"messenger",path:[before,after]});
+    assert.strictEqual(valid.diagnostics.length,0,JSON.stringify(valid.diagnostics));
+    before.swipeIdx=1;
+    const stale=STATE.fold({mode:"messenger",path:[before,after]});
+    assert.deepStrictEqual(stale.actors.char.wearState.partiallyWorn,[]);
+    assert.deepStrictEqual(stale.actors.char.wearState.worn.map(x=>x.item),["футболка"]);
+    assert.ok(stale.diagnostics.some(x=>/ссылка не подтверждена/.test(x.issue)));
+  });
+  await ta("VIS-REF-2E: unknown or removed garments do not become adjustment references", async () => {
+    const unknown=STATE.fold({mode:"rp",path:[]});
+    assert.deepStrictEqual(STATE.references(unknown,"char",["adjust"]),[]);
+    const m=make("assistant","Сняла топ",[Evt("char","wear","remove",["топ"],"established","Сняла топ")],"r");
+    const gone=STATE.fold({mode:"rp",path:[m]});
+    assert.deepStrictEqual(STATE.references(gone,"char",["adjust"]),[]);
+    const unresolved=INTR.parse(JSON.stringify({events:[],unresolved:["неизвестно, что именно спустила"]}),
+      {mode:"rp",role:"assistant",text:"Спустила её",references:[]});
+    assert.deepStrictEqual(unresolved.events,[]);
+    assert.ok(unresolved.issues.some(x=>x.startsWith("Неоднозначная ссылка:")));
+  });
+  await ta("VIS-REF-2F: observer commits grounded adjustment on selected swipe with source provenance", async () => {
+    const h=fbHarness({name:"Орихимэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const before=h.chat.newMsg("assistant",null,"На мне длинная белая футболка и шорты");
+    before.swipes[0].stateEvents=[Evt("char","wear","set",["длинная белая футболка","шорты"],"reported",before.swipes[0].text)];
+    await h.chat.commitMessage(before,before.id);
+    const reply=h.chat.newMsg("assistant",before.id,"Я спустила её с плеч");
+    await h.chat.commitMessage(reply,reply.id);
+    const old=globalThis.PRP.llm;
+    let observed;
+    globalThis.PRP.llm={simple:async (_provider,prompt)=>{
+      observed=prompt;
+      return JSON.stringify({events:[{actor:"char",field:"wear",action:"adjust",referenceId:"wear:char:0:adjust",
+        placement:"с плеч",certainty:"reported",evidence:"Я спустила её с плеч"}]});
+    }};
+    try {
+      const result=await h.ctx.svc.state.observeMessage(reply,{id:"mock"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.ok(observed.includes("wear.adjust") && observed.includes("REFERENCES"),observed);
+      const event=reply.swipes[0].stateEvents[0];
+      assert.strictEqual(event.reference.source.messageId,before.id);
+      const now=h.ctx.svc.state.snapshot();
+      assert.deepStrictEqual(now.actors.char.wearState.partiallyWorn.map(x=>x.item),["длинная белая футболка"]);
+      assert.deepStrictEqual(now.actors.char.wearState.worn.map(x=>x.item),["шорты"]);
+      assert.strictEqual(now.diagnostics.length,0,JSON.stringify(now.diagnostics));
+    } finally {globalThis.PRP.llm=old;}
+  });
   await ta("VIS-REF-1: observer resolves a prior garment by verified reference, not by invented current quote", async () => {
     const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Персонаж." });
     await h.chat.createChat("messenger", "c1");
