@@ -159,6 +159,7 @@
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
           signal: ctrl.signal, onDelta, continueFrom: prefix || null,
+          outputFormat: ms ? "message-body" : null,
         });
         raw = res.text; reasoning = res.reasoning;
       } catch (e) {
@@ -352,7 +353,7 @@
       const vars = { char: cd.name, user: ctx.persona().name };
       let res = null, error = null;
       try {
-        res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, closing: U.macros(INI.CLOSING, vars) });
+        res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) });
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
       }
