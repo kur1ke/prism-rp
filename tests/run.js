@@ -3235,7 +3235,7 @@ async function foundationH() {
       assert.ok(!backend.prompt.includes("blue dress")&&!backend.prompt.includes("nipples"),backend.prompt);
       assert.ok(backend.prompt.includes("<lora:ori:0.8>")&&backend.prompt.includes("orihime_inoue"),backend.prompt);
       assert.ok(!backend.negative.split(",").map(s=>s.trim()).includes("shorts"),backend.negative);
-      assert.strictEqual(live.swipes[0].images[0].promptSources.drawAuthored,true);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.imageLayers.drawAuthored,true);
     }finally {ICP.compile=oldC;IB.generate=oldG;}
   });
   await ta("VIS-DRAW-SOURCE-5: Messenger intent image uses one compiler call for author's shot",async()=>{
