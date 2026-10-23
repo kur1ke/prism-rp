@@ -4004,6 +4004,105 @@ async function unifiedTracker() {
     assert.deepStrictEqual(STATE.forCharacter(first).visualWearRemoved.map((x) => x.item), ["юбку"]);
     assert.strictEqual(STATE.forCharacter(second).visualWearRemoved[0].source.swipeIdx, 1);
   });
+  await ta("VIS-REF-1: observer resolves a prior garment by verified reference, not by invented current quote", async () => {
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Персонаж." });
+    await h.chat.createChat("messenger", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const first = h.chat.newMsg("assistant", null, "На мне свободная белая футболка и короткие шорты");
+    first.swipes[0].stateEvents = [Evt("char", "wear", "set", ["свободная белая футболка", "короткие шорты"], "reported",
+      "На мне свободная белая футболка и короткие шорты")];
+    await h.chat.commitMessage(first, first.id);
+    const user = h.chat.newMsg("user", first.id, "Тогда сними её для меня");
+    await h.chat.commitMessage(user, user.id);
+    const reply = h.chat.newMsg("assistant", user.id, "Вот... я сняла её...");
+    await h.chat.commitMessage(reply, reply.id);
+    const old = globalThis.PRP.llm;
+    let received;
+    globalThis.PRP.llm = { simple: async (_provider, text) => {
+      received = text;
+      return JSON.stringify({ events: [{ actor: "char", field: "wear", action: "remove",
+        referenceId: "wear:char:0", certainty: "reported", evidence: "я сняла её" }] });
+    } };
+    try {
+      const result = await h.ctx.svc.state.observeMessage(reply, { id: "mock" });
+      assert.strictEqual(result.status, "ok", JSON.stringify(result));
+      assert.ok(received.includes("Тогда сними её для меня"), received);
+      assert.ok(received.includes("свободная белая футболка") && received.includes("короткие шорты"));
+      assert.ok(received.includes("HISTORY") && received.includes("REFERENCES"));
+      const event = reply.swipes[0].stateEvents[0];
+      assert.deepStrictEqual(event.value, ["свободная белая футболка"]);
+      assert.strictEqual(event.evidence, "я сняла её");
+      assert.strictEqual(event.reference.source.messageId, first.id);
+      assert.strictEqual(event.reference.source.swipeIdx, 0);
+      const tracked = globalThis.PRP.stateTracker.forCharacter(h.ctx.svc.state.snapshot());
+      assert.deepStrictEqual(tracked.visualWear, ["короткие шорты"]);
+      assert.deepStrictEqual(tracked.visualWearRemoved.map((x) => x.item), ["свободная белая футболка"]);
+      assert.strictEqual(tracked.visualWearRemoved[0].source.messageId, reply.id);
+      const replay = globalThis.PRP.stateTracker.fold({ mode: "messenger", path: h.chat.path() });
+      assert.strictEqual(replay.diagnostics.length, 0, JSON.stringify(replay.diagnostics));
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("VIS-REF-2: source validator rejects fabricated, foreign and mismatched reference IDs", async () => {
+    const before = make("assistant", "На мне синяя куртка", [Evt("char", "wear", "add",
+      ["синяя куртка"], "reported", "На мне синяя куртка")], "before");
+    const pre = STATE.fold({ mode: "messenger", path: [before] });
+    const refs = STATE.references(pre, "char");
+    assert.strictEqual(refs.length, 1);
+    const base = { actor: "char", field: "wear", action: "remove", certainty: "reported", evidence: "Я сняла её", value: ["синяя куртка"] };
+    const opts = { mode: "messenger", role: "assistant", text: "Я сняла её", references: refs };
+    const okay = INTR.parse(JSON.stringify({ events: [Object.assign({}, base, { referenceId: refs[0].id })] }), opts);
+    assert.strictEqual(okay.events.length, 1, JSON.stringify(okay.issues));
+    assert.strictEqual(INTR.parse(JSON.stringify({ events: [Object.assign({}, base, { referenceId: "wear:user:0" })] }), opts).events.length, 0);
+    assert.strictEqual(INTR.parse(JSON.stringify({ events: [Object.assign({}, base, { value: ["пальто"], referenceId: refs[0].id })] }), opts).events.length, 0);
+    const fake = Object.assign({}, okay.events[0], { reference: Object.assign({}, refs[0], { item: "пальто" }), value: ["пальто"] });
+    const replay = STATE.apply(pre, fake, { role: "assistant", mode: "messenger", text: "Я сняла её", messageId: "reply" });
+    assert.deepStrictEqual(STATE.forCharacter(replay).visualWear, ["синяя куртка"]);
+    assert.deepStrictEqual(STATE.forCharacter(replay).visualWearRemoved, []);
+    assert.ok(replay.diagnostics.some((x) => /ссылка не подтверждена/.test(x.issue)));
+    const noName = INTR.parse(JSON.stringify({ events: [base] }), Object.assign({}, opts, { references: [] }));
+    assert.strictEqual(noName.events.length, 0, "no ungrounded future garment is inferred from pronoun");
+  });
+  await ta("VIS-REF-3: unresolved antecedent is diagnostic, not a guessed canonical event", async () => {
+    const report = INTR.parse(JSON.stringify({ events: [], unresolved: ["два возможных предмета для «её»"] }),
+      { mode: "messenger", role: "assistant", text: "Я сняла её", references: [] });
+    assert.strictEqual(report.events.length, 0);
+    assert.ok(report.issues.some((x) => x.includes("Неоднозначная ссылка")), JSON.stringify(report));
+  });
+  await ta("VIS-REF-4: changing a prior message while observer runs prevents stale reference commit", async () => {
+    const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Персонаж." });
+    await h.chat.createChat("messenger", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const before = h.chat.newMsg("assistant", null, "На мне футболка");
+    before.swipes[0].stateEvents = [Evt("char", "wear", "set", ["футболка"], "reported", "На мне футболка")];
+    await h.chat.commitMessage(before, before.id);
+    const reply = h.chat.newMsg("assistant", before.id, "Я сняла её");
+    await h.chat.commitMessage(reply, reply.id);
+    const old = globalThis.PRP.llm;
+    let resolve;
+    globalThis.PRP.llm = { simple: () => new Promise((r) => { resolve = r; }) };
+    try {
+      const pending = h.ctx.svc.state.observeMessage(reply, { id: "mock" });
+      assert.strictEqual(typeof resolve, "function");
+      before.swipes[0].text = "На мне платье"; // content changed without changing the ancestor ID or swipeIdx
+      resolve(JSON.stringify({ events: [{ actor: "char", field: "wear", action: "remove",
+        referenceId: "wear:char:0", certainty: "reported", evidence: "Я сняла её" }] }));
+      assert.strictEqual((await pending).skipped, "stale-branch");
+      assert.strictEqual(reply.swipes[0].stateEvents, undefined);
+    } finally { globalThis.PRP.llm = old; }
+  });
+  await ta("VIS-REF-5: reference list is isolated by active swipe, actor and prior state", async () => {
+    const m = { id: "m", role: "assistant", swipeIdx: 0, swipes: [
+      { text: "На мне юбка", sceneOps: [], stateEvents: [Evt("char", "wear", "set", ["юбка"], "established", "На мне юбка")] },
+      { text: "На мне куртка", sceneOps: [], stateEvents: [Evt("char", "wear", "set", ["куртка"], "established", "На мне куртка")] },
+    ] };
+    const a = STATE.references(STATE.fold({ mode: "rp", path: [m] }), "char");
+    m.swipeIdx = 1;
+    const b = STATE.references(STATE.fold({ mode: "rp", path: [m] }), "char");
+    assert.deepStrictEqual(a.map((x) => x.item), ["юбка"]);
+    assert.deepStrictEqual(b.map((x) => x.item), ["куртка"]);
+    assert.strictEqual(b[0].source.swipeIdx, 1);
+    assert.deepStrictEqual(STATE.references(STATE.fold({ mode: "rp", path: [m] }), "user"), []);
+  });
   await ta("UT-4: модель не может править пользователя; пользователь не правит персонажа", async () => {
     const e = Evt("user", "wear", "set", ["кимоно"], "established", "Я надела кимоно");
     const x = STATE.fold({ mode: "rp", path: [make("assistant", "Я надела кимоно", [e], "m1")] });
