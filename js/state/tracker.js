@@ -220,12 +220,18 @@
     let sceneCursor = null;
     const aliases = { char: opts.charName, user: opts.userName };
     const normName = (x) => String(x || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
-    function syncSceneActor(actorId, field, sceneValue, source) {
+    function syncSceneActor(actorId, field, sceneValue, source, fullOutfit = true) {
       // Legacy Scene stores a resulting full wear list. It remains a single
       // authoritative replacement in the new canonical fold.
-      if (field === "wear") transitionWear(st.actors[actorId],
-        { action: "set", value: Array.isArray(sceneValue) ? clone(sceneValue) : [], certainty: "established" }, source);
-      else st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
+      if (field === "wear") {
+        const actor = st.actors[actorId];
+        const previouslyComplete = actor.wearState.complete;
+        transitionWear(actor,
+          { action: "set", value: Array.isArray(sceneValue) ? clone(sceneValue) : [], certainty: "established" }, source);
+        // Scene.add/remove supplies a resulting list, not evidence that the
+        // character's entire outfit was established. Preserve that distinction.
+        if (!fullOutfit) actor.wearState.complete = previouslyComplete;
+      } else st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
     }
     function charInScene(cursor, actorName) {
       const key = Object.keys(cursor.chars || {}).find((n) => normName(n) === normName(actorName));
@@ -259,7 +265,7 @@
             const ch = charInScene(sceneCursor, name);
             if (!ch) continue;
             const field = op.key === "pose" ? "pose" : "wear";
-            syncSceneActor(actorId, field, field === "pose" ? ch.pose : ch.wear, { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+            syncSceneActor(actorId, field, field === "pose" ? ch.pose : ch.wear, { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 }, op.key === "wear");
           }
         }
       }
