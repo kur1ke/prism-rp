@@ -58,6 +58,10 @@
     if (!tracked || !tracked.state || !tracked.state.actors) return [];
     return ["char", "user"].map((actor) => ({
       actor,
+      known: !!(tracked.state.actors[actor] && tracked.state.actors[actor].wearState && tracked.state.actors[actor].wearState.known),
+      complete: !!(tracked.state.actors[actor] && tracked.state.actors[actor].wearState && tracked.state.actors[actor].wearState.complete),
+      worn: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
+        tracked.state.actors[actor].wearState.worn) || []),
       removed: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
         tracked.state.actors[actor].wearState.removed) || []),
       partiallyWorn: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
