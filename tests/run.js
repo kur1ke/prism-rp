@@ -4016,6 +4016,7 @@ async function unifiedTracker() {
     await h.chat.commitMessage(user, user.id);
     const reply = h.chat.newMsg("assistant", user.id, "Вот... я сняла её...");
     await h.chat.commitMessage(reply, reply.id);
+    const activeReply = h.chat.path().slice(-1)[0];
     const old = globalThis.PRP.llm;
     let received;
     globalThis.PRP.llm = { simple: async (_provider, text) => {
@@ -4024,12 +4025,12 @@ async function unifiedTracker() {
         referenceId: "wear:char:0", certainty: "reported", evidence: "я сняла её" }] });
     } };
     try {
-      const result = await h.ctx.svc.state.observeMessage(reply, { id: "mock" });
+      const result = await h.ctx.svc.state.observeMessage(activeReply, { id: "mock" });
       assert.strictEqual(result.status, "ok", JSON.stringify(result));
       assert.ok(received.includes("Тогда сними её для меня"), received);
       assert.ok(received.includes("свободная белая футболка") && received.includes("короткие шорты"));
       assert.ok(received.includes("HISTORY") && received.includes("REFERENCES"));
-      const event = reply.swipes[0].stateEvents[0];
+      const event = activeReply.swipes[0].stateEvents[0];
       assert.deepStrictEqual(event.value, ["свободная белая футболка"]);
       assert.strictEqual(event.evidence, "я сняла её");
       assert.strictEqual(event.reference.source.messageId, first.id);
@@ -4077,17 +4078,18 @@ async function unifiedTracker() {
     await h.chat.commitMessage(before, before.id);
     const reply = h.chat.newMsg("assistant", before.id, "Я сняла её");
     await h.chat.commitMessage(reply, reply.id);
+    const activeBefore = h.chat.path()[0], activeReply = h.chat.path()[1];
     const old = globalThis.PRP.llm;
     let resolve;
     globalThis.PRP.llm = { simple: () => new Promise((r) => { resolve = r; }) };
     try {
-      const pending = h.ctx.svc.state.observeMessage(reply, { id: "mock" });
+      const pending = h.ctx.svc.state.observeMessage(activeReply, { id: "mock" });
       assert.strictEqual(typeof resolve, "function");
-      before.swipes[0].text = "На мне платье"; // content changed without changing the ancestor ID or swipeIdx
+      activeBefore.swipes[0].text = "На мне платье"; // content changed without changing the ancestor ID or swipeIdx
       resolve(JSON.stringify({ events: [{ actor: "char", field: "wear", action: "remove",
         referenceId: "wear:char:0", certainty: "reported", evidence: "Я сняла её" }] }));
       assert.strictEqual((await pending).skipped, "stale-branch");
-      assert.strictEqual(reply.swipes[0].stateEvents, undefined);
+      assert.strictEqual(activeReply.swipes[0].stateEvents, undefined);
     } finally { globalThis.PRP.llm = old; }
   });
   await ta("VIS-REF-5: reference list is isolated by active swipe, actor and prior state", async () => {
