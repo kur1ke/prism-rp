@@ -3122,20 +3122,14 @@ async function foundationH() {
   });
   await ta("INITIAL-UX-1: accept one fenced JSON outfit but not explanatory prose or partial list",async()=>{
     const I=globalThis.PRP.stateInterpreter;
-    assert.deepStrictEqual(I.parseInitialOutfit('```json
-{"wear":{"worn":["короткий халатик"]}}
-```').worn,["короткий халатик"]);
-    assert.deepStrictEqual(I.parseInitialOutfit('```
-{"wear":{"worn":[]}}
-```').worn,[]);
+    const fenced=(body,lang="json")=>["```"+lang,body,"```"].join("\n");
+    assert.deepStrictEqual(I.parseInitialOutfit(fenced('{"wear":{"worn":["короткий халатик"]}}')).worn,
+      ["короткий халатик"]);
+    assert.deepStrictEqual(I.parseInitialOutfit(fenced('{"wear":{"worn":[]}}',"")).worn,[]);
     for (const raw of [
       'Наряд: {"wear":{"worn":["халатик"]}}',
-      '```json
-{"wear":{"worn":["халатик"],"complete":false}}
-```',
-      'Начало ```json
-{"wear":{"worn":["халатик"]}}
-```',
+      fenced('{"wear":{"worn":["халатик"],"complete":false}}'),
+      'Начало '+fenced('{"wear":{"worn":["халатик"]}}'),
     ]) assert.ok(I.parseInitialOutfit(raw).error,"do not extract guessed/partial JSON: "+raw);
   });
   await ta("INITIAL-UX-2: pending creation modal is visible, informative and not dismissible via its actions",async()=>{
