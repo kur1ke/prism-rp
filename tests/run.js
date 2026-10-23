@@ -3207,6 +3207,36 @@ async function foundationH() {
       assert.deepStrictEqual(wear.worn.map(x=>x.item),[]);
     }finally {globalThis.PRP.llm.simple=old;}
   });
+  await ta("VIS-DRAW-SOURCE-2C: an English photo can remove the exact previously named Russian garment using branch reference",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const before=h.chat.newMsg("assistant",null,"На мне шорты");
+    before.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",
+      value:["шорты"],certainty:"reported",evidence:"На мне шорты"}];
+    await h.chat.commitMessage(before,before.id);
+    const after=h.chat.newMsg("assistant",before.id,"😘");
+    after.swipes[0].draws=[{prompt:"current mirror selfie, shorts removed, white t-shirt",ratio:"1:1"}];
+    await h.chat.commitMessage(after,after.id);
+    const old=globalThis.PRP.llm.simple;
+    let query;
+    try{
+      globalThis.PRP.llm.simple=async (_,q)=>{
+        query=q;return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
+          referenceId:"wear:char:0",certainty:"reported",evidence:"shorts removed",
+          evidenceType:"draw",visualScope:"current-self"}]});
+      };
+      const res=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(res.status,"ok",JSON.stringify(res));
+      assert.ok(query.includes('"wear:char:0"'),"exact current reference is supplied to visual Observer");
+      const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(wear.removed.map(x=>x.item),["шорты"]);
+      assert.deepStrictEqual(wear.worn.map(x=>x.item),[]);
+      assert.strictEqual(wear.removed[0].source.evidenceType,"draw");
+      const saved=h.chat.path().slice(-1)[0].swipes[0].stateEvents[0];
+      assert.strictEqual(saved.reference.item,"шорты");
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
   await ta("VIS-DRAW-SOURCE-3: forged, off-frame, other-source, and stale-swipe visual facts cannot enter state",async()=>{
     const TRACK=globalThis.PRP.stateTracker,INT=globalThis.PRP.stateInterpreter;
     const current="1girl, current selfie, white shirt";
