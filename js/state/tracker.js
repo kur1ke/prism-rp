@@ -1,6 +1,7 @@
 /* Prism RP — UT-1: общий фактический трекер состояния персонажа для RP и Messenger.
    Чистый, детерминированный. Истина хранится не в UI, а в событиях на swipes сообщений;
-   изображение не является событием. Перспектива задаёт видимость, не физическое существование.
+   raw/compiled изображение не является событием; подтверждённое описание текущего
+   авторского [draw:] может стать источником wear-события. Перспектива задаёт видимость, не физическое существование.
    Поля legacy Messenger Environment — совместимый начальный слой/ручные исправления.
    Не определяет, что произошло из свободного текста (это работа state/interpreter).
 */
@@ -125,10 +126,34 @@
       } else if (typeof e.value !== "string" || !e.value.trim() || e.value.length > 240) return "некорректное значение";
     }
     if (e.evidence != null && (typeof e.evidence !== "string" || e.evidence.length > 450)) return "некорректная цитата";
-    if (e.reference && (!source || source.text == null)) return "контекстная ссылка без текста действия";
-    if (source && source.text != null) {
-      // Current message proves the action; previous state proves the item.
-      if (!str(e.evidence) || !String(source.text).includes(e.evidence)) return "нет точного подтверждения в сообщении";
+    // Text and author-generated [draw:] are distinct evidence surfaces of
+    // ONE swipe. A draw never becomes a hidden instruction or a separate store:
+    // replay must prove the exact quoted fragment is still in its source shot.
+    const drawn = e.evidenceType === "draw";
+    if (e.evidenceType != null && !drawn) return "неизвестный источник цитаты";
+    // A photo proves only depicted items. Even a full-body frame cannot
+    // establish all potentially hidden clothes or clear the entire outfit.
+    if (drawn && !["add", "remove", "adjust"].includes(e.action))
+      return "draw не подтверждает полный комплект или очистку гардероба";
+    if (drawn && e.visualScope !== "current-self")
+      return "draw не подтверждён как актуальное изображение самого персонажа";
+    // A continued swipe may contain several shots. Only the final authored
+    // shot is its current visual statement; older pictures in that same swipe
+    // must not silently preserve stale clothing after a new photo was sent.
+    const currentDraw = source && Array.isArray(source.draws) && source.draws.length
+      ? source.draws[source.draws.length - 1] : null;
+    if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
+      !currentDraw || typeof currentDraw.prompt !== "string" ||
+      !str(e.evidence) || !currentDraw.prompt.includes(e.evidence)))
+      return "нет точного подтверждения в авторском draw";
+    if (e.reference && (!source || (source.text == null && !drawn)))
+      return "контекстная ссылка без текста действия";
+    if (source && (source.text != null || drawn)) {
+      // Current swipe's text OR authored shot proves only the quoted details.
+      // Prior branch-local state may resolve an item's exact identity.
+      const evidenceText = drawn ? currentDraw.prompt : String(source.text);
+      if (!str(e.evidence) || !evidenceText.includes(e.evidence))
+        return "нет точного подтверждения в сообщении";
       if (e.reference) {
         if (e.field !== "wear" || !["remove", "adjust"].includes(e.action) || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
         const candidates = Array.isArray(source.references) ? source.references : [];
@@ -179,6 +204,7 @@
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
       value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
@@ -193,7 +219,8 @@
     const e = n.event, actor = out.actors[e.actor];
     const value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
     const provenance = { messageId: source && source.messageId || null,
-      swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence };
+      swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}) };
     if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
@@ -276,7 +303,7 @@
         }
       }
       for (const e of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
-        st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+        st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.

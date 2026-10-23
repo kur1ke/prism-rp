@@ -39,6 +39,9 @@
         recent: prior.slice(-5).map((m) => ({
           messageId: m.id, swipeIdx: m.swipeIdx || 0, role: m.role,
           text: String(TR.activeSwipe(m).text || "").slice(0, 500),
+          ...(m.role === "assistant" && Array.isArray(TR.activeSwipe(m).draws) &&
+            TR.activeSwipe(m).draws.length && TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt
+            ? { draw: String(TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt).slice(0, 400) } : {}),
         })),
         references: TRACK.references(state, actor, ["remove", "adjust"]),
       };
@@ -49,7 +52,7 @@
       return JSON.stringify((path || []).map((m) => [
         m.id, m.swipeIdx || 0, TR.activeSwipe(m).text,
         TR.activeSwipe(m).stateEvents, TR.activeSwipe(m).stateCorrections,
-        TR.activeSwipe(m).sceneOps,
+        TR.activeSwipe(m).sceneOps, TR.activeSwipe(m).draws,
       ]));
     }
 
@@ -109,15 +112,26 @@
       const c = ctx.chat();
       if (!c || !msg || msg.chatId !== c.id || !["assistant", "user"].includes(msg.role)) return { skipped: "not-message" };
       const sw = TR.activeSwipe(msg), sourceText = String(sw.text || ""), swipeIdx = msg.swipeIdx || 0;
-      if (!sourceText.trim()) return { skipped: "empty" };
-      if (!INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
-      if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) && sw.stateStatus.sourceText === sourceText && !(opts && opts.force)) return { skipped: "already-processed" };
+      // Only a current assistant-authored [draw:] is observational evidence;
+      // manual image prompts, rewritten tags and backend pixels never feed canon.
+      // Continue may append a newer shot within the same swipe. The latest
+      // authored draw is the current observation; all source draws stay in
+      // the original swipe for exact evidence/provenance replay.
+      const lastDraw = msg.role === "assistant" && Array.isArray(sw.draws) && sw.draws.length
+        ? sw.draws[sw.draws.length - 1] : null;
+      const sourceDraw = lastDraw ? String(lastDraw.prompt || "") : "";
+      if (!sourceText.trim() && !sourceDraw.trim()) return { skipped: "empty" };
+      if (!sourceDraw && !INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
+      if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) &&
+          sw.stateStatus.sourceText === sourceText && (sw.stateStatus.sourceDraw || "") === sourceDraw &&
+          !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       const index = initialPath.indexOf(msg);
       if (index < 0) return { skipped: "off-path" };
       const originalKey = pathFingerprint(initialPath);
       const chatId = c.id;
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
+        ...(sourceDraw ? { draw: sourceDraw.slice(0, 1600), draws: [{ prompt: sourceDraw }] } : {}),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name,
         ...observationContext(initialPath.slice(0, index), msg.role) };
       // Reuse a read-only early result only when its interpretation inputs still
@@ -125,7 +139,7 @@
       const prepared = opts && opts.prepared;
       const sameInputs = prepared && prepared.chatId === msg.chatId &&
         prepared.providerId === (provider && provider.id) && prepared.options &&
-        ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]) &&
+        ["mode", "role", "text", "draw", "speakerName"].every((key) => prepared.options[key] === options[key]) &&
         JSON.stringify(prepared.options.recent) === JSON.stringify(options.recent);
       let result;
       if (sameInputs) {
@@ -143,6 +157,9 @@
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
+      // Grounded fallback intentionally reads only text. Image descriptions
+      // are interpreted by the SAME Observer and independently verified
+      // against their exact draw evidence on every StateTracker fold.
       const events = result.events.slice();
       // Compare common Russian inflections ('синяя куртка'/'синей куртке')
       // to avoid adding the same garment twice when model and fallback agree.
@@ -150,8 +167,17 @@
         .match(/[\p{L}\p{N}]+/gu) || []).map((word) => word.length > 4
           ? word.replace(/(?:ого|ему|ому|ыми|ими|ая|яя|ый|ий|ой|ей|ие|ые|ую|юю|ых|их|ым|им|ом|ем|а|я|е|у|ю|ы|и)$/u, "")
           : word).join(" ");
+      // Fallback is lexical Russian text extraction, not a bilingual item
+      // identity resolver. A confirmed current visual removal/adjustment must
+      // not be undone by an uncorrelated fallback "wear.add" derived from
+      // caption words (e.g. шорты vs shorts). The primary Observer can still
+      // report independently grounded compatible text facts; don't guess.
+      const visualChange = result.events.some((e) => e.actor === "char" &&
+        e.field === "wear" && e.evidenceType === "draw" &&
+        (e.action === "remove" || e.action === "adjust"));
       for (const e of fallback) {
         if (events.length >= INT.MAX) break;
+        if (visualChange && e.field === "wear") continue;
         const sameField = events.filter((x) => x.actor === e.actor && x.field === e.field && x.certainty !== "intent");
         if (e.field === "wear" && e.action === "add" && Array.isArray(e.value)) {
           // A model may return one garment (or an invalid second garment).
@@ -162,13 +188,18 @@
           if (missing.length) events.push(Object.assign({}, e, { value: missing }));
         } else if (!sameField.length) events.push(e);
       }
+      // One message may assert clothing both in its caption and in the photo.
+      // Apply text observations first; the intentional current photo is the
+      // later visual observation of that same moment. Neither is a second
+      // canonical store. Preserve relative ordering within each evidence kind.
+      events.sort((a, b) => Number(a.evidenceType === "draw") - Number(b.evidenceType === "draw"));
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
           pathFingerprint(chat().path()) !== originalKey) {
         return { skipped: "stale-branch" };
       }
       const status = !result.valid ? events.length ? "partial" : "error" : result.issues.length ? "partial" : events.length ? "ok" : "no-changes";
-      const stateStatus = { status, sourceText, issues: result.issues, at: Date.now(),
+      const stateStatus = { status, sourceText, sourceDraw, issues: result.issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length };
       const next = JSON.parse(JSON.stringify(msg));
       next.swipes[swipeIdx].stateEvents = events;
@@ -187,7 +218,8 @@
        Ожидание ограничено таймаутом наблюдателя (simpleWithLimit) плюс запас в settle(). */
     const jobs = new Map();
     const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
-    const jobKey = (msg) => [msg.chatId, msg.id, msg.swipeIdx || 0, String(TR.activeSwipe(msg).text || "")].join("\u0001");
+    const jobKey = (msg) => [msg.chatId, msg.id, msg.swipeIdx || 0, String(TR.activeSwipe(msg).text || ""),
+      msg.role === "assistant" ? JSON.stringify(TR.activeSwipe(msg).draws || []) : ""].join("\u0001");
     function sync() {
       S.tracking = jobs.size > 0;
       if (ctx.ui && typeof ctx.ui.renderComposer === "function") ctx.ui.renderComposer();

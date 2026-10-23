@@ -3120,6 +3120,259 @@ async function foundationH() {
       assert.ok(!image.promptSources.imageLayers.identity);
     } finally { IB.generate = oldGen; ICP.compile = oldCompile; }
   });
+  await ta("VIS-DRAW-SOURCE-1: selfie establishes first worn garment without textual clothing narration",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Держи селфи!");
+    const draw="1girl, orihime_inoue, white oversized t-shirt, mirror selfie, bedroom";
+    m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    const old=globalThis.PRP.llm.simple;
+    let instruction="";
+    try{
+      globalThis.PRP.llm.simple=async (_,txt)=>{instruction=txt;return JSON.stringify({events:[{
+        actor:"char",field:"wear",action:"add",value:["white oversized t-shirt"],
+        certainty:"reported",evidence:"white oversized t-shirt",
+        evidenceType:"draw",visualScope:"current-self"}]});};
+      const res=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(res.status,"ok",JSON.stringify(res));
+      assert.ok(instruction.includes("ТЕКУЩИЙ АВТОРСКИЙ DRAW")&&instruction.includes(draw),instruction);
+      const state=h.ctx.svc.state.snapshot();
+      assert.deepStrictEqual(state.actors.char.wearState.worn.map(x=>x.item),["white oversized t-shirt"]);
+      assert.strictEqual(state.actors.char.wearState.complete,false);
+      assert.strictEqual(state.actors.char.wearState.worn[0].source.evidenceType,"draw");
+      assert.strictEqual(state.actors.char.wearState.worn[0].source.messageId,m.id);
+      assert.strictEqual(state.actors.user.wearState.known,false);
+      const prism=h.prism.build(h.chat.path());
+      assert.ok(allText(prism.messages).includes("white oversized t-shirt"),
+        "the next roleplay turn must receive clothing learned from the photo");
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
+  await ta("VIS-DRAW-SOURCE-2: silent playful selfie changes garment placement and removes only explicitly removed item",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const before=h.chat.newMsg("assistant",null,"На мне белая футболка и шорты.");
+    // Persist the first outfit as a grounded authored visual rather than trusting translated nouns in Russian text.
+    before.swipes[0].draws=[{prompt:"current selfie, white t-shirt, shorts",ratio:"1:1"}];
+    before.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",
+      value:["white t-shirt","shorts"],certainty:"reported",evidence:"white t-shirt, shorts",
+      evidenceType:"draw",visualScope:"current-self"}];
+    await h.chat.commitMessage(before,before.id);
+    const follow=h.chat.newMsg("assistant",before.id,"😏");
+    follow.swipes[0].draws=[{prompt:"current mirror selfie, white t-shirt pulled down off shoulders, shorts removed, smiling",ratio:"1:1"}];
+    await h.chat.commitMessage(follow,follow.id);
+    const old=globalThis.PRP.llm.simple;
+    try{
+      globalThis.PRP.llm.simple=async ()=>JSON.stringify({events:[
+        {actor:"char",field:"wear",action:"adjust",value:["white t-shirt"],placement:"off shoulders",
+         certainty:"reported",evidence:"white t-shirt pulled down off shoulders",evidenceType:"draw",visualScope:"current-self"},
+        {actor:"char",field:"wear",action:"remove",value:["shorts"],
+         certainty:"reported",evidence:"shorts removed",evidenceType:"draw",visualScope:"current-self"}
+      ]});
+      const res=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(res.status,"ok",JSON.stringify(res));
+      const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(wear.partiallyWorn.map(x=>x.item),["white t-shirt"]);
+      assert.strictEqual(wear.partiallyWorn[0].placement,"off shoulders");
+      assert.deepStrictEqual(wear.removed.map(x=>x.item),["shorts"]);
+      assert.deepStrictEqual(wear.worn,[]);
+      assert.strictEqual(wear.complete,false);
+    }finally {globalThis.PRP.llm.simple=old;}
+  });
+  await ta("VIS-DRAW-SOURCE-2A: current photo can explicitly establish garment absence without a removal verb",async()=>{
+    const TRACK=globalThis.PRP.stateTracker,INT=globalThis.PRP.stateInterpreter;
+    const shot="orihime_inoue, current mirror selfie, white t-shirt, no shorts, sitting on bed";
+    const candidate={actor:"char",field:"wear",action:"remove",value:["shorts"],certainty:"reported",
+      evidence:"no shorts",evidenceType:"draw",visualScope:"current-self"};
+    const opts={mode:"messenger",role:"assistant",speakerName:"Орихимэ",text:"Фото!",
+      draw:shot,draws:[{prompt:shot}],recent:[],references:[]};
+    assert.ok(INT.instruction(opts).includes("no shorts"));
+    const p=INT.parse(JSON.stringify({events:[candidate]}),opts);
+    assert.strictEqual(p.events.length,1,JSON.stringify(p));
+    const current=TRACK.fold({mode:"messenger",path:[{id:"visual",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Фото!",draws:[{prompt:shot}],stateEvents:p.events}]}]});
+    assert.deepStrictEqual(current.actors.char.wearState.removed.map(x=>x.item),["shorts"]);
+    assert.strictEqual(current.actors.char.wearState.known,false,"unseen remaining outfit is unknown");
+    // Merely omitting shorts from a cropped portrait is not evidence of absence.
+    const crop="orihime_inoue, current selfie, close-up face, orange hair";
+    const forged=TRACK.fold({mode:"messenger",path:[{id:"crop",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Фото!",draws:[{prompt:crop}],stateEvents:[candidate]}]}]});
+    assert.deepStrictEqual(forged.actors.char.wearState.removed,[]);
+  });
+  await ta("VIS-DRAW-SOURCE-2B: author photo has final say about the current moment when caption contradicts it",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"На мне шорты");
+    m.swipes[0].draws=[{prompt:"current mirror selfie, shorts removed, white t-shirt",ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    const old=globalThis.PRP.llm.simple;
+    try{
+      globalThis.PRP.llm.simple=async ()=>JSON.stringify({events:[
+        {actor:"char",field:"wear",action:"remove",value:["shorts"],certainty:"reported",
+          evidence:"shorts removed",evidenceType:"draw",visualScope:"current-self"}
+      ]});
+      const res=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(res.status,"ok",JSON.stringify(res));
+      const sw=h.chat.path().slice(-1)[0].swipes[0];
+      assert.ok(sw.stateEvents.every(e=>e.evidenceType==="draw"),
+        "an uncorrelated lexical caption fallback must not undo the validated current photo");
+      assert.strictEqual(sw.stateEvents[sw.stateEvents.length-1].evidenceType,"draw",
+        "selfie is the latest observation within the same message");
+      const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(wear.removed.map(x=>x.item),["shorts"]);
+      assert.deepStrictEqual(wear.worn.map(x=>x.item),[]);
+    }finally {globalThis.PRP.llm.simple=old;}
+  });
+  await ta("VIS-DRAW-SOURCE-2C: an English photo can remove the exact previously named Russian garment using branch reference",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const before=h.chat.newMsg("assistant",null,"На мне шорты");
+    before.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",
+      value:["шорты"],certainty:"reported",evidence:"На мне шорты"}];
+    await h.chat.commitMessage(before,before.id);
+    const after=h.chat.newMsg("assistant",before.id,"😘");
+    after.swipes[0].draws=[{prompt:"current mirror selfie, shorts removed, white t-shirt",ratio:"1:1"}];
+    await h.chat.commitMessage(after,after.id);
+    const old=globalThis.PRP.llm.simple;
+    let query;
+    try{
+      globalThis.PRP.llm.simple=async (_,q)=>{
+        query=q;return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
+          referenceId:"wear:char:0",certainty:"reported",evidence:"shorts removed",
+          evidenceType:"draw",visualScope:"current-self"}]});
+      };
+      const res=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(res.status,"ok",JSON.stringify(res));
+      assert.ok(query.includes('"wear:char:0"'),"exact current reference is supplied to visual Observer");
+      const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(wear.removed.map(x=>x.item),["шорты"]);
+      assert.deepStrictEqual(wear.worn.map(x=>x.item),[]);
+      assert.strictEqual(wear.removed[0].source.evidenceType,"draw");
+      const saved=h.chat.path().slice(-1)[0].swipes[0].stateEvents[0];
+      assert.strictEqual(saved.reference.item,"шорты");
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
+  await ta("VIS-DRAW-SOURCE-3: forged, off-frame, other-source, and stale-swipe visual facts cannot enter state",async()=>{
+    const TRACK=globalThis.PRP.stateTracker,INT=globalThis.PRP.stateInterpreter;
+    const current="1girl, current selfie, white shirt";
+    const options={mode:"messenger",role:"assistant",text:"Лови!",draw:current,
+      draws:[{prompt:current}],speakerName:"Орихимэ",recent:[],references:[]};
+    const valid={actor:"char",field:"wear",action:"add",value:["white shirt"],
+      certainty:"reported",evidence:"white shirt",evidenceType:"draw",visualScope:"current-self"};
+    const rejected=[
+      {...valid,evidence:"pink bikini"},
+      {...valid,evidenceType:"text"},
+      {...valid,visualScope:"old-photo"},
+      {...valid,action:"set"},
+      {...valid,action:"clear",value:null},
+      {...valid,actor:"user"},
+      {...valid,certainty:"established"}
+    ];
+    for(const event of rejected){
+      const p=INT.parse(JSON.stringify({events:[event]}),options);
+      assert.strictEqual(p.events.length,0,JSON.stringify({event,p}));
+    }
+    const good=INT.parse(JSON.stringify({events:[valid]}),options);
+    assert.strictEqual(good.events.length,1,JSON.stringify(good));
+    const m={id:"photo",role:"assistant",swipeIdx:0,swipes:[{text:"Лови!",draws:[{prompt:current}],stateEvents:good.events},
+      {text:"Прошлое",draws:[{prompt:"an old stock image of jeans"}],stateEvents:[]}]};
+    const make=(idx)=>TRACK.fold({mode:"messenger",charName:"Орихимэ",path:[{...m,swipeIdx:idx}]});
+    assert.deepStrictEqual(make(0).actors.char.wearState.worn.map(x=>x.item),["white shirt"]);
+    assert.strictEqual(make(1).actors.char.wearState.known,false);
+    m.swipes[0].draws=[{prompt:"a screenshot of a shoe store"}];
+    assert.strictEqual(make(0).actors.char.wearState.known,false,"edited draw invalidates previous visual provenance");
+  });
+  await ta("VIS-DRAW-SOURCE-3B: continued swipe observes its newest authored photo, not a stale first draw",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const msg=h.chat.newMsg("assistant",null,"Два снимка");
+    msg.swipes[0].draws=[{prompt:"current selfie, blue hoodie",ratio:"1:1"},
+      {prompt:"current mirror selfie, red t-shirt",ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    const old=globalThis.PRP.llm.simple;let request="";
+    try{
+      globalThis.PRP.llm.simple=async (_,prompt)=>{
+        request=prompt;return JSON.stringify({events:[{actor:"char",field:"wear",action:"add",
+          value:["red t-shirt"],certainty:"reported",evidence:"red t-shirt",
+          evidenceType:"draw",visualScope:"current-self"}]});
+      };
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.ok(request.includes("current mirror selfie, red t-shirt"));
+      assert.ok(!request.includes("current selfie, blue hoodie"),
+        "the first photo in a continued swipe must not be mistaken for the latest");
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),["red t-shirt"]);
+      const original=h.chat.path().slice(-1)[0];
+      const ghost=JSON.parse(JSON.stringify(original));
+      ghost.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["blue hoodie"],
+        certainty:"reported",evidence:"blue hoodie",evidenceType:"draw",visualScope:"current-self"}];
+      const stale=globalThis.PRP.stateTracker.fold({mode:"messenger",charName:"Орихимэ",path:[ghost]});
+      assert.strictEqual(stale.actors.char.wearState.known,false,
+        "an earlier draw of this same swipe cannot remain current after a new shot");
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
+  await ta("VIS-DRAW-SOURCE-4: authored English draw is not vetoed by stale removed state or global negatives",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.8}],
+      wardrobe:"base: blue dress",nsfw:"nude: nipples"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const prev=h.chat.newMsg("assistant",null,"Я сняла шорты");
+    prev.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],certainty:"reported",evidence:"Я сняла шорты"}];
+    await h.chat.commitMessage(prev,prev.id);
+    const m=h.chat.newMsg("assistant",prev.id,"Фото!");
+    const shot="1girl, white t-shirt, shirt off shoulders, shorts on bed, selfie, cinematic lighting";
+    m.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false,drawPromptMode:"tags"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;let compCalls=0,backend;
+    try{
+      ICP.compile=async (scene,opts)=>{compCalls++;return oldC(scene,opts,async()=>{throw Error("must not CALL a translator for English draw");});};
+      IB.generate=async (_,o)=>{backend=o;return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
+      const live=h.S.messages.find(x=>x.id===m.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:shot,ratio:"1:1"});
+      assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
+      assert.strictEqual(compCalls,1,"compiler adapter may be entered, but the translation model must not run");
+      assert.ok(backend.prompt.includes("shorts on bed")&&backend.prompt.includes("shirt off shoulders"),backend.prompt);
+      assert.ok(!backend.prompt.includes("blue dress")&&!backend.prompt.includes("nipples"),backend.prompt);
+      assert.ok(backend.prompt.includes("<lora:ori:0.8>")&&backend.prompt.includes("orihime_inoue"),backend.prompt);
+      assert.ok(!backend.negative.split(",").map(s=>s.trim()).includes("shorts"),backend.negative);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.imageLayers.drawAuthored,true);
+    }finally {ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VIS-DRAW-SOURCE-5: Messenger intent image uses one compiler call for author's shot",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const prev=h.chat.newMsg("assistant",null,"Я сняла шорты");
+    prev.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],certainty:"reported",evidence:"Я сняла шорты"}];
+    await h.chat.commitMessage(prev,prev.id);
+    const msg=h.chat.newMsg("assistant",prev.id,"А теперь взгляни");
+    const visual="Я делаю актуальное селфи в красном платье перед зеркалом";
+    msg.swipes[0].draws=[{prompt:visual,ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:true,drawPromptMode:"intent"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;let calls=[],sent;
+    try{
+      ICP.compile=async (shot,o)=>{calls.push({shot,o});return {text:"1girl, orihime_inoue, red dress, mirror selfie",compiled:true};};
+      IB.generate=async (_,o)=>{sent=o;return {dataUrl:"data:image/png;base64,AA==",seed:4,info:{width:512,height:512}};};
+      const live=h.S.messages.find(x=>x.id===msg.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:visual,ratio:"1:1"});
+      assert.strictEqual(calls.length,1,JSON.stringify(calls));
+      assert.strictEqual(calls[0].o.intentMode,true);
+      assert.strictEqual(calls[0].o.wearState,undefined);
+      assert.ok(sent.prompt.includes("red dress"),sent.prompt);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"intent");
+    }finally {ICP.compile=oldC;IB.generate=oldG;}
+  });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
     const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});

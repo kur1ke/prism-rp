@@ -37,21 +37,23 @@
 
   // Only the inputs determining branch-specific physical/scene state. Images
   // and transient image status are deliberately excluded from this fingerprint.
-  function stateVersion(message, selectedSwipe) {
+  function stateVersion(message, selectedSwipe, shotOnly) {
     if (!message || !Array.isArray(message.swipes)) return "";
     const index = selectedSwipe == null ? (message.swipeIdx || 0) : selectedSwipe;
     const sw = message.swipes[index];
     if (!sw) return "";
-    return JSON.stringify([
-      message.id, message.chatId, message.parentId || null, index,
-      sw.text, sw.sceneOps, sw.stateEvents, sw.stateCorrections, sw.messengerAt,
-    ]);
+    const shot = [message.id, message.chatId, message.parentId || null, index, sw.text, sw.draws];
+    // The character has already authored this exact photograph. Changes to
+    // an Observer's inferred facts do not invalidate the photo itself.
+    return JSON.stringify(shotOnly ? shot : shot.concat([
+      sw.sceneOps, sw.stateEvents, sw.stateCorrections, sw.messengerAt,
+    ]));
   }
 
-  async function imageOriginStillCurrent(DB, origin) {
+  async function imageOriginStillCurrent(DB, origin, shotOnly) {
     const before = origin.path.slice(0, -1);
     const live = await Promise.all(before.map((m) => DB.get("messages", m.id)));
-    return before.every((m, i) => live[i] && stateVersion(live[i]) === stateVersion(m));
+    return before.every((m, i) => live[i] && stateVersion(live[i], null, shotOnly) === stateVersion(m, null, shotOnly));
   }
 
   // Capture the selected swipe and its ancestry once, before any async request.
@@ -66,7 +68,8 @@
     const frozen = JSON.parse(JSON.stringify(path));
     frozen[frozen.length - 1].swipeIdx = swipeIdx;
     return { chatId, messageId: source.id, swipeIdx, sourceText: String(sw.text || ""),
-      sourceStateVersion: stateVersion(frozen[frozen.length - 1], swipeIdx), path: frozen };
+      sourceStateVersion: stateVersion(frozen[frozen.length - 1], swipeIdx),
+      sourceDrawVersion: stateVersion(frozen[frozen.length - 1], swipeIdx, true), path: frozen };
   }
 
   function create(ctx) {
@@ -109,9 +112,14 @@
       if (!cfg.enabled) { ui.toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
       if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
-      const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1", fromMessage: !!d.fromMessage };
+      const originSwipe = TR.activeSwipe(origin.path[origin.path.length - 1]);
+      const drawAuthored = Array.isArray(originSwipe.draws) && originSwipe.draws.some((x) =>
+        x && String(x.prompt || "") === String(reuse ? reuse.draw : d.prompt) &&
+        String(x.ratio || "1:1") === String((reuse ? reuse.ratio : d.ratio) || "1:1"));
+      const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1",
+        fromMessage: drawAuthored || !!d.fromMessage };
       if (S.drawing.has(entry.id)) { ui.toast("Это изображение уже генерируется.", true); return; }
-      if (!reuse) entry.intentMode = !!(entry.fromMessage && cfg.drawPromptMode === "intent");
+      if (!reuse) entry.intentMode = !!(drawAuthored && cfg.drawPromptMode === "intent");
       // Resolve physical state from the frozen origin path BEFORE the first await.
       // Do not let a later UI branch/chat selection change this image's source.
       const upto = origin.path;
@@ -150,7 +158,9 @@
           { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner, qualityPinned: ST.qualityPinned(S.settings) }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
-        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd, scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
+        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
+          scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts,
+          shotAuthored: drawAuthored, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
         const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sourceSwipe, entry) ? dialogueImageContext(upto, sourceMsg) : "";
@@ -159,12 +169,15 @@
         // Shot text is authoritative; reported state is supplementary evidence
         // for the *same* translation call. The translated result replaces the
         // raw state layer instead of being stacked on top of it.
-        const stateContext = cfg.translate && composed.stateContext &&
+        const stateContext = !drawAuthored && cfg.translate && composed.stateContext &&
           (IC.needsRewrite(imageScene) || IC.needsRewrite(composed.stateContext)) ? composed.stateContext : "";
         if (cfg.translate && (IC.needsRewrite(imageScene) || IC.needsRewrite(stateContext))) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        const canonicalWear = composed.physicalWear;
+        // Canon is allowed to learn FROM the authored visual assertion.
+        // It must not veto/reinterpret the frame on the basis of incomplete
+        // earlier text-only Observer results.
+        const canonicalWear = drawAuthored ? null : composed.physicalWear;
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
-        const comp = intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
+        const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             embodiedOwner: cameraOwner, frame: composed.subjects, stateContext,
@@ -191,7 +204,7 @@
         if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
-        if (!(await imageOriginStillCurrent(DB, origin)))
+        if (!(await imageOriginStillCurrent(DB, origin, drawAuthored)))
           throw new Error("Исходная ветка изменилась во время подготовки изображения. Повторите рисование.");
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
@@ -215,8 +228,10 @@
         // visible text has not changed.
         const currentSource = latest && JSON.parse(JSON.stringify(latest));
         if (currentSource) currentSource.swipeIdx = origin.swipeIdx;
-        const originValid = currentSource && stateVersion(currentSource, origin.swipeIdx) === origin.sourceStateVersion &&
-          await imageOriginStillCurrent(DB, origin);
+        const originValid = currentSource && (drawAuthored
+          ? stateVersion(currentSource, origin.swipeIdx, true) === origin.sourceDrawVersion
+          : stateVersion(currentSource, origin.swipeIdx) === origin.sourceStateVersion) &&
+          await imageOriginStillCurrent(DB, origin, drawAuthored);
         if (finalPatch.status === "done" && !originValid) {
           finalPatch = { status: "error", error: "Исходное состояние ветки или свайпа изменилось. Повторите рисование." };
           imageData = null;
