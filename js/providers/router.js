@@ -9,12 +9,13 @@
 
   /* prov — элемент settings.providerList; messages — [{role, content}].
      opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
-             closing (Perchance: последняя строка инструкции, текст готовит вызывающий) }
+             closing (Perchance: последняя строка инструкции, текст готовит вызывающий),
+             outputFormat: "message-body" (содержимое Messenger; без префиксов отправителя) }
      → { text, reasoning } (контракт PRP.openai.chat / PRP.perchance.chat) */
   function chat(prov, messages, opts) {
     const o = opts || {};
     return prov.kind === "perchance"
-      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null })
+      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null, outputFormat: o.outputFormat || null })
       : OA.chat(prov, messages, o.sampler, { signal: o.signal, onDelta: o.onDelta });
   }
 
