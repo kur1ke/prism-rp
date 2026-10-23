@@ -125,6 +125,12 @@ Tracker can replay verified `wear.adjust` events; this does NOT establish
 live Observer support. Contextual `referenceId` remains restricted to
 `wear.remove`.
 
+StateResolver can expose typed partial facts without making Image Compiler
+interpret them. The composer does not yet implement positive partial-placement
+tags or garment-specific negative constraints; same-turn A1111/Forge and
+Perchance validation remain outstanding. Do not mark VIS-OUTFIT-1B/1C/D closed
+from this batch alone.
+
 ### VIS-REF-2 — bounded action-specific adjust references (testing candidate)
 
 Observer now receives both remove and adjust references derived from the
@@ -145,11 +151,6 @@ enables Observer extraction experimentally and DOES NOT assert successful
 live-provider sampling. No changes to Image Compiler, A1111 negative
 constraints or `[draw:]` authority are included. Validate manual Perchance
 and live Russian dialogue separately.
-StateResolver can expose typed partial facts without making Image Compiler
-interpret them. The composer does not yet implement positive partial-placement
-tags or garment-specific negative constraints; same-turn A1111/Forge and
-Perchance validation remain outstanding. Do not mark VIS-OUTFIT-1B/1C/D closed
-from this batch alone.
 
 ## Staged implementation / CURRENT STATUS
 
