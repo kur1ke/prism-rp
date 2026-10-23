@@ -255,7 +255,7 @@
     else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
     else if (section === "tracker") {
       const w = v.world || {};
-      const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
+      const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Одежда", (w.visualWear || []).join(", ")], ["Комплект", w.wearComplete === true ? "полный: неуказанная одежда отсутствует" : "неполный/неизвестный"], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
       const removed = Array.isArray(w.visualWearRemoved) ? w.visualWearRemoved : [];
       content = '<div class="block"><div class="block-title">Текущее состояние</div><dl class="kv">' + pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>'
         + '<div class="block"><div class="block-title">Снятые вещи <small>' + removed.length + '</small></div>'
@@ -275,7 +275,14 @@
         return (sw && sw.stateCorrections || []).map(e => ({ e, msg }));
       });
       const rows = active.concat(corrections);
-      content = '<div class="block"><div class="block-title">События активной ветки <small>' + rows.length + '</small></div>'
+      const origin = m.chat && m.chat.initialWear;
+      const originContent = origin && origin.kind === "initial-outfit" && origin.event
+        ? '<div class="block"><div class="block-title">Начальный комплект (до сообщений)</div>'
+          + '<p class="hint">Источник: скрытый запрос к RP Provider; полный перечень, отсутствующие вещи не подразумеваются.</p>'
+          + '<p>' + esc(origin.event.action === "clear" ? "ничего не надето"
+            : (origin.event.value || []).join(", ")) + '</p></div>'
+        : '';
+      content = originContent + '<div class="block"><div class="block-title">События активной ветки <small>' + rows.length + '</small></div>'
         + (rows.length ? '<ul class="wc-list">' + rows.map(({e,msg}) =>
             '<li><span class="tag">' + esc(e.actor || "") + '</span> <b>' + esc(e.field || "") + '</b> · ' + esc(e.action || "")
             + '<div>' + esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) + '</div>'
