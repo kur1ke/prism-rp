@@ -35,6 +35,25 @@
     return !draws.some((d) => String(d && d.prompt || "").trim() === String(entry && entry.draw || "").trim());
   }
 
+  // Only the inputs determining branch-specific physical/scene state. Images
+  // and transient image status are deliberately excluded from this fingerprint.
+  function stateVersion(message, selectedSwipe) {
+    if (!message || !Array.isArray(message.swipes)) return "";
+    const index = selectedSwipe == null ? (message.swipeIdx || 0) : selectedSwipe;
+    const sw = message.swipes[index];
+    if (!sw) return "";
+    return JSON.stringify([
+      message.id, message.chatId, message.parentId || null, index,
+      sw.text, sw.sceneOps, sw.stateEvents, sw.stateCorrections, sw.messengerAt,
+    ]);
+  }
+
+  async function imageOriginStillCurrent(DB, origin) {
+    const before = origin.path.slice(0, -1);
+    const live = await Promise.all(before.map((m) => DB.get("messages", m.id)));
+    return before.every((m, i) => live[i] && stateVersion(live[i]) === stateVersion(m));
+  }
+
   // Capture the selected swipe and its ancestry once, before any async request.
   // This is a read-only generation source, NOT a new visual/canonical state.
   function imageOrigin(messages, msg, sw, chatId) {
@@ -46,7 +65,8 @@
     if (!path.length || path[path.length - 1] !== source || path.some((m) => m.chatId !== chatId)) return null;
     const frozen = JSON.parse(JSON.stringify(path));
     frozen[frozen.length - 1].swipeIdx = swipeIdx;
-    return { chatId, messageId: source.id, swipeIdx, sourceText: String(sw.text || ""), path: frozen };
+    return { chatId, messageId: source.id, swipeIdx, sourceText: String(sw.text || ""),
+      sourceStateVersion: stateVersion(frozen[frozen.length - 1], swipeIdx), path: frozen };
   }
 
   function create(ctx) {
@@ -169,6 +189,10 @@
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
         if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
+        // A changed ancestor swipe or evidence during compilation invalidates
+        // this image before a potentially expensive backend request.
+        if (!(await imageOriginStillCurrent(DB, origin)))
+          throw new Error("Исходная ветка изменилась во время подготовки изображения. Повторите рисование.");
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
@@ -186,6 +210,17 @@
         const latest = await DB.get("messages", origin.messageId);
         const savedSwipe = latest && latest.chatId === origin.chatId && latest.swipes && latest.swipes[origin.swipeIdx];
         const savedImage = savedSwipe && (savedSwipe.images || []).find((im) => im.id === entry.id);
+        // Do not attach an image built from obsolete ancestor physical facts.
+        // A changed source state's events also invalidate it, even if its
+        // visible text has not changed.
+        const currentSource = latest && JSON.parse(JSON.stringify(latest));
+        if (currentSource) currentSource.swipeIdx = origin.swipeIdx;
+        const originValid = currentSource && stateVersion(currentSource, origin.swipeIdx) === origin.sourceStateVersion &&
+          await imageOriginStillCurrent(DB, origin);
+        if (finalPatch.status === "done" && !originValid) {
+          finalPatch = { status: "error", error: "Исходное состояние ветки или свайпа изменилось. Повторите рисование." };
+          imageData = null;
+        }
         // Deleted/edited messages and images cannot be resurrected by a late callback.
         if (savedSwipe && savedSwipe.text === origin.sourceText && savedImage) {
           Object.assign(savedImage, finalPatch);
