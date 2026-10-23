@@ -4077,6 +4077,36 @@ async function unifiedTracker() {
     assert.deepStrictEqual(STATE.forCharacter(first).visualWearRemoved.map((x) => x.item), ["юбку"]);
     assert.strictEqual(STATE.forCharacter(second).visualWearRemoved[0].source.swipeIdx, 1);
   });
+  await ta("SR-5: Messenger and Prism consume the same branch-derived wearable state", async () => {
+    const h = fbHarness({ name: "Орихимэ", description: "Героиня." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const first = h.chat.newMsg("assistant", null, "На мне белая футболка и шорты");
+    first.swipes[0].stateEvents = [Evt("char", "wear", "set",
+      ["белая футболка", "шорты"], "reported", "На мне белая футболка и шорты")];
+    await h.chat.commitMessage(first, first.id);
+    const second = h.chat.newMsg("assistant", first.id, "Я сняла шорты");
+    second.swipes[0].stateEvents = [Evt("char", "wear", "remove",
+      ["шорты"], "reported", "Я сняла шорты")];
+    await h.chat.commitMessage(second, second.id);
+    const world = h.ctx.svc.messenger.view().world;
+    assert.deepStrictEqual(world.visualWear, ["белая футболка"]);
+    assert.deepStrictEqual(world.visualWearRemoved.map(x => x.item), ["шорты"]);
+    assert.strictEqual(world.visualWearRemoved[0].source.messageId, second.id);
+    const ctxPrism = h.prism.build();
+    assert.ok(ctxPrism.messages && !ctxPrism.report.overflow, "normal Prism budget respected");
+    const sys = allText(ctxPrism.messages);
+    assert.ok(sys.includes("шорты") && sys.includes("сообщённые снятые вещи"), "Prism receives removed facts from same snapshot");
+    // Regression: a separate source path cannot inherit these facts.
+    const selectedBefore = h.chat.path().slice(0, 1);
+    const same = h.ctx.svc.state.context(selectedBefore);
+    const proj = globalThis.PRP.stateResolver.resolve({
+      tracked: same, world: { visualWear: [] }, names: { char: "Орихимэ" },
+    });
+    assert.deepStrictEqual(proj.world.visualWear, ["белая футболка", "шорты"]);
+    assert.deepStrictEqual(proj.wearFacts[0].removed, []);
+  });
   await ta("VIS-REF-1: observer resolves a prior garment by verified reference, not by invented current quote", async () => {
     const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Персонаж." });
     await h.chat.createChat("messenger", "c1");
