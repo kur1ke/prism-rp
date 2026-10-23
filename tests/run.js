@@ -3676,6 +3676,91 @@ async function foundationD() {
     assert.strictEqual(p.startWith, "Химэ:");
     assert.ok(PC.toPrompt(msgs, { char: "Химэ", user: "Кира" }).instruction.includes("Напиши следующее сообщение Химэ"), "без closing — прежнее поведение");
   });
+  await ta("MS-BODY-1: Perchance uses structured role data, not speaker-prefixed transcript, only for Messenger", async () => {
+    const PC = require(J("providers/perchance.js"));
+    const ms = [{ role: "system", content: "Система" }, { role: "user", content: "Привет, Лилит!" },
+      { role: "assistant", content: "Лилит (Лили): это название рассказа" },
+      { role: "system", content: "После истории" }];
+    const names = { char: "Лилит (Лили)", user: "Кира" };
+    const body = PC.toPrompt(ms, names, null, "message-body");
+    assert.strictEqual(body.startWith, "", "no forced speaker prefix");
+    assert.ok(body.instruction.includes(JSON.stringify({ role: "user", content: "Привет, Лилит!" })));
+    assert.ok(body.instruction.includes(JSON.stringify({ role: "assistant", content: "Лилит (Лили): это название рассказа" })), "quoted actual message not erased");
+    assert.ok(!body.instruction.includes("\\nЛилит (Лили): ") && !body.instruction.includes("\\nКира: "), "no bare speaker-labelled input transcript");
+    assert.ok(body.instruction.includes("Без имени отправителя"));
+    assert.ok(body.instruction.indexOf("После истории") > body.instruction.indexOf("Лилит (Лили): это название"));
+    const rp = PC.toPrompt(ms, names);
+    assert.strictEqual(rp.startWith, "Лилит (Лили):", "RP keeps old startWith");
+    assert.ok(rp.instruction.includes("Кира: Привет, Лилит!"), "RP remains transcript-based");
+  });
+  await ta("MS-BODY-2: streamed Perchance text is authoritative over a differently prefixed generatedText", async () => {
+    const PC = require(J("providers/perchance.js"));
+    const prev = globalThis.ai;
+    const streamed = [];
+    try {
+      globalThis.ai = (o) => {
+        assert.strictEqual(o.startWith(), "");
+        assert.strictEqual(o.hideStartWith, true);
+        o.onChunk({ isFromStartWith: true, textChunk: "Лилит (Лили):" });
+        o.onChunk({ textChunk: "Привет!\\n\\n" });
+        o.onChunk({ textChunk: "Вот моя фотография." });
+        return Promise.resolve({ generatedText: "Лилит (Лили): Привет!\\n\\nЛилит (Лили): Вот моя фотография." });
+      };
+      const result = await PC.chat({ char: "Лилит (Лили)", user: "Кира" }, [], {
+        outputFormat: "message-body", onDelta: (d) => streamed.push(d.text),
+      });
+      assert.strictEqual(result.text, "Привет!\\n\\nВот моя фотография.");
+      assert.strictEqual(streamed.join(""), result.text);
+    } finally { if (prev === undefined) delete globalThis.ai; else globalThis.ai = prev; }
+  });
+  await ta("MS-BODY-3: no-stream Perchance result removes only its exact technical continuation seed", async () => {
+    const PC = require(J("providers/perchance.js"));
+    const prev = globalThis.ai;
+    try {
+      globalThis.ai = (o) => {
+        assert.strictEqual(o.startWith(), "Привет,");
+        return Promise.resolve({ generatedText: "Привет, я тут!" });
+      };
+      const result = await PC.chat({ char: "Лилит (Лили)", user: "Кира" }, [], {
+        outputFormat: "message-body", continueFrom: "Привет,",
+      });
+      assert.strictEqual(result.text, "я тут!", "continuation does not append original seed twice");
+      globalThis.ai = (o) => {
+        assert.strictEqual(o.startWith(), "");
+        return Promise.resolve({ generatedText: "Лилит (Лили): это название песни" });
+      };
+      const quoted = await PC.chat({ char: "Лилит (Лили)", user: "Кира" }, [], { outputFormat: "message-body" });
+      assert.strictEqual(quoted.text, "Лилит (Лили): это название песни", "never strip content based on names");
+    } finally { if (prev === undefined) delete globalThis.ai; else globalThis.ai = prev; }
+  });
+  await ta("MS-BODY-4: runtime sends body-only mode for Messenger normal, regen, continue, and initiative, not RP", async () => {
+    const h = fbHarness({ name: "Лилит (Лили)", description: "Персонаж." });
+    await msChat(h);
+    const modes = [], prefixes = [];
+    fbLLM = async (provider, messages, opts) => {
+      modes.push(opts.outputFormat);
+      prefixes.push(opts.continueFrom);
+      return { text: opts.continueFrom ? " и ещё" : "Привет!" };
+    };
+    const c = await h.chat.addUserMessage("Привет");
+    await h.gen.generate();
+    const a = h.chat.path().find((m) => m.role === "assistant");
+    await h.gen.generate(a.id, "regen");
+    await h.gen.generate(a.id, "continue");
+    assert.deepStrictEqual(modes, ["message-body", "message-body", "message-body"]);
+    assert.ok(prefixes[2] && prefixes[2].includes("Привет"));
+    assert.ok(h.chat.path().find((m) => m.role === "assistant").swipes.some((sw) => sw.text.includes("Привет")));
+    // Initiation uses the same body-only protocol when no unanswered user turn exists.
+    const h2 = fbHarness({ name: "Лилит (Лили)", description: "Персонаж." });
+    await msChat(h2);
+    await h2.gen.initiative();
+    assert.strictEqual(modes[3], "message-body", "initiative must use message-body");
+    const hrp = fbHarness({ name: "Лилит (Лили)", description: "Персонаж." });
+    await hrp.chat.createChat("rp", "rp1");
+    await hrp.chat.addUserMessage("Привет");
+    await hrp.gen.generate();
+    assert.strictEqual(modes[4], null, "RP remains unchanged");
+  });
   await ta("D-15: замок держится до конца записи — повторная проверка во время сохранения не вызывает модель второй раз", async () => {
     const h = fbHarness(CARD);
     await msChat(h);
