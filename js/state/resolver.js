@@ -26,6 +26,12 @@
       if (known.fieldStatus && Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) out[field] = clone(known[field]);
     }
     out.fieldStatus = clone(known.fieldStatus || {});
+    // Closed-world starting outfit (and later explicit full wear.set) is not
+    // equivalent to "unknown unspecified underlayers". Expose this *derived*
+    // bit to Messenger's budgeted Prism view; no second inventory is stored.
+    out.wearComplete = !!(tracked.state && tracked.state.actors &&
+      tracked.state.actors.char && tracked.state.actors.char.wearState &&
+      tracked.state.actors.char.wearState.complete);
     out.visualWearRemoved = clone(known.visualWearRemoved || []);
     out.visualWearPartial = clone(known.visualWearPartial || []);
     out.intentions = clone(known.intentions || []);

@@ -220,6 +220,7 @@
     const value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
+      ...(source && source.kind ? { kind: source.kind } : {}),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}) };
     if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
@@ -239,6 +240,16 @@
   function fold(o) {
     const opts = o || {};
     let st = empty({ char: opts.charName, user: opts.userName });
+    // A newly created Messenger chat may have ONE persisted origin event.
+    // It is replayed before branch events (and before explicit legacy/manual
+    // environment), never written into a message or a second outfit registry.
+    const initial = opts.mode === "messenger" && opts.initialWear;
+    if (initial && initial.schema === 1 && initial.kind === "initial-outfit" &&
+        initial.event && initial.event.actor === "char" && initial.event.field === "wear" &&
+        ["set", "clear"].includes(initial.event.action) && initial.event.certainty === "reported" &&
+        initial.event.evidence === "") {
+      st = apply(st, initial.event, { role: "initial", mode: opts.mode, kind: "initial-outfit" });
+    }
     const legacy = opts.legacyWorld || null;
     if (legacy) {
       const compat = { location: legacy.location, activity: legacy.activity, wear: legacy.visualWear, pose: legacy.visualPose,

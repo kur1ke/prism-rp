@@ -21,12 +21,65 @@
         legacy = world && world.world;
       }
       return TRACK.fold({ mode: c.mode, sceneInit: c.sceneInit, path: p,
-        charName: cd.name, userName: ctx.persona().name, legacyWorld: legacy });
+        charName: cd.name, userName: ctx.persona().name, legacyWorld: legacy, initialWear: c.initialWear });
     }
 
     function context(path, opts) {
       const state = snapshot(path, opts);
       return { state, character: TRACK.forCharacter(state), userView: TRACK.forUser(state, ctx.chat() && ctx.chat().mode) };
+    }
+
+    // InitialOutfit: invoked ONCE by new Messenger chat orchestration, after
+    // environment setup and before presenting the empty chat. The RP provider
+    // chooses the entire outfit. No hidden chat message, no parallel inventory.
+    // A malformed/failed model response leaves wear UNKNOWN, never naked.
+    const initializing = new Map();
+    function initializeOutfit(provider, setup) {
+      const c = ctx.chat(), card = ctx.card();
+      if (!c || c.mode !== "messenger" || !card || c.cardId !== card.id || c.initialWear || chat().path().length ||
+          (S.messages || []).length) return Promise.resolve({ status: "skipped" });
+      if (snapshot([]).actors.char.wearState.known)
+        return Promise.resolve({ status: "already-known" });
+      if (!provider || !PRP.llm || typeof PRP.llm.simple !== "function")
+        return Promise.resolve({ status: "unavailable" });
+      if (initializing.has(c.id)) return initializing.get(c.id);
+      const id = c.id, cardId = c.cardId;
+      const instruction = INT.initialOutfitInstruction(card, setup || {});
+      const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
+        ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
+      if (tokens + 650 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
+        return Promise.resolve({ status: "overflow" });
+      const task = (async () => {
+        let raw;
+        try { raw = await simpleWithLimit(provider, instruction); }
+        catch (_e) { return { status: "error", reason: "model" }; }
+        const parsed = INT.parseInitialOutfit(raw);
+        if (parsed.error) return { status: "error", reason: parsed.error };
+        const event = TRACK.normalize({
+          actor: "char", field: "wear", action: parsed.worn.length ? "set" : "clear",
+          ...(parsed.worn.length ? { value: parsed.worn } : {}),
+          certainty: "reported", evidence: "",
+        }, { role: "initial", mode: "messenger" });
+        if (!event.event) return { status: "error", reason: event.error };
+        // One origin event belongs to this exact new chat, never to a sibling
+        // or to an already active conversation. A delayed response cannot
+        // retroactively dress a character after the first message.
+        const current = ctx.chat();
+        if (!current || current.id !== id || current.cardId !== cardId ||
+            S.chatId !== id || S.cardId !== cardId || !ctx.card() || ctx.card().id !== cardId ||
+            current.initialWear || chat().path().length ||
+            (S.messages || []).length || snapshot([]).actors.char.wearState.known)
+          return { status: "stale" };
+        const record = { schema: 1, kind: "initial-outfit", event: event.event };
+        const next = Object.assign({}, current, { initialWear: record });
+        try { await ctx.DB.put("chats", next); }
+        catch (_e) { return { status: "error", reason: "storage" }; }
+        Object.assign(current, next);
+        if (ctx.svc.prism && typeof ctx.svc.prism.refresh === "function") ctx.svc.prism.refresh();
+        return { status: "ok", worn: parsed.worn.length };
+      })().finally(() => { if (initializing.get(id) === task) initializing.delete(id); });
+      initializing.set(id, task);
+      return task;
     }
 
     // Bounded, read-only references: never copy another chat, a sibling swipe,
@@ -284,7 +337,7 @@
       sw.stateCorrections = next.swipes[swIdx].stateCorrections;
       return { corrections: changes };
     }
-    return { snapshot, context, prepareUser, observeMessage, track, pending, settle, correct };
+    return { snapshot, context, initializeOutfit, prepareUser, observeMessage, track, pending, settle, correct };
   }
   PRP.stateService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
