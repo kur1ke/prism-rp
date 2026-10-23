@@ -39,9 +39,9 @@
         recent: prior.slice(-5).map((m) => ({
           messageId: m.id, swipeIdx: m.swipeIdx || 0, role: m.role,
           text: String(TR.activeSwipe(m).text || "").slice(0, 500),
-          ...(m.role === "assistant" && TR.activeSwipe(m).draws &&
-            TR.activeSwipe(m).draws[0] && TR.activeSwipe(m).draws[0].prompt
-            ? { draw: String(TR.activeSwipe(m).draws[0].prompt).slice(0, 400) } : {}),
+          ...(m.role === "assistant" && Array.isArray(TR.activeSwipe(m).draws) &&
+            TR.activeSwipe(m).draws.length && TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt
+            ? { draw: String(TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt).slice(0, 400) } : {}),
         })),
         references: TRACK.references(state, actor, ["remove", "adjust"]),
       };
@@ -114,8 +114,12 @@
       const sw = TR.activeSwipe(msg), sourceText = String(sw.text || ""), swipeIdx = msg.swipeIdx || 0;
       // Only a current assistant-authored [draw:] is observational evidence;
       // manual image prompts, rewritten tags and backend pixels never feed canon.
-      const sourceDraw = msg.role === "assistant" && Array.isArray(sw.draws) && sw.draws[0]
-        ? String(sw.draws[0].prompt || "") : "";
+      // Continue may append a newer shot within the same swipe. The latest
+      // authored draw is the current observation; all source draws stay in
+      // the original swipe for exact evidence/provenance replay.
+      const lastDraw = msg.role === "assistant" && Array.isArray(sw.draws) && sw.draws.length
+        ? sw.draws[sw.draws.length - 1] : null;
+      const sourceDraw = lastDraw ? String(lastDraw.prompt || "") : "";
       if (!sourceText.trim() && !sourceDraw.trim()) return { skipped: "empty" };
       if (!sourceDraw && !INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
       if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) &&
