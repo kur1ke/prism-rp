@@ -17,6 +17,15 @@
     const targetCard = ((m.cards || []).find((c) => c.id === modal.cardId)) || m.card;
     const tz = modal.timeZone || MT.systemTimeZone();
     const manual = modal.timeMode === "manual";
+    if (modal.creating) return `<div class="modal-wrap"><div class="modal narrow ms-new" role="dialog" aria-modal="true"
+      aria-label="Создание переписки" aria-busy="true">
+      <div class="modal-head"><h2>Создаём переписку${targetCard ? " с " + esc(targetCard.name) : ""}</h2></div>
+      <div class="modal-body"><div class="block" role="status" aria-live="polite">
+        <p class="lead">${icon("clock")} Определяем начальное состояние персонажа…</p>
+        <p class="hint">Выполняется один скрытый запрос к RP-модели. Сообщение в чат не добавляется.</p>
+        <p class="hint">Окно закроется, когда переписка будет готова.</p>
+      </div><div class="modal-foot"><button class="btn btn-primary" disabled aria-disabled="true">Создаём…</button></div></div>
+    </div></div>`;
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal narrow ms-new" role="dialog" aria-modal="true" aria-label="Новая переписка">
       <div class="modal-head"><h2>Новая переписка${targetCard ? " с " + esc(targetCard.name) : ""}</h2>
         <button class="icon-btn" data-act="modal-close" title="Отмена">${icon("x")}</button></div>
