@@ -3267,6 +3267,8 @@ async function foundationH() {
       {...valid,evidence:"pink bikini"},
       {...valid,evidenceType:"text"},
       {...valid,visualScope:"old-photo"},
+      {...valid,action:"set"},
+      {...valid,action:"clear",value:null},
       {...valid,actor:"user"},
       {...valid,certainty:"established"}
     ];
