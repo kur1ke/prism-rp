@@ -131,6 +131,8 @@
     // replay must prove the exact quoted fragment is still in its source shot.
     const drawn = e.evidenceType === "draw";
     if (e.evidenceType != null && !drawn) return "неизвестный источник цитаты";
+    if (drawn && e.visualScope !== "current-self")
+      return "draw не подтверждён как актуальное изображение самого персонажа";
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
       !Array.isArray(source.draws) ||
       !source.draws.some((d) => d && typeof d.prompt === "string" &&
@@ -196,7 +198,7 @@
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
       value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
-      ...(e.evidenceType === "draw" ? { evidenceType: "draw" } : {}),
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
@@ -212,7 +214,7 @@
     const value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
-      ...(e.evidenceType === "draw" ? { evidenceType: "draw" } : {}) };
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}) };
     if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
