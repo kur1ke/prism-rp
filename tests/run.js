@@ -3154,8 +3154,6 @@ async function foundationH() {
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const before=h.chat.newMsg("assistant",null,"На мне белая футболка и шорты.");
-    before.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",
-      value:["white t-shirt","shorts"],certainty:"reported",evidence:"На мне белая футболка и шорты."}];
     // Persist the first outfit as a grounded authored visual rather than trusting translated nouns in Russian text.
     before.swipes[0].draws=[{prompt:"current selfie, white t-shirt, shorts",ratio:"1:1"}];
     before.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",
@@ -3182,6 +3180,26 @@ async function foundationH() {
       assert.deepStrictEqual(wear.worn,[]);
       assert.strictEqual(wear.complete,false);
     }finally {globalThis.PRP.llm.simple=old;}
+  });
+  await ta("VIS-DRAW-SOURCE-2A: current photo can explicitly establish garment absence without a removal verb",async()=>{
+    const TRACK=globalThis.PRP.stateTracker,INT=globalThis.PRP.stateInterpreter;
+    const shot="orihime_inoue, current mirror selfie, white t-shirt, no shorts, sitting on bed";
+    const candidate={actor:"char",field:"wear",action:"remove",value:["shorts"],certainty:"reported",
+      evidence:"no shorts",evidenceType:"draw",visualScope:"current-self"};
+    const opts={mode:"messenger",role:"assistant",speakerName:"Орихимэ",text:"Фото!",
+      draw:shot,draws:[{prompt:shot}],recent:[],references:[]};
+    assert.ok(INT.instruction(opts).includes("no shorts"));
+    const p=INT.parse(JSON.stringify({events:[candidate]}),opts);
+    assert.strictEqual(p.events.length,1,JSON.stringify(p));
+    const current=TRACK.fold({mode:"messenger",path:[{id:"visual",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Фото!",draws:[{prompt:shot}],stateEvents:p.events}]}]});
+    assert.deepStrictEqual(current.actors.char.wearState.removed.map(x=>x.item),["shorts"]);
+    assert.strictEqual(current.actors.char.wearState.known,false,"unseen remaining outfit is unknown");
+    // Merely omitting shorts from a cropped portrait is not evidence of absence.
+    const crop="orihime_inoue, current selfie, close-up face, orange hair";
+    const forged=TRACK.fold({mode:"messenger",path:[{id:"crop",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Фото!",draws:[{prompt:crop}],stateEvents:[candidate]}]}]});
+    assert.deepStrictEqual(forged.actors.char.wearState.removed,[]);
   });
   await ta("VIS-DRAW-SOURCE-2B: author photo has final say about the current moment when caption contradicts it",async()=>{
     const h=fbHarness({name:"Орихимэ"});
