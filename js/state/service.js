@@ -163,8 +163,17 @@
         .match(/[\p{L}\p{N}]+/gu) || []).map((word) => word.length > 4
           ? word.replace(/(?:ого|ему|ому|ыми|ими|ая|яя|ый|ий|ой|ей|ие|ые|ую|юю|ых|их|ым|им|ом|ем|а|я|е|у|ю|ы|и)$/u, "")
           : word).join(" ");
+      // Fallback is lexical Russian text extraction, not a bilingual item
+      // identity resolver. A confirmed current visual removal/adjustment must
+      // not be undone by an uncorrelated fallback "wear.add" derived from
+      // caption words (e.g. шорты vs shorts). The primary Observer can still
+      // report independently grounded compatible text facts; don't guess.
+      const visualChange = result.events.some((e) => e.actor === "char" &&
+        e.field === "wear" && e.evidenceType === "draw" &&
+        (e.action === "remove" || e.action === "adjust"));
       for (const e of fallback) {
         if (events.length >= INT.MAX) break;
+        if (visualChange && e.field === "wear") continue;
         const sameField = events.filter((x) => x.actor === e.actor && x.field === e.field && x.certainty !== "intent");
         if (e.field === "wear" && e.action === "add" && Array.isArray(e.value)) {
           // A model may return one garment (or an invalid second garment).
