@@ -37,6 +37,7 @@ require(J("cards/import.js"));
 require(J("providers/openai.js"));
 require(J("chat/tree.js"));
 require(J("state/tracker.js"));
+require(J("state/resolver.js"));
 require(J("state/interpreter.js"));
 require(J("state/service.js"));
 require(J("images/compose.js"));
@@ -55,6 +56,78 @@ let passed = 0, failed = 0;
 function t(name, fn) {
   try { fn(); passed++; }
   catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.message || e)); }
+}
+
+/* ── SR-1: one read-only StateResolver across consumer modules ── */
+{
+  const SR = globalThis.PRP.stateResolver;
+  t("SR-1: projected Messenger world preserves legacy baseline, evidence and unknowns", () => {
+    const world = { location: "Город", visualWear: ["старая одежда"], visualPose: "сидит",
+      ongoing: ["план"], custom: { stable: true } };
+    const known = { visualWear: ["футболка", "шорты"], visualPose: "стоит",
+      fieldStatus: { visualWear: { certainty: "reported", source: { messageId: "m1", swipeIdx: 1 } } },
+      visualWearRemoved: [{ item: "кардиган", certainty: "reported",
+        source: { messageId: "m2", swipeIdx: 0, evidence: "Сняла кардиган" } }],
+      intentions: [{ field: "activity", value: "пойти домой" }] };
+    const original = JSON.stringify({ world, known });
+    const projected = SR.world(world, { character: known });
+    assert.deepStrictEqual(projected.visualWear, ["футболка", "шорты"]);
+    assert.strictEqual(projected.visualPose, "сидит", "unknown tracked pose must not override legacy");
+    assert.strictEqual(projected.location, "Город", "legacy location survives");
+    assert.deepStrictEqual(projected.ongoing, ["план"]);
+    assert.deepStrictEqual(projected.visualWearRemoved.map(x => x.item), ["кардиган"]);
+    assert.strictEqual(projected.fieldStatus.visualWear.source.swipeIdx, 1);
+    projected.visualWear[0] = "платье";
+    projected.visualWearRemoved[0].item = "чужой";
+    assert.strictEqual(JSON.stringify({ world, known }), original, "resolver never mutates sources");
+    assert.deepStrictEqual(SR.world(world, null), world, "no tracker means unchanged legacy view");
+  });
+  t("SR-2: RP scene projection merges only known actor fields, preserves world and other actors", () => {
+    const base = { loc: "Парк", present: ["Том"], chars: {
+      "Орихимэ": { wear: ["старый наряд"], pose: "сидит", mood: "весело" },
+      "Том": { wear: ["куртка"], pose: "идёт", mood: "спокоен" },
+    } };
+    const tracked = { state: { actors: {
+      char: { fields: { wear: { value: ["футболка"], certainty: "reported" },
+        hair: { value: "оранжевые волосы" } }, wearState: { removed: [] } },
+      user: { fields: { pose: { value: "смотрит вверх" } }, wearState: { removed: [] } },
+    } } };
+    const before = JSON.stringify({ base, tracked });
+    const scene = SR.scene(base, tracked, { char: "Орихимэ", user: "Пользователь" });
+    assert.strictEqual(scene.loc, "Парк");
+    assert.deepStrictEqual(scene.chars["Орихимэ"].wear, ["футболка"]);
+    assert.strictEqual(scene.chars["Орихимэ"].pose, "сидит", "unknown pose must be preserved");
+    assert.strictEqual(scene.chars["Орихимэ"].mood, "весело");
+    assert.strictEqual(scene.chars["Орихимэ"].visualHair, "оранжевые волосы");
+    assert.deepStrictEqual(scene.chars["Том"], base.chars["Том"]);
+    assert.strictEqual(scene.chars["Пользователь"].pose, "смотрит вверх");
+    assert.strictEqual(JSON.stringify({ base, tracked }), before, "scene snapshots are immutable");
+  });
+  t("SR-3: removed garments remain explicit per-actor read-only facts, no invented wear", () => {
+    const removed = { item: "юбка", certainty: "established",
+      source: { messageId: "m7", swipeIdx: 2, evidence: "Сняла юбку" } };
+    const tracked = { state: { actors: {
+      char: { fields: {}, wearState: { removed: [removed] } },
+      user: { fields: {}, wearState: { removed: [] } },
+    } }, character: { fieldStatus: {}, visualWear: [], visualWearRemoved: [removed], intentions: [] } };
+    const projected = SR.resolve({ tracked, scene: { chars: {}, present: [] },
+      world: { visualWear: ["устаревшее"] }, names: { char: "Орихимэ", user: "Пользователь" } });
+    assert.strictEqual(projected.scene.chars["Орихимэ"], undefined, "no invented outfit");
+    assert.deepStrictEqual(projected.wearFacts[0].removed.map(x => x.item), ["юбка"]);
+    assert.strictEqual(projected.wearFacts[0].removed[0].source.swipeIdx, 2);
+    assert.deepStrictEqual(projected.wearFacts[1].removed, []);
+    projected.wearFacts[0].removed[0].item = "куртка";
+    assert.strictEqual(removed.item, "юбка", "origin stays read-only");
+  });
+  t("SR-4: pure resolver preserves compatibility for empty or missing state", () => {
+    const scene = { chars: { "Юки": { wear: ["шапка"] } } };
+    const out = SR.resolve({ scene, world: { location: "дом" }, names: { char: "Юки" } });
+    assert.deepStrictEqual(out.scene, scene);
+    assert.deepStrictEqual(out.world, { location: "дом" });
+    assert.deepStrictEqual(out.wearFacts, []);
+    assert.notStrictEqual(out.scene, scene, "views must never alias mutable scene state");
+    assert.notStrictEqual(out.world, undefined);
+  });
 }
 
 /* ── PERF-02A: independent provider selection (no migration) ── */
@@ -4003,6 +4076,36 @@ async function unifiedTracker() {
     assert.deepStrictEqual(STATE.forCharacter(second).visualWearRemoved.map((x) => x.item), ["куртку"]);
     assert.deepStrictEqual(STATE.forCharacter(first).visualWearRemoved.map((x) => x.item), ["юбку"]);
     assert.strictEqual(STATE.forCharacter(second).visualWearRemoved[0].source.swipeIdx, 1);
+  });
+  await ta("SR-5: Messenger and Prism consume the same branch-derived wearable state", async () => {
+    const h = fbHarness({ name: "Орихимэ", description: "Героиня." });
+    await h.chat.createChat("messenger", "c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id, { timeZone: "UTC", timeMode: "live" });
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const first = h.chat.newMsg("assistant", null, "На мне белая футболка и шорты");
+    first.swipes[0].stateEvents = [Evt("char", "wear", "set",
+      ["белая футболка", "шорты"], "reported", "На мне белая футболка и шорты")];
+    await h.chat.commitMessage(first, first.id);
+    const second = h.chat.newMsg("assistant", first.id, "Я сняла шорты");
+    second.swipes[0].stateEvents = [Evt("char", "wear", "remove",
+      ["шорты"], "reported", "Я сняла шорты")];
+    await h.chat.commitMessage(second, second.id);
+    const world = h.ctx.svc.messenger.view().world;
+    assert.deepStrictEqual(world.visualWear, ["белая футболка"]);
+    assert.deepStrictEqual(world.visualWearRemoved.map(x => x.item), ["шорты"]);
+    assert.strictEqual(world.visualWearRemoved[0].source.messageId, second.id);
+    const ctxPrism = h.prism.build();
+    assert.ok(ctxPrism.messages && !ctxPrism.report.overflow, "normal Prism budget respected");
+    const sys = allText(ctxPrism.messages);
+    assert.ok(sys.includes("шорты") && sys.includes("сообщённые снятые вещи"), "Prism receives removed facts from same snapshot");
+    // Regression: a separate source path cannot inherit these facts.
+    const selectedBefore = h.chat.path().slice(0, 1);
+    const same = h.ctx.svc.state.context(selectedBefore);
+    const proj = globalThis.PRP.stateResolver.resolve({
+      tracked: same, world: { visualWear: [] }, names: { char: "Орихимэ" },
+    });
+    assert.deepStrictEqual(proj.world.visualWear, ["белая футболка", "шорты"]);
+    assert.deepStrictEqual(proj.wearFacts[0].removed, []);
   });
   await ta("VIS-REF-1: observer resolves a prior garment by verified reference, not by invented current quote", async () => {
     const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Персонаж." });

@@ -6,7 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -100,20 +100,18 @@
       const ms = currentChat.mode === "messenger" && ctx.svc.messenger;
       const stamped = sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
       const snap = ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
-      const st = snap ? snap.state.scene : chat().sceneState(upto);
+      // The frozen image-origin path is authoritative. Use the same
+      // projection as Prism; do not mutate the folded StateTracker snapshot.
+      const projected = SR.resolve({
+        tracked: snap, scene: snap ? snap.state.scene : chat().sceneState(upto),
+        names: { char: cd.name, user: pers.name },
+      });
+      const st = projected.scene;
       let visual = ms ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null })) : null;
-        if (snap) {
-          for (const [actorId, name] of [["char", cd.name], ["user", pers.name]]) {
-            const actor = snap.state.actors[actorId];
-            const old = st.chars[name] || { wear: [], pose: "", mood: "" };
-            if (actor.fields.wear) old.wear = actor.fields.wear.value || [];
-            if (actor.fields.pose) old.pose = actor.fields.pose.value || "";
-            if (actor.fields.hair) old.visualHair = actor.fields.hair.value || "";
-            st.chars[name] = old;
-          }
-        } else if (ms && visual) {
-          st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
-        }
+      if (!snap && ms && visual) {
+        st.chars = st.chars || {};
+        st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
+      }
       Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
       delete entry.error;
       if (!reuse) (sw.images = sw.images || []).push(entry);

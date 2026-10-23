@@ -9,7 +9,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario;
+  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
 
   // Bring at most two latest selected-swipe visual directives back into the
   // text model history. These are shot references, NOT canonical scene updates.
@@ -57,31 +57,16 @@
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
       const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;
-      const st = chat().sceneState(path);
-      // Общее физическое состояние независимо от способа общения. Мессенджер
-      // показывает сообщение о месте (reported), а не притворяется зрительной сценой.
+      // One read-only projection for Prism, Messenger and image preparation.
+      // Messenger stays a reported view; RP retains scene and source provenance.
       const tracked = ctx.svc.state ? ctx.svc.state.context(path, { now: extra && extra.messengerNow }) : null;
-      if (tracked) {
-        if (messenger) {
-          const known = tracked.character;
-          for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
-            if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
-            messenger.world[field] = known[field];
-          }
-          messenger.world.fieldStatus = known.fieldStatus;
-          messenger.world.intentions = known.intentions;
-        } else {
-          for (const [actorId, name] of [["char", cd.name], ["user", ctx.persona().name]]) {
-            const actor = tracked.state.actors[actorId];
-            if (!actor) continue;
-            const ch = st.chars[name] || { wear: [], pose: "", mood: "" };
-            if (actor.fields.wear) ch.wear = actor.fields.wear.value || [];
-            if (actor.fields.pose) ch.pose = actor.fields.pose.value || "";
-            if (actor.fields.hair) ch.visualHair = actor.fields.hair.value || "";
-            st.chars[name] = ch;
-          }
-        }
-      }
+      const projected = SR.resolve({
+        tracked, scene: messenger ? null : chat().sceneState(path),
+        world: messenger ? messenger.world : null,
+        names: { char: cd.name, user: ctx.persona().name },
+      });
+      const st = messenger ? chat().sceneState(path) : projected.scene;
+      if (messenger) messenger.world = projected.world;
       // В RP здесь видимое общее пространство; в переписке — заявленные персонажем обстоятельства,
       // используемые для поиска мира без утверждения, что пользователь их наблюдал.
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
@@ -92,10 +77,7 @@
         text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
       });
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
-      const wearFacts = tracked ? ["char", "user"].map((actorId) => ({
-        actor: actorId,
-        removed: ((tracked.state.actors[actorId] || {}).wearState || {}).removed || [],
-      })) : [];
+      const wearFacts = projected.wearFacts;
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
         sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
