@@ -4350,6 +4350,7 @@ async function unifiedTracker() {
     await h.chat.commitMessage(before,before.id);
     const reply=h.chat.newMsg("assistant",before.id,"Я спустила её с плеч");
     await h.chat.commitMessage(reply,reply.id);
+    const activeReply=h.chat.path().slice(-1)[0];
     const old=globalThis.PRP.llm;
     let observed;
     globalThis.PRP.llm={simple:async (_provider,prompt)=>{
@@ -4358,10 +4359,10 @@ async function unifiedTracker() {
         placement:"с плеч",certainty:"reported",evidence:"Я спустила её с плеч"}]});
     }};
     try {
-      const result=await h.ctx.svc.state.observeMessage(reply,{id:"mock"});
+      const result=await h.ctx.svc.state.observeMessage(activeReply,{id:"mock"});
       assert.strictEqual(result.status,"ok",JSON.stringify(result));
       assert.ok(observed.includes("wear.adjust") && observed.includes("REFERENCES"),observed);
-      const event=reply.swipes[0].stateEvents[0];
+      const event=activeReply.swipes[0].stateEvents[0];
       assert.strictEqual(event.reference.source.messageId,before.id);
       const now=h.ctx.svc.state.snapshot();
       assert.deepStrictEqual(now.actors.char.wearState.partiallyWorn.map(x=>x.item),["длинная белая футболка"]);
