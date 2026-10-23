@@ -4105,6 +4105,35 @@ async function unifiedTracker() {
     assert.strictEqual(b[0].source.swipeIdx, 1);
     assert.deepStrictEqual(STATE.references(STATE.fold({ mode: "rp", path: [m] }), "user"), []);
   });
+  await ta("VIS-REF-6: a persisted contextual removal is invalid on an ancestor alternate swipe", async () => {
+    const first = { id: "first", role: "assistant", swipeIdx: 0, swipes: [
+      { text: "На мне юбка", stateEvents: [Evt("char", "wear", "set", ["юбка"], "reported", "На мне юбка")], sceneOps: [] },
+      { text: "На мне куртка", stateEvents: [Evt("char", "wear", "set", ["куртка"], "reported", "На мне куртка")], sceneOps: [] },
+    ] };
+    const initial = STATE.fold({ mode: "messenger", path: [first] });
+    const ref = STATE.references(initial, "char")[0];
+    const evt = Object.assign(Evt("char", "wear", "remove", ["юбка"], "reported", "Я сняла её"), { reference: ref });
+    const follow = make("assistant", "Я сняла её", [evt], "follow");
+    let state = STATE.fold({ mode: "messenger", path: [first, follow] });
+    assert.deepStrictEqual(STATE.forCharacter(state).visualWearRemoved.map((x) => x.item), ["юбка"]);
+    first.swipeIdx = 1;
+    state = STATE.fold({ mode: "messenger", path: [first, follow] });
+    assert.deepStrictEqual(STATE.forCharacter(state).visualWear, ["куртка"]);
+    assert.deepStrictEqual(STATE.forCharacter(state).visualWearRemoved, []);
+    assert.ok(state.diagnostics.some((x) => /ссылка не подтверждена/.test(x.issue)));
+  });
+  await ta("VIS-REF-7: Debug Tracker shows removed items and per-swipe source without leaking HTML", async () => {
+    const view = globalThis.PRP.views;
+    const html = view.debugModal({ card: { name: "Орихимэ" }, messengerView: {
+      world: { visualWear: ["шорты"], visualWearRemoved: [{
+        item: "<куртка>", certainty: "reported",
+        source: { messageId: "m_ref", swipeIdx: 2, evidence: "Я сняла её" }
+      }] }
+    }, path: [] }, { section: "tracker" });
+    assert.ok(html.includes("Снятые вещи") && html.includes("m_ref") && html.includes("swipe 2"));
+    assert.ok(html.includes("&lt;куртка&gt;") && !html.includes("<куртка>"), "show escaped data only");
+    assert.ok(html.includes("Я сняла её"));
+  });
   await ta("UT-4: модель не может править пользователя; пользователь не правит персонажа", async () => {
     const e = Evt("user", "wear", "set", ["кимоно"], "established", "Я надела кимоно");
     const x = STATE.fold({ mode: "rp", path: [make("assistant", "Я надела кимоно", [e], "m1")] });
