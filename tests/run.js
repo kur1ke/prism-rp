@@ -3074,6 +3074,42 @@ async function foundationH() {
     assert.strictEqual(cached.cached, true);
     assert.strictEqual(cached.text, compiled.text);
   });
+  await ta("VIS-STATE-TRANSLATE-2: image service passes origin-bound state to translator, never appends untranslated keep", async () => {
+    const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
+    const h = fbHarness(card);
+    await h.chat.createChat("messenger", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const m = h.chat.newMsg("assistant", null, "На мне тёплый шерстяной кардиган.");
+    m.swipes[0].stateEvents = [{ actor: "char", field: "wear", action: "add",
+      value: ["тёплый шерстяной кардиган"], certainty: "reported", evidence: "На мне тёплый шерстяной кардиган." }];
+    await h.chat.commitMessage(m, m.id);
+    const src = h.S.messages.find((x) => x.id === m.id);
+    h.S.settings.images = Object.assign({}, STG.DEFAULTS.images, { enabled: true, backend: "a1111", url: "http://unused", translate: true });
+    h.S.drawing = new Set(); h.S.imgUrls = {};
+    h.ctx.svc.images = globalThis.PRP.imageService.create(h.ctx);
+    const savedCompile = ICP.compile, savedGenerate = IB.generate;
+    let received = null, generated = null;
+    try {
+      ICP.compile = async (shot, opts) => {
+        received = { shot, opts };
+        return { compiled: true, text: "pov, bare feet on wooden floor, warm wool cardigan" };
+      };
+      IB.generate = async (_, args) => {
+        generated = args;
+        return { dataUrl: "data:image/png;base64,AA==", seed: 42, info: { width: 1024, height: 1024 } };
+      };
+      await h.ctx.svc.images.draw(src, src.swipes[0], { prompt: "camera=owner; POV, bare feet on wooden floor" });
+      assert.ok(received && received.opts.stateContext.includes("тёплый шерстяной кардиган"),
+        received && JSON.stringify(received), "origin state should reach translation context");
+      assert.ok(generated && generated.prompt.includes("warm wool cardigan"), generated && generated.prompt);
+      assert.ok(generated.prompt.includes("lilithx") && generated.prompt.includes("<lora:lilithx_v2:0.8>"));
+      assert.ok(!/кардиган|clothing:|camera pose:/.test(generated.prompt), generated.prompt);
+      const im = src.swipes[0].images[0];
+      assert.strictEqual(im.status, "done");
+      assert.ok(im.promptSources.imageLayers.established.includes("кардиган"),
+        "debug retains provenance even though raw state is absent from finished prompt");
+    } finally { ICP.compile = savedCompile; IB.generate = savedGenerate; }
+  });
   await ta("VIS-ORIGIN-1: image source is the chosen swipe and its own ancestor path", async () => {
     const svc = globalThis.PRP.imageService;
     const root = { id: "root", chatId: "c1", parentId: null, swipeIdx: 1, swipes: [{ text: "A" }, { text: "B" }] };
