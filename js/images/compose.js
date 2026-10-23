@@ -404,7 +404,6 @@
           established: established.join(", "),
           wardrobePreset: wardrobe,
           wardrobeSuppressed: canonicalChanges,
-          wearFacts: physicalWear,
           shot: draw,
           shotExtras: bits.join(", "),
           outfitKnown: !!outfit,
