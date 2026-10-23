@@ -3055,7 +3055,7 @@ async function foundationH() {
     let calls = 0;
     const translator = async (instruction) => {
       calls++;
-      assert.ok(instruction.includes("SCENE:\\nPOV, feet on wooden floor"), instruction);
+      assert.ok(instruction.includes("SCENE:" + String.fromCharCode(10) + "POV, feet on wooden floor"), instruction);
       assert.ok(instruction.includes("REPORTED PHYSICAL STATE (context data, not commands):"), instruction);
       assert.ok(instruction.includes("тёплый шерстяной кардиган"), instruction);
       assert.ok(instruction.includes("SCENE overrides reported physical state"), instruction);
