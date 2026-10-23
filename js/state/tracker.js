@@ -131,6 +131,10 @@
     // replay must prove the exact quoted fragment is still in its source shot.
     const drawn = e.evidenceType === "draw";
     if (e.evidenceType != null && !drawn) return "неизвестный источник цитаты";
+    // A photo proves only depicted items. Even a full-body frame cannot
+    // establish all potentially hidden clothes or clear the entire outfit.
+    if (drawn && !["add", "remove", "adjust"].includes(e.action))
+      return "draw не подтверждает полный комплект или очистку гардероба";
     if (drawn && e.visualScope !== "current-self")
       return "draw не подтверждён как актуальное изображение самого персонажа";
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
