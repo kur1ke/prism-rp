@@ -293,7 +293,13 @@
           '<li>' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
           : '<p class="empty-note">Нет.</p>') + '</div>';
     } else {
-      content = '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
+      const init = m.chat && m.chat.initialOutfitCheck;
+      const initIssue = init && init.status === "error"
+        ? '<div class="block"><div class="block-title">Начальная одежда: ошибка инициализации</div>'
+          + '<p class="hint">Начальный комплект не был записан. Одежда осталась неизвестной; это не означает отсутствие одежды.</p>'
+          + '<p>Причина: ' + esc(init.reason || "неизвестна") + '</p></div>'
+        : '';
+      content = initIssue + '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
         + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
         + '<button class="btn btn-sm" data-act="state-retry">Повторить анализ</button></div>'
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
