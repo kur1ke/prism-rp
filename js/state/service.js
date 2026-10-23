@@ -126,9 +126,19 @@
       const sameInputs = prepared && prepared.chatId === msg.chatId &&
         prepared.providerId === (provider && provider.id) && prepared.options &&
         ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]) &&
-        JSON.stringify(prepared.options.recent) === JSON.stringify(options.recent) &&
-        JSON.stringify(prepared.options.references) === JSON.stringify(options.references);
-      const result = sameInputs ? await prepared.promise : await analyse(options, provider);
+        JSON.stringify(prepared.options.recent) === JSON.stringify(options.recent);
+      let result;
+      if (sameInputs) {
+        const early = await prepared.promise;
+        const refsSame = JSON.stringify(prepared.options.references) === JSON.stringify(options.references);
+        // PERF-02B: if the prior assistant's state finished meanwhile, reuse
+        // an explicit, non-referential early result or even its error. Only
+        // retry when newly available references could change an unresolved
+        // interpretation, or a previously resolved reference became stale.
+        const mayNeedReferences = early.valid && (!early.events.length ||
+          early.events.some((e) => e.reference));
+        result = refsSame || !mayNeedReferences ? early : await analyse(options, provider);
+      } else result = await analyse(options, provider);
       // Высокоточные явные самоописания не должны исчезать только потому,
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
