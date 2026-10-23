@@ -28,12 +28,16 @@
   // narrative text. A frame description has no authority to rewrite them.
   function visualWear(wear) {
     if (!wear) return null;
-    const named = (items) => (Array.isArray(items) ? items : []).map((x) => String(x && x.item || "")).filter(Boolean);
+    const named = (items) => (Array.isArray(items) ? items : []).map((x) => ({
+      item: String(x && x.item || ""),
+      certainty: x && x.certainty === "reported" ? "reported" : "established",
+    })).filter((x) => x.item);
     return {
       worn: named(wear.worn),
       removed: named(wear.removed),
       partiallyWorn: (wear.partiallyWorn || []).map((x) => ({
         item: String(x.item || ""), placement: String(x.placement || ""),
+        certainty: x.certainty === "reported" ? "reported" : "established",
       })).filter((x) => x.item && x.placement),
     };
   }
