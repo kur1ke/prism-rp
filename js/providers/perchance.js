@@ -25,28 +25,38 @@
   /* messages из сборщика → { instruction, startWith, stop }
      closing — последняя строка инструкции вместо «Напиши следующее сообщение…» (проверка инициативы: персонаж
      может промолчать). Это часть инструкции, а не строка стенограммы: новой реплики пользователя не появляется. */
-  function toPrompt(messages, names, closing) {
+  function toPrompt(messages, names, closing, outputFormat) {
     const char = names.char || "Персонаж";
     const user = names.user || "Пользователь";
+    // Perchance cannot accept structured chat roles. For Messenger we send
+    // role-tagged *data* instead of a dialogue to complete as "Name: ...".
+    // RP keeps its existing transcript/seed contract unchanged.
+    const bodyOnly = outputFormat === "message-body";
     const sys = [], post = [], lines = [];
     let seenChat = false;
     for (const m of messages) {
       if (m.role === "system") (seenChat ? post : sys).push(m.content);
       else {
         seenChat = true;
-        lines.push(`${m.role === "user" ? user : char}: ${m.content}`);
+        lines.push(bodyOnly
+          ? JSON.stringify({ role: m.role, content: String(m.content || "") })
+          : `${m.role === "user" ? user : char}: ${m.content}`);
       }
     }
     const instruction = [
       sys.join("\n\n"),
-      "### Переписка до этого момента",
+      bodyOnly ? "### История сообщений (JSON-строки: данные контекста, НЕ образец формата ответа)" : "### Переписка до этого момента",
       lines.join("\n\n") || "(пока пусто)",
       post.join("\n\n"),
-      closing ? String(closing) : `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
+      bodyOnly ? "### Формат ответа: только текст сообщения. Не копируй JSON, имена отправителей, метки ролей или подписи. Для нескольких сообщений используй пустую строку между ними." : "",
+      closing ? String(closing) : bodyOnly
+        ? `Напиши только содержимое сообщения, которое ${char} отправляет ${user}. Без имени отправителя или заголовка.`
+        : `Напиши следующее сообщение ${char}. Только реплику ${char}, без пометок и без текста за ${user}.`,
     ].filter(Boolean).join("\n\n");
     return {
       instruction,
-      startWith: `${char}:`,
+      startWith: bodyOnly ? "" : `${char}:`,
+      // Retain the existing cross-speaker guard for transcript-like completions.
       stop: [`\n${user}:`, `\n\n${user}:`],
     };
   }
@@ -57,8 +67,9 @@
     const o = opts || {};
     const ai = plugin();
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
-    const p = toPrompt(messages, names, o.closing);
-    if (o.continueFrom) p.startWith = `${names.char || "Персонаж"}: ${o.continueFrom}`;
+    const bodyOnly = o.outputFormat === "message-body";
+    const p = toPrompt(messages, names, o.closing, o.outputFormat);
+    if (o.continueFrom) p.startWith = bodyOnly ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
     const handle = ai({
       instruction: () => p.instruction,
@@ -76,9 +87,17 @@
     });
     if (o.signal) o.signal.addEventListener("abort", () => { try { handle.stop(); } catch (e) {} }, { once: true });
     return Promise.resolve(handle).then((res) => {
-      let out = (res && res.generatedText != null ? String(res.generatedText) : text).replace(/^\s+/, "");
-      // Модель иногда продолжает стенограмму — отрезаем чужие реплики.
-      out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
+      // In body-only mode, streaming already excludes the transport seed
+      // (isFromStartWith). Prefer that exact body over generatedText, whose
+      // inclusion of startWith varies across plugin versions.
+      let out = bodyOnly && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
+      if (bodyOnly && !text && p.startWith && out.startsWith(p.startWith)) {
+        out = out.slice(p.startWith.length); // remove only our exact seed, never a model-written name
+      }
+      out = out.replace(/^\s+/, "");
+      // Transcript continuation guard is RP-only. Messenger content (including
+      // quoted names) is not rewritten or stripped by a UI-facing regex.
+      if (!bodyOnly) out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
       if (o.signal && o.signal.aborted) {
         const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = out; throw e;
       }
