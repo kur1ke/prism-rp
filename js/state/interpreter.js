@@ -310,8 +310,14 @@
   }
   function parseInitialOutfit(raw) {
     if (typeof raw !== "string" || raw.length > 8000) return { error: "Некорректный ответ инициализации" };
+    // Perchance/RP providers may wrap otherwise valid structured JSON in
+    // a single markdown code fence. Unwrap ONLY that exact envelope: do not
+    // salvage a plausible object from explanatory text or several candidates.
+    const trimmed = raw.trim();
+    const fenced = /^\x60\x60\x60(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n\x60\x60\x60$/i.exec(trimmed);
     let data;
-    try { data = JSON.parse(raw.trim()); } catch (_e) { return { error: "Ожидался JSON полного наряда" }; }
+    try { data = JSON.parse(fenced ? fenced[1].trim() : trimmed); }
+    catch (_e) { return { error: "Ожидался JSON полного наряда" }; }
     if (!data || typeof data !== "object" || Array.isArray(data) ||
         !data.wear || typeof data.wear !== "object" || Array.isArray(data.wear) ||
         !Array.isArray(data.wear.worn) ||
