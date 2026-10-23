@@ -3285,6 +3285,22 @@ async function foundationH() {
       assert.ok(!backend.negative.includes("shirt"),backend.negative);
     } finally {ICP.compile=savedC;ICP.compileWear=savedW;IB.generate=savedG;}
   });
+  await ta("VIS-OUTFIT-1C-9: canonical compilation replaces the old lexical wardrobe postfilter", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue"}};
+    const c=IC.compose({draw:"1girl, selfie",card,scene:{chars:{Химэ:{wear:["футболка"]}},present:[]},
+      messenger:{location:""},wearFacts:[{actor:"char",worn:[],removed:[{item:"юбка"}],
+        partiallyWorn:[{item:"футболка",placement:"с плеч"}]}]});
+    const exact="1girl, shirt pulled down off shoulders, indoors";
+    const out=IC.finalise({composed:c,compiled:exact,stateCompiled:true,card,
+      backend:"a1111",settings:{promptMode:"off"}});
+    assert.ok(out.prompt.includes("shirt pulled down off shoulders"),out.prompt);
+    assert.ok(out.prompt.includes("orihime_inoue"));
+    // Old records lacking typed facts still use compatibility rules.
+    const legacy=IC.finalise({composed:{...c,physicalWear:null},compiled:exact,stateCompiled:true,card,
+      backend:"a1111",settings:{promptMode:"off"}});
+    assert.ok(!legacy.prompt.includes("shirt pulled down off shoulders"),
+      "legacy lexical postfilter remains a backwards-compatible fallback");
+  });
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
