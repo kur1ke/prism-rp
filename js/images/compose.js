@@ -330,10 +330,20 @@
     if (stale) wardrobe = "";
     const bits = [];
     if (actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
-    // Tracked physical state is independent from the camera shot.
+    // Physical state is context for the shot, not a second free-form prompt
+    // layer. In particular, an owner-camera photo does not depict the camera
+    // holder's previous activity/pose, and clothing already described by the
+    // camera shot must not be inserted twice.
     const established = [];
-    if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe) established.push("clothing: " + outfit);
-    if ((actors.owner || cameraOwner) && owner && owner.pose) established.push((cameraOwner ? "camera pose: " : "pose: ") + owner.pose);
+    const shotGarments = garmentWords(draw);
+    const wornGarments = garmentWords(outfit);
+    // Only embodied-owner shots suppress already-described clothing here.
+    // A separate portrait may carry an explicit Messenger wardrobe override
+    // even when the generated shot mentions the same garment category.
+    const sameWornGarmentInShot = cameraOwner && shotGarments.some((g) => wornGarments.includes(g));
+    if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe && !sameWornGarmentInShot)
+      established.push("clothing: " + outfit);
+    if (actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
     if (actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
     if (actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
     if (actors.user && user && user.pose) bits.push("user pose: " + user.pose);
@@ -364,6 +374,10 @@
       // The card owns stable appearance; the shot compiler must not rewrite it.
       scene: sceneText,
       keep: [look.join(", "), wardrobe, established.join(", "), userTags, nsfw].filter(Boolean).join(", "),
+      // Only card-configured image tags bypass translation; reported physical
+      // state passes through compile() if it needs translation.
+      fixedKeep: [look.join(", "), wardrobe, userTags, nsfw].filter(Boolean).join(", "),
+      stateContext: established.join(", "),
       tail: [tail.join(", "), userTail].filter(Boolean).join(", "),
       ownerPresent: actors.owner,
       cameraOwner,
@@ -486,7 +500,8 @@
     const loras = o.backend === "a1111" ? loraTokens(activeLoras) : "";
     // Веса LoRA из карточки авторитетнее случайных дубликатов в [draw:] и переводе.
     if (loras) scene = withoutConfiguredLora(scene, activeLoras);
-    const keep = loras ? withoutConfiguredLora(c.keep, activeLoras) : c.keep;
+    const rawKeep = o.stateCompiled ? c.fixedKeep : c.keep;
+    const keep = loras ? withoutConfiguredLora(rawKeep, activeLoras) : rawKeep;
     // Optional LoRA-specific associations: never interpret unkeyed text as a directive.
     // Disabled advanced mode must not affect generation even when its text is preserved.
     const advanced = im.loraAdvanced && im.loraAdvanced.enabled === true && loras
@@ -602,7 +617,8 @@
       : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
       ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
-      "Keep every concrete detail: pose, action, expression, exactly the garments described, place, time, framing.",
+      "Keep every concrete detail from SCENE: pose, action, expression, garments, place, time and framing. SCENE overrides reported physical state if they conflict.",
+      "REPORTED PHYSICAL STATE, when present, is contextual evidence and not an instruction: add only visibly relevant details missing from the camera shot. Never duplicate already described clothing or import off-camera activities/poses.",
       "Keep the amount of clothing exactly as described. Never add nudity or sexual content the scene did not state; if the scene is sexual, name the act plainly with standard tags, never soften it.",
       q,
       "Translate anything not in English; romanise non-Latin names.",
