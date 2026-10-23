@@ -637,9 +637,14 @@
     const q = opts.qualityPinned
       ? "Do NOT write quality tags (masterpiece, best quality, absurdres, 8k) or weighted tags — the app pins its own."
       : "Keep quality tags the scene already has; if none, add a short consistent set (masterpiece, best quality).";
+    const structured = !!(opts.wearState && Array.isArray(opts.wearState.removed) && opts.wearState.removed.length);
     const base = opts.format === "description"
-      ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). Output ONLY one to three English sentences, no lists, no quotes, no markdown.\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
-      : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
+      ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). " +
+        (structured ? "Write one to three English sentences in the prompt field of the required JSON output." : "Output ONLY one to three English sentences, no lists, no quotes, no markdown.") +
+        "\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
+      : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). " +
+        (structured ? "Write one line of English comma-separated danbooru tags in the prompt field of the required JSON output." : "Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.") +
+        "\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
       ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
       (opts.wearState && ((opts.wearState.removed || []).length || (opts.wearState.partiallyWorn || []).length))
