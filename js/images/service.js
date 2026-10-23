@@ -163,7 +163,7 @@
           wearTranslation = await ICP.compileWear(canonicalWear, generateText);
           if (!wearTranslation.ok) throw new Error("Не удалось перевести снятую одежду: " + (wearTranslation.error || "неизвестная ошибка"));
         }
-        const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!stateContext && !!comp.compiled,
+        const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
           card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative: wearTranslation.negative });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
