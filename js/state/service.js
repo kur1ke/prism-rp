@@ -36,7 +36,7 @@
     const initializing = new Map();
     function initializeOutfit(provider, setup) {
       const c = ctx.chat(), card = ctx.card();
-      if (!c || c.mode !== "messenger" || !card || c.initialWear || chat().path().length ||
+      if (!c || c.mode !== "messenger" || !card || c.cardId !== card.id || c.initialWear || chat().path().length ||
           (S.messages || []).length) return Promise.resolve({ status: "skipped" });
       if (snapshot([]).actors.char.wearState.known)
         return Promise.resolve({ status: "already-known" });
@@ -66,7 +66,8 @@
         // retroactively dress a character after the first message.
         const current = ctx.chat();
         if (!current || current.id !== id || current.cardId !== cardId ||
-            S.chatId !== id || current.initialWear || chat().path().length ||
+            S.chatId !== id || S.cardId !== cardId || !ctx.card() || ctx.card().id !== cardId ||
+            current.initialWear || chat().path().length ||
             (S.messages || []).length || snapshot([]).actors.char.wearState.known)
           return { status: "stale" };
         const record = { schema: 1, kind: "initial-outfit", event: event.event };
