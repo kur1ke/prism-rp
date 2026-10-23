@@ -118,8 +118,12 @@ current-message evidence. There is no new persisted inventory or schema
 migration: the original `stateEvents`, corrections, and legacy Scene remain
 the source of truth, replayed on each selected path/swipe.
 
-The Observer may propose `wear.adjust` but live provider quality is NOT
-verified. Contextual `referenceId` remains restricted to `wear.remove`.
+Observer prompting is deliberately unchanged in WS-1: automatic
+`wear.adjust` extraction needs exact item identity via branch-local
+references and real-provider evaluation before it can be enabled.
+Tracker can replay verified `wear.adjust` events; this does NOT establish
+live Observer support. Contextual `referenceId` remains restricted to
+`wear.remove`.
 StateResolver can expose typed partial facts without making Image Compiler
 interpret them. The composer does not yet implement positive partial-placement
 tags or garment-specific negative constraints; same-turn A1111/Forge and
