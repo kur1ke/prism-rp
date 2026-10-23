@@ -3312,6 +3312,75 @@ async function foundationH() {
     assert.ok(!legacy.prompt.includes("hoodie pulled down off shoulders"),
       "legacy lexical postfilter remains a backwards-compatible fallback");
   });
+  await ta("VIS-OUTFIT-1C-10: changed ancestor swipe during backend invalidates image provenance", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    const a=h.chat.newMsg("assistant",null,"На мне футболка");
+    a.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["футболка"],
+      certainty:"reported",evidence:"На мне футболка"}];
+    await h.chat.commitMessage(a,a.id);
+    const last=h.chat.newMsg("assistant",a.id,"Вот фотография");
+    await h.chat.commitMessage(last,last.id);
+    const source=h.S.messages.find(x=>x.id===last.id);
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const old=IB.generate;
+    let entered,release;
+    const started=new Promise(r=>{entered=r;});
+    const backend=new Promise(r=>{release=r;});
+    try {
+      IB.generate=async ()=>{entered();return backend;};
+      const pending=h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, selfie"});
+      await started;
+      const parent=h.S.messages.find(x=>x.id===a.id);
+      parent.swipes.push({text:"На мне платье",sceneOps:[],stateEvents:[{actor:"char",field:"wear",
+        action:"add",value:["платье"],certainty:"reported",evidence:"На мне платье"}]});
+      parent.swipeIdx=1;
+      await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(parent)));
+      release({dataUrl:"data:image/png;base64,AA==",seed:1,info:{width:512,height:512}});
+      await pending;
+      const saved=await h.ctx.DB.get("messages",source.id);
+      assert.strictEqual(saved.swipes[0].images[0].status,"error");
+      assert.ok(/состояние ветки/.test(saved.swipes[0].images[0].error));
+      assert.strictEqual(await h.ctx.DB.get("images",saved.swipes[0].images[0].id),undefined,
+        "no image from the former ancestor swipe may be persisted");
+    } finally {IB.generate=old;}
+  });
+  await ta("VIS-OUTFIT-1C-11: changed ancestor evidence during compile skips backend", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    const a=h.chat.newMsg("assistant",null,"На мне футболка");
+    a.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["футболка"],
+      certainty:"reported",evidence:"На мне футболка"}];
+    await h.chat.commitMessage(a,a.id);
+    const last=h.chat.newMsg("assistant",a.id,"Я сняла шорты");
+    last.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],
+      certainty:"reported",evidence:"Я сняла шорты"}];
+    await h.chat.commitMessage(last,last.id);
+    const source=h.S.messages.find(x=>x.id===last.id);
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;
+    let backendCalls=0;
+    try {
+      ICP.compile=async ()=>{
+        const parent=h.S.messages.find(x=>x.id===a.id);
+        parent.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["платье"],
+          certainty:"reported",evidence:"На мне платье"}];
+        await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(parent)));
+        return {text:"1girl, selfie",compiled:true,wearValidated:true,
+          negative:"shorts",wearItems:[{index:0,item:"шорты",tag:"shorts"}]};
+      };
+      IB.generate=async ()=>{backendCalls++;throw Error("must not generate with stale ancestor facts");};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, selfie"});
+      assert.strictEqual(backendCalls,0);
+      assert.strictEqual(source.swipes[0].images[0].status,"error");
+    } finally {ICP.compile=oldC;IB.generate=oldG;}
+  });
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
