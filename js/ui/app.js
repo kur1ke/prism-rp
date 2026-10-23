@@ -154,7 +154,9 @@
           ui.toast("Начальную одежду определить не удалось; она пока неизвестна, а первое фото может её установить.", true);
       }
     }
-    if (id) await openChat(id);
+    // Another new-chat/navigation action may have replaced this request while
+    // the initial RP model was thinking. Do not steal focus back to an old chat.
+    if (id && S.chatId === id) await openChat(id);
     return id;
   }
   async function openCard(cardId) {
