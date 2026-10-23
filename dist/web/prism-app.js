@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "f702e1b2b284b245f6192c18d750d13a12edeb29";
+  window.PRISM_RP_BUILD_SHA = "189811003259a035dfcf5d4d43dd1579f5e1a260";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4629,6 +4629,81 @@
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);
 
+/* js/state/resolver.js */
+/* Prism RP — one read-only projection of the selected-path StateTracker snapshot.
+   No scene/World writes, no state extraction, no independent storage or authority.
+   The caller supplies one already-resolved snapshot for an exact path/swipe.
+   Legacy Messenger Environment remains an input baseline, not a competing
+   store of extracted state events. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+
+  const WORLD_FIELDS = Object.freeze([
+    "location", "activity", "visualWear", "visualPose", "visualHair",
+    "nearby", "ongoing", "availability",
+  ]);
+  const SCENE_FIELDS = Object.freeze([
+    ["wear", "wear"], ["pose", "pose"], ["hair", "visualHair"],
+  ]);
+
+  function world(base, tracked) {
+    if (!base) return base;
+    const out = clone(base);
+    if (!tracked || !tracked.character) return out;
+    const known = tracked.character;
+    for (const field of WORLD_FIELDS) {
+      if (known.fieldStatus && Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) out[field] = clone(known[field]);
+    }
+    out.fieldStatus = clone(known.fieldStatus || {});
+    out.visualWearRemoved = clone(known.visualWearRemoved || []);
+    out.intentions = clone(known.intentions || []);
+    return out;
+  }
+
+  function scene(base, tracked, names) {
+    if (!base) return base;
+    const out = clone(base);
+    if (!tracked || !tracked.state || !tracked.state.actors) return out;
+    out.chars = out.chars || {};
+    for (const [actorId, name] of [["char", names && names.char], ["user", names && names.user]]) {
+      if (!name) continue;
+      const actor = tracked.state.actors[actorId];
+      if (!actor || !actor.fields) continue;
+      const previous = out.chars[name] || { wear: [], pose: "", mood: "" };
+      const projected = Object.assign({}, previous);
+      for (const [field, target] of SCENE_FIELDS) {
+        if (actor.fields[field]) projected[target] = clone(actor.fields[field].value == null ? (field === "wear" ? [] : "") : actor.fields[field].value);
+      }
+      // Only materialize an actor if they were already present in the scene or
+      // have state facts. Do not invent an extra actor in a POV image.
+      if (out.chars[name] || SCENE_FIELDS.some(([field]) => actor.fields[field])) out.chars[name] = projected;
+    }
+    return out;
+  }
+
+  function wearFacts(tracked) {
+    if (!tracked || !tracked.state || !tracked.state.actors) return [];
+    return ["char", "user"].map((actor) => ({
+      actor,
+      removed: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
+        tracked.state.actors[actor].wearState.removed) || []),
+    }));
+  }
+
+  function resolve(o) {
+    const input = o || {};
+    return {
+      scene: scene(input.scene, input.tracked, input.names),
+      world: world(input.world, input.tracked),
+      wearFacts: wearFacts(input.tracked),
+    };
+  }
+  PRP.stateResolver = { world, scene, wearFacts, resolve };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateResolver;
+})(typeof window !== "undefined" ? window : globalThis);
+
 /* js/state/interpreter.js */
 /* Prism RP — UT-1: ограниченный LLM-интерпретатор событий, не автор истории.
    Только текущее сообщение, без секретов других персонажей и без скрытых промптов.
@@ -8199,7 +8274,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario;
+  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
 
   // Bring at most two latest selected-swipe visual directives back into the
   // text model history. These are shot references, NOT canonical scene updates.
@@ -8247,31 +8322,16 @@
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
       const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;
-      const st = chat().sceneState(path);
-      // Общее физическое состояние независимо от способа общения. Мессенджер
-      // показывает сообщение о месте (reported), а не притворяется зрительной сценой.
+      // One read-only projection for Prism, Messenger and image preparation.
+      // Messenger stays a reported view; RP retains scene and source provenance.
       const tracked = ctx.svc.state ? ctx.svc.state.context(path, { now: extra && extra.messengerNow }) : null;
-      if (tracked) {
-        if (messenger) {
-          const known = tracked.character;
-          for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
-            if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
-            messenger.world[field] = known[field];
-          }
-          messenger.world.fieldStatus = known.fieldStatus;
-          messenger.world.intentions = known.intentions;
-        } else {
-          for (const [actorId, name] of [["char", cd.name], ["user", ctx.persona().name]]) {
-            const actor = tracked.state.actors[actorId];
-            if (!actor) continue;
-            const ch = st.chars[name] || { wear: [], pose: "", mood: "" };
-            if (actor.fields.wear) ch.wear = actor.fields.wear.value || [];
-            if (actor.fields.pose) ch.pose = actor.fields.pose.value || "";
-            if (actor.fields.hair) ch.visualHair = actor.fields.hair.value || "";
-            st.chars[name] = ch;
-          }
-        }
-      }
+      const projected = SR.resolve({
+        tracked, scene: messenger ? null : chat().sceneState(path),
+        world: messenger ? messenger.world : null,
+        names: { char: cd.name, user: ctx.persona().name },
+      });
+      const st = messenger ? chat().sceneState(path) : projected.scene;
+      if (messenger) messenger.world = projected.world;
       // В RP здесь видимое общее пространство; в переписке — заявленные персонажем обстоятельства,
       // используемые для поиска мира без утверждения, что пользователь их наблюдал.
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
@@ -8282,10 +8342,7 @@
         text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
       });
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
-      const wearFacts = tracked ? ["char", "user"].map((actorId) => ({
-        actor: actorId,
-        removed: ((tracked.state.actors[actorId] || {}).wearState || {}).removed || [],
-      })) : [];
+      const wearFacts = projected.wearFacts;
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
         sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
@@ -8324,7 +8381,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -8418,20 +8475,18 @@
       const ms = currentChat.mode === "messenger" && ctx.svc.messenger;
       const stamped = sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
       const snap = ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
-      const st = snap ? snap.state.scene : chat().sceneState(upto);
+      // The frozen image-origin path is authoritative. Use the same
+      // projection as Prism; do not mutate the folded StateTracker snapshot.
+      const projected = SR.resolve({
+        tracked: snap, scene: snap ? snap.state.scene : chat().sceneState(upto),
+        names: { char: cd.name, user: pers.name },
+      });
+      const st = projected.scene;
       let visual = ms ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null })) : null;
-        if (snap) {
-          for (const [actorId, name] of [["char", cd.name], ["user", pers.name]]) {
-            const actor = snap.state.actors[actorId];
-            const old = st.chars[name] || { wear: [], pose: "", mood: "" };
-            if (actor.fields.wear) old.wear = actor.fields.wear.value || [];
-            if (actor.fields.pose) old.pose = actor.fields.pose.value || "";
-            if (actor.fields.hair) old.visualHair = actor.fields.hair.value || "";
-            st.chars[name] = old;
-          }
-        } else if (ms && visual) {
-          st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
-        }
+      if (!snap && ms && visual) {
+        st.chars = st.chars || {};
+        st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
+      }
       Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
       delete entry.error;
       if (!reuse) (sw.images = sw.images || []).push(entry);
@@ -9747,7 +9802,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const MT = PRP.messengerTime, ENV = PRP.messengerEnv, CONV = PRP.messengerConversation, BR = PRP.branch;
+  const MT = PRP.messengerTime, ENV = PRP.messengerEnv, CONV = PRP.messengerConversation, BR = PRP.branch, SR = PRP.stateResolver;
 
   const STORE = "messengerEnvironments";
   const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -9792,14 +9847,7 @@
       // совместимым базовым слоем; сообщения дополняют/изменяют его автоматически.
       if (ctx.svc.state) {
         const tracked = ctx.svc.state.context(path, { now: at, legacyWorld: w.world });
-        const known = tracked.character;
-        for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
-          if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
-          w.world[field] = known[field];
-        }
-        w.world.fieldStatus = known.fieldStatus;
-        w.world.visualWearRemoved = known.visualWearRemoved;
-        w.world.intentions = known.intentions;
+        w.world = SR.world(w.world, tracked);
       }
       const conv = CONV.derive(path, { now: at, record: env });
       const open = conv.promises.concat(conv.plans).filter((m) => m.status === "open").sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -9944,14 +9992,7 @@
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: t });
       if (ctx.svc.state) {
         const tracked = ctx.svc.state.context(path, { now: t, legacyWorld: w.world });
-        const known = tracked.character;
-        for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
-          if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
-          w.world[field] = known[field];
-        }
-        w.world.fieldStatus = known.fieldStatus;
-        w.world.visualWearRemoved = known.visualWearRemoved;
-        w.world.intentions = known.intentions;
+        w.world = SR.world(w.world, tracked);
       }
       const conv = CONV.derive(path, { now: t, record: env });
       const last = path[path.length - 1];
