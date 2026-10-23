@@ -3225,12 +3225,12 @@ async function foundationH() {
     h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
     const oldC=ICP.compile,oldG=IB.generate;let compCalls=0,backend;
     try{
-      ICP.compile=async()=>{compCalls++;throw Error("must not rewrite authored English draw");};
+      ICP.compile=async (scene,opts)=>{compCalls++;return oldC(scene,opts,async()=>{throw Error("must not CALL a translator for English draw");});};
       IB.generate=async (_,o)=>{backend=o;return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:shot,ratio:"1:1"});
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
-      assert.strictEqual(compCalls,0);
+      assert.strictEqual(compCalls,1,"compiler adapter may be entered, but the translation model must not run");
       assert.ok(backend.prompt.includes("shorts on bed")&&backend.prompt.includes("shirt off shoulders"),backend.prompt);
       assert.ok(!backend.prompt.includes("blue dress")&&!backend.prompt.includes("nipples"),backend.prompt);
       assert.ok(backend.prompt.includes("<lora:ori:0.8>")&&backend.prompt.includes("orihime_inoue"),backend.prompt);
