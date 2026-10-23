@@ -181,6 +181,9 @@ single-character shots; multi-character shots use canonical scene reconciliation
 without globally forbidding other people's clothing. `partiallyWorn` is
 positive placement information, not a removed garment. Existing lexical
 wardrobe filtering is bypassed for successfully canonical-compiled clothing.
+Image persistence revalidates the selected ancestor swipe/text/scene/state event
+fingerprints after asynchronous calls; stale origin facts never silently attach
+to the current branch, and an invalid image is marked for retry.
 No new canonical state store, parser or inventory is created.
 
 The semantic correctness of model-produced English garment tags and the
