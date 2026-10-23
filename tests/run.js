@@ -3307,6 +3307,13 @@ async function foundationH() {
       assert.ok(!request.includes("current selfie, blue hoodie"),
         "the first photo in a continued swipe must not be mistaken for the latest");
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),["red t-shirt"]);
+      const original=h.chat.path().slice(-1)[0];
+      const ghost=JSON.parse(JSON.stringify(original));
+      ghost.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["blue hoodie"],
+        certainty:"reported",evidence:"blue hoodie",evidenceType:"draw",visualScope:"current-self"}];
+      const stale=globalThis.PRP.stateTracker.fold({mode:"messenger",charName:"Орихимэ",path:[ghost]});
+      assert.strictEqual(stale.actors.char.wearState.known,false,
+        "an earlier draw of this same swipe cannot remain current after a new shot");
     }finally{globalThis.PRP.llm.simple=old;}
   });
   await ta("VIS-DRAW-SOURCE-4: authored English draw is not vetoed by stale removed state or global negatives",async()=>{
