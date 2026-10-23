@@ -337,7 +337,10 @@
     const established = [];
     const shotGarments = garmentWords(draw);
     const wornGarments = garmentWords(outfit);
-    const sameWornGarmentInShot = shotGarments.some((g) => wornGarments.includes(g));
+    // Only embodied-owner shots suppress already-described clothing here.
+    // A separate portrait may carry an explicit Messenger wardrobe override
+    // even when the generated shot mentions the same garment category.
+    const sameWornGarmentInShot = cameraOwner && shotGarments.some((g) => wornGarments.includes(g));
     if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe && !sameWornGarmentInShot)
       established.push("clothing: " + outfit);
     if (actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
