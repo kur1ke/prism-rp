@@ -150,8 +150,19 @@
       // message or changes an existing conversation.
       if (svc.state && typeof svc.state.initializeOutfit === "function") {
         const init = await svc.state.initializeOutfit(ctx.provider(), chosenSetup);
-        if (S.chatId === id && init && !["ok", "skipped", "already-known"].includes(init.status))
-          ui.toast("Начальную одежду определить не удалось; она пока неизвестна, а первое фото может её установить.", true);
+        if (S.chatId === id && init && !["ok", "skipped", "already-known", "stale"].includes(init.status)) {
+          const reasons = {
+            timeout: "истекло время ожидания RP-модели",
+            "plugin-unavailable": "Perchance ai-text-plugin недоступен",
+            "provider-rejected": "RP Provider отклонил запрос",
+            "provider-error": "RP Provider не ответил",
+            unavailable: "RP Provider не настроен",
+            overflow: "служебный запрос превышает бюджет контекста",
+            storage: "не удалось сохранить результат",
+          };
+          const detail = reasons[init.reason] || (init.reason && init.reason.length <= 160 ? init.reason : "ответ модели не прошёл проверку");
+          ui.toast("Переписка создана. Начальную одежду определить не удалось: " + detail + ". Подробности — в Debug.", true);
+        }
       }
     }
     // Another new-chat/navigation action may have replaced this request while
@@ -194,8 +205,8 @@
     "open-chat": (t) => openChat(t.dataset.id),
     rail: () => { $("#rail").classList.toggle("open"); ui.syncScrim(); },
     "reload-page": () => location.reload(),
-    "modal-bg": (t, e) => { if (e.target === t) { S.modal = null; ui.renderModal(); } },
-    "modal-close": () => { S.modal = null; ui.renderModal(); },
+    "modal-bg": (t, e) => { if (e.target === t && !(S.modal && S.modal.creating)) { S.modal = null; ui.renderModal(); } },
+    "modal-close": () => { if (S.modal && S.modal.creating) return; S.modal = null; ui.renderModal(); },
   }, ...controllers.map((c) => c.actions));
   const chatCtl = controllers[0];
 
@@ -232,7 +243,7 @@
     if (chatCtl.shortcut(e)) return;
     if (e.key === "Escape") {
       if (S.pop) return ui.closePop();
-      if (S.modal) { S.modal = null; return ui.renderModal(); }
+      if (S.modal) { if (S.modal.creating) return; S.modal = null; return ui.renderModal(); }
       if (S.editingMsg) { S.editingMsg = null; return ui.renderFeed(); }
       if (S.find) return ACTS["find-close"]();
       if (S.drawerOpen && ui.narrow()) return ACTS["drawer-close"]();

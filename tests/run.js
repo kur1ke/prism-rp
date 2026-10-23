@@ -3120,6 +3120,86 @@ async function foundationH() {
       assert.ok(!image.promptSources.imageLayers.identity);
     } finally { IB.generate = oldGen; ICP.compile = oldCompile; }
   });
+  await ta("INITIAL-UX-1: accept one fenced JSON outfit but not explanatory prose or partial list",async()=>{
+    const I=globalThis.PRP.stateInterpreter;
+    const fenced=(body,lang="json")=>["```"+lang,body,"```"].join("\n");
+    assert.deepStrictEqual(I.parseInitialOutfit(fenced('{"wear":{"worn":["короткий халатик"]}}')).worn,
+      ["короткий халатик"]);
+    assert.deepStrictEqual(I.parseInitialOutfit(fenced('{"wear":{"worn":[]}}',"")).worn,[]);
+    for (const raw of [
+      'Наряд: {"wear":{"worn":["халатик"]}}',
+      fenced('{"wear":{"worn":["халатик"],"complete":false}}'),
+      'Начало '+fenced('{"wear":{"worn":["халатик"]}}'),
+    ]) assert.ok(I.parseInitialOutfit(raw).error,"do not extract guessed/partial JSON: "+raw);
+  });
+  await ta("INITIAL-UX-2: pending creation modal is visible, informative and not dismissible via its actions",async()=>{
+    require(J("ui/views/messenger.js"));
+    require(J("ui/controllers/messenger.js"));
+    const card={id:"c1",name:"Орихимэ"};
+    const view=globalThis.PRP.views.newMessengerModal({cards:[card],card},
+      {kind:"new-messenger",cardId:"c1",creating:true});
+    assert.ok(view.includes('aria-busy="true"')&&view.includes('role="status"'));
+    assert.ok(view.includes("Определяем начальное состояние персонажа"));
+    assert.ok(view.includes("disabled"));
+    assert.ok(!view.includes('data-act="ms-create"'),"a pending modal cannot resubmit");
+    assert.ok(!view.includes('data-act="modal-close"'));
+  });
+  await ta("INITIAL-UX-3: duplicate Messenger create is rejected while one request is pending",async()=>{
+    require(J("ui/controllers/messenger.js"));
+    const oldDocument=globalThis.document;
+    const S={modal:{kind:"new-messenger",cardId:"c1",timeMode:"live",timeZone:"UTC"}};
+    let calls=0,renders=0,finish;
+    const done=new Promise(resolve=>finish=resolve);
+    const ctx={
+      S,svc:{messenger:{checkSetup:()=>null}},
+      ui:{$:(selector)=>selector==="#ms-tz"?{value:"UTC"}:{value:""},
+        renderModal:()=>renders++,toast:()=>{}},
+      nav:{newChat:async(_mode,_card,setup)=>{calls++;assert.strictEqual(setup.timeZone,"UTC");await done;return "chat";}},
+    };
+    globalThis.document={querySelector:()=>({value:"live"})};
+    try{
+      const action=globalThis.PRP.controllers.messenger(ctx).actions["ms-create"];
+      const first=action();
+      assert.ok(S.modal.creating);
+      await action();
+      assert.strictEqual(calls,1,"one user click may not start multiple chats");
+      assert.ok(renders>=1);
+      finish();
+      await first;
+      assert.strictEqual(S.modal,null,"modal closes after creation resolves");
+    }finally{globalThis.document=oldDocument;finish();}
+  });
+  await ta("INITIAL-UX-4: malformed RP response persists only a classified failure, not guessed canon",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id,{timeZone:"UTC",timeMode:"live"});
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const old=globalThis.PRP.llm.simple;
+    try{
+      globalThis.PRP.llm.simple=async()=>"Сейчас на мне халатик";
+      const res=await h.ctx.svc.state.initializeOutfit({id:"rp",kind:"perchance"},{timeZone:"UTC"});
+      assert.strictEqual(res.status,"error");assert.strictEqual(res.reason,"Ожидался JSON полного наряда");
+      const stored=await h.ctx.DB.get("chats",h.ctx.chat().id);
+      assert.ok(stored.initialOutfitCheck&&stored.initialOutfitCheck.reason===res.reason);
+      assert.strictEqual(stored.initialWear,undefined,"invalid model response may not become clothing canon");
+      assert.ok(!JSON.stringify(stored).includes("Сейчас на мне халатик"),"do not persist raw model output");
+      assert.strictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.known,false);
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
+  await ta("INITIAL-UX-5: provider timeout is distinguished from malformed JSON",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id,{timeZone:"UTC",timeMode:"live"});
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const old=globalThis.PRP.llm.simple;
+    try{
+      globalThis.PRP.llm.simple=async()=>{throw Error("превышено время ожидания 20000 мс");};
+      const res=await h.ctx.svc.state.initializeOutfit({id:"rp",kind:"perchance"},{timeZone:"UTC"});
+      assert.deepStrictEqual(res,{status:"error",reason:"timeout"});
+      assert.strictEqual(h.ctx.chat().initialOutfitCheck.reason,"timeout");
+      assert.strictEqual(h.ctx.chat().initialWear,undefined);
+    }finally{globalThis.PRP.llm.simple=old;}
+  });
   await ta("INITIAL-OUTFIT-1: full hidden response parser rejects incomplete or ungrounded clothing",async()=>{
     const I=globalThis.PRP.stateInterpreter;
     const prompt=I.initialOutfitInstruction({name:"Орихимэ",description:"Живёт дома",scenario:"Дома ночью"},{timeZone:"UTC",timeMode:"live"});

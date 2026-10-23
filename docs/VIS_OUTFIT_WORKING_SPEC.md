@@ -232,6 +232,20 @@ the new chat record property is included in normal chat backup storage.
 Rollback removes the origin event from newly created chats, which changes
 their initial canon: backups must be preserved for intentional restoration.
 
+**Creating-chat UX / failure diagnostics:** Keep the creation modal open
+with a visible live status until the ONE RP-provider request finishes; duplicate
+clicks, backdrop and Escape cannot start another chat or make the running
+operation look abandoned. The modal closes on result or thrown error. Provider
+failure, timeout and malformed JSON get distinct user-visible explanations.
+Only the bounded classification of a failed initial request is stored in
+`chat.initialOutfitCheck` and displayed in Debug → Errors; no raw model output,
+prompt, partial garment list or hidden narrative message is saved. A single
+Markdown `json` code fence around a **complete** valid JSON payload is accepted
+for provider compatibility; leading prose, extracted substrings, a model
+`complete:false`, or malformed/multi-object responses still fail closed.
+If initialization fails, the Messenger chat still opens and wear stays unknown,
+never silently empty.
+
 **Manual mirror:** Create a NEW test Messenger chat using an RP model
 available for `llm.simple`. Inspect Debug → Events/Tracker; confirm no
 hidden chat bubble exists, full list including any underwear is present

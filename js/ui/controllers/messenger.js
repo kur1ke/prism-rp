@@ -35,14 +35,24 @@
         if (result && result.status === "error") ui.toast("Не удалось извлечь состояние: проверьте подробности анализа.", true);
       },
       "ms-create": async () => {
+        if (!S.modal || S.modal.kind !== "new-messenger" || S.modal.creating) return;
         const tz = $("#ms-tz").value.trim(), mode = radio("ms-mode") || "live";
         const manualNow = mode === "manual" ? MT.toIso(MT.fromLocal($("#ms-manual").value, tz)) : null;
         const setup = { timeZone: tz, timeMode: mode, manualNow };
         const err = svc.messenger.checkSetup(setup);
         if (err) { ui.toast(err, true); return; }
-        const cardId = S.modal && S.modal.cardId;
-        S.modal = null; ui.renderModal();
-        await nav.newChat("messenger", cardId, setup);
+        // Keep the modal visible while the new chat and its hidden initial
+        // state are prepared. One active request = one click, not a toast loop.
+        if (!S.modal || S.modal.kind !== "new-messenger" || S.modal.creating) return;
+        const cardId = S.modal.cardId;
+        const pending = Object.assign({}, S.modal, { creating: true });
+        S.modal = pending;
+        ui.renderModal();
+        try {
+          await nav.newChat("messenger", cardId, setup);
+        } finally {
+          if (S.modal === pending) { S.modal = null; ui.renderModal(); }
+        }
       },
       "env-edit": () => { S.envEdit = { scope: svc.chat.path().length ? "branch" : "" }; ui.renderDrawer(); },
       "env-cancel": () => { S.envEdit = null; ui.renderDrawer(); },
