@@ -153,18 +153,18 @@
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.
         if (changes && !comp.compiled) throw new Error("Не удалось согласовать одежду с текущим состоянием: " + (comp.error || "нет результата"));
-        // Backend negative prompts affect the ENTIRE frame, not one actor.
-        // Only single-owner shots can safely receive a garment-specific
-        // global absence; other shots rely on the canonical scene compiler.
+        if (changes && !comp.wearValidated)
+          throw new Error("Не удалось согласовать предметные ограничения с каноном.");
+        // The same compiler response binds English negative tags to the
+        // source-indexed removed garments. Never make a second model call.
         const singleOwner = (composed.ownerPresent || composed.cameraOwner) &&
           !composed.userPresent && IC.subjectCount(comp.text) <= 1;
-        let wearTranslation = { ok: true, negative: "", items: [] };
-        if (singleOwner && canonicalWear && canonicalWear.removed && canonicalWear.removed.length) {
-          wearTranslation = await ICP.compileWear(canonicalWear, generateText);
-          if (!wearTranslation.ok) throw new Error("Не удалось перевести снятую одежду: " + (wearTranslation.error || "неизвестная ошибка"));
-        }
+        const wearNegative = singleOwner ? String(comp.negative || "") : "";
+        if (changes && canonicalWear.removed && canonicalWear.removed.length &&
+            (!comp.negative || !Array.isArray(comp.wearItems)))
+          throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
-          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative: wearTranslation.negative });
+          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative });
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
@@ -176,7 +176,7 @@
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
           promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null,
-            wearConstraints: { items: wearTranslation.items, negative: wearTranslation.negative,
+            wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
               globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]) } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
