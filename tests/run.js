@@ -3199,7 +3199,8 @@ async function foundationH() {
       const res=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
       assert.strictEqual(res.status,"ok",JSON.stringify(res));
       const sw=h.chat.path().slice(-1)[0].swipes[0];
-      assert.strictEqual(sw.stateEvents[0].evidenceType,undefined,"caption evidence applied first");
+      assert.ok(sw.stateEvents.every(e=>e.evidenceType==="draw"),
+        "an uncorrelated lexical caption fallback must not undo the validated current photo");
       assert.strictEqual(sw.stateEvents[sw.stateEvents.length-1].evidenceType,"draw",
         "selfie is the latest observation within the same message");
       const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
