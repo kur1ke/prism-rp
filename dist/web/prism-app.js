@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "189811003259a035dfcf5d4d43dd1579f5e1a260";
+  window.PRISM_RP_BUILD_SHA = "79c907a026af9bac0e0fd7b0238fcee0a875a3c3";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4378,15 +4378,82 @@
   // Wear facts are derived from the selected swipe path; there is no second
   // persisted inventory. A removed item remains explicitly absent even if
   // the rest of the outfit has never been established.
-  const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: { worn: [], removed: [] }, intentions: [], notes: [] });
+  // Canonical state is folded, never persisted as a separate inventory.
+  // "known" distinguishes no positive evidence from an established empty list;
+  // "complete" means a full outfit was explicitly established, not guessed.
+  // fields.wear below is ONLY a compatibility projection, never an input.
+  const emptyWear = () => ({ known: false, complete: false, worn: [], removed: [], partiallyWorn: [], last: null });
+  const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: emptyWear(), intentions: [], notes: [] });
   const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
+
+  function wearDatum(actor) {
+    const wear = actor && actor.wearState;
+    if (!wear || !wear.known) return null;
+    const items = wear.worn.concat(wear.partiallyWorn)
+      .slice().sort((a, b) => (a.order || 0) - (b.order || 0))
+      .map((x) => x.item);
+    const last = wear.last || { certainty: "established", source: { kind: "legacy" } };
+    return { value: items, certainty: last.certainty, source: clone(last.source) };
+  }
+
+  function syncWearProjection(actor) {
+    const datum = wearDatum(actor);
+    if (datum) actor.fields.wear = datum;
+    else delete actor.fields.wear;
+  }
+
+  // One transition owns all three disjoint garment sets. Projections are
+  // rebuilt after the transition; no event writes fields.wear independently.
+  function transitionWear(actor, event, source) {
+    const wear = actor.wearState;
+    const buckets = ["worn", "removed", "partiallyWorn"];
+    const previous = buckets.flatMap((key) => wear[key]);
+    const orderOf = (item) => {
+      const current = previous.find((x) => sameGarment(x.item, item));
+      return current ? current.order || 0 : Math.max(-1, ...previous.map((x) => x.order == null ? -1 : x.order)) + 1;
+    };
+    const drop = (item) => {
+      for (const key of buckets) wear[key] = wear[key].filter((x) => !sameGarment(x.item, item));
+    };
+    const fact = (item, order, placement) => ({
+      item, order, certainty: event.certainty, source: clone(source),
+      ...(placement ? { placement } : {}),
+    });
+    if (event.action === "set" || event.action === "clear") {
+      wear.known = true;
+      wear.complete = true;
+      wear.worn = event.action === "set"
+        ? event.value.filter((item, index) => event.value.findIndex((x) => sameGarment(x, item)) === index)
+          .map((item, i) => fact(item, i))
+        : [];
+      wear.removed = [];
+      wear.partiallyWorn = [];
+    } else {
+      if (event.action === "add" || event.action === "adjust") wear.known = true;
+      for (const item of event.value) {
+        const order = orderOf(item);
+        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) {
+          // Duplicate declarations do not change original item evidence.
+          wear.removed = wear.removed.filter((x) => !sameGarment(x.item, item));
+          continue;
+        }
+        drop(item);
+        const target = event.action === "remove" ? "removed" :
+          event.action === "adjust" ? "partiallyWorn" : "worn";
+        wear[target].push(fact(item, order, event.action === "adjust" ? event.placement : ""));
+      }
+    }
+    wear.last = { certainty: event.certainty, source: clone(source) };
+    syncWearProjection(actor);
+  }
   // Reference IDs are only meaningful inside one branch-derived snapshot.
   // The source of each item is the original reported/established event.
   function references(state, actorId) {
     const actor = state && state.actors && state.actors[actorId];
     if (!actor || !actor.wearState || !Array.isArray(actor.wearState.worn)) return [];
-    return actor.wearState.worn.slice(0, 12).map((x, i) => ({
+    return actor.wearState.worn.concat(actor.wearState.partiallyWorn || [])
+      .sort((a, b) => (a.order || 0) - (b.order || 0)).slice(0, 12).map((x, i) => ({
       id: "wear:" + actorId + ":" + i, actor: actorId, field: "wear", action: "remove",
       item: x.item, source: clone(x.source),
     }));
@@ -4398,12 +4465,15 @@
     if (!ALLOWED_ACTORS.has(e.actor)) return "неизвестный участник";
     if (!FIELDS.includes(e.field)) return "неизвестное поле";
     if (!CERTAINTY.has(e.certainty)) return "неизвестный статус";
-    if (!["set", "clear", "add", "remove"].includes(e.action)) return "неизвестное действие";
-    if (["add", "remove"].includes(e.action) && e.field !== "wear") return "дополнение допустимо только для одежды";
+    if (!["set", "clear", "add", "remove", "adjust"].includes(e.action)) return "неизвестное действие";
+    if (["add", "remove", "adjust"].includes(e.action) && e.field !== "wear") return "дополнение допустимо только для одежды";
+    if (e.action === "adjust" && (typeof e.placement !== "string" || !e.placement.trim() ||
+        e.placement.length > 160 || !str(e.evidence).includes(e.placement))) return "положение одежды не подтверждается цитатой";
+    if (e.action === "adjust" && (!Array.isArray(e.value) || e.value.length !== 1)) return "изменение положения требует один предмет";
     if (source && source.role === "user" && e.actor !== "user") return "пользователь не управляет чужим персонажем";
     if (source && source.role === "assistant" && e.actor !== "char") return "модель не управляет пользователем";
     if (e.certainty === "established" && source && source.mode === "messenger" && source.role !== "manual") return "сообщения мессенджера не доказывают физическое состояние";
-    if (["set", "add", "remove"].includes(e.action)) {
+    if (["set", "add", "remove", "adjust"].includes(e.action)) {
       if (LIST.has(e.field)) {
         if (!Array.isArray(e.value) || e.value.length < 1 || e.value.length > 12 || e.value.some((x) => typeof x !== "string" || !x.trim() || x.length > 160)) return "некорректный список";
       } else if (typeof e.value !== "string" || !e.value.trim() || e.value.length > 240) return "некорректное значение";
@@ -4463,6 +4533,7 @@
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
       value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
+      ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
   }
@@ -4474,47 +4545,16 @@
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
-    let value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
-    const previous = actor.fields.wear;
-    if (e.field === "wear" && (e.action === "add" || e.action === "remove") && e.certainty !== "intent") {
-      // Absence is a first-class fact, not the complement of a fully-known
-      // garment list. Never invent what else is worn after a removal.
-      const list = previous && Array.isArray(previous.value) ? previous.value.slice() : [];
-      value = e.action === "add"
-        ? list.concat(e.value.filter((x) => !list.some((y) => sameGarment(x, y))))
-        : list.filter((x) => !e.value.some((y) => sameGarment(x, y)));
-    }
-    const datum = { value, certainty: e.certainty, source: { messageId: source && source.messageId || null,
-      swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence } };
+    const value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
+    const provenance = { messageId: source && source.messageId || null,
+      swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence };
     if (e.certainty === "intent") {
-      actor.intentions.push({ field: e.field, value, ...datum.source });
+      actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
     } else {
-      actor.intentions = actor.intentions.filter((i) => i.field !== e.field);
-      if (e.field === "wear") {
-        if (e.action === "set" || e.action === "clear") {
-          // Only an explicit *complete* outfit replacement or reset invalidates
-          // old absence facts. Partial additions do not.
-          actor.wearState.removed = [];
-          actor.wearState.worn = e.action === "set" ? e.value.map((item) => ({ item, source: clone(datum.source) })) : [];
-        } else if (e.action === "remove") {
-          actor.wearState.worn = actor.wearState.worn.filter((x) => !e.value.some((item) => sameGarment(x.item, item)));
-          const removed = actor.wearState.removed;
-          for (const item of e.value) {
-            const existing = removed.findIndex((x) => sameGarment(x.item, item));
-            if (existing >= 0) removed.splice(existing, 1);
-            removed.push({ item, certainty: e.certainty, source: datum.source });
-          }
-        } else if (e.action === "add") {
-          actor.wearState.removed = actor.wearState.removed.filter((x) => !e.value.some((item) => sameGarment(x.item, item)));
-          for (const item of e.value) {
-            if (!actor.wearState.worn.some((x) => sameGarment(x.item, item))) actor.wearState.worn.push({ item, source: clone(datum.source) });
-          }
-        }
-        // A removal without established prior wear is *not* an empty outfit:
-        // keep wear unknown and preserve only explicit negative facts.
-        if (previous || e.action !== "remove") actor.fields.wear = datum;
-      } else actor.fields[e.field] = datum;
+      actor.intentions = actor.intentions.filter((intent) => intent.field !== e.field);
+      if (e.field === "wear") transitionWear(actor, e, provenance);
+      else actor.fields[e.field] = { value, certainty: e.certainty, source: provenance };
     }
     return out;
   }
@@ -4532,21 +4572,26 @@
         hair: legacy.visualHair, nearby: legacy.nearby, ongoing: legacy.ongoing, availability: legacy.availability };
       for (const [field, v] of Object.entries(compat)) {
         if (v == null || (Array.isArray(v) && !v.length) || (field === "availability" && v === "unknown")) continue;
-        st.actors.char.fields[field] = { value: clone(v), certainty: "established", source: { kind: "legacy-manual" } };
-        if (field === "wear" && Array.isArray(v)) st.actors.char.wearState.worn = v.map((item) => ({ item, source: { kind: "legacy-manual" } }));
+        if (field === "wear" && Array.isArray(v))
+          transitionWear(st.actors.char, { action: "set", value: clone(v), certainty: "established" }, { kind: "legacy-manual" });
+        else st.actors.char.fields[field] = { value: clone(v), certainty: "established", source: { kind: "legacy-manual" } };
       }
     }
     let sceneCursor = null;
     const aliases = { char: opts.charName, user: opts.userName };
     const normName = (x) => String(x || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
-    function syncSceneActor(actorId, field, sceneValue, source) {
-      st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
-      // A legacy scene wear directive is an authoritative full resulting
-      // state; old removed items must not override that explicit state.
+    function syncSceneActor(actorId, field, sceneValue, source, fullOutfit = true) {
+      // Legacy Scene stores a resulting full wear list. It remains a single
+      // authoritative replacement in the new canonical fold.
       if (field === "wear") {
-        st.actors[actorId].wearState.removed = [];
-        st.actors[actorId].wearState.worn = (Array.isArray(sceneValue) ? sceneValue : []).map((item) => ({ item, source: clone(source) }));
-      }
+        const actor = st.actors[actorId];
+        const previouslyComplete = actor.wearState.complete;
+        transitionWear(actor,
+          { action: "set", value: Array.isArray(sceneValue) ? clone(sceneValue) : [], certainty: "established" }, source);
+        // Scene.add/remove supplies a resulting list, not evidence that the
+        // character's entire outfit was established. Preserve that distinction.
+        if (!fullOutfit) actor.wearState.complete = previouslyComplete;
+      } else st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
     }
     function charInScene(cursor, actorName) {
       const key = Object.keys(cursor.chars || {}).find((n) => normName(n) === normName(actorName));
@@ -4580,7 +4625,7 @@
             const ch = charInScene(sceneCursor, name);
             if (!ch) continue;
             const field = op.key === "pose" ? "pose" : "wear";
-            syncSceneActor(actorId, field, field === "pose" ? ch.pose : ch.wear, { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+            syncSceneActor(actorId, field, field === "pose" ? ch.pose : ch.wear, { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 }, op.key === "wear");
           }
         }
       }
@@ -4598,11 +4643,15 @@
 
   // Одна каноническая запись в обоих режимах; вывод в разные перспективы ниже.
   function fieldOf(snapshot, actor, field) {
-    return snapshot && snapshot.actors && snapshot.actors[actor] && snapshot.actors[actor].fields[field] || null;
+    const current = snapshot && snapshot.actors && snapshot.actors[actor];
+    if (!current) return null;
+    if (field === "wear" && current.wearState && typeof current.wearState.known === "boolean")
+      return wearDatum(current);
+    return current.fields[field] || null;
   }
   function forCharacter(snapshot) {
     const a = snapshot && snapshot.actors && snapshot.actors.char;
-    const result = { location: null, activity: null, visualWear: [], visualWearRemoved: a ? clone(a.wearState.removed) : [], visualPose: null, visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
+    const result = { location: null, activity: null, visualWear: [], visualWearRemoved: a ? clone(a.wearState.removed) : [], visualWearPartial: a ? clone(a.wearState.partiallyWorn || []) : [], visualPose: null, visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
     const mapping = { location: "location", activity: "activity", wear: "visualWear", pose: "visualPose", hair: "visualHair", nearby: "nearby", ongoing: "ongoing", availability: "availability" };
     for (const [field, key] of Object.entries(mapping)) {
       const datum = fieldOf(snapshot, "char", field);
@@ -4614,13 +4663,21 @@
   function forUser(snapshot, mode) {
     const view = { mode, visible: {}, reported: {}, unknown: [], intentions: [] };
     const char = snapshot && snapshot.actors && snapshot.actors.char || emptyActor("");
-    for (const [field, datum] of Object.entries(char.fields)) {
+    for (const field of FIELDS) {
+      const datum = fieldOf(snapshot, "char", field);
+      if (!datum) continue;
       if (mode === "rp" && datum.certainty === "established") view.visible[field] = clone(datum.value);
       else if (datum.certainty === "reported") view.reported[field] = clone(datum.value);
     }
     if (char.wearState.removed.length) {
       const key = mode === "rp" && char.wearState.removed.every((x) => x.certainty === "established") ? "visible" : "reported";
       view[key].wearRemoved = char.wearState.removed.map((x) => x.item);
+    }
+    if (char.wearState.partiallyWorn && char.wearState.partiallyWorn.length) {
+      for (const fact of char.wearState.partiallyWorn) {
+        const target = mode === "rp" && fact.certainty === "established" ? view.visible : view.reported;
+        (target.wearPartial = target.wearPartial || []).push(clone(fact));
+      }
     }
     view.intentions = char.intentions.slice();
     return view;
@@ -4638,6 +4695,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
+  const TRACK = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
   const clone = (v) => JSON.parse(JSON.stringify(v));
 
   const WORLD_FIELDS = Object.freeze([
@@ -4658,6 +4716,7 @@
     }
     out.fieldStatus = clone(known.fieldStatus || {});
     out.visualWearRemoved = clone(known.visualWearRemoved || []);
+    out.visualWearPartial = clone(known.visualWearPartial || []);
     out.intentions = clone(known.intentions || []);
     return out;
   }
@@ -4674,11 +4733,12 @@
       const previous = out.chars[name] || { wear: [], pose: "", mood: "" };
       const projected = Object.assign({}, previous);
       for (const [field, target] of SCENE_FIELDS) {
-        if (actor.fields[field]) projected[target] = clone(actor.fields[field].value == null ? (field === "wear" ? [] : "") : actor.fields[field].value);
+        const datum = TRACK.fieldOf(tracked.state, actorId, field);
+        if (datum) projected[target] = clone(datum.value == null ? (field === "wear" ? [] : "") : datum.value);
       }
-      // Only materialize an actor if they were already present in the scene or
-      // have state facts. Do not invent an extra actor in a POV image.
-      if (out.chars[name] || SCENE_FIELDS.some(([field]) => actor.fields[field])) out.chars[name] = projected;
+      // Materialize from canonical fields, not a possibly stale compatibility
+      // mirror. Unknown wear must not create a fictional actor in a POV shot.
+      if (out.chars[name] || SCENE_FIELDS.some(([field]) => TRACK.fieldOf(tracked.state, actorId, field))) out.chars[name] = projected;
     }
     return out;
   }
@@ -4689,6 +4749,8 @@
       actor,
       removed: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
         tracked.state.actors[actor].wearState.removed) || []),
+      partiallyWorn: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
+        tracked.state.actors[actor].wearState.partiallyWorn) || []),
     }));
   }
 
