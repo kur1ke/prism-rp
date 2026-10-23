@@ -3144,6 +3144,9 @@ async function foundationH() {
       assert.strictEqual(state.actors.char.wearState.worn[0].source.evidenceType,"draw");
       assert.strictEqual(state.actors.char.wearState.worn[0].source.messageId,m.id);
       assert.strictEqual(state.actors.user.wearState.known,false);
+      const prism=h.prism.build(h.chat.path());
+      assert.ok(allText(prism.messages).includes("white oversized t-shirt"),
+        "the next roleplay turn must receive clothing learned from the photo");
     }finally{globalThis.PRP.llm.simple=old;}
   });
   await ta("VIS-DRAW-SOURCE-2: silent playful selfie changes garment placement and removes only explicitly removed item",async()=>{
@@ -3178,6 +3181,30 @@ async function foundationH() {
       assert.deepStrictEqual(wear.removed.map(x=>x.item),["shorts"]);
       assert.deepStrictEqual(wear.worn,[]);
       assert.strictEqual(wear.complete,false);
+    }finally {globalThis.PRP.llm.simple=old;}
+  });
+  await ta("VIS-DRAW-SOURCE-2B: author photo has final say about the current moment when caption contradicts it",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"На мне шорты");
+    m.swipes[0].draws=[{prompt:"current mirror selfie, shorts removed, white t-shirt",ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    const old=globalThis.PRP.llm.simple;
+    try{
+      globalThis.PRP.llm.simple=async ()=>JSON.stringify({events:[
+        {actor:"char",field:"wear",action:"remove",value:["shorts"],certainty:"reported",
+          evidence:"shorts removed",evidenceType:"draw",visualScope:"current-self"}
+      ]});
+      const res=await h.ctx.svc.state.observeMessage(h.chat.path().slice(-1)[0],{id:"fake"});
+      assert.strictEqual(res.status,"ok",JSON.stringify(res));
+      const sw=h.chat.path().slice(-1)[0].swipes[0];
+      assert.strictEqual(sw.stateEvents[0].evidenceType,undefined,"caption evidence applied first");
+      assert.strictEqual(sw.stateEvents[sw.stateEvents.length-1].evidenceType,"draw",
+        "selfie is the latest observation within the same message");
+      const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(wear.removed.map(x=>x.item),["shorts"]);
+      assert.deepStrictEqual(wear.worn.map(x=>x.item),[]);
     }finally {globalThis.PRP.llm.simple=old;}
   });
   await ta("VIS-DRAW-SOURCE-3: forged, off-frame, other-source, and stale-swipe visual facts cannot enter state",async()=>{
