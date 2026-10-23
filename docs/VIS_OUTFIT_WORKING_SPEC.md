@@ -152,6 +152,39 @@ live-provider sampling. No changes to Image Compiler, A1111 negative
 constraints or `[draw:]` authority are included. Validate manual Perchance
 and live Russian dialogue separately.
 
+## VIS-OUTFIT-1C-1 — canonical image input contract (testing candidate)
+
+The image service must derive one StateResolver projection from the **frozen image
+origin path/swipe**. StateResolver supplies `worn`, `removed`, and
+`partiallyWorn` facts for each actor; `imgCompose` uses only the `char`
+slice if that actor is the visible owner or owns the camera. Other actors'
+facts are not transferred as this character's outfit. Card wardrobe presets
+are *not* current facts: when canonical absence/displacement is present, a
+full-outfit preset may not silently reintroduce a removed garment.
+
+The compiler sees compact canonical physical facts as **data**, not hidden
+instructions, and reconciles a shot's clothing claims with these facts.
+`[draw:]` continues to own composition, framing, pose, and visibility. It
+never writes state. Canonical clothing changes force compiler reconciliation
+even if the shot is already English or general translation is disabled.
+When that reconciliation fails, backend generation does not run.
+
+For a single-character shot, the image adapter translates **only the current
+removed item names** to source-indexed English garment tags using a bounded
+strict-JSON compiler response. It must provide precisely one safe syntactic
+tag per known removed item, never invent a new absent item or exposed body
+part; malformed/missing translation fails before generation. These tags enter
+the image backend's global negative prompt. Multi-character shots cannot use
+a global garment negative safely; they use the canonical scene reconciliation
+instead. `partiallyWorn` is *positive placement information*, not an absent
+garment. No second canonical store, parser, or inventory is created.
+
+The semantic correctness of model-produced English garment tags and the
+compiler's ability to remove all contradictory positive tokens are **NOT
+provable by schema validation alone**. Perchance, real text provider and
+A1111/Forge checks remain mandatory; until then this is a scoped candidate,
+not a claim of visual consistency or VIS-OUTFIT-1 closure.
+
 ## Staged implementation / CURRENT STATUS
 
 - **VIS-OUTFIT-1A (this PR):** reliable first-class `removed` facts with provenance despite unknown prior outfit; add/rewear cancellation and budgeted RP facts. CI tests only, real browser NOT RUN.
