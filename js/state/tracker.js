@@ -137,19 +137,21 @@
       return "draw не подтверждает полный комплект или очистку гардероба";
     if (drawn && e.visualScope !== "current-self")
       return "draw не подтверждён как актуальное изображение самого персонажа";
+    // A continued swipe may contain several shots. Only the final authored
+    // shot is its current visual statement; older pictures in that same swipe
+    // must not silently preserve stale clothing after a new photo was sent.
+    const currentDraw = source && Array.isArray(source.draws) && source.draws.length
+      ? source.draws[source.draws.length - 1] : null;
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
-      !Array.isArray(source.draws) ||
-      !source.draws.some((d) => d && typeof d.prompt === "string" &&
-        !!str(e.evidence) && d.prompt.includes(e.evidence))))
+      !currentDraw || typeof currentDraw.prompt !== "string" ||
+      !str(e.evidence) || !currentDraw.prompt.includes(e.evidence)))
       return "нет точного подтверждения в авторском draw";
     if (e.reference && (!source || (source.text == null && !drawn)))
       return "контекстная ссылка без текста действия";
     if (source && (source.text != null || drawn)) {
       // Current swipe's text OR authored shot proves only the quoted details.
       // Prior branch-local state may resolve an item's exact identity.
-      const evidenceText = drawn
-        ? source.draws.find((d) => d && typeof d.prompt === "string" && d.prompt.includes(e.evidence)).prompt
-        : String(source.text);
+      const evidenceText = drawn ? currentDraw.prompt : String(source.text);
       if (!str(e.evidence) || !evidenceText.includes(e.evidence))
         return "нет точного подтверждения в сообщении";
       if (e.reference) {
