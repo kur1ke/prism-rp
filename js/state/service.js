@@ -127,6 +127,15 @@
         prepared.providerId === (provider && provider.id) && prepared.options &&
         ["mode", "role", "text", "speakerName"].every((key) => prepared.options[key] === options[key]) &&
         JSON.stringify(prepared.options.recent) === JSON.stringify(options.recent);
+      if (prepared && typeof console !== "undefined" && /Я снял шарф\./.test(sourceText)) {
+        console.log("OBSERVER_DIFF_DEBUG", JSON.stringify({
+          sameInputs: !!sameInputs, preparedChat: prepared.chatId, liveChat: msg.chatId,
+          prepProv: prepared.providerId, liveProv: provider && provider.id,
+          equal: ["mode","role","text","speakerName"].map(k => [k,prepared.options[k] === options[k]]),
+          preRecent: prepared.options.recent, nowRecent: options.recent,
+          preRefs: prepared.options.references, nowRefs: options.references
+        }));
+      }
       let result;
       if (sameInputs) {
         const early = await prepared.promise;
