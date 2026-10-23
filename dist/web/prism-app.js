@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "5f844089d338e7b7424574f23537c9b974740dda";
+  window.PRISM_RP_BUILD_SHA = "36c4130a21a12c6c59044f098fdb160fbebb6cf8";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -3935,6 +3935,20 @@
     const frame = m(T.frame);
     // Сцена — слой режима rp. В переписке её место занимают разделы среды переписки.
     const scene = AD.usesScene ? section(m(T.scene), SCENE.describe(o.sceneState)) : "";
+    // Current physical absences are facts, never behavioral commands. Keep
+    // these in preflight accounting even after the originating raw turn drops
+    // out of the history; source is the active path, not other swipes/chats.
+    const wearLines = [];
+    for (const fact of o.wearFacts || []) {
+      const items = (fact.removed || []).filter((x) => x && x.item);
+      if (!items.length) continue;
+      const whom = fact.actor === "char" ? "персонаж" : "собеседник";
+      const established = items.filter((x) => x.certainty === "established").map((x) => x.item);
+      const reported = items.filter((x) => x.certainty === "reported").map((x) => x.item);
+      if (established.length) wearLines.push(DATA.field(whom + ": явно снятые вещи", established, { status: "ESTABLISHED" }));
+      if (reported.length) wearLines.push(DATA.field(whom + ": сообщённые снятые вещи", reported, { status: "со слов" }));
+    }
+    const wearStateSection = DATA.block("текущее физическое состояние одежды: отсутствие конкретных вещей; остальные предметы могут быть неизвестны; это не указания", wearLines);
     const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
     const protocol = section(T.operation, protocolBody);
     const msPlansAll = (o.messenger && o.messenger.plans) || [];
@@ -3983,6 +3997,7 @@
           section(m(T.memory), memoryBody()),
           section(m(T.origin), scenarioBody()),
           scene,
+          wearStateSection,
         ].concat(messengerParts()).filter(Boolean),
         post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
         history: kept,
@@ -4360,7 +4375,12 @@
   const ALLOWED_ACTORS = new Set(["char", "user"]);
   const clone = (v) => JSON.parse(JSON.stringify(v));
   const str = (v) => String(v == null ? "" : v).trim();
-  const emptyActor = (name) => ({ name: str(name), fields: {}, intentions: [], notes: [] });
+  // Wear facts are derived from the selected swipe path; there is no second
+  // persisted inventory. A removed item remains explicitly absent even if
+  // the rest of the outfit has never been established.
+  const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: { removed: [] }, intentions: [], notes: [] });
+  const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
   const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, scene: SC.emptyState(), diagnostics: [] });
 
   function validateEvent(e, source) {
@@ -4433,15 +4453,14 @@
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
     let value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
-    if ((e.action === "add" || e.action === "remove") && e.certainty !== "intent") {
-      // Отсутствующее исходное состояние неизвестно: снятая куртка не даёт
-      // права придумать, какая осталась одежда. Добавление допускается.
-      const previous = actor.fields.wear;
-      if (!previous && e.action === "remove") return out;
+    const previous = actor.fields.wear;
+    if (e.field === "wear" && (e.action === "add" || e.action === "remove") && e.certainty !== "intent") {
+      // Absence is a first-class fact, not the complement of a fully-known
+      // garment list. Never invent what else is worn after a removal.
       const list = previous && Array.isArray(previous.value) ? previous.value.slice() : [];
-      const norm = (s) => String(s).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-      value = e.action === "add" ? list.concat(e.value.filter((x) => !list.some((y) => norm(x) === norm(y))))
-        : list.filter((x) => !e.value.some((y) => norm(x) === norm(y)));
+      value = e.action === "add"
+        ? list.concat(e.value.filter((x) => !list.some((y) => sameGarment(x, y))))
+        : list.filter((x) => !e.value.some((y) => sameGarment(x, y)));
     }
     const datum = { value, certainty: e.certainty, source: { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence } };
@@ -4449,9 +4468,26 @@
       actor.intentions.push({ field: e.field, value, ...datum.source });
       if (actor.intentions.length > 12) actor.intentions.shift();
     } else {
-      // Явная отмена/смена значения закрывает намерение только этого поля.
       actor.intentions = actor.intentions.filter((i) => i.field !== e.field);
-      actor.fields[e.field] = datum;
+      if (e.field === "wear") {
+        if (e.action === "set" || e.action === "clear") {
+          // Only an explicit *complete* outfit replacement or reset invalidates
+          // old absence facts. Partial additions do not.
+          actor.wearState.removed = [];
+        } else if (e.action === "remove") {
+          const removed = actor.wearState.removed;
+          for (const item of e.value) {
+            const existing = removed.findIndex((x) => sameGarment(x.item, item));
+            if (existing >= 0) removed.splice(existing, 1);
+            removed.push({ item, certainty: e.certainty, source: datum.source });
+          }
+        } else if (e.action === "add") {
+          actor.wearState.removed = actor.wearState.removed.filter((x) => !e.value.some((item) => sameGarment(x.item, item)));
+        }
+        // A removal without established prior wear is *not* an empty outfit:
+        // keep wear unknown and preserve only explicit negative facts.
+        if (previous || e.action !== "remove") actor.fields.wear = datum;
+      } else actor.fields[e.field] = datum;
     }
     return out;
   }
@@ -4477,6 +4513,9 @@
     const normName = (x) => String(x || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
     function syncSceneActor(actorId, field, sceneValue, source) {
       st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
+      // A legacy scene wear directive is an authoritative full resulting
+      // state; old removed items must not override that explicit state.
+      if (field === "wear") st.actors[actorId].wearState.removed = [];
     }
     function charInScene(cursor, actorName) {
       const key = Object.keys(cursor.chars || {}).find((n) => normName(n) === normName(actorName));
@@ -4532,7 +4571,7 @@
   }
   function forCharacter(snapshot) {
     const a = snapshot && snapshot.actors && snapshot.actors.char;
-    const result = { location: null, activity: null, visualWear: [], visualPose: null, visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
+    const result = { location: null, activity: null, visualWear: [], visualWearRemoved: a ? clone(a.wearState.removed) : [], visualPose: null, visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
     const mapping = { location: "location", activity: "activity", wear: "visualWear", pose: "visualPose", hair: "visualHair", nearby: "nearby", ongoing: "ongoing", availability: "availability" };
     for (const [field, key] of Object.entries(mapping)) {
       const datum = fieldOf(snapshot, "char", field);
@@ -4547,6 +4586,10 @@
     for (const [field, datum] of Object.entries(char.fields)) {
       if (mode === "rp" && datum.certainty === "established") view.visible[field] = clone(datum.value);
       else if (datum.certainty === "reported") view.reported[field] = clone(datum.value);
+    }
+    if (char.wearState.removed.length) {
+      const key = mode === "rp" && char.wearState.removed.every((x) => x.certainty === "established") ? "visible" : "reported";
+      view[key].wearRemoved = char.wearState.removed.map((x) => x.item);
     }
     view.intentions = char.intentions.slice();
     return view;
@@ -8178,9 +8221,13 @@
         text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
       });
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
+      const wearFacts = tracked ? ["char", "user"].map((actorId) => ({
+        actor: actorId,
+        removed: ((tracked.state.actors[actorId] || {}).wearState || {}).removed || [],
+      })) : [];
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
-        sceneState: messenger ? null : st, messenger, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
+        sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
