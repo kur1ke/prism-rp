@@ -44,6 +44,21 @@
         return Promise.resolve({ status: "unavailable" });
       if (initializing.has(c.id)) return initializing.get(c.id);
       const id = c.id, cardId = c.cardId;
+      // Diagnostics are metadata on the new chat, never a second source
+      // of outfit truth. Do not persist prompts, raw model outputs or secrets.
+      async function failed(reason) {
+        const current = ctx.chat();
+        if (!current || current.id !== id || current.cardId !== cardId ||
+            S.chatId !== id || S.cardId !== cardId || chat().path().length ||
+            (S.messages || []).length || current.initialWear)
+          return { status: "stale" };
+        const next = Object.assign({}, current, {
+          initialOutfitCheck: { status: "error", reason: String(reason).slice(0, 160) },
+        });
+        try { await ctx.DB.put("chats", next); Object.assign(current, next); }
+        catch (_e) { /* Non-canonical diagnostics cannot block chat creation. */ }
+        return { status: "error", reason };
+      }
       const instruction = INT.initialOutfitInstruction(card, setup || {});
       const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
         ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
@@ -52,15 +67,21 @@
       const task = (async () => {
         let raw;
         try { raw = await simpleWithLimit(provider, instruction); }
-        catch (_e) { return { status: "error", reason: "model" }; }
+        catch (e) {
+          const message = String(e && e.message || e || "");
+          return failed(/превышено время ожидания/i.test(message) ? "timeout"
+            : /ai-text-plugin недоступен/i.test(message) ? "plugin-unavailable"
+            : /\b(?:401|403|429)\b/.test(message) ? "provider-rejected"
+            : "provider-error");
+        }
         const parsed = INT.parseInitialOutfit(raw);
-        if (parsed.error) return { status: "error", reason: parsed.error };
+        if (parsed.error) return failed(parsed.error);
         const event = TRACK.normalize({
           actor: "char", field: "wear", action: parsed.worn.length ? "set" : "clear",
           ...(parsed.worn.length ? { value: parsed.worn } : {}),
           certainty: "reported", evidence: "",
         }, { role: "initial", mode: "messenger" });
-        if (!event.event) return { status: "error", reason: event.error };
+        if (!event.event) return failed(event.error);
         // One origin event belongs to this exact new chat, never to a sibling
         // or to an already active conversation. A delayed response cannot
         // retroactively dress a character after the first message.
