@@ -194,6 +194,54 @@ provable by schema validation alone**. Perchance, real text provider and
 A1111/Forge checks remain mandatory; until then this is a scoped candidate,
 not a claim of visual consistency or VIS-OUTFIT-1 closure.
 
+## INITIAL-OUTFIT — exhaustive Messenger chat origin (testing candidate)
+
+**Agreement:** A new Messenger chat may ask its *selected RP Provider* one hidden
+question about the character's complete starting outfit, before the UI opens
+the chat. The reply must be `{"wear":{"worn":["…"]}}`: no `complete` flag is
+accepted or needed from the model, because this particular operation is a
+**closed-world declaration**. One listed housecoat and nothing else means that
+the character wears only that housecoat; no implicit underwear, shoes, or
+socks. An explicitly empty list means nothing is worn. This does **not**
+imply automatic visibility/exposure in every camera shot.
+
+**Implementation:** `ui/app.js.newChat` runs this only for newly created
+Messenger chats, after messenger time setup. `stateService.initializeOutfit`
+captures chat and card IDs, sends a bounded one-time data-only prompt through
+`ctx.provider()` (RP model, not Processing Provider), strictly parses the JSON
+and normalizes ONE `wear.set` or `wear.clear` event. It persists to
+`chat.initialWear` as a typed origin event, never as a visible chat message.
+`StateTracker.fold` replays the event before any selected-path message or
+explicit legacy/manual environment. It reuses the *same* canonical wear
+transition: `known=true`, `complete=true`; all later `add/remove/adjust`
+and branch/swipe transitions work on that state. No second inventory.
+
+`StateResolver` derives `wearComplete` for Messenger; the budgeted Prism
+context explicitly says the outfit list is complete and all unlisted layers
+are absent. Debug Tracker displays that status, Debug Events shows the
+chat-origin event separately from branch-message events. The card/scenario
+are quoted as *data* in the one-time prompt, never reused as instructions.
+
+**Failure / compatibility:** No model/provider, invalid/incomplete JSON,
+timeout, context overflow, storage failure, or a chat/branch change while
+the model thinks leaves the outfit **unknown** (not empty, naked, or a
+fabricated default). No auto-retry for existing/imported chats, and no
+retroactive initialization if the chat has already acquired messages or
+explicit environment wear. The event is optional on old chats/backups;
+the new chat record property is included in normal chat backup storage.
+Rollback removes the origin event from newly created chats, which changes
+their initial canon: backups must be preserved for intentional restoration.
+
+**Manual mirror:** Create a NEW test Messenger chat using an RP model
+available for `llm.simple`. Inspect Debug → Events/Tracker; confirm no
+hidden chat bubble exists, full list including any underwear is present
+and says complete, then take a selfie and silently adjust/remove a garment.
+Confirm next Prism retains the complete/changed wardrobe. Repeat with
+the RP model returning a single housecoat (no implied underwear), and
+with a provider error (unknown, not naked). Existing chats must remain
+unmodified. Real model fidelity, Perchance UI, Forge and backup restoration
+are NOT RUN by automated tests.
+
 ## VIS-DRAW-SOURCE — photographic evidence and image authority correction (testing candidate)
 
 **Motivation:** A Messenger character may write only “Вот фото” while its authored
