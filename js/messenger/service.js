@@ -13,7 +13,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const MT = PRP.messengerTime, ENV = PRP.messengerEnv, CONV = PRP.messengerConversation, BR = PRP.branch;
+  const MT = PRP.messengerTime, ENV = PRP.messengerEnv, CONV = PRP.messengerConversation, BR = PRP.branch, SR = PRP.stateResolver;
 
   const STORE = "messengerEnvironments";
   const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -58,14 +58,7 @@
       // совместимым базовым слоем; сообщения дополняют/изменяют его автоматически.
       if (ctx.svc.state) {
         const tracked = ctx.svc.state.context(path, { now: at, legacyWorld: w.world });
-        const known = tracked.character;
-        for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
-          if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
-          w.world[field] = known[field];
-        }
-        w.world.fieldStatus = known.fieldStatus;
-        w.world.visualWearRemoved = known.visualWearRemoved;
-        w.world.intentions = known.intentions;
+        w.world = SR.world(w.world, tracked);
       }
       const conv = CONV.derive(path, { now: at, record: env });
       const open = conv.promises.concat(conv.plans).filter((m) => m.status === "open").sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -210,14 +203,7 @@
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: t });
       if (ctx.svc.state) {
         const tracked = ctx.svc.state.context(path, { now: t, legacyWorld: w.world });
-        const known = tracked.character;
-        for (const field of ["location", "activity", "visualWear", "visualPose", "visualHair", "nearby", "ongoing", "availability"]) {
-          if (!Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) continue;
-          w.world[field] = known[field];
-        }
-        w.world.fieldStatus = known.fieldStatus;
-        w.world.visualWearRemoved = known.visualWearRemoved;
-        w.world.intentions = known.intentions;
+        w.world = SR.world(w.world, tracked);
       }
       const conv = CONV.derive(path, { now: t, record: env });
       const last = path[path.length - 1];
