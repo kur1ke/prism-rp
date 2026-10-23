@@ -26,6 +26,7 @@
     }
     out.fieldStatus = clone(known.fieldStatus || {});
     out.visualWearRemoved = clone(known.visualWearRemoved || []);
+    out.visualWearPartial = clone(known.visualWearPartial || []);
     out.intentions = clone(known.intentions || []);
     return out;
   }
@@ -57,6 +58,8 @@
       actor,
       removed: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
         tracked.state.actors[actor].wearState.removed) || []),
+      partiallyWorn: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
+        tracked.state.actors[actor].wearState.partiallyWorn) || []),
     }));
   }
 
