@@ -3286,6 +3286,24 @@ async function foundationH() {
       assert.deepStrictEqual(prev.initialWear.event.value,["белая футболка","шорты"]);
     }finally{globalThis.PRP.llm.simple=old;}
   });
+  await ta("INITIAL-OUTFIT-9: silently adjusted housecoat remains the only garment in a complete outfit",async()=>{
+    const T=globalThis.PRP.stateTracker;
+    const origin={schema:1,kind:"initial-outfit",event:{
+      actor:"char",field:"wear",action:"set",value:["короткий домашний халатик"],
+      certainty:"reported",evidence:""}};
+    const draw="camera=owner; короткий домашний халатик приподнят, вид на ноги";
+    const msg={id:"selfie",role:"assistant",swipeIdx:0,swipes:[{text:"Лови фото!",
+      draws:[{prompt:draw}],stateEvents:[{actor:"char",field:"wear",action:"adjust",
+        value:["короткий домашний халатик"],placement:"приподнят",
+        certainty:"reported",evidence:"короткий домашний халатик приподнят",
+        evidenceType:"draw",visualScope:"current-self"}]}]};
+    const wear=T.fold({mode:"messenger",initialWear:origin,path:[msg]}).actors.char.wearState;
+    assert.strictEqual(wear.complete,true);
+    assert.deepStrictEqual(wear.worn,[]);
+    assert.deepStrictEqual(wear.partiallyWorn.map(x=>x.item),["короткий домашний халатик"]);
+    assert.strictEqual(wear.partiallyWorn[0].placement,"приподнят");
+    assert.deepStrictEqual(wear.removed,[]);
+  });
   await ta("VIS-DRAW-SOURCE-1: selfie establishes first worn garment without textual clothing narration",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");
