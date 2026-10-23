@@ -142,7 +142,18 @@
       if (err) { ui.toast(err, true); return null; }
     }
     const id = await svc.chat.createChat(mode, cardId);
-    if (id && mode === "messenger") await svc.messenger.createFor(id, setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" });
+    if (id && mode === "messenger") {
+      const chosenSetup = setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" };
+      await svc.messenger.createFor(id, chosenSetup);
+      // The first hidden request belongs to the same RP provider as this
+      // character. Await it before exposing the chat; it never creates a
+      // message or changes an existing conversation.
+      if (svc.state && typeof svc.state.initializeOutfit === "function") {
+        const init = await svc.state.initializeOutfit(ctx.provider(), chosenSetup);
+        if (init && !["ok", "skipped", "already-known"].includes(init.status))
+          ui.toast("Начальную одежду определить не удалось; она пока неизвестна, а первое фото может её установить.", true);
+      }
+    }
     if (id) await openChat(id);
     return id;
   }
