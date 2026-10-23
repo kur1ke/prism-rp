@@ -314,7 +314,9 @@
     try { data = JSON.parse(raw.trim()); } catch (_e) { return { error: "Ожидался JSON полного наряда" }; }
     if (!data || typeof data !== "object" || Array.isArray(data) ||
         !data.wear || typeof data.wear !== "object" || Array.isArray(data.wear) ||
-        !Array.isArray(data.wear.worn)) return { error: "Отсутствует полный список wear.worn" };
+        !Array.isArray(data.wear.worn) ||
+        Object.keys(data).length !== 1 || Object.keys(data.wear).length !== 1)
+      return { error: "Ответ обязан содержать только wear.worn (без complete и других полей)" };
     const list = data.wear.worn;
     if (list.length > 12 || list.some((x) => typeof x !== "string" || !x.trim() ||
       x.length > 160 || /[\r\n<>]/.test(x) || /^(?:unknown|неизвестно|none|maybe|null|возможно)$/i.test(x.trim())))
