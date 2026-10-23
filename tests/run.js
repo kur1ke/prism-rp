@@ -3381,6 +3381,20 @@ async function foundationH() {
       assert.strictEqual(source.swipes[0].images[0].status,"error");
     } finally {ICP.compile=oldC;IB.generate=oldG;}
   });
+  await ta("VIS-OUTFIT-1C-12: Card NSFW appearance presets cannot undress a canonically clothed subject", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue",look:"base: orange hair",
+      nsfw:"nude: nude, nipples",loras:[{name:"ori",weight:0.7}]}};
+    const canonical=[{actor:"char",known:true,complete:false,
+      worn:[{item:"white nightgown"}],removed:[{item:"shorts"}],partiallyWorn:[]}];
+    const c=IC.compose({draw:"1girl, nude, on bed",card,scene:{chars:{Химэ:{wear:["white nightgown"]}},present:[]},
+      wearFacts:canonical,persona:{}});
+    assert.ok(!c.keep.includes("nipples") && !c.fixedKeep.includes("nude"),
+      "a shot-local keyword must not activate Card wardrobe/NSFW authority");
+    const final=IC.finalise({composed:c,compiled:"1girl, white nightgown, on bed",
+      stateCompiled:true,backend:"a1111",card,settings:{promptMode:"off"}});
+    assert.ok(!final.prompt.includes("nipples") && !final.prompt.includes("nude"),final.prompt);
+    assert.ok(final.prompt.includes("<lora:ori:0.7>") && final.prompt.includes("orihime_inoue"));
+  });
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
