@@ -3120,6 +3120,101 @@ async function foundationH() {
       assert.ok(!image.promptSources.imageLayers.identity);
     } finally { IB.generate = oldGen; ICP.compile = oldCompile; }
   });
+  await ta("VIS-DRAW-AUTH-1: a character-authored Messenger draw reaches backend unchanged despite incomplete Tracker", async () => {
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.8}],
+      wardrobe:"base: blue dress",nsfw:"nude: nipples"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const prev=h.chat.newMsg("assistant",null,"Я сняла шорты");
+    prev.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],certainty:"reported",evidence:"Я сняла шорты"}];
+    await h.chat.commitMessage(prev,prev.id);
+    const msg=h.chat.newMsg("assistant",prev.id,"Вот снимок.");
+    const draw="1girl, white t-shirt, shirt off shoulders, shorts on bed, selfie, cinematic lighting";
+    msg.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false,drawPromptMode:"tags"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;
+    let translations=0,backend;
+    try {
+      ICP.compile=async()=>{translations++;throw Error("a correctly authored draw must not be rewritten");};
+      IB.generate=async (_,x)=>{backend=x;return {dataUrl:"data:image/png;base64,AA==",seed:10,info:{width:512,height:512}};};
+      const live=h.S.messages.find(x=>x.id===msg.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:draw,ratio:"1:1"});
+      const im=live.swipes[0].images[0];
+      assert.strictEqual(im.status,"done",JSON.stringify(im));
+      assert.strictEqual(translations,0,"English tags already supplied by RP are sufficient");
+      assert.ok(backend.prompt.includes("shirt off shoulders")&&backend.prompt.includes("shorts on bed"),backend.prompt);
+      assert.ok(!backend.prompt.includes("blue dress")&&!backend.prompt.includes("nipples"),backend.prompt);
+      assert.ok(backend.prompt.includes("<lora:ori:0.8>") && backend.prompt.includes("orihime_inoue"),backend.prompt);
+      assert.ok(!backend.negative.split(",").map(x=>x.trim()).includes("shorts"),backend.negative);
+      assert.strictEqual(im.promptSources.drawAuthored,true);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),["шорты"],
+        "taking a photo doesn't rewrite canonical wear");
+    }finally {ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VIS-DRAW-AUTH-2: author-supplied visual intent compiles once without Tracker rewrite",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const prev=h.chat.newMsg("assistant",null,"Сняла шорты");
+    prev.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],certainty:"reported",evidence:"Сняла шорты"}];
+    await h.chat.commitMessage(prev,prev.id);
+    const msg=h.chat.newMsg("assistant",prev.id,"Посмотри сюда");
+    const draw="Орихимэ фотографирует себя перед зеркалом, в красном платье";
+    msg.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:true,drawPromptMode:"intent"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;
+    let calls=[],backend;
+    try{
+      ICP.compile=async (shot,opts)=>{calls.push({shot,opts});return {text:"1girl, orihime_inoue, red dress, mirror selfie",compiled:true};};
+      IB.generate=async (_,a)=>{backend=a;return {dataUrl:"data:image/png;base64,AA==",seed:1,info:{width:512,height:512}};};
+      const live=h.S.messages.find(x=>x.id===msg.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:draw,ratio:"1:1"});
+      assert.strictEqual(calls.length,1,JSON.stringify(calls));
+      assert.strictEqual(calls[0].opts.intentMode,true);
+      assert.strictEqual(calls[0].opts.wearState,undefined);
+      assert.ok(backend.prompt.includes("red dress"),backend.prompt);
+      assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
+      assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"intent");
+    }finally {ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VIS-DRAW-AUTH-3: concurrent Observer updates must not stale a character-authored shot",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    const parent=h.chat.newMsg("assistant",null,"На мне футболка");
+    await h.chat.commitMessage(parent,parent.id);
+    const msg=h.chat.newMsg("assistant",parent.id,"Селфи");
+    msg.swipes[0].draws=[{prompt:"1girl, selfie, white shirt",ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false,drawPromptMode:"tags"});
+    h.S.drawing=new Set();h.S.imgUrls={};h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldG=IB.generate;
+    let enter,release;
+    const inBackend=new Promise(r=>enter=r),finish=new Promise(r=>release=r);
+    try{
+      IB.generate=async()=>{enter();return finish;};
+      const live=h.S.messages.find(x=>x.id===msg.id);
+      const pending=h.ctx.svc.images.draw(live,live.swipes[0],msg.swipes[0].draws[0]);
+      await inBackend;
+      const p=h.S.messages.find(x=>x.id===parent.id);
+      p.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["футболка"],certainty:"reported",evidence:"На мне футболка"}];
+      await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(p)));
+      const d=h.S.messages.find(x=>x.id===msg.id);
+      d.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["блузка"],certainty:"reported",evidence:"Селфи"}];
+      await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(d)));
+      release({dataUrl:"data:image/png;base64,AA==",seed:1,info:{width:512,height:512}});
+      await pending;
+      const saved=await h.ctx.DB.get("messages",msg.id);
+      assert.strictEqual(saved.swipes[0].images[0].status,"done",JSON.stringify(saved.swipes[0].images[0]));
+      assert.strictEqual((await h.ctx.DB.get("images",saved.swipes[0].images[0].id)).chatId,"c1");
+    }finally {IB.generate=oldG;}
+  });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
     const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
