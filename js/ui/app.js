@@ -150,7 +150,7 @@
       // message or changes an existing conversation.
       if (svc.state && typeof svc.state.initializeOutfit === "function") {
         const init = await svc.state.initializeOutfit(ctx.provider(), chosenSetup);
-        if (init && !["ok", "skipped", "already-known"].includes(init.status))
+        if (S.chatId === id && init && !["ok", "skipped", "already-known"].includes(init.status))
           ui.toast("Начальную одежду определить не удалось; она пока неизвестна, а первое фото может её установить.", true);
       }
     }
