@@ -6,6 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
+  const TRACK = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
   const clone = (v) => JSON.parse(JSON.stringify(v));
 
   const WORLD_FIELDS = Object.freeze([
@@ -43,11 +44,12 @@
       const previous = out.chars[name] || { wear: [], pose: "", mood: "" };
       const projected = Object.assign({}, previous);
       for (const [field, target] of SCENE_FIELDS) {
-        if (actor.fields[field]) projected[target] = clone(actor.fields[field].value == null ? (field === "wear" ? [] : "") : actor.fields[field].value);
+        const datum = TRACK.fieldOf(tracked.state, actorId, field);
+        if (datum) projected[target] = clone(datum.value == null ? (field === "wear" ? [] : "") : datum.value);
       }
-      // Only materialize an actor if they were already present in the scene or
-      // have state facts. Do not invent an extra actor in a POV image.
-      if (out.chars[name] || SCENE_FIELDS.some(([field]) => actor.fields[field])) out.chars[name] = projected;
+      // Materialize from canonical fields, not a possibly stale compatibility
+      // mirror. Unknown wear must not create a fictional actor in a POV shot.
+      if (out.chars[name] || SCENE_FIELDS.some(([field]) => TRACK.fieldOf(tracked.state, actorId, field))) out.chars[name] = projected;
     }
     return out;
   }
