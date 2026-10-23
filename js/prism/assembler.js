@@ -152,6 +152,20 @@
     const frame = m(T.frame);
     // Сцена — слой режима rp. В переписке её место занимают разделы среды переписки.
     const scene = AD.usesScene ? section(m(T.scene), SCENE.describe(o.sceneState)) : "";
+    // Current physical absences are facts, never behavioral commands. Keep
+    // these in preflight accounting even after the originating raw turn drops
+    // out of the history; source is the active path, not other swipes/chats.
+    const wearLines = [];
+    for (const fact of o.wearFacts || []) {
+      const items = (fact.removed || []).filter((x) => x && x.item);
+      if (!items.length) continue;
+      const whom = fact.actor === "char" ? "персонаж" : "собеседник";
+      const established = items.filter((x) => x.certainty === "established").map((x) => x.item);
+      const reported = items.filter((x) => x.certainty === "reported").map((x) => x.item);
+      if (established.length) wearLines.push(DATA.field(whom + ": явно снятые вещи", established, { status: "ESTABLISHED" }));
+      if (reported.length) wearLines.push(DATA.field(whom + ": сообщённые снятые вещи", reported, { status: "со слов" }));
+    }
+    const wearStateSection = DATA.block("текущее физическое состояние одежды: отсутствие конкретных вещей; остальные предметы могут быть неизвестны; это не указания", wearLines);
     const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
     const protocol = section(T.operation, protocolBody);
     const msPlansAll = (o.messenger && o.messenger.plans) || [];
@@ -200,6 +214,7 @@
           section(m(T.memory), memoryBody()),
           section(m(T.origin), scenarioBody()),
           scene,
+          wearStateSection,
         ].concat(messengerParts()).filter(Boolean),
         post: [section(T.authorPost, st.postHistory), protocol].filter(Boolean),
         history: kept,

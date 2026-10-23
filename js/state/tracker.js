@@ -15,7 +15,12 @@
   const ALLOWED_ACTORS = new Set(["char", "user"]);
   const clone = (v) => JSON.parse(JSON.stringify(v));
   const str = (v) => String(v == null ? "" : v).trim();
-  const emptyActor = (name) => ({ name: str(name), fields: {}, intentions: [], notes: [] });
+  // Wear facts are derived from the selected swipe path; there is no second
+  // persisted inventory. A removed item remains explicitly absent even if
+  // the rest of the outfit has never been established.
+  const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: { removed: [] }, intentions: [], notes: [] });
+  const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
   const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, scene: SC.emptyState(), diagnostics: [] });
 
   function validateEvent(e, source) {
@@ -88,15 +93,14 @@
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
     let value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
-    if ((e.action === "add" || e.action === "remove") && e.certainty !== "intent") {
-      // Отсутствующее исходное состояние неизвестно: снятая куртка не даёт
-      // права придумать, какая осталась одежда. Добавление допускается.
-      const previous = actor.fields.wear;
-      if (!previous && e.action === "remove") return out;
+    const previous = actor.fields.wear;
+    if (e.field === "wear" && (e.action === "add" || e.action === "remove") && e.certainty !== "intent") {
+      // Absence is a first-class fact, not the complement of a fully-known
+      // garment list. Never invent what else is worn after a removal.
       const list = previous && Array.isArray(previous.value) ? previous.value.slice() : [];
-      const norm = (s) => String(s).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-      value = e.action === "add" ? list.concat(e.value.filter((x) => !list.some((y) => norm(x) === norm(y))))
-        : list.filter((x) => !e.value.some((y) => norm(x) === norm(y)));
+      value = e.action === "add"
+        ? list.concat(e.value.filter((x) => !list.some((y) => sameGarment(x, y))))
+        : list.filter((x) => !e.value.some((y) => sameGarment(x, y)));
     }
     const datum = { value, certainty: e.certainty, source: { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence } };
@@ -104,9 +108,26 @@
       actor.intentions.push({ field: e.field, value, ...datum.source });
       if (actor.intentions.length > 12) actor.intentions.shift();
     } else {
-      // Явная отмена/смена значения закрывает намерение только этого поля.
       actor.intentions = actor.intentions.filter((i) => i.field !== e.field);
-      actor.fields[e.field] = datum;
+      if (e.field === "wear") {
+        if (e.action === "set" || e.action === "clear") {
+          // Only an explicit *complete* outfit replacement or reset invalidates
+          // old absence facts. Partial additions do not.
+          actor.wearState.removed = [];
+        } else if (e.action === "remove") {
+          const removed = actor.wearState.removed;
+          for (const item of e.value) {
+            const existing = removed.findIndex((x) => sameGarment(x.item, item));
+            if (existing >= 0) removed.splice(existing, 1);
+            removed.push({ item, certainty: e.certainty, source: datum.source });
+          }
+        } else if (e.action === "add") {
+          actor.wearState.removed = actor.wearState.removed.filter((x) => !e.value.some((item) => sameGarment(x.item, item)));
+        }
+        // A removal without established prior wear is *not* an empty outfit:
+        // keep wear unknown and preserve only explicit negative facts.
+        if (previous || e.action !== "remove") actor.fields.wear = datum;
+      } else actor.fields[e.field] = datum;
     }
     return out;
   }
@@ -132,6 +153,9 @@
     const normName = (x) => String(x || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
     function syncSceneActor(actorId, field, sceneValue, source) {
       st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
+      // A legacy scene wear directive is an authoritative full resulting
+      // state; old removed items must not override that explicit state.
+      if (field === "wear") st.actors[actorId].wearState.removed = [];
     }
     function charInScene(cursor, actorName) {
       const key = Object.keys(cursor.chars || {}).find((n) => normName(n) === normName(actorName));
@@ -187,7 +211,7 @@
   }
   function forCharacter(snapshot) {
     const a = snapshot && snapshot.actors && snapshot.actors.char;
-    const result = { location: null, activity: null, visualWear: [], visualPose: null, visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
+    const result = { location: null, activity: null, visualWear: [], visualWearRemoved: a ? clone(a.wearState.removed) : [], visualPose: null, visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
     const mapping = { location: "location", activity: "activity", wear: "visualWear", pose: "visualPose", hair: "visualHair", nearby: "nearby", ongoing: "ongoing", availability: "availability" };
     for (const [field, key] of Object.entries(mapping)) {
       const datum = fieldOf(snapshot, "char", field);
@@ -202,6 +226,10 @@
     for (const [field, datum] of Object.entries(char.fields)) {
       if (mode === "rp" && datum.certainty === "established") view.visible[field] = clone(datum.value);
       else if (datum.certainty === "reported") view.reported[field] = clone(datum.value);
+    }
+    if (char.wearState.removed.length) {
+      const key = mode === "rp" && char.wearState.removed.every((x) => x.certainty === "established") ? "visible" : "reported";
+      view[key].wearRemoved = char.wearState.removed.map((x) => x.item);
     }
     view.intentions = char.intentions.slice();
     return view;

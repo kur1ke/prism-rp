@@ -3960,6 +3960,50 @@ async function unifiedTracker() {
     x = STATE.fold({ mode: "rp", userName: "Лёня", path: [before, first] });
     assert.deepStrictEqual(STATE.fieldOf(x, "user", "wear").value, ["джинсы"]);
   });
+  await ta("VIS-OUTFIT-1A-1: removal without known initial outfit is an absence fact, not an invented empty outfit", async () => {
+    const m = make("assistant", "Я сняла нижнюю рубашку", [Evt("char", "wear", "remove", ["рубашку"], "reported", "Я сняла нижнюю рубашку")], "a1");
+    const s = STATE.fold({ mode: "messenger", charName: "Орихимэ", path: [m] });
+    assert.strictEqual(STATE.fieldOf(s, "char", "wear"), null, "remaining clothes are unknown");
+    assert.deepStrictEqual(STATE.forCharacter(s).visualWear, [], "no clothes are invented");
+    assert.deepStrictEqual(STATE.forCharacter(s).visualWearRemoved.map((x) => x.item), ["рубашку"]);
+    assert.strictEqual(STATE.forCharacter(s).visualWearRemoved[0].source.messageId, "a1");
+    assert.strictEqual(STATE.forCharacter(s).visualWearRemoved[0].certainty, "reported");
+    assert.deepStrictEqual(STATE.forUser(s, "messenger").reported.wearRemoved, ["рубашку"]);
+  });
+  await ta("VIS-OUTFIT-1A-2: repeated removal is idempotent; putting the item back clears absence", async () => {
+    const a = make("assistant", "Я сняла куртку", [Evt("char", "wear", "remove", ["куртку"], "established", "Я сняла куртку")], "a");
+    const b = make("assistant", "Я ещё раз сняла куртку", [Evt("char", "wear", "remove", ["куртку"], "established", "Я ещё раз сняла куртку")], "b");
+    const c = make("assistant", "Я надела куртку", [Evt("char", "wear", "add", ["куртку"], "established", "Я надела куртку")], "c");
+    let st = STATE.fold({ mode: "rp", charName: "Орихимэ", path: [a, b] });
+    assert.deepStrictEqual(STATE.forCharacter(st).visualWearRemoved.map((x) => x.item), ["куртку"]);
+    assert.strictEqual(STATE.forCharacter(st).visualWearRemoved[0].source.messageId, "b");
+    st = STATE.fold({ mode: "rp", charName: "Орихимэ", path: [a, b, c] });
+    assert.deepStrictEqual(STATE.forCharacter(st).visualWearRemoved, []);
+    assert.deepStrictEqual(STATE.forCharacter(st).visualWear, ["куртку"]);
+    const unknown = STATE.fold({ mode: "rp", charName: "Орихимэ", path: [a] });
+    assert.deepStrictEqual(STATE.forCharacter(unknown).visualWearRemoved.map((x) => x.item), ["куртку"]);
+  });
+  await ta("VIS-OUTFIT-1A-3: intent, invalid evidence and the wrong actor cannot remove clothes", async () => {
+    const planned = make("assistant", "Я собираюсь снять куртку", [Evt("char", "wear", "remove", ["куртку"], "intent", "Я собираюсь снять куртку")], "p");
+    const falseQuote = make("assistant", "Сегодня тепло", [Evt("char", "wear", "remove", ["куртку"], "reported", "Сегодня тепло")], "q");
+    const other = make("user", "Она сняла куртку", [Evt("char", "wear", "remove", ["куртку"], "established", "Она сняла куртку")], "r");
+    const st = STATE.fold({ mode: "rp", path: [planned, falseQuote, other] });
+    assert.deepStrictEqual(STATE.forCharacter(st).visualWearRemoved, []);
+    assert.ok(st.diagnostics.length >= 2, "invalid facts appear in diagnostics");
+  });
+  await ta("VIS-OUTFIT-1A-4: swipe/branch provenance isolates garment absences", async () => {
+    const m = { id: "m", chatId: "s1", role: "assistant", swipeIdx: 0, swipes: [
+      { text: "Сняла юбку", sceneOps: [], stateEvents: [Evt("char", "wear", "remove", ["юбку"], "established", "Сняла юбку")] },
+      { text: "Сняла куртку", sceneOps: [], stateEvents: [Evt("char", "wear", "remove", ["куртку"], "established", "Сняла куртку")] },
+    ] };
+    const first = STATE.fold({ mode: "rp", path: [m] });
+    assert.deepStrictEqual(STATE.forCharacter(first).visualWearRemoved.map((x) => x.item), ["юбку"]);
+    m.swipeIdx = 1;
+    const second = STATE.fold({ mode: "rp", path: [m] });
+    assert.deepStrictEqual(STATE.forCharacter(second).visualWearRemoved.map((x) => x.item), ["куртку"]);
+    assert.deepStrictEqual(STATE.forCharacter(first).visualWearRemoved.map((x) => x.item), ["юбку"]);
+    assert.strictEqual(STATE.forCharacter(second).visualWearRemoved[0].source.swipeIdx, 1);
+  });
   await ta("UT-4: модель не может править пользователя; пользователь не правит персонажа", async () => {
     const e = Evt("user", "wear", "set", ["кимоно"], "established", "Я надела кимоно");
     const x = STATE.fold({ mode: "rp", path: [make("assistant", "Я надела кимоно", [e], "m1")] });
@@ -4061,6 +4105,25 @@ async function unifiedTracker() {
     assert.strictEqual(ctx.world.fieldStatus.location.certainty, "reported");
     const snapshot = h.ctx.svc.state.snapshot();
     assert.strictEqual(snapshot.scene.loc, "");
+  });
+  await ta("VIS-OUTFIT-1A-5: removed items survive raw-history eviction in a strict-budget Prism data section", async () => {
+    const h = fbHarness({ name: "Орихимэ", description: "Персонаж." });
+    await h.chat.createChat("rp", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    const first = h.chat.newMsg("assistant", null, "Я сняла куртку");
+    first.swipes[0].stateEvents = [Evt("char", "wear", "remove", ["куртку"], "established", "Я сняла куртку")];
+    await h.chat.commitMessage(first, first.id);
+    for (let i = 0; i < 12; i++) {
+      const m = h.chat.newMsg(i % 2 ? "assistant" : "user", h.ctx.chat().leafId, "Разговор продолжается " + i);
+      await h.chat.commitMessage(m, m.id);
+    }
+    const p = h.prism.build();
+    assert.ok(p.messages, p.error);
+    const system = p.messages.filter((m) => m.role === "system").map((m) => m.content).join("\\n");
+    assert.ok(system.includes("явно снятые вещи") && system.includes("куртку"), system);
+    assert.ok(system.includes("[данные"), "absence is a fact, not an injected instruction");
+    const current = h.ctx.svc.state.context();
+    assert.deepStrictEqual(current.character.visualWearRemoved.map((x) => x.item), ["куртку"]);
   });
   await ta("UT-13: исправление ошибки — часть ветки, а следующее событие его обновляет", async () => {
     const h = fbHarness({ name: "Орихимэ", description: "Девушка." });
