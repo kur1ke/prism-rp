@@ -161,6 +161,8 @@ slice if that actor is the visible owner or owns the camera. Other actors'
 facts are not transferred as this character's outfit. Card wardrobe presets
 are *not* current facts: when canonical absence/displacement is present, a
 full-outfit preset may not silently reintroduce a removed garment.
+The same holds for optional Card NSFW look presets: a camera-shot keyword
+alone cannot elevate them above established clothing changes.
 
 The compiler sees compact canonical physical facts as **data**, not hidden
 instructions, and reconciles a shot's clothing claims with these facts.
