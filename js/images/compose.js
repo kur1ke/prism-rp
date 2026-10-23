@@ -330,10 +330,17 @@
     if (stale) wardrobe = "";
     const bits = [];
     if (actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
-    // Tracked physical state is independent from the camera shot.
+    // Physical state is context for the shot, not a second free-form prompt
+    // layer. In particular, an owner-camera photo does not depict the camera
+    // holder's previous activity/pose, and clothing already described by the
+    // camera shot must not be inserted twice.
     const established = [];
-    if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe) established.push("clothing: " + outfit);
-    if ((actors.owner || cameraOwner) && owner && owner.pose) established.push((cameraOwner ? "camera pose: " : "pose: ") + owner.pose);
+    const shotGarments = garmentWords(draw);
+    const wornGarments = garmentWords(outfit);
+    const sameWornGarmentInShot = shotGarments.some((g) => wornGarments.includes(g));
+    if ((actors.owner || cameraOwner) && messenger && outfit && !wardrobe && !sameWornGarmentInShot)
+      established.push("clothing: " + outfit);
+    if (actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
     if (actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
     if (actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
     if (actors.user && user && user.pose) bits.push("user pose: " + user.pose);
@@ -364,6 +371,10 @@
       // The card owns stable appearance; the shot compiler must not rewrite it.
       scene: sceneText,
       keep: [look.join(", "), wardrobe, established.join(", "), userTags, nsfw].filter(Boolean).join(", "),
+      // Only card-configured image tags bypass translation; reported physical
+      // state passes through compile() if it needs translation.
+      fixedKeep: [look.join(", "), wardrobe, userTags, nsfw].filter(Boolean).join(", "),
+      stateContext: established.join(", "),
       tail: [tail.join(", "), userTail].filter(Boolean).join(", "),
       ownerPresent: actors.owner,
       cameraOwner,
@@ -486,7 +497,8 @@
     const loras = o.backend === "a1111" ? loraTokens(activeLoras) : "";
     // Веса LoRA из карточки авторитетнее случайных дубликатов в [draw:] и переводе.
     if (loras) scene = withoutConfiguredLora(scene, activeLoras);
-    const keep = loras ? withoutConfiguredLora(c.keep, activeLoras) : c.keep;
+    const rawKeep = o.stateCompiled ? c.fixedKeep : c.keep;
+    const keep = loras ? withoutConfiguredLora(rawKeep, activeLoras) : rawKeep;
     // Optional LoRA-specific associations: never interpret unkeyed text as a directive.
     // Disabled advanced mode must not affect generation even when its text is preserved.
     const advanced = im.loraAdvanced && im.loraAdvanced.enabled === true && loras
