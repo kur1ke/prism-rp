@@ -4005,6 +4005,136 @@ async function unifiedTracker() {
   const make = (role, txt, events, id, swipeIdx = 0) => ({ id, chatId: "s1", role, swipeIdx,
     swipes: [{ text: txt, sceneOps: [], stateEvents: events }] });
   const Evt = (actor, field, action, value, certainty, evidence) => ({ actor, field, action, value, certainty, evidence });
+  /* WS-1: canonical garment facts; legacy wear is only a derived view. */
+  await ta("WS-1A: removal without known outfit preserves unknown baseline and typed absence", async () => {
+    const m = make("assistant", "Я сняла шарф", [Evt("char", "wear", "remove", ["шарф"], "reported", "Я сняла шарф")], "r1");
+    const st = STATE.fold({ mode: "messenger", path: [m] });
+    assert.strictEqual(st.actors.char.wearState.known, false);
+    assert.strictEqual(STATE.fieldOf(st, "char", "wear"), null);
+    assert.deepStrictEqual(st.actors.char.wearState.worn, []);
+    assert.deepStrictEqual(st.actors.char.wearState.partiallyWorn, []);
+    assert.strictEqual(st.actors.char.wearState.removed[0].source.messageId, "r1");
+    assert.strictEqual(st.actors.char.wearState.removed[0].certainty, "reported");
+  });
+  await ta("WS-1B: set -> adjust -> remove -> rewear has one canonical item with provenance", async () => {
+    const a = make("assistant", "На мне футболка и шорты", [Evt("char", "wear", "set", ["футболка", "шорты"], "established", "На мне футболка и шорты")], "a");
+    const partial = Object.assign(Evt("char", "wear", "adjust", ["футболка"], "established", "Спустила футболка с плеч"), { placement: "с плеч" });
+    const b = make("assistant", "Спустила футболка с плеч", [partial], "b");
+    const c = make("assistant", "Сняла футболка", [Evt("char", "wear", "remove", ["футболка"], "established", "Сняла футболка")], "c");
+    const d = make("assistant", "Надела футболка", [Evt("char", "wear", "add", ["футболка"], "established", "Надела футболка")], "d");
+    const s1 = STATE.fold({ mode: "rp", path: [a] });
+    const s2 = STATE.fold({ mode: "rp", path: [a,b] });
+    assert.deepStrictEqual(STATE.fieldOf(s1, "char", "wear").value, ["футболка", "шорты"]);
+    assert.deepStrictEqual(STATE.fieldOf(s2, "char", "wear").value, ["футболка", "шорты"], "compat order remains stable");
+    assert.deepStrictEqual(s2.actors.char.wearState.worn.map(x => x.item), ["шорты"]);
+    assert.deepStrictEqual(s2.actors.char.wearState.partiallyWorn.map(x => x.item), ["футболка"]);
+    assert.strictEqual(s2.actors.char.wearState.partiallyWorn[0].placement, "с плеч");
+    assert.strictEqual(s2.actors.char.wearState.partiallyWorn[0].source.messageId, "b");
+    assert.deepStrictEqual(s2.actors.char.wearState.removed, []);
+    const s3 = STATE.fold({ mode: "rp", path: [a,b,c] });
+    assert.deepStrictEqual(s3.actors.char.wearState.partiallyWorn, []);
+    assert.deepStrictEqual(s3.actors.char.wearState.removed.map(x => x.item), ["футболка"]);
+    assert.strictEqual(s3.actors.char.wearState.removed[0].source.messageId, "c");
+    const s4 = STATE.fold({ mode: "rp", path: [a,b,c,d] });
+    assert.deepStrictEqual(s4.actors.char.wearState.removed, []);
+    assert.deepStrictEqual(s4.actors.char.wearState.partiallyWorn, []);
+    assert.deepStrictEqual(s4.actors.char.wearState.worn.map(x => x.item), ["шорты","футболка"]);
+    assert.strictEqual(s4.actors.char.wearState.worn.find(x => x.item === "футболка").source.messageId, "d");
+    assert.strictEqual(s2.actors.char.wearState.partiallyWorn[0].source.messageId, "b", "prior snapshot unchanged");
+  });
+  await ta("WS-1C: adjust is evidence-grounded, and intent never changes canonical wear", async () => {
+    const intent = Object.assign(Evt("char", "wear", "adjust", ["футболка"], "intent", "Хочу спустить футболка с плеч"), { placement: "с плеч" });
+    const bad = Object.assign(Evt("char", "wear", "adjust", ["футболка"], "established", "Спустила футболка с плеч"), { placement: "на талии" });
+    const st = STATE.fold({ mode: "rp", path: [
+      make("assistant", "Хочу спустить футболка с плеч", [intent], "i"),
+      make("assistant", "Спустила футболка с плеч", [bad], "bad"),
+    ] });
+    assert.strictEqual(STATE.fieldOf(st, "char", "wear"), null);
+    assert.deepStrictEqual(st.actors.char.wearState.partiallyWorn, []);
+    assert.strictEqual(st.actors.char.intentions.length, 1);
+    assert.ok(st.diagnostics.some(x => /положени/.test(x.issue)), JSON.stringify(st.diagnostics));
+  });
+  await ta("WS-1D: partial garment is independently known even if rest of outfit is not", async () => {
+    const event = Object.assign(Evt("char", "wear", "adjust", ["футболка"], "reported", "Спустила футболка с плеч"), { placement: "с плеч" });
+    const st = STATE.fold({ mode: "messenger", path: [make("assistant", "Спустила футболка с плеч", [event], "s")] });
+    assert.deepStrictEqual(STATE.fieldOf(st, "char", "wear").value, ["футболка"]);
+    assert.strictEqual(st.actors.char.wearState.partiallyWorn[0].certainty, "reported");
+    assert.deepStrictEqual(globalThis.PRP.stateResolver.wearFacts({ state: st })[0].partiallyWorn.map(x => x.item), ["футболка"]);
+  });
+  await ta("WS-1E: manual and legacy wear compatibility is a projection of canonical facts", async () => {
+    const before = STATE.fold({ mode: "messenger", legacyWorld: { visualWear: ["пальто","шарф"] }, path: [] });
+    assert.strictEqual(before.actors.char.wearState.known, true);
+    assert.deepStrictEqual(before.actors.char.wearState.worn.map(x => x.certainty), ["established","established"]);
+    assert.deepStrictEqual(STATE.fieldOf(before,"char","wear").value, ["пальто","шарф"]);
+    const changed = STATE.apply(before, Evt("char","wear","remove",["шарф"],"established",""), { role:"manual", mode:"messenger", messageId:"correction" });
+    assert.deepStrictEqual(STATE.fieldOf(changed,"char","wear").value, ["пальто"]);
+    assert.deepStrictEqual(changed.actors.char.wearState.removed.map(x => x.item), ["шарф"]);
+    assert.deepStrictEqual(STATE.fieldOf(before,"char","wear").value, ["пальто","шарф"]);
+  });
+  await ta("WS-1F: alternate swipes do not share partial position or inferred wear", async () => {
+    const evt = (placement) => Object.assign(Evt("char","wear","adjust",["футболка"],"established", "Спустила футболка " + placement), { placement });
+    const m = { id:"m",role:"assistant",swipeIdx:0,swipes:[
+      { text:"Спустила футболка с плеч", sceneOps:[],stateEvents:[evt("с плеч")] },
+      { text:"Спустила футболка до талии", sceneOps:[],stateEvents:[evt("до талии")] },
+    ] };
+    const first = STATE.fold({ mode:"rp",path:[m] });
+    m.swipeIdx = 1;
+    const second = STATE.fold({ mode:"rp",path:[m] });
+    assert.strictEqual(first.actors.char.wearState.partiallyWorn[0].placement, "с плеч");
+    assert.strictEqual(second.actors.char.wearState.partiallyWorn[0].placement, "до талии");
+    assert.strictEqual(second.actors.char.wearState.partiallyWorn[0].source.swipeIdx, 1);
+  });
+  await ta("WS-1G: partial evidence does not claim the entire outfit is known", async () => {
+    const first = make("assistant","Я сняла шарф",[Evt("char","wear","remove",["шарф"],"reported","Я сняла шарф")],"first");
+    const add = make("assistant","На мне футболка",[Evt("char","wear","add",["футболка"],"reported","На мне футболка")],"add");
+    const set = make("assistant","На мне футболка и брюки",[Evt("char","wear","set",["футболка","брюки"],"reported","На мне футболка и брюки")],"set");
+    const unknown = STATE.fold({mode:"messenger",path:[first]});
+    const incomplete = STATE.fold({mode:"messenger",path:[first,add]});
+    const complete = STATE.fold({mode:"messenger",path:[first,add,set]});
+    assert.strictEqual(unknown.actors.char.wearState.complete, false);
+    assert.strictEqual(incomplete.actors.char.wearState.known, true);
+    assert.strictEqual(incomplete.actors.char.wearState.complete, false, "knowing one garment is not knowing the entire outfit");
+    assert.strictEqual(complete.actors.char.wearState.complete, true);
+    assert.deepStrictEqual(complete.actors.char.wearState.removed, [], "explicit full replacement retires earlier absence");
+  });
+  await ta("WS-1H: Scene reads canonical WearState, not a poisoned compatibility projection", async () => {
+    const st = STATE.fold({mode:"messenger",path:[make("assistant","На мне футболка",[Evt("char","wear","add",["футболка"],"reported","На мне футболка")],"a")]});
+    const clean = JSON.parse(JSON.stringify(st));
+    st.actors.char.fields.wear.value = ["чужое пальто"];
+    assert.deepStrictEqual(STATE.fieldOf(st,"char","wear").value, ["футболка"]);
+    const result = globalThis.PRP.stateResolver.scene({chars:{}}, {state:st},{char:"Орихимэ"});
+    assert.deepStrictEqual(result.chars["Орихимэ"].wear, ["футболка"]);
+    assert.deepStrictEqual(STATE.fieldOf(clean,"char","wear").value, ["футболка"]);
+  });
+  await ta("WS-1I: exact garment identity never merges similarly named distinct items", async () => {
+    const st = STATE.fold({mode:"rp",path:[
+      make("assistant","На мне топ и топорик",[Evt("char","wear","set",["топ","топорик"],"established","На мне топ и топорик")],"set"),
+      make("assistant","Сняла топ",[Evt("char","wear","remove",["топ"],"established","Сняла топ")],"remove"),
+    ]});
+    assert.deepStrictEqual(STATE.fieldOf(st,"char","wear").value, ["топорик"]);
+    assert.deepStrictEqual(st.actors.char.wearState.removed.map(x=>x.item), ["топ"]);
+    assert.deepStrictEqual(st.actors.user.wearState.worn, []);
+  });
+  await ta("WS-1J: partial garments remain removable via active-path references", async () => {
+    const partial = Object.assign(Evt("char","wear","adjust",["футболка"],"reported","Спустила футболка с плеч"),{placement:"с плеч"});
+    const s=STATE.fold({mode:"messenger",path:[make("assistant","Спустила футболка с плеч",[partial],"a")]});
+    const refs=STATE.references(s,"char");
+    assert.strictEqual(refs.length,1);
+    assert.strictEqual(refs[0].item,"футболка");
+    assert.strictEqual(refs[0].source.messageId,"a");
+    assert.deepStrictEqual(STATE.references(s,"user"),[]);
+  });
+  await ta("WS-1K: legacy Scene.add never asserts the full outfit is known", async () => {
+    const add=make("assistant","Накинула шарф",[],"a");
+    add.swipes[0].sceneOps = S.parseBody("Орихимэ.add=шарф");
+    const added=STATE.fold({mode:"rp",charName:"Орихимэ",path:[add]});
+    assert.deepStrictEqual(STATE.fieldOf(added,"char","wear").value, ["шарф"]);
+    assert.strictEqual(added.actors.char.wearState.complete, false);
+    const full=make("assistant","В полном наряде",[],"b");
+    full.swipes[0].sceneOps = S.parseBody("Орихимэ.wear=футболка, шарф");
+    const established=STATE.fold({mode:"rp",charName:"Орихимэ",path:[add,full]});
+    assert.strictEqual(established.actors.char.wearState.complete, true);
+  });
   await ta("UT-1: одно состояние в RP и Messenger, разные перспективы наблюдения", async () => {
     const evt = Evt("char", "location", "set", "дома", "reported", "Я дома");
     const ms = STATE.fold({ mode: "messenger", charName: "Орихимэ", userName: "Лёня", path: [make("assistant", "Я дома", [evt], "m1")] });
