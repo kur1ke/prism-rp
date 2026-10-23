@@ -40,7 +40,7 @@
           messageId: m.id, swipeIdx: m.swipeIdx || 0, role: m.role,
           text: String(TR.activeSwipe(m).text || "").slice(0, 500),
         })),
-        references: TRACK.references(state, actor),
+        references: TRACK.references(state, actor, ["remove", "adjust"]),
       };
     }
     function pathFingerprint(path) {
