@@ -106,6 +106,25 @@ Use existing Debug/Visual State Inspector; do not build another debug UI. Future
 
 Test A1111/Forge with controlled model/seed/shot settings and compare **prompt correctness** as primary acceptance, not pixel similarity. Recheck Scene ID, strict budget, branch provenance, image origin, retry and provider compatibility. Nothing in this design authorizes main promotion.
 
+## WS-1 canonical WearState consolidation (testing candidate)
+
+This batch is deliberately narrower than VIS-OUTFIT-1 closure. StateTracker now
+folds garment events into one derived `wearState` with `known`,
+`worn`, `removed` and `partiallyWorn`. `fields.wear` is rebuilt only
+from this state for legacy consumers. Each item has explicit certainty and
+source; `wear.adjust` includes a verbatim `placement` excerpt from
+current-message evidence. There is no new persisted inventory or schema
+migration: the original `stateEvents`, corrections, and legacy Scene remain
+the source of truth, replayed on each selected path/swipe.
+
+The Observer may propose `wear.adjust` but live provider quality is NOT
+verified. Contextual `referenceId` remains restricted to `wear.remove`.
+StateResolver can expose typed partial facts without making Image Compiler
+interpret them. The composer does not yet implement positive partial-placement
+tags or garment-specific negative constraints; same-turn A1111/Forge and
+Perchance validation remain outstanding. Do not mark VIS-OUTFIT-1B/1C/D closed
+from this batch alone.
+
 ## Staged implementation / CURRENT STATUS
 
 - **VIS-OUTFIT-1A (this PR):** reliable first-class `removed` facts with provenance despite unknown prior outfit; add/rewear cancellation and budgeted RP facts. CI tests only, real browser NOT RUN.
