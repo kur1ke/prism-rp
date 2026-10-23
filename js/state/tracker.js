@@ -19,9 +19,10 @@
   // persisted inventory. A removed item remains explicitly absent even if
   // the rest of the outfit has never been established.
   // Canonical state is folded, never persisted as a separate inventory.
-  // "known" distinguishes an unknown outfit from an established empty one.
+  // "known" distinguishes no positive evidence from an established empty list;
+  // "complete" means a full outfit was explicitly established, not guessed.
   // fields.wear below is ONLY a compatibility projection, never an input.
-  const emptyWear = () => ({ known: false, worn: [], removed: [], partiallyWorn: [], last: null });
+  const emptyWear = () => ({ known: false, complete: false, worn: [], removed: [], partiallyWorn: [], last: null });
   const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: emptyWear(), intentions: [], notes: [] });
   const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
@@ -61,6 +62,7 @@
     });
     if (event.action === "set" || event.action === "clear") {
       wear.known = true;
+      wear.complete = true;
       wear.worn = event.action === "set"
         ? event.value.filter((item, index) => event.value.findIndex((x) => sameGarment(x, item)) === index)
           .map((item, i) => fact(item, i))
