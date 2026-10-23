@@ -3216,6 +3216,38 @@ async function foundationH() {
       assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.items[0].tag,"shorts");
     } finally {ICP.compile=oldComp;ICP.compileWear=oldWear;IB.generate=oldGen;}
   });
+  await ta("VIS-OUTFIT-1C-6: no backend request on invalid translation of canonical removed garment", async () => {
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Я сняла юбку");
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["юбку"],certainty:"reported",evidence:"Я сняла юбку"}];
+    await h.chat.commitMessage(m,m.id);
+    const source=h.S.messages.find(x=>x.id===m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const origC=ICP.compile,origW=ICP.compileWear,origGen=IB.generate;
+    let called=0;
+    try {
+      ICP.compile=async ()=>({text:"1girl, sitting on a bed",compiled:true});
+      ICP.compileWear=async ()=>({ok:false,error:"invalid garment translation"});
+      IB.generate=async ()=>{called++;throw Error("must not submit");};
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:"1girl, sitting on a bed"});
+      assert.strictEqual(called,0);
+      assert.strictEqual(source.swipes[0].images[0].status,"error");
+      assert.ok(source.swipes[0].images[0].error.includes("снятую одежду"));
+    } finally {ICP.compile=origC;ICP.compileWear=origW;IB.generate=origGen;}
+  });
+  await ta("VIS-OUTFIT-1C-7: global garment negative is not applied to another character", async () => {
+    const card={name:"Химэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.7}]}};
+    const base=IC.compose({draw:"2girls, Химэ and a friend, standing, park",card,scene:{chars:{}},persona:{},
+      wearFacts:[{actor:"char",worn:[],removed:[{item:"юбка"}],partiallyWorn:[]}]});
+    const f=IC.finalise({composed:base,compiled:"2girls, orihime_inoue, another girl, skirt, park",
+      backend:"a1111",card,settings:{promptMode:"off"},wearNegative:"skirt"});
+    assert.ok(!f.negative.split(",").map(x=>x.trim()).includes("skirt"),f.negative);
+    assert.ok(f.prompt.includes("orihime_inoue") && f.prompt.includes("<lora:ori:0.7>"),f.prompt);
+  });
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
