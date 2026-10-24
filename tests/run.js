@@ -995,7 +995,7 @@ t("VIS-REVEAL-01: partial clothing motion retains stated exposure without invent
   assert.ok(f.prompt.includes("<lora:Orihime Illustrious:0.8>"),f.prompt);
   assert.ok(!/nude|nipples|bare breasts|cover breasts/.test(f.prompt+" "+f.negative),
     "do not auto-add either exposure or unsupported body-specific restrictions");
-  const plan=VP.create({owner:true,shotAuthored:true,draw,
+  const plan=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw,
     wearFacts:[{actor:"char",known:true,complete:true,worn:[{item:"жёлтая блузка"}],
       partiallyWorn:[],removed:[]}]});
   const audit=ICP.auditFinal(f.prompt,f.negative,plan,[],[],{otherActorPresent:false});
