@@ -4101,6 +4101,9 @@ async function foundationH() {
     assert.ok(hybrid.prompt.includes("<lora:Orihime Illustrious:0.8>"),hybrid.prompt);
     const rules=IC.rewriteRules({intentMode:true,format:"hybrid",embodiedOwner:true});
     assert.ok(rules.includes("does NOT specify a viewpoint"),rules);
+    assert.ok(IC.drawInstruction({intentMode:true,hybrid:true}).includes("НЕ задаёт POV"));
+    assert.ok(IC.drawInstruction({intentMode:true}).includes("Для вида собственного тела"),
+      "legacy intent instructions remain unchanged");
   });
   await ta("VIS-FF-02: translated author shot cannot override source frame actors",async()=>{
     const card={name:"Orihime Inoue",image:{trigger:"orihime_inoue",
@@ -4175,7 +4178,7 @@ async function foundationH() {
       assert.strictEqual(calls,1,"one compiler call, no extra Observer or translator");
       assert.strictEqual(requests,1);
       assert.ok(backend.prompt.includes("The lower hem"),backend.prompt);
-       assert.ok(!/\bpov\b/i.test(backend.prompt),"hybrid must not force POV");
+      assert.ok(!/\bpov\b/i.test(backend.prompt),"hybrid must not force POV");
       assert.ok(backend.prompt.includes("masterpiece, best quality"),backend.prompt);
       assert.ok(backend.prompt.includes("<lora:Orihime Illustrious:0.8>"),backend.prompt);
       assert.ok(!/bra|panties|beige skirt/i.test(backend.prompt),"no added wardrobe");
