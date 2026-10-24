@@ -61,7 +61,7 @@
   const wordExists = (str, word) => !!word && (String(str || "").match(/[a-z][a-z0-9]*/g) || []).includes(word);
   const sameTag = (a, b) => IC.bareTag(a).replace(/[_-]/g, " ").toLowerCase() ===
     IC.bareTag(b).replace(/[_-]/g, " ").toLowerCase();
-  function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags) {
+  function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags, subjectScope) {
     const plan = visualPlan && visualPlan.wear ? visualPlan : null;
     if (!plan || plan.actor !== "char") return { validated: false, scope: "not-owner", issues: [] };
     const removed = Array.isArray(plan.wear.removed) ? plan.wear.removed : [];
@@ -87,9 +87,11 @@
         !tagParts(prompt).some((p) => sameTag(p.raw, found.tag));
     })) issues.push("Видимые снятые вещи не связаны с точными positive-тегами");
     if (issues.length) return { validated: false, scope: "invalid-mapping", issues };
-    // A scene with another person is not globally garment-scoped. Do not
-    // remove that person's shirt because the camera owner removed theirs.
-    if (IC.subjectCount(prompt) > 1)
+    // The actual shot may name a second participant without any explicit
+    // 2girls/1boy count token in its positive tags. ImageService's source
+    // actor resolution is more authoritative than a heuristic counting tags.
+    // Never apply the owner's garment exclusion to the other participant.
+    if ((subjectScope && subjectScope.otherActorPresent === true) || IC.subjectCount(prompt) > 1)
       return { validated: false, scope: "multi-subject", issues: [] };
     const positives = tagParts(prompt), negatives = tagParts(negative);
     for (let i = 0; i < mapped.length; i++) {
@@ -127,7 +129,8 @@
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame", o.embodiedOwner ? "owner-camera" : "external-camera",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
-      o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "", s].join("\u0001");
+      o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
+      o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only", s].join("\u0001");
     if (mem.has(key)) {
       const cached = mem.get(key);
       return typeof cached === "string" ? { text: cached, compiled: true, cached: true } : { ...cached, cached: true };
@@ -183,7 +186,7 @@
           }
         }
         const wearItems = absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() }));
-        const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags);
+        const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags, o.subjectScope);
         if (semantic.issues.length)
           return { text: s, compiled: false, error: semantic.issues.join("; ").slice(0, 240) };
         result = {
