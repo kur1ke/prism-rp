@@ -1000,15 +1000,15 @@ t("VIS-PROVENANCE-1: diagnostic image layers preserve source ownership", () => {
   assert.equal(other.provenance.imageLayers.identity, "");
   assert.equal(other.provenance.imageLayers.wardrobePreset, "");
 });
-t("VIS-STATE-1: tracked pose and wear are distinct from camera shot", () => {
+t("VIS-STATE-1: reported Messenger pose does not overwrite photo composition", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
   const scene = { chars: { Лилит: { wear: ["серый свитер"], pose: "сидит на диване" } }, present: [] };
   const c = IC.compose({ draw: "1girl, looking at viewer, medium shot", card, scene, persona: {}, messenger: { location: "" } });
   assert.ok(c.keep.includes("clothing: серый свитер"), c.keep);
-  assert.ok(c.keep.includes("pose: сидит на диване"), c.keep);
+  assert.ok(!c.keep.includes("pose: сидит на диване"), c.keep);
   assert.ok(!c.scene.includes("clothing:") && !c.scene.includes("pose:"), c.scene);
   const f = IC.finalise({ composed: c, compiled: "1girl, medium shot, soft lighting", card, settings: {}, backend: "a1111" });
-  assert.ok(f.prompt.includes("pose: сидит на диване") && f.prompt.includes("clothing: серый свитер"), f.prompt);
+  assert.ok(!f.prompt.includes("pose: сидит на диване") && f.prompt.includes("clothing: серый свитер"), f.prompt);
   const unknown = IC.compose({ draw: "1girl, medium shot", card, scene: { chars: {}, present: [] }, persona: {} });
   assert.ok(!unknown.keep.includes("pose:") && !unknown.keep.includes("clothing:"), unknown.keep);
 });
