@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "72f8a438b98ac60c75208116758e6d76faedf41f";
+  window.PRISM_RP_BUILD_SHA = "28cf655ae146dd65f92d82de9597d97bf26f3f14";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5830,6 +5830,7 @@
         "\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
     const rules = [
       ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
+      ...(opts.visualPlan && opts.visualPlan.wear ? ["CANONICAL WEAR FACTS are the validated END-OF-TURN state for THIS source message, not the previous outfit. Do not re-infer clothing transitions from translation; translate only the visible RESULT of the authored shot.", "Clothing named because it was REMOVED is not a positive on-body garment tag. An explicitly shown removed object may appear off-body; omission alone never invents a visible object. Other worn garments need not be visible in a crop."] : []),
       (opts.wearState && ((opts.wearState.removed || []).length || (opts.wearState.partiallyWorn || []).length))
         ? "Keep camera, people, pose and environment from SCENE. For the character whose CANONICAL WEAR FACTS are supplied, canonical clothing state overrides conflicting clothing claims in SCENE: omit removed garments, retain explicitly worn garments, depict partially worn garments at their recorded placement. Do not infer exposed body parts or nudity from removal beneath outer layers. Treat reported as character-reported state, not independent objective proof. Preserve unrelated scene details."
         : "Keep every concrete detail from SCENE: pose, action, expression, garments, place, time and framing. SCENE overrides reported physical state if they conflict.",
@@ -5861,6 +5862,62 @@
     parseDraws, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompose;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* js/images/visual-plan.js */
+/* PrismRP VC-01 — transient, branch-scoped image garment plan.
+   No persistence, model calls, state transitions, inventory, or scene authority.
+   Unknown body state cannot be fabricated from a crop or missing tag. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const bounded = (rows) => (Array.isArray(rows) ? rows : []).slice(0, 12).map(clone);
+  function freeze(v) {
+    if (v && typeof v === "object" && !Object.isFrozen(v)) {
+      Object.values(v).forEach(freeze);
+      Object.freeze(v);
+    }
+    return v;
+  }
+
+  function create(input) {
+    const o = input || {};
+    const owner = !!o.owner || !!o.cameraOwner;
+    const fact = owner && Array.isArray(o.wearFacts)
+      ? o.wearFacts.find((item) => item && item.actor === "char") : null;
+    const wear = fact ? {
+      known: !!fact.known,
+      complete: !!fact.complete,
+      worn: bounded(fact.worn),
+      partiallyWorn: bounded(fact.partiallyWorn),
+      removed: bounded(fact.removed),
+    } : null;
+    const source = o.source && {
+      chatId: String(o.source.chatId || ""),
+      messageId: String(o.source.messageId || ""),
+      swipeIdx: Number(o.source.swipeIdx) || 0,
+    };
+    // "Removed from the body" and "absent from the frame" are distinct.
+    // Until the Observer supplies typed, evidence-validated frame object roles
+    // (VC-02), an authored photo MUST NOT generate a global garment negative:
+    // that same garment may be held or lying on the bed.
+    const authored = !!o.shotAuthored;
+    const result = {
+      actor: owner ? "char" : null,
+      source: source || null,
+      shotAuthored: authored,
+      wear,
+      onBodyCandidates: wear ? wear.worn.concat(wear.partiallyWorn).map((x) => x.item) : [],
+      absentFromBody: wear ? wear.removed.map((x) => x.item) : [],
+      offBodyVisible: [], // never inferred from REMOVED; VC-02 binds exact shot evidence.
+      allowGlobalGarmentNegative: owner && !authored,
+    };
+    return freeze(result);
+  }
+
+  PRP.visualPlan = { create };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.visualPlan;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/images/backends.js */
@@ -6100,7 +6157,8 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    const key = ["v7-single-canonical-wear", o.intentMode ? "intent" : "tags", o.embodiedOwner ? "owner-camera" : "external-camera",
+    const key = ["v8-end-turn-visual-plan", o.intentMode ? "intent" : "tags",
+      o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame", o.embodiedOwner ? "owner-camera" : "external-camera",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear), s].join("\u0001");
     if (mem.has(key)) {
@@ -6113,7 +6171,9 @@
       "The absent list MUST contain precisely one entry per REMOVED item in CANONICAL WEAR FACTS, in original order, with consecutive indexes starting at 0.",
       "Each tag is only that removed garment name translated into one short English garment tag, with explicit color/material if present.",
       "Do not add nudity, bare body parts, other garments, activities, or inferred exposure to these tags.",
-      "The prompt preserves shot composition but omits any garment known removed and places partially worn garments correctly.",
+      "The prompt must never present REMOVED items as worn, lifted, pulled-up, or partially worn on the subject. PARTIAL items are still worn at their known placement.",
+      "REMOVED means absent FROM THE BODY, not necessarily absent from the image: an explicitly depicted removed garment held in hands or lying nearby remains a visible off-body object.",
+      "Do not add a garment as a visible object unless SCENE explicitly depicts it there. Never translate a completed removal into lifting a shirt.",
     ].join("\n") : "";
     const instruction = IC.rewriteRules(o) +
       (contract ? "\n\n" + contract : "") + "\n\nSCENE:\n" + s +
@@ -6132,7 +6192,11 @@
           return { text: s, compiled: false, error: "Некорректный перевод одежды: отсутствуют подтверждённые предметные tags" };
         result = {
           text: prompt, compiled: true, wearValidated: true,
-          negative: absent.map((x) => x.tag.trim()).join(", "),
+          // A global negative applies to the whole frame. In authored shots
+          // a REMOVED item can still be held or lie nearby. Until VC-02
+          // adds grounded off-body roles, do not forbid it globally.
+          negative: o.visualPlan && !o.visualPlan.allowGlobalGarmentNegative ? "" :
+            absent.map((x) => x.tag.trim()).join(", "),
           wearItems: absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() })),
         };
       } else {
@@ -8698,7 +8762,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -8740,6 +8804,13 @@
     return JSON.stringify(shotOnly ? shot : shot.concat([
       sw.sceneOps, sw.stateEvents, sw.stateCorrections, sw.messengerAt,
     ]));
+  }
+
+  async function sourceStillCurrent(DB, origin, shotOnly) {
+    const live = await DB.get("messages", origin.messageId);
+    if (!live || live.chatId !== origin.chatId) return false;
+    return stateVersion(live, origin.swipeIdx, shotOnly) ===
+      (shotOnly ? origin.sourceDrawVersion : origin.sourceStateVersion);
   }
 
   async function imageOriginStillCurrent(DB, origin, shotOnly) {
@@ -8841,13 +8912,35 @@
       await DB.put("messages", msg);
       repaint();
       let finalPatch, imageData;
+      let shotOnlyGate = drawAuthored;
       try {
         const intent = !!entry.intentMode;
         const cameraOwner = IC.ownerCamera(cd, entry.draw);
         // Camera metadata is an image-level fact, not a tag for the compiler/backend.
         const shot = String(entry.draw || "").replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
+        // VC-01: the canonical snapshot already includes this accepted message's
+        // validated Observer events. It is END-OF-TURN, not stale pre-shot wear.
+        // The first (and only) intent translation must receive those facts.
+        // Subject scoping happens on the ORIGINAL authored shot, before a
+        // translator can hallucinate the card owner into a product screenshot.
+        const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true });
+        // A current authored selfie need not repeat the card owner's name.
+        // Do not infer the owner from a mere portrait or screenshot.
+        const currentSelfie = drawAuthored &&
+          /(?:\bmy\s+selfie\b|\btaking\s+(?:a\s+)?selfie\b|\bselfie\s+of\s+myself\b|(?:^|[\s,;:])я\s+[^.!?]{0,60}селфи|(?:^|[\s,;:])сво[её]\s+селфи)/iu.test(shot) &&
+          !/(?:скриншот|screenshot|чужое\s+селфи|someone\s+else)/iu.test(shot) &&
+          !shotActors.empty && !shotActors.userNamed;
+        const visualPlan = VP.create({
+          wearFacts: projected.wearFacts,
+          owner: !!shotActors.owner || currentSelfie,
+          cameraOwner,
+          shotAuthored: drawAuthored,
+          source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
+        });
         const firstPass = intent ? await ICP.compile(shot,
-          { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner, qualityPinned: ST.qualityPinned(S.settings) }, generateText) : null;
+          { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner,
+            qualityPinned: ST.qualityPinned(S.settings),
+            wearState: visualPlan.wear, visualPlan }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
@@ -8867,7 +8960,13 @@
         // Canon is allowed to learn FROM the authored visual assertion.
         // It must not veto/reinterpret the frame on the basis of incomplete
         // earlier text-only Observer results.
-        const canonicalWear = drawAuthored ? null : composed.physicalWear;
+        // A validated current author-shot CAN change clothing in this message.
+        // The resulting END-OF-TURN state, rather than the previous state,
+        // is now available for the single intent compilation above.
+        // The legacy English-tags authored path remains unchanged in VC-01;
+        // VC-02 will attach typed off-body visibility to both input modes.
+        const canonicalWear = intent && drawAuthored ? visualPlan.wear :
+          drawAuthored ? null : composed.physicalWear;
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
@@ -8886,7 +8985,7 @@
           !composed.userPresent && IC.subjectCount(comp.text) <= 1;
         const wearNegative = singleOwner ? String(comp.negative || "") : "";
         if (changes && canonicalWear.removed && canonicalWear.removed.length &&
-            (!comp.negative || !Array.isArray(comp.wearItems)))
+            ((!visualPlan.shotAuthored && !comp.negative) || !Array.isArray(comp.wearItems)))
           throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
           card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative });
@@ -8894,10 +8993,16 @@
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
         if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
+        // A VisualPlan derived from canonical wear is invalid if the source's
+        // selected-path garment events/corrections change while compiling.
+        // Shot-only equality is safe ONLY for authored images whose rendered
+        // content did not consume tracked state.
+        shotOnlyGate = drawAuthored && !(intent && visualPlan.wear);
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
-        if (!(await imageOriginStillCurrent(DB, origin, drawAuthored)))
-          throw new Error("Исходная ветка изменилась во время подготовки изображения. Повторите рисование.");
+        if (!(await sourceStillCurrent(DB, origin, shotOnlyGate)) ||
+            !(await imageOriginStillCurrent(DB, origin, shotOnlyGate)))
+          throw new Error("Исходная ветка или сообщение изменились во время подготовки изображения. Повторите рисование.");
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
@@ -8906,7 +9011,11 @@
           promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
-              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]) } } };
+              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]),
+              plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
+                complete: !!(visualPlan.wear && visualPlan.wear.complete),
+                absentFromBody: visualPlan.absentFromBody,
+                negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
         finalPatch = { status: "error", error: e.message || String(e) };
@@ -8920,10 +9029,10 @@
         // visible text has not changed.
         const currentSource = latest && JSON.parse(JSON.stringify(latest));
         if (currentSource) currentSource.swipeIdx = origin.swipeIdx;
-        const originValid = currentSource && (drawAuthored
+        const originValid = currentSource && (shotOnlyGate
           ? stateVersion(currentSource, origin.swipeIdx, true) === origin.sourceDrawVersion
           : stateVersion(currentSource, origin.swipeIdx) === origin.sourceStateVersion) &&
-          await imageOriginStillCurrent(DB, origin, drawAuthored);
+          await imageOriginStillCurrent(DB, origin, shotOnlyGate);
         if (finalPatch.status === "done" && !originValid) {
           finalPatch = { status: "error", error: "Исходное состояние ветки или свайпа изменилось. Повторите рисование." };
           imageData = null;
