@@ -231,10 +231,11 @@
           draw: shot, frameObjects: verifiedFrameObjects,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
+        const shotScope = { otherActorPresent: !!shotActors.user };
         const firstPass = intent ? await ICP.compile(shot,
           { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner,
             qualityPinned: ST.qualityPinned(S.settings),
-            wearState: visualPlan.wear, visualPlan }, generateText) : null;
+            wearState: visualPlan.wear, visualPlan, subjectScope: shotScope }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
@@ -260,12 +261,14 @@
           owner: !!composed.ownerPresent, cameraOwner: !!composed.cameraOwner,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
+        const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             embodiedOwner: cameraOwner, frame: composed.subjects, stateContext,
-            wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined }, generateText);
+            wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
+            subjectScope }, generateText);
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.
@@ -275,7 +278,7 @@
         // The same compiler response binds English negative tags to the
         // source-indexed removed garments. Never make a second model call.
         const singleOwner = (composed.ownerPresent || composed.cameraOwner) &&
-          !composed.userPresent && IC.subjectCount(comp.text) <= 1;
+          !subjectScope.otherActorPresent && IC.subjectCount(comp.text) <= 1;
         const wearNegative = singleOwner ? String(comp.negative || "") : "";
         if (changes && canonicalWear.removed && canonicalWear.removed.length &&
             ((!visualPlan.shotAuthored && !comp.negative) || !Array.isArray(comp.wearItems)))
@@ -285,7 +288,7 @@
         // The compiler is not the last positive-tag source: Card, LoRA
         // rules and fixedPrompt can reintroduce a removed garment. Audit the
         // actual executable strings immediately before the backend.
-        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags);
+        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
         if (finalAudit.issues.length)
           throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
