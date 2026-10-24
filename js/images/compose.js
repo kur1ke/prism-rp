@@ -316,7 +316,9 @@
     const established = [];
     if (!shotAuthored && actors.owner && messenger && outfit && !wardrobe)
       established.push("clothing: " + outfit);
-    if (!shotAuthored && actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
+    // Messenger reports a remote character's circumstances, not a camera pose.
+    // Only RP scene state can provide a fallback pose for non-authored shots.
+    if (!shotAuthored && !messenger && actors.owner && owner && owner.pose) established.push("pose: " + owner.pose);
     if (!shotAuthored && actors.owner && owner && owner.visualHair) established.push("hairstyle: " + owner.visualHair);
     if (!shotAuthored && actors.user && userOutfit) bits.push("user clothing: " + userOutfit);
     if (!shotAuthored && actors.user && user && user.pose) bits.push("user pose: " + user.pose);
