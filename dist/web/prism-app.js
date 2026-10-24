@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "f7cdbe922ac0559147c7ef2b5625238399a7b326";
+  window.PRISM_RP_BUILD_SHA = "9591631218c341798c37261a6c8413cc72438f33";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5856,7 +5856,8 @@
     const opts = o || {};
     if (opts.intentMode) return [
       "Когда персонаж отправляет изображение, добавь одну директиву [draw: описание изображения].",
-      "В [draw:] описывай готовое изображение: видимых участников, их действия, внешний вид, окружение и композицию. Описание должно быть самостоятельным, визуально конкретным и не содержать технических параметров генерации или объяснений.",
+      "В [draw:] описывай готовый визуальный кадр, а не пересказывай происходящую сцену: тип изображения, видимых участников и объекты, их действия и расположение, окружение, ракурс и границы кадра.",
+      "Передавай композицию именно изображения, а не общее описание ситуации. Описание должно быть самостоятельным, визуально конкретным и не содержать технических параметров генерации или объяснений.",
       "Явно называй по имени только изображённых персонажей. Имя персонажа карточки: " + (opts.characterName || "персонаж") + ".",
       "Постоянные теги внешности, LoRA и параметры качества приложение добавляет отдельно; не дублируй их в [draw:].",
       "Не больше одной директивы за ответ; не добавляй изображение без повода."
