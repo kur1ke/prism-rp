@@ -5224,13 +5224,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // stored VIS-REF-1 events. Adjustment gets a distinct typed ID, derived
     // from the SAME bounded active-path garment facts, not a new registry.
     const requested = Array.isArray(actions) ? actions : ["remove"];
-    const allowed = ["remove", "adjust"].filter((action) => requested.includes(action));
-    const items = actor.wearState.worn.concat(actor.wearState.partiallyWorn || [])
+    const allowed = ["remove", "adjust", "add"].filter((action) => requested.includes(action));
+    const present = actor.wearState.worn.concat(actor.wearState.partiallyWorn || [])
       .sort((a, b) => (a.order || 0) - (b.order || 0)).slice(0, 12);
-    return items.flatMap((x, i) => allowed.map((action) => ({
-      id: "wear:" + actorId + ":" + i + (action === "adjust" ? ":adjust" : ""),
+    const removed = (actor.wearState.removed || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).slice(0, 12);
+    const items = present.flatMap((x, i) => allowed.filter((action) => action !== "add").map((action) => ({ x, i, action })))
+      .concat(removed.flatMap((x, i) => allowed.includes("add") ? [{ x, i, action: "add" }] : []));
+    return items.map(({ x, i, action }) => ({
+      id: "wear:" + actorId + ":" + i + (action === "adjust" ? ":adjust" : action === "add" ? ":add" : ""),
       actor: actorId, field: "wear", action, item: x.item, source: clone(x.source),
-    })));
+    }));
   }
   const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, scene: SC.emptyState(), diagnostics: [] });
 
@@ -5282,7 +5285,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!str(e.evidence) || !evidenceText.includes(e.evidence))
         return "нет точного подтверждения в сообщении";
       if (e.reference) {
-        if (e.field !== "wear" || !["remove", "adjust"].includes(e.action) || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
+        if (e.field !== "wear" || !["remove", "adjust", "add"].includes(e.action) || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
         const candidates = Array.isArray(source.references) ? source.references : [];
         const match = candidates.find((x) => x.id === e.reference.id && x.actor === e.actor &&
           x.field === e.field && x.action === e.action && x.item === e.value[0] &&
@@ -5617,7 +5620,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       "Каждое событие: {\"actor\":\"" + actor + "\",\"field\":\"location|activity|wear|pose|hair|nearby|ongoing|availability\",\"action\":\"set|clear|add|remove|adjust\",\"value\":\"строка или массив строк для wear/nearby/ongoing\",\"certainty\":\"established|reported|intent\",\"evidence\":\"точная подстрока исходного сообщения\"}.",
       "Только действия/состояния СЕБЯ говорящего. Не меняй состояние другого человека. Не более " + MAX + " событий.",
       "Новые предметы, волосы и места не придумывай. Прямые описания извлекай только когда названы явно; для уже сохранённого предмета допускается проверенная ссылка referenceId, если текущее сообщение описывает совершённое действие.",
-      "Намерение, будущее время, предложение и условие = intent, оно НЕ изменяет текущее физическое состояние.",
+      "Определи актуальное состояние на конец реплики. Будущее время само по себе не означает отложенность: согласие на непосредственную просьбу может подразумевать действие сейчас. Учитывай контекст, время, доступность и завершённость; явные 'завтра', 'позже', условие и планы без немедленного выполнения = intent.",
+      "Не требуй отчёта о каждом жесте. Подразумеваемое немедленное выполнение допускается только при однозначном предмете, непосредственной просьбе/согласии и отсутствии отсрочки или препятствий. Если сомневаешься — intent/unresolved, не придумывай результат.",
       "Отрицание, вопрос, чужие утверждения, цитаты внутри сообщения — не событие. Для неопределённого верни [].",
       mode === "messenger" ? "МЕССЕНДЖЕР: любое сообщение — сообщение на расстоянии. Даже 'я дома' = reported (слова, не объективное доказательство). Нельзя established." :
         "RP: явно совершённое говорящим действие или состояние = established, но не выдумывай действий, которые говорящий не совершал.",
@@ -5625,9 +5629,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       "Для wear/nearby/ongoing поле value ВСЕГДА массив строк, например: \"value\": [\"огромный свитер\", \"тёплые носочки\"]. Для location/activity/pose/hair/availability — одна строка.",
       "Для одежды wear: set — ТОЛЬКО явно полный комплект; add — явно надетая СЕЙЧАС вещь ('в свитере', 'на мне свитер'), даже если момент надевания не назван; remove — только явно снятая вещь. Не додумывай остальную одежду.",
       "wear.adjust — только когда уже надетая вещь явно смещена, приспущена или поправлена, но НЕ снята полностью. Укажи placement — точную подстроку evidence о новом положении (например, 'с плеч'). Один предмет, один event. Если положение или совершение действия неясно — unresolved, не придумывай.",
+      "Для wear.add используй однозначный referenceId с action=add из REFERENCES, когда персонаж возвращает ранее снятую вещь, включая местоимение 'её'. Не придумывай имя предмета. Если ссылка неоднозначна — unresolved.",
       "Для wear.adjust, если вещь уже есть в REFERENCES, выбирай однозначный referenceId с action=adjust и опускай value, даже если в тексте другое русское окончание ('футболку' / 'футболка'). Приложение восстановит исходное точное имя и проверит источник. Не подставляй от себя близкие по смыслу названия. Для нового явно названного предмета допустим value=[...], только если его нет среди известных ссылок.",
 
-      "Когда предмет назван только местоимением (например, 'я сняла её' или 'спустила её с плеч'), используй referenceId ИСКЛЮЧИТЕЛЬНО из REFERENCES того же actor и действия (remove или adjust). Поле value тогда опусти: приложение подставит точное сохранённое имя. evidence и placement — только из ТЕКУЩЕГО сообщения, не из истории.",
+      "Когда предмет назван только местоимением (например, 'я сняла её' или 'спустила её с плеч'), используй referenceId ИСКЛЮЧИТЕЛЬНО из REFERENCES того же actor и действия (remove, adjust или add). Поле value тогда опусти: приложение подставит точное сохранённое имя. evidence и placement — только из ТЕКУЩЕГО сообщения, не из истории.",
       "Выбирай referenceId только когда референт однозначен из диалога. Если несколько возможных предметов и связь неясна, верни events без такого изменения и unresolved с короткой причиной. Не считай просьбу собеседника совершённым действием персонажа.",
       "Пример: просьба пользователя 'сними её' не меняет одежду персонажа. Позднее 'я сняла её' персонажа может означать wear.remove с referenceId, если конкретная известная вещь определяется однозначно.",
       ...(x.draw ? [
@@ -9896,7 +9901,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
             TR.activeSwipe(m).draws.length && TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt
             ? { draw: String(TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt).slice(0, 400) } : {}),
         })),
-        references: TRACK.references(state, actor, ["remove", "adjust"]),
+        references: TRACK.references(state, actor, ["remove", "adjust", "add"]),
       };
     }
     function pathFingerprint(path) {
