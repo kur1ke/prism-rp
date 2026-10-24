@@ -80,7 +80,7 @@
         if (!S.modal || S.modal.kind !== "debug") return;
         const body = $(".debug-modal .debug-body");
         if (!body) return;
-        const title = { prism: "Prism", tracker: "Трекер", events: "События", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
+        const title = { prism: "Prism", tracker: "Трекер", events: "События", images: "Изображения", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
         const content = (body.innerText || body.textContent || "").trim();
         const value = "Debug — " + ((ctx.card() || {}).name || "чат") + " / " + title + "\n\n" + content;
         const clipboard = typeof navigator !== "undefined" && navigator.clipboard;
