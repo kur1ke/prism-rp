@@ -3068,7 +3068,7 @@ async function foundationH() {
     // Существующие RP [scene:] в переписке по-прежнему не применяются.
     assert.deepStrictEqual(h.chat.sceneState().present, []);
   });
-  await ta("VIS-POV-3: image service carries owner camera through translation and provenance", async () => {
+  await ta("VIS-CAMERA-4: image service derives named actor from source Draw", async () => {
     const h = fbHarness({ name: "Лилит (Лили)", image: { trigger: "lilithx", look: "base: burgundy hair", loras: [{ name: "lilithx_v2", weight: 0.8 }] } });
     await h.chat.createChat("messenger", "c1");
     const draft = h.chat.newMsg("assistant", null, "Вот снимок!");
@@ -3083,13 +3083,13 @@ async function foundationH() {
       ICP.compile = async (_, o) => { opts = o; return { compiled: true, text: "lilithx, adult, female, 1girl, feet, bare feet, grey carpet, pov" }; };
       IB.generate = async (_, o) => { sent = o; return { dataUrl: "data:image/png;base64,AA==", seed: 4, info: { width: 512, height: 512 } }; };
       await h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "фото из первого лица, на котором видны ступни Лилит (Лили) на сером ковре" });
-      assert.strictEqual(opts.embodiedOwner, true);
+      assert.ok(!Object.prototype.hasOwnProperty.call(opts,"embodiedOwner"));
       assert.ok(sent && !sent.prompt.includes("1girl") && sent.prompt.includes("lilithx"), sent && sent.prompt);
       assert.ok(sent.prompt.includes("<lora:lilithx_v2:0.8>"), sent.prompt);
       const image = source.swipes[0].images[0];
       assert.strictEqual(image.status, "done");
-      assert.strictEqual(image.promptSources.cameraRole, "owner");
-      assert.ok(!image.promptSources.imageLayers.identity);
+      assert.strictEqual(image.promptSources.subjects.owner,true);
+      assert.ok(image.promptSources.imageLayers.identity,"named owner keeps appearance");
     } finally { IB.generate = oldGen; ICP.compile = oldCompile; }
   });
   await ta("INITIAL-UX-1: accept one fenced JSON outfit but not explanatory prose or partial list",async()=>{
@@ -3343,7 +3343,7 @@ async function foundationH() {
     const origin={schema:1,kind:"initial-outfit",event:{
       actor:"char",field:"wear",action:"set",value:["короткий домашний халатик"],
       certainty:"reported",evidence:""}};
-    const draw="camera=owner; короткий домашний халатик приподнят, вид на ноги";
+    const draw="короткий домашний халатик приподнят, вид на ноги";
     const msg={id:"selfie",role:"assistant",swipeIdx:0,swipes:[{text:"Лови фото!",
       draws:[{prompt:draw}],stateEvents:[{actor:"char",field:"wear",action:"adjust",
         value:["короткий домашний халатик"],placement:"приподнят",
@@ -3599,7 +3599,7 @@ async function foundationH() {
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const first="current mirror selfie, white cotton t-shirt removed";
-    const second="camera=owner; holding it in hands, view from above";
+    const second="holding it in hands, view from above";
     const m=h.chat.newMsg("assistant",null,"Первое фото");
     m.swipes[0].draws=[{prompt:first,ratio:"1:1"}];
     await h.chat.commitMessage(m,m.id);
@@ -3630,7 +3630,7 @@ async function foundationH() {
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
         ["white cotton t-shirt"],"holding it must not turn removed into worn");
       const currentPlan=globalThis.PRP.visualPlan.create({
-        cameraOwner:true,shotAuthored:true,draw:second,
+        owner:true,shotAuthored:true,draw:second,
         frameObjects:live.swipes[0].stateStatus.frameObjects,
         wearFacts:globalThis.PRP.stateResolver.wearFacts({state:h.ctx.svc.state.snapshot()})});
       assert.deepStrictEqual(currentPlan.offBodyVisible.map(x=>x.item),["white cotton t-shirt"]);
@@ -3982,10 +3982,10 @@ async function foundationH() {
     }finally {ICP.compile=oldC;IB.generate=oldG;}
   });
   await ta("VIS-HYBRID-1: authored Draw compiles as a concise description, not a second scene",async()=>{
-    const rules=IC.rewriteRules({format:"hybrid",intentMode:true,embodiedOwner:true,
+    const rules=IC.rewriteRules({format:"hybrid",intentMode:true,
       visualPlan:{wear:{worn:[],removed:[],partiallyWorn:[]}}});
     assert.ok(rules.includes("faithful visual translator") && rules.includes("NOT a scene writer"));
-    assert.ok(rules.includes("Do not invent ANY garments") && rules.includes("OWNER-CAMERA"));
+    assert.ok(rules.includes("Do not invent ANY garments") && !rules.includes("OWNER-CAMERA"));
     assert.ok(rules.includes("not a clothing checklist") || rules.includes("not a clothing checklist"));
     assert.ok(!rules.includes("danbooru tags in the prompt"),"hybrid never asks for tag-only composition");
     assert.ok(IC.rewriteRules({format:"tags",intentMode:true}).includes("comma-separated"));
@@ -4001,7 +4001,7 @@ async function foundationH() {
       assert.ok(instruction.includes("one or two short"));
       return translated;
     };
-    const opts={format:"hybrid",intentMode:true,embodiedOwner:true,translate:false};
+    const opts={format:"hybrid",intentMode:true,translate:false};
     const a=await ICP.compile(scene,opts,model);
     const b=await ICP.compile(scene,opts,model);
     assert.strictEqual(count,1,"single translator and same-input cache");
@@ -4015,7 +4015,7 @@ async function foundationH() {
   await ta("VIS-FF-01C: persisted pre-frame-first hybrid cache must not survive rule change",async()=>{
     ICP.clear();
     const scene="Она показывает живот в кадре";
-    const options={intentMode:true,format:"hybrid",embodiedOwner:true};
+    const options={intentMode:true,format:"hybrid"};
     const legacyKey=["v9-final-audit","intent","regular-frame","owner-camera",
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
     const oldRecord={text:"A third-person top-down portrait.",compiled:true};
@@ -4058,7 +4058,7 @@ async function foundationH() {
       loras:[{name:"Orihime Illustrious",weight:0.8}]}};
     const shot="Орихимэ приподняла футболку, открывая живот";
     const composed=IC.compose({draw:shot,card,scene:S.emptyState(),persona:{},
-      messenger:null,cameraOwner:true,shotAuthored:true});
+      messenger:null,shotAuthored:true});
     const english="The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
     const hybrid=IC.finalise({composed,card,compiled:english,hybrid:true,backend:"a1111",
       settings:{promptMode:"off",fixedPrompt:""}});
@@ -4068,7 +4068,7 @@ async function foundationH() {
     assert.ok(hybrid.prompt.includes("orihime_inoue") && hybrid.prompt.includes("long orange hair"),hybrid.prompt);
     assert.ok(hybrid.prompt.includes("masterpiece, best quality"),hybrid.prompt);
     assert.ok(hybrid.prompt.includes("<lora:Orihime Illustrious:0.8>"),hybrid.prompt);
-    assert.ok(!/\b1girl\b/.test(hybrid.prompt),"owner-camera is not another subject");
+    assert.ok(!/\b1girl\b/.test(hybrid.prompt),"no unspecified extra subject");
     assert.ok(!/bra|panties|lace underwear|beige skirt/i.test(hybrid.prompt),
       "hidden/undrawn wardrobe must not be injected");
     const pinned=IC.finalise({composed,card,compiled:english,hybrid:true,backend:"a1111",
@@ -4077,28 +4077,27 @@ async function foundationH() {
     assert.ok(!pinned.prompt.includes("masterpiece"),"manual fixed block owns quality");
     const legacy=IC.finalise({composed,card,compiled:"lifting shirt, stomach, navel",
       backend:"a1111",settings:{promptMode:"off"}});
-    assert.ok(legacy.prompt.includes("pov"));
+    assert.ok(!/\bpov\b/i.test(legacy.prompt));
     assert.ok(!legacy.prompt.includes("masterpiece"),"tagged format must remain unchanged");
   });
-  await ta("VIS-FF-01: owner-camera is attribution, not automatic hybrid framing",async()=>{
+  await ta("VIS-CAMERA-5: natural framing has no special camera metadata",async()=>{
     const card={name:"Orihime Inoue",image:{trigger:"orihime_inoue",
       loras:[{name:"Orihime Illustrious",weight:0.8}]}};
-    const composed=IC.compose({draw:"camera=owner; close-up of her stomach",
+    const composed=IC.compose({draw:"close-up of her stomach",
       card,scene:{chars:{}},persona:{},shotAuthored:true});
     const english="Close-up of her stomach as she lifts a white t-shirt.";
     const hybrid=IC.finalise({composed,compiled:english,hybrid:true,
       card,backend:"a1111",settings:{promptMode:"off",negative:"bad anatomy"}});
-    assert.strictEqual(composed.cameraOwner,true);
-    assert.strictEqual(composed.provenance.cameraRole,"owner");
+    assert.strictEqual(composed.ownerPresent,true);
+    assert.ok(!("cameraRole" in composed.provenance));
     assert.ok(hybrid.prompt.includes(english),hybrid.prompt);
     assert.ok(!/\bpov\b|first.person view/i.test(hybrid.prompt),hybrid.prompt);
     assert.ok(!/third.person view|duplicate body/i.test(hybrid.negative),hybrid.negative);
     assert.ok(hybrid.prompt.includes("<lora:Orihime Illustrious:0.8>"),hybrid.prompt);
-    const rules=IC.rewriteRules({intentMode:true,format:"hybrid",embodiedOwner:true});
-    assert.ok(rules.includes("does NOT specify a viewpoint"),rules);
-    assert.ok(IC.drawInstruction({intentMode:true,hybrid:true}).includes("НЕ задаёт POV"));
-    assert.ok(IC.drawInstruction({intentMode:true}).includes("Для вида собственного тела"),
-      "legacy intent instructions remain unchanged");
+    const rules=IC.rewriteRules({intentMode:true,format:"hybrid"});
+    assert.ok(!rules.includes("OWNER-CAMERA"),rules);
+    assert.ok(!IC.drawInstruction({intentMode:true,hybrid:true}).includes("camera=owner"));
+    assert.ok(!IC.drawInstruction({intentMode:true}).includes("camera=owner"));
   });
   await ta("VIS-FF-02: translated author shot cannot override source frame actors",async()=>{
     const card={name:"Orihime Inoue",image:{trigger:"orihime_inoue",
@@ -4118,7 +4117,7 @@ async function foundationH() {
     assert.strictEqual(second.ownerPresent,true,"translation cannot drop a source actor");
   });
   await ta("VIS-HYBRID-5: removed garment is omitted, not a visible instruction, with one model call",async()=>{
-    const plan=globalThis.PRP.visualPlan.create({cameraOwner:true,shotAuthored:true,
+    const plan=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,
       draw:"Орихимэ сняла белую хлопковую футболку; видны белое кружевное бельё и юбка",
       wearFacts:[{actor:"char",known:true,complete:true,
         worn:[{item:"белое кружевное бельё"},{item:"бежевая юбка"}],
@@ -4146,7 +4145,7 @@ async function foundationH() {
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const msg=h.chat.newMsg("assistant",null,"Вот фотография");
-    const shot="camera=owner; Орихимэ Иноуэ приподняла белую хлопковую футболку, открывая живот и пупок";
+    const shot="Орихимэ Иноуэ приподняла белую хлопковую футболку, открывая живот и пупок";
     msg.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
     await h.chat.commitMessage(msg,msg.id);
     h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{
@@ -4258,10 +4257,10 @@ async function foundationH() {
     assert.throws(()=>{plan.wear.removed[0].item="вымышленный предмет";},TypeError);
     assert.strictEqual(facts[0].removed[0].item,"юбка");
     assert.strictEqual(VP.create({owner:false,wearFacts:facts}).wear,null,"other person's photo cannot acquire owner wear");
-    assert.strictEqual(VP.create({cameraOwner:true,wearFacts:facts}).actor,"char");
+    assert.strictEqual(VP.create({owner:true,wearFacts:facts}).actor,"char");
   });
   await ta("VC-01-2: authored intent translates canonical removal in one model call without global negatives",async()=>{
-    const VP=globalThis.PRP.visualPlan,plan=VP.create({cameraOwner:true,shotAuthored:true,
+    const VP=globalThis.PRP.visualPlan,plan=VP.create({owner:true,shotAuthored:true,
       wearFacts:[{actor:"char",known:true,complete:true,worn:[],partiallyWorn:[],
         removed:[{item:"белая хлопковая футболка",certainty:"reported"}]}]});
     let calls=0;
@@ -4296,7 +4295,7 @@ async function foundationH() {
       evidence:"приподняла край белой хлопковой футболки"}];
     await h.chat.commitMessage(middle,middle.id);
     const last=h.chat.newMsg("assistant",middle.id,"Вот второе фото!");
-    const shot="camera=owner; вид сверху вниз на торс Орихимэ Иноуэ, она сняла белую хлопковую футболку, обнажая живот и белое кружевное бельё";
+    const shot="вид сверху вниз на торс Орихимэ Иноуэ, она сняла белую хлопковую футболку, обнажая живот и белое кружевное бельё";
     last.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
     last.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
       value:["белая хлопковая футболка"],certainty:"reported",evidence:"сняла белую хлопковую футболку",
@@ -4341,7 +4340,7 @@ async function foundationH() {
       value:["юбку"],certainty:"reported",evidence:"Сняла юбку"}];
     await h.chat.commitMessage(first,first.id);
     const next=h.chat.newMsg("assistant",first.id,"Фото");
-    const shot="camera=owner; вид сверху на Химэ, видно ноги";
+    const shot="вид сверху на Химэ, видно ноги";
     next.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
     await h.chat.commitMessage(next,next.id);
     h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",
@@ -4370,7 +4369,7 @@ async function foundationH() {
   });
   await ta("VC-02-1: Observer links off-body object only to verified same-draw removal",async()=>{
     const I=globalThis.PRP.stateInterpreter;
-    const draw="camera=owner; она сняла белую хлопковую футболку и держит снятую футболку в руках";
+    const draw="она сняла белую хлопковую футболку и держит снятую футболку в руках";
     const options={role:"assistant",mode:"messenger",text:"Фото!",draw,
       draws:[{prompt:draw}],references:[]};
     const raw=JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",value:["белую хлопковую футболку"],
@@ -4381,7 +4380,7 @@ async function foundationH() {
     assert.strictEqual(parsed.events.length,1,JSON.stringify(parsed.issues));
     assert.deepStrictEqual(parsed.frameObjects,[{role:"offBody",item:"белую хлопковую футболку",
       evidence:"держит снятую футболку в руках"}]);
-    const plan=globalThis.PRP.visualPlan.create({cameraOwner:true,shotAuthored:true,draw,
+    const plan=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw,
       frameObjects:parsed.frameObjects,
       wearFacts:[{actor:"char",known:true,removed:[{item:"белую хлопковую футболку"}],worn:[],partiallyWorn:[]}]});
     assert.deepStrictEqual(plan.offBodyVisible,parsed.frameObjects);
@@ -4405,10 +4404,10 @@ async function foundationH() {
     assert.strictEqual(I.parse(JSON.stringify({events:[],frameObjects:guesses}),
       {...options,role:"user"}).frameObjects.length,0);
     const frame=[{role:"offBody",item:"футболка",evidence:draw}];
-    const absent=VP.create({cameraOwner:true,shotAuthored:true,draw,frameObjects:frame,
+    const absent=VP.create({owner:true,shotAuthored:true,draw,frameObjects:frame,
       wearFacts:[{actor:"char",worn:[{item:"футболка"}],removed:[],partiallyWorn:[]}]});
     assert.deepStrictEqual(absent.offBodyVisible,[]);
-    const stale=VP.create({cameraOwner:true,shotAuthored:true,draw:"другой кадр",frameObjects:frame,
+    const stale=VP.create({owner:true,shotAuthored:true,draw:"другой кадр",frameObjects:frame,
       wearFacts:[{actor:"char",worn:[],removed:[{item:"футболка"}],partiallyWorn:[]}]});
     assert.deepStrictEqual(stale.offBodyVisible,[]);
   });
@@ -4432,7 +4431,7 @@ async function foundationH() {
     const facts=[{actor:"char",known:true,removed:[{item:"white t-shirt",certainty:"reported"}],
       worn:[],partiallyWorn:[]}];
     const draw="holding white t-shirt in hands";
-    const base={cameraOwner:true,shotAuthored:true,draw,wearFacts:facts};
+    const base={owner:true,shotAuthored:true,draw,wearFacts:facts};
     const withRole=VP.create({...base,frameObjects:[{role:"offBody",item:"white t-shirt",evidence:draw}]});
     const withoutRole=VP.create(base);
     let calls=0;
@@ -4458,7 +4457,7 @@ async function foundationH() {
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const m=h.chat.newMsg("assistant",null,"Вот фотография");
-    const draw="camera=owner; я сняла белую футболку и держу её в руках";
+    const draw="я сняла белую футболку и держу её в руках";
     m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
     m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
       value:["белую футболку"],certainty:"reported",evidence:"сняла белую футболку",
@@ -4490,7 +4489,7 @@ async function foundationH() {
   await ta("VC-02-6: stale or incorrect frame-role metadata never reaches VisualPlan",async()=>{
     const VP=globalThis.PRP.visualPlan;
     const wearFacts=[{actor:"char",worn:[],partiallyWorn:[],removed:[{item:"белая футболка"}]}];
-    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw:"я держу снятую футболку",
+    const plan=VP.create({owner:true,shotAuthored:true,draw:"я держу снятую футболку",
       frameObjects:[{role:"offBody",item:"белая футболка",evidence:"на столе"}],wearFacts});
     assert.deepStrictEqual(plan.offBodyVisible,[]);
     assert.deepStrictEqual(VP.create({shotAuthored:true,draw:"я держу снятую футболку",
@@ -4499,7 +4498,7 @@ async function foundationH() {
   });
   await ta("VC-03-1: compiler rejects lifting shirt as a completed removal before backend",async()=>{
     const VP=globalThis.PRP.visualPlan;
-    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw:"сняла белую хлопковую футболку",
+    const plan=VP.create({owner:true,shotAuthored:true,draw:"сняла белую хлопковую футболку",
       wearFacts:[{actor:"char",known:true,complete:true,worn:[],partiallyWorn:[],
         removed:[{item:"белая хлопковая футболка",certainty:"reported"}]}]});
     ICP.clear();
@@ -4518,7 +4517,7 @@ async function foundationH() {
   });
   await ta("VC-03-2: final positive sources cannot reintroduce removed garments",async()=>{
     const VP=globalThis.PRP.visualPlan;
-    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw:"сняла футболку",
+    const plan=VP.create({owner:true,shotAuthored:true,draw:"сняла футболку",
       wearFacts:[{actor:"char",known:true,worn:[],partiallyWorn:[],removed:[{item:"белая футболка"}]}]});
     const wearItems=[{index:0,item:"белая футболка",tag:"white cotton t-shirt"}];
     assert.strictEqual(ICP.auditFinal("pov, white lace lingerie, navel","",plan,wearItems,[]).validated,true);
@@ -4533,7 +4532,7 @@ async function foundationH() {
   await ta("VC-03-3: visible removed objects need signed off-body tags and no global negative",async()=>{
     const VP=globalThis.PRP.visualPlan;
     const draw="я держу снятую футболку в руках";
-    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw,
+    const plan=VP.create({owner:true,shotAuthored:true,draw,
       frameObjects:[{role:"offBody",item:"белая футболка",evidence:draw}],
       wearFacts:[{actor:"char",known:true,worn:[],partiallyWorn:[],removed:[{item:"белая футболка"}]}]});
     const items=[{index:0,item:"белая футболка",tag:"white t-shirt"}];
@@ -4558,7 +4557,7 @@ async function foundationH() {
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const m=h.chat.newMsg("assistant",null,"Я сняла белую футболку");
-    const draw="camera=owner; сняла белую футболку, видно живот";
+    const draw="сняла белую футболку, видно живот";
     m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
     m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
       value:["белую футболку"],certainty:"reported",evidence:"сняла белую футболку",
@@ -5043,7 +5042,7 @@ async function foundationH() {
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
-    const c = IC.compose({ draw: "camera=owner; POV, feet on wooden floor", card, scene: st, persona: {}, messenger: { location: "" } });
+    const c = IC.compose({ draw: "POV, feet on wooden floor", card, scene: st, persona: {}, messenger: { location: "" } });
     assert.strictEqual(c.stateContext, "clothing: тёплый шерстяной кардиган");
     let calls = 0;
     const translator = async (instruction) => {
@@ -5091,7 +5090,7 @@ async function foundationH() {
         generated = args;
         return { dataUrl: "data:image/png;base64,AA==", seed: 42, info: { width: 1024, height: 1024 } };
       };
-      await h.ctx.svc.images.draw(src, src.swipes[0], { prompt: "camera=owner; POV, bare feet on wooden floor" });
+      await h.ctx.svc.images.draw(src, src.swipes[0], { prompt: "POV, bare feet on wooden floor" });
       assert.ok(received && received.opts.stateContext.includes("тёплый шерстяной кардиган"),
         received && JSON.stringify(received), "origin state should reach translation context");
       assert.ok(generated && generated.prompt.includes("warm wool cardigan"), generated && generated.prompt);
