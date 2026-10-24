@@ -6,7 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -154,8 +154,23 @@
         const cameraOwner = IC.ownerCamera(cd, entry.draw);
         // Camera metadata is an image-level fact, not a tag for the compiler/backend.
         const shot = String(entry.draw || "").replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
+        // VC-01: the canonical snapshot already includes this accepted message's
+        // validated Observer events. It is END-OF-TURN, not stale pre-shot wear.
+        // The first (and only) intent translation must receive those facts.
+        // Subject scoping happens on the ORIGINAL authored shot, before a
+        // translator can hallucinate the card owner into a product screenshot.
+        const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true });
+        const visualPlan = VP.create({
+          wearFacts: projected.wearFacts,
+          owner: !!shotActors.owner,
+          cameraOwner,
+          shotAuthored: drawAuthored,
+          source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
+        });
         const firstPass = intent ? await ICP.compile(shot,
-          { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner, qualityPinned: ST.qualityPinned(S.settings) }, generateText) : null;
+          { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner,
+            qualityPinned: ST.qualityPinned(S.settings),
+            wearState: visualPlan.wear, visualPlan }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
@@ -175,7 +190,13 @@
         // Canon is allowed to learn FROM the authored visual assertion.
         // It must not veto/reinterpret the frame on the basis of incomplete
         // earlier text-only Observer results.
-        const canonicalWear = drawAuthored ? null : composed.physicalWear;
+        // A validated current author-shot CAN change clothing in this message.
+        // The resulting END-OF-TURN state, rather than the previous state,
+        // is now available for the single intent compilation above.
+        // The legacy English-tags authored path remains unchanged in VC-01;
+        // VC-02 will attach typed off-body visibility to both input modes.
+        const canonicalWear = intent && drawAuthored ? visualPlan.wear :
+          drawAuthored ? null : composed.physicalWear;
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
@@ -194,7 +215,7 @@
           !composed.userPresent && IC.subjectCount(comp.text) <= 1;
         const wearNegative = singleOwner ? String(comp.negative || "") : "";
         if (changes && canonicalWear.removed && canonicalWear.removed.length &&
-            (!comp.negative || !Array.isArray(comp.wearItems)))
+            ((!visualPlan.shotAuthored && !comp.negative) || !Array.isArray(comp.wearItems)))
           throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
           card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative });
@@ -214,7 +235,11 @@
           promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
-              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]) } } };
+              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]),
+              plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
+                complete: !!(visualPlan.wear && visualPlan.wear.complete),
+                absentFromBody: visualPlan.absentFromBody,
+                negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
         finalPatch = { status: "error", error: e.message || String(e) };
