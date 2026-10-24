@@ -3943,6 +3943,12 @@ async function foundationH() {
     assert.strictEqual(ICP.auditFinal("pov, holding white t-shirt, wearing shirt","",plan,items,tags).validated,false);
     assert.strictEqual(ICP.auditFinal("pov, holding white t-shirt","white t-shirt",plan,items,tags).validated,false);
     assert.strictEqual(ICP.auditFinal("pov, holding white t-shirt","",plan,items,[]).validated,false);
+    assert.strictEqual(ICP.auditFinal("pov, wearing white t-shirt","",plan,items,
+      [{index:0,tag:"wearing white t-shirt"}]).validated,false,
+      "an off-body index cannot launder an on-body positive tag");
+    assert.strictEqual(ICP.auditFinal("pov, holding a banana","",plan,items,
+      [{index:0,tag:"holding a banana"}]).validated,false,
+      "source-bound garment cannot be renamed to a different object");
     ICP.clear();
     const incomplete=await ICP.compile(draw,{intentMode:true,visualPlan:plan,wearState:plan.wear},
       async()=>JSON.stringify({prompt:"pov, holding white t-shirt",absent:[{index:0,tag:"white t-shirt"}]}));
