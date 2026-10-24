@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "41a9702570c43912697acec19f29fa5361c38c55";
+  window.PRISM_RP_BUILD_SHA = "219d26020e6e9276fee0389405c2f73514a20b49";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -9570,10 +9570,64 @@
       if (index < 0) return { skipped: "off-path" };
       const originalKey = pathFingerprint(initialPath);
       const chatId = c.id;
+      // VC-04: continued swipes contain several authored photographs. Preserve
+      // ONLY previously interpreted, source-bound visual facts whose exact
+      // prior draw still exists. The latest observer still interprets only
+      // the newest photograph, and an old crop cannot become new authority.
+      // Legacy stateEvents without a matching earlier stateStatus are never
+      // promoted into historical events.
+      const draws = msg.role === "assistant" && Array.isArray(sw.draws) ? sw.draws : [];
+      const latestIndex = draws.length - 1;
+      const priorStatus = sw.stateStatus;
+      const archivedDrawEvents = [];
+      let previousIndex = -1;
+      if (latestIndex > 0 && priorStatus &&
+          ["ok", "partial", "no-changes"].includes(priorStatus.status) &&
+          typeof priorStatus.sourceText === "string" &&
+          sourceText.startsWith(priorStatus.sourceText) &&
+          typeof priorStatus.sourceDraw === "string") {
+        const candidates = draws.slice(0, -1).map((d, i) =>
+          d && String(d.prompt || "") === priorStatus.sourceDraw ? i : -1).filter(i => i >= 0);
+        previousIndex = Number.isInteger(priorStatus.sourceDrawIndex)
+          ? priorStatus.sourceDrawIndex
+          : candidates.length === 1 ? candidates[0] : -1;
+        if (previousIndex >= 0 && previousIndex < latestIndex &&
+            draws[previousIndex] && String(draws[previousIndex].prompt || "") === priorStatus.sourceDraw) {
+          for (const event of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
+            if (!event || event.evidenceType !== "draw" || event.certainty === "intent") continue;
+            const drawIndex = event.drawIndex == null ? previousIndex : event.drawIndex;
+            const exactDraw = draws[drawIndex];
+            if (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex > previousIndex ||
+                !exactDraw || typeof exactDraw.prompt !== "string" ||
+                !event.evidence || !exactDraw.prompt.includes(event.evidence)) continue;
+            archivedDrawEvents.push({ ...event, drawIndex });
+          }
+        }
+      }
+      // Same-swipe photo history is valid local context for references, but
+      // never an extra instruction or independently persisted inventory.
+      // Build a bounded *read-only* intermediate snapshot using only the
+      // exact previously verified photo events; do not pull future text or
+      // later Scene directives back into that earlier moment.
+      const contextual = observationContext(initialPath.slice(0, index), msg.role);
+      if (previousIndex >= 0 && archivedDrawEvents.length) {
+        const priorMessage = {
+          id: msg.id, chatId: msg.chatId, parentId: msg.parentId,
+          role: msg.role, swipeIdx: 0,
+          swipes: [{
+            text: priorStatus.sourceText,
+            draws: draws.slice(0, previousIndex + 1),
+            sceneOps: [], stateCorrections: [],
+            stateEvents: archivedDrawEvents.slice(-32),
+          }],
+        };
+        const localState = snapshot(initialPath.slice(0, index).concat([priorMessage]));
+        contextual.references = TRACK.references(localState, "char", ["remove", "adjust", "add"]);
+      }
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
         ...(sourceDraw ? { draw: sourceDraw.slice(0, 1600), draws: [{ prompt: sourceDraw }] } : {}),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name,
-        ...observationContext(initialPath.slice(0, index), msg.role) };
+        ...contextual };
       // Reuse a read-only early result only when its interpretation inputs still
       // match. Changed persona/mode/text cannot silently inherit stale events.
       const prepared = opts && opts.prepared;
@@ -9593,42 +9647,8 @@
           early.issues.some((issue) => issue.startsWith("Неоднозначная ссылка:")));
         result = refsSame || !mayNeedReferences ? early : await analyse(options, provider);
       } else result = await analyse(options, provider);
-      // Высокоточные явные самоописания не должны исчезать только потому,
-      // что Perchance вернул неполный JSON или не распознал простое предложение.
-      // Более сложные случаи по-прежнему требуют модельного извлечения.
-      // VC-04: continued swipes contain several authored photographs. Preserve
-      // ONLY previously interpreted, source-bound visual facts whose exact
-      // prior draw still exists. The latest observer still interprets only
-      // the newest photograph, and an old crop cannot become new authority.
-      // Legacy stateEvents without a matching earlier stateStatus are never
-      // promoted into historical events.
-      const draws = msg.role === "assistant" && Array.isArray(sw.draws) ? sw.draws : [];
-      const latestIndex = draws.length - 1;
-      const priorStatus = sw.stateStatus;
-      const archivedDrawEvents = [];
-      if (latestIndex > 0 && priorStatus &&
-          ["ok", "partial", "no-changes"].includes(priorStatus.status) &&
-          typeof priorStatus.sourceText === "string" &&
-          sourceText.startsWith(priorStatus.sourceText) &&
-          typeof priorStatus.sourceDraw === "string") {
-        const candidates = draws.slice(0, -1).map((d, i) =>
-          d && String(d.prompt || "") === priorStatus.sourceDraw ? i : -1).filter(i => i >= 0);
-        const previousIndex = Number.isInteger(priorStatus.sourceDrawIndex)
-          ? priorStatus.sourceDrawIndex
-          : candidates.length === 1 ? candidates[0] : -1;
-        if (previousIndex >= 0 && previousIndex < latestIndex &&
-            draws[previousIndex] && String(draws[previousIndex].prompt || "") === priorStatus.sourceDraw) {
-          for (const event of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
-            if (!event || event.evidenceType !== "draw" || event.certainty === "intent") continue;
-            const drawIndex = event.drawIndex == null ? previousIndex : event.drawIndex;
-            const exactDraw = draws[drawIndex];
-            if (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex > previousIndex ||
-                !exactDraw || typeof exactDraw.prompt !== "string" ||
-                !event.evidence || !exactDraw.prompt.includes(event.evidence)) continue;
-            archivedDrawEvents.push({ ...event, drawIndex });
-          }
-        }
-      }
+      // Fallback never invents frame objects; semantic photo references
+      // are determined only by the validated main Observer result.
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
       // Grounded fallback intentionally reads only text. Image descriptions
       // are interpreted by the SAME Observer and independently verified
