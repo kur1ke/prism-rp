@@ -365,6 +365,6 @@
     "Если ничего не изменилось — строку не пиши. Изменения состояния не повторяй в тексте ответа.",
   ].join("\n");
 
-  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, ageWords, describe, summaryLine, formatClock, opLabel, isLegacy, PROTOCOL };
+  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, ageWords, describe, summaryLine, formatClock, opLabel, isLegacy, sameItem, PROTOCOL };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.scene;
 })(typeof window !== "undefined" ? window : globalThis);
