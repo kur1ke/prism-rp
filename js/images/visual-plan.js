@@ -16,7 +16,7 @@
 
   function create(input) {
     const o = input || {};
-    const owner = !!o.owner || !!o.cameraOwner;
+    const owner = !!o.owner;
     const fact = owner && Array.isArray(o.wearFacts)
       ? o.wearFacts.find((item) => item && item.actor === "char") : null;
     const wear = fact ? {
