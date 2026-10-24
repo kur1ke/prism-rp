@@ -133,8 +133,9 @@
       const providedIndex = !reuse && Array.isArray(sw.draws) ? sw.draws.indexOf(d) : -1;
       const pinnedIndex = reuse && Number.isInteger(reuse.sourceDrawIndex)
         ? reuse.sourceDrawIndex : providedIndex;
-      const authoredIndex = pinnedIndex >= 0 && matching.includes(pinnedIndex)
-        ? pinnedIndex : matching.length === 1 ? matching[0] : -1;
+      const authoredIndex = pinnedIndex >= 0
+        ? (matching.includes(pinnedIndex) ? pinnedIndex : -1)
+        : matching.length === 1 ? matching[0] : -1;
       const drawAuthored = authoredIndex >= 0;
       // A continued swipe's END-OF-TURN state belongs to the LAST authored
       // photograph. Re-rendering an older photograph with it would rewrite
