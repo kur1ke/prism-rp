@@ -43,6 +43,70 @@
   }
   const hasWearChange = (w) => !!(w && (w.removed.length || w.partiallyWorn.length));
 
+  // VC-03: source-bound, deliberately conservative semantic tag audit.
+  // Model-reported "absent" is a translated garment label, NOT proof that
+  // the generated positive prompt actually omitted that garment. For each
+  // removed garment use the last noun in its translated tag as a generic
+  // lexical collision anchor (e.g. white cotton t-shirt -> shirt). This is
+  // a deterministic safeguard, NOT unrestricted semantic understanding.
+  function garmentHead(tag) {
+    const words = String(tag || "").toLowerCase().replace(/[_-]/g, " ").match(/[a-z][a-z0-9]*/g) || [];
+    return words.length ? words[words.length - 1] : "";
+  }
+  function tagParts(value) {
+    return IC.splitTags(value).map((raw) => ({
+      raw, norm: IC.bareTag(raw).replace(/[_-]/g, " ").trim().toLowerCase(),
+    })).filter((x) => x.norm);
+  }
+  const wordExists = (str, word) => !!word && (String(str || "").match(/[a-z][a-z0-9]*/g) || []).includes(word);
+  const sameTag = (a, b) => IC.bareTag(a).replace(/[_-]/g, " ").toLowerCase() ===
+    IC.bareTag(b).replace(/[_-]/g, " ").toLowerCase();
+  function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags) {
+    const plan = visualPlan && visualPlan.wear ? visualPlan : null;
+    if (!plan || plan.actor !== "char") return { validated: false, scope: "not-owner", issues: [] };
+    const removed = Array.isArray(plan.wear.removed) ? plan.wear.removed : [];
+    if (!removed.length) return { validated: false, scope: "no-removal", issues: [] };
+    const issues = [];
+    const mapped = Array.isArray(wearItems) ? wearItems : [];
+    if (mapped.length !== removed.length || mapped.some((x, i) =>
+      !x || x.index !== i || typeof x.tag !== "string" || !garmentHead(x.tag) ||
+      (x.item != null && x.item !== removed[i].item)))
+      issues.push("Не все снятые вещи привязаны к исходному предмету и английскому тегу");
+    const objects = Array.isArray(plan.offBodyVisible) ? plan.offBodyVisible : [];
+    const shown = Array.isArray(offBodyTags) ? offBodyTags : [];
+    if (objects.length !== shown.length || objects.some((x, i) => {
+      const found = shown[i];
+      const idx = removed.findIndex((r) => r.item === x.item);
+      const noun = idx < 0 ? "" : garmentHead(mapped[idx] && mapped[idx].tag);
+      // An indexed claim about a visible removed object cannot rename it
+      // into another object or disguise a newly worn/lifted garment.
+      const bodyAction = /\b(?:wearing|worn|lifting|putting on|pulled up|off shoulders)\b/i;
+      return idx < 0 || !found || found.index !== idx || typeof found.tag !== "string" ||
+        !wordExists(IC.bareTag(found.tag).toLowerCase().replace(/[_-]/g, " "), noun) ||
+        bodyAction.test(found.tag) ||
+        !tagParts(prompt).some((p) => sameTag(p.raw, found.tag));
+    })) issues.push("Видимые снятые вещи не связаны с точными positive-тегами");
+    if (issues.length) return { validated: false, scope: "invalid-mapping", issues };
+    // A scene with another person is not globally garment-scoped. Do not
+    // remove that person's shirt because the camera owner removed theirs.
+    if (IC.subjectCount(prompt) > 1)
+      return { validated: false, scope: "multi-subject", issues: [] };
+    const positives = tagParts(prompt), negatives = tagParts(negative);
+    for (let i = 0; i < mapped.length; i++) {
+      const noun = garmentHead(mapped[i].tag);
+      const allowed = shown.filter((x) => x.index === i).map((x) => x.tag);
+      for (const p of positives) {
+        if (wordExists(p.norm, noun) && !allowed.some((x) => sameTag(x, p.raw))) {
+          issues.push("Снятая вещь присутствует в positive вне подтверждённой off-body роли: " + mapped[i].tag);
+          break;
+        }
+      }
+      if (allowed.length && negatives.some((n) => wordExists(n.norm, noun)))
+        issues.push("Глобальный negative подавляет подтверждённый видимый снятый предмет: " + mapped[i].tag);
+    }
+    return { validated: issues.length === 0, scope: "single-owner", issues };
+  }
+
   // One compiler call owns both the reconciled positive shot and negative
   // garment tags from the SAME selected-path wear facts, never a second model.
   async function compile(scene, opts, generateText) {
@@ -59,7 +123,7 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    const key = ["v8-end-turn-visual-plan", o.intentMode ? "intent" : "tags",
+    const key = ["v9-final-audit", o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame", o.embodiedOwner ? "owner-camera" : "external-camera",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
@@ -77,6 +141,10 @@
       "The prompt must never present REMOVED items as worn, lifted, pulled-up, or partially worn on the subject. PARTIAL items are still worn at their known placement.",
       "REMOVED means absent FROM THE BODY, not necessarily absent from the image: an explicitly depicted removed garment held in hands or lying nearby remains a visible off-body object.",
       "Do not add a garment as a visible object unless SCENE explicitly depicts it there. Never translate a completed removal into lifting a shirt.",
+      ...(o.visualPlan && o.visualPlan.shotAuthored ? [
+        'Also return "offBody":[{"index":0,"tag":"exact English positive tag"}] for EACH VERIFIED VISIBLE OFF-BODY OBJECT. Use the removed garment index. Otherwise return "offBody":[]; never invent an object.',
+        "Put every offBody tag verbatim as a separate tag in prompt. Never put an on-body/lifted garment tag in prompt when it is removed.",
+      ] : []),
     ].join("\n") : "";
     const instruction = IC.rewriteRules(o) +
       (contract ? "\n\n" + contract : "") + "\n\nSCENE:\n" + s +
@@ -98,14 +166,35 @@
             absent.some((x, i) => !x || x.index !== i || typeof x.tag !== "string" ||
               !/^[a-z][a-z0-9 _-]{1,79}$/i.test(x.tag.trim())))
           return { text: s, compiled: false, error: "Некорректный перевод одежды: отсутствуют подтверждённые предметные tags" };
+        const visible = o.visualPlan && Array.isArray(o.visualPlan.offBodyVisible)
+          ? o.visualPlan.offBodyVisible : [];
+        const offBodyTags = [];
+        if (o.visualPlan && o.visualPlan.shotAuthored) {
+          const supplied = decoded.offBody == null ? [] : decoded.offBody;
+          if (!Array.isArray(supplied) || supplied.length !== visible.length)
+            return { text: s, compiled: false, error: "Отсутствуют подтверждённые off-body роли для текущего кадра" };
+          for (const object of visible) {
+            const index = wear.removed.findIndex(x => x.item === object.item);
+            const matching = supplied.filter(x => x && x.index === index &&
+              typeof x.tag === "string" && x.tag.length >= 3 && x.tag.length <= 140);
+            if (index < 0 || matching.length !== 1 || !tagParts(prompt).some(p => sameTag(p.raw, matching[0].tag)))
+              return { text: s, compiled: false, error: "Off-body роль не подтверждается финальным positive" };
+            offBodyTags.push({ index, tag: matching[0].tag });
+          }
+        }
+        const wearItems = absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() }));
+        const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags);
+        if (semantic.issues.length)
+          return { text: s, compiled: false, error: semantic.issues.join("; ").slice(0, 240) };
         result = {
           text: prompt, compiled: true, wearValidated: true,
+          semanticValidated: semantic.validated, semanticScope: semantic.scope, offBodyTags,
           // A global negative applies to the whole frame. In authored shots
           // a REMOVED item can still be held or lie nearby. Until VC-02
           // adds grounded off-body roles, do not forbid it globally.
           negative: o.visualPlan && !o.visualPlan.allowGlobalGarmentNegative ? "" :
             absent.map((x) => x.tag.trim()).join(", "),
-          wearItems: absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() })),
+          wearItems,
         };
       } else {
         let out = raw.replace(/\s+/g, " ").replace(/^[\x60"']+|[\x60"']+$/g, "").trim();
@@ -123,6 +212,6 @@
 
   function clear() { mem.clear(); if (persist) try { persist.save({}); } catch (e) {} }
 
-  PRP.imgCompile = { compile, setStore, clear };
+  PRP.imgCompile = { compile, auditFinal, setStore, clear };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompile;
 })(typeof window !== "undefined" ? window : globalThis);

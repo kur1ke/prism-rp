@@ -211,22 +211,21 @@
         const stateContext = !drawAuthored && cfg.translate && composed.stateContext &&
           (IC.needsRewrite(imageScene) || IC.needsRewrite(composed.stateContext)) ? composed.stateContext : "";
         if (cfg.translate && (IC.needsRewrite(imageScene) || IC.needsRewrite(stateContext))) { entry.stage = "Перевожу сцену в промпт…"; repaint(); }
-        // Canon is allowed to learn FROM the authored visual assertion.
-        // It must not veto/reinterpret the frame on the basis of incomplete
-        // earlier text-only Observer results.
-        // A validated current author-shot CAN change clothing in this message.
-        // The resulting END-OF-TURN state, rather than the previous state,
-        // is now available for the single intent compilation above.
-        // The legacy English-tags authored path remains unchanged in VC-01;
-        // VC-02 will attach typed off-body visibility to both input modes.
-        const canonicalWear = intent && drawAuthored ? visualPlan.wear :
-          drawAuthored ? null : composed.physicalWear;
+        // VC-03: BOTH authored modes consume the same END-OF-TURN facts.
+        // The current authored shot may establish a new verified action;
+        // no stale pre-shot rule is allowed to veto that action.
+        const canonicalWear = drawAuthored ? visualPlan.wear : composed.physicalWear;
+        const auditPlan = drawAuthored ? visualPlan : VP.create({
+          wearFacts: projected.wearFacts,
+          owner: !!composed.ownerPresent, cameraOwner: !!composed.cameraOwner,
+          source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
+        });
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             embodiedOwner: cameraOwner, frame: composed.subjects, stateContext,
-            wearState: canonicalWear }, generateText);
+            wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined }, generateText);
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.
@@ -243,6 +242,12 @@
           throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
           card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative });
+        // The compiler is not the last positive-tag source: Card, LoRA
+        // rules and fixedPrompt can reintroduce a removed garment. Audit the
+        // actual executable strings immediately before the backend.
+        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags);
+        if (finalAudit.issues.length)
+          throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
@@ -251,7 +256,7 @@
         // selected-path garment events/corrections change while compiling.
         // Shot-only equality is safe ONLY for authored images whose rendered
         // content did not consume tracked state.
-        shotOnlyGate = drawAuthored && !(intent && visualPlan.wear);
+        shotOnlyGate = drawAuthored && !canonicalWear;
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
         if (!(await sourceStillCurrent(DB, origin, shotOnlyGate)) ||
@@ -263,7 +268,9 @@
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
           promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
-            compiled: !!comp.compiled, translatedText: comp.text, actorState: snap ? snap.character.fieldStatus : null,
+            compiled: !!comp.compiled, translatedText: comp.text,
+            semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
+            actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
               globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]),
               plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
