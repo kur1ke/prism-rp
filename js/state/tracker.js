@@ -80,7 +80,6 @@
         // original provenance. An ordinary "adjusted" remark is not a new
         // placement; Observer must supply a grounded position to use adjust.
         if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) continue;
-        if (event.action === "remove" && wear.removed.some((x) => sameGarment(x.item, item))) continue;
         if (event.action === "adjust" && wear.partiallyWorn.some((x) =>
           sameGarment(x.item, item) && x.placement === event.placement)) continue;
         drop(item);
