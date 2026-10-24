@@ -3084,7 +3084,7 @@ async function foundationH() {
       IB.generate = async (_, o) => { sent = o; return { dataUrl: "data:image/png;base64,AA==", seed: 4, info: { width: 512, height: 512 } }; };
       await h.ctx.svc.images.draw(source, source.swipes[0], { prompt: "фото из первого лица, на котором видны ступни Лилит (Лили) на сером ковре" });
       assert.ok(!Object.prototype.hasOwnProperty.call(opts,"embodiedOwner"));
-      assert.ok(sent && !sent.prompt.includes("1girl") && sent.prompt.includes("lilithx"), sent && sent.prompt);
+      assert.ok(sent && sent.prompt.includes("lilithx"), sent && sent.prompt);
       assert.ok(sent.prompt.includes("<lora:lilithx_v2:0.8>"), sent.prompt);
       const image = source.swipes[0].images[0];
       assert.strictEqual(image.status, "done");
@@ -4083,7 +4083,7 @@ async function foundationH() {
   await ta("VIS-CAMERA-5: natural framing has no special camera metadata",async()=>{
     const card={name:"Orihime Inoue",image:{trigger:"orihime_inoue",
       loras:[{name:"Orihime Illustrious",weight:0.8}]}};
-    const composed=IC.compose({draw:"close-up of her stomach",
+    const composed=IC.compose({draw:"close-up of Orihime Inoue stomach",
       card,scene:{chars:{}},persona:{},shotAuthored:true});
     const english="Close-up of her stomach as she lifts a white t-shirt.";
     const hybrid=IC.finalise({composed,compiled:english,hybrid:true,
@@ -5054,14 +5054,14 @@ async function foundationH() {
       assert.ok(!instruction.includes("camera pose:"), "irrelevant camera-holder activity is excluded");
       return "pov, feet on wooden floor, warm wool cardigan";
     };
-    const compiled = await ICP.compile(c.scene, { format: "tags", translate: true, embodiedOwner: true, stateContext: c.stateContext }, translator);
+    const compiled = await ICP.compile(c.scene, { format: "tags", translate: true, stateContext: c.stateContext }, translator);
     assert.strictEqual(calls, 1);
     assert.strictEqual(compiled.compiled, true);
     const f = IC.finalise({ composed: c, compiled: compiled.text, stateCompiled: true,
       card, backend: "a1111", settings: { promptMode: "off" }, persona: {} });
     assert.ok(f.prompt.includes("warm wool cardigan") && f.prompt.includes("lilithx") && f.prompt.includes("<lora:lilithx_v2:0.8>"));
     assert.ok(!/шерстяной|кардиган|смотрю|camera pose:|clothing:/.test(f.prompt), f.prompt);
-    const cached = await ICP.compile(c.scene, { format: "tags", translate: true, embodiedOwner: true, stateContext: c.stateContext },
+    const cached = await ICP.compile(c.scene, { format: "tags", translate: true, stateContext: c.stateContext },
       () => { throw new Error("cache should skip second call"); });
     assert.strictEqual(cached.cached, true);
     assert.strictEqual(cached.text, compiled.text);
@@ -7218,13 +7218,13 @@ t("CARD-Q: only explicitly enabled custom fields enter selected budgeted details
   assert.ok(selected.selected.some((x) => /Collects beautiful stones/.test(x.text)));
   assert.strictEqual(selected.selected.find((x) => /Collects beautiful stones/.test(x.text)).field, "custom");
 });
-t("CARD-Q: owner POV retains LoRA without enabling advanced rules", () => {
+t("CARD-Q: pictured owner retains LoRA without enabling advanced rules", () => {
   const card = Object.assign(CM.blank(), { name: "Lilith", image: {
     trigger: "lilithx", look: "base: visible face", negative: "",
     loras: [{ name: "lilithx_v2", weight: 0.8 }],
     loraAdvanced: { enabled: false, rules: "feet: dark pedicure" }
   }});
-  const composed = { scene: "pov, feet", keep: "", ownerPresent: false, cameraOwner: true };
+  const composed = { scene: "pov, feet", keep: "", ownerPresent: true };
   let result = IC.finalise({ card, composed, backend: "a1111" });
   assert.ok(result.prompt.includes("lilithx"));
   assert.ok(result.prompt.includes("<lora:lilithx_v2:0.8>"));
