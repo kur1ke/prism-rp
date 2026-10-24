@@ -274,7 +274,9 @@
       }
       const status = !result.valid ? events.length ? "partial" : "error" : result.issues.length ? "partial" : events.length ? "ok" : "no-changes";
       const stateStatus = { status, sourceText, sourceDraw, issues: result.issues, at: Date.now(),
-        method: fallback.length ? "model+grounded" : "model", eventCount: events.length };
+        method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
+        // Shot-local provenance, not wardrobe state. Same-swipe image use only.
+        frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
       const next = JSON.parse(JSON.stringify(msg));
       next.swipes[swipeIdx].stateEvents = events;
       next.swipes[swipeIdx].stateStatus = stateStatus;
