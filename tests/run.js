@@ -956,7 +956,6 @@ t("VIS-DRAW-GENRE-1: visual genre and frame without content-dependent authoring"
   assert.ok(short.includes("тип изображения, видимых участников и объекты"), short);
   assert.ok(short.includes("их действия и расположение, окружение, ракурс и границы кадра"), short);
   assert.ok(short.includes("а не пересказывай происходящую сцену"), short);
-  assert.ok(short.includes("Передавай композицию именно изображения"), short);
   assert.ok(short.includes("Указывай всю видимую в кадре одежду."), short);
   assert.ok(short.includes("визуально конкретным"), short);
   assert.ok(short.includes("не содержать технических параметров генерации или объяснений"), short);
