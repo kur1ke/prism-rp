@@ -50,6 +50,13 @@
     ]));
   }
 
+  async function sourceStillCurrent(DB, origin, shotOnly) {
+    const live = await DB.get("messages", origin.messageId);
+    if (!live || live.chatId !== origin.chatId) return false;
+    return stateVersion(live, origin.swipeIdx, shotOnly) ===
+      (shotOnly ? origin.sourceDrawVersion : origin.sourceStateVersion);
+  }
+
   async function imageOriginStillCurrent(DB, origin, shotOnly) {
     const before = origin.path.slice(0, -1);
     const live = await Promise.all(before.map((m) => DB.get("messages", m.id)));
@@ -236,8 +243,9 @@
         shotOnlyGate = drawAuthored && !(intent && visualPlan.wear);
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
-        if (!(await imageOriginStillCurrent(DB, origin, shotOnlyGate)))
-          throw new Error("Исходная ветка изменилась во время подготовки изображения. Повторите рисование.");
+        if (!(await sourceStillCurrent(DB, origin, shotOnlyGate)) ||
+            !(await imageOriginStillCurrent(DB, origin, shotOnlyGate)))
+          throw new Error("Исходная ветка или сообщение изменились во время подготовки изображения. Повторите рисование.");
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
