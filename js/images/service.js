@@ -6,7 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan, TRACK = PRP.stateTracker;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -137,11 +137,14 @@
         ? (matching.includes(pinnedIndex) ? pinnedIndex : -1)
         : matching.length === 1 ? matching[0] : -1;
       const drawAuthored = authoredIndex >= 0;
-      // A continued swipe's END-OF-TURN state belongs to the LAST authored
-      // photograph. Re-rendering an older photograph with it would rewrite
-      // history visually; without a per-photo snapshot, fail closed.
-      if (drawAuthored && authoredIndex !== authorDraws.length - 1) {
-        ui.toast("Нельзя перерисовать прежний кадр продолженного ответа по состоянию последнего фото. Выберите актуальный снимок.", true);
+      // Historical authored photo: derive a read-only source snapshot from
+      // this exact swipe's indexed photo events. Do not borrow the final photo's
+      // garment state. Ambiguous narration/Scene/corrections fail closed.
+      const historical = drawAuthored && authoredIndex !== authorDraws.length - 1
+        ? TRACK.historicalDrawPath(origin.path, authoredIndex) : null;
+      if (historical && !historical.ok) {
+        ui.toast("Нельзя достоверно восстановить одежду на момент прежнего кадра (" +
+          historical.reason + "). Рисование отменено.", true);
         return;
       }
       if (matching.length > 1 && !drawAuthored) {
@@ -159,12 +162,20 @@
       if (!reuse) entry.intentMode = !!(drawAuthored && cfg.drawPromptMode === "intent");
       // Resolve physical state from the frozen origin path BEFORE the first await.
       // Do not let a later UI branch/chat selection change this image's source.
-      const upto = origin.path;
+      const upto = historical ? historical.path : origin.path;
       const sourceMsg = upto[upto.length - 1];
       const sourceSwipe = TR.activeSwipe(sourceMsg);
       const ms = currentChat.mode === "messenger" && ctx.svc.messenger;
       const stamped = sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
+      if (historical && !ctx.svc.state) {
+        ui.toast("Для восстановления прежнего кадра необходим StateTracker.", true);
+        return;
+      }
       const snap = ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
+      if (historical && snap && snap.state && (snap.state.diagnostics || []).some(x => x.source === origin.messageId)) {
+        ui.toast("Историческое состояние снимка содержит неподтверждённые события. Рисование отменено.", true);
+        return;
+      }
       // The frozen image-origin path is authoritative. Use the same
       // projection as Prism; do not mutate the folded StateTracker snapshot.
       const projected = SR.resolve({
@@ -298,7 +309,8 @@
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
           promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text,
-            ...(drawAuthored ? { sourceDrawIndex: authoredIndex } : {}),
+            ...(drawAuthored ? { sourceDrawIndex: authoredIndex,
+              historicalDrawState: !!historical } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
             actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,

@@ -362,6 +362,59 @@
     return st;
   }
 
+  // VC-05: derive a read-only, source-scoped replay path for a previous
+  // authored photograph in a continued swipe. The persisted swipe is NEVER
+  // shortened or changed. Refuse if same-swipe text/Scene/corrections may have
+  // happened between photos, or if indexed evidence cannot prove chronology.
+  // Prior path ancestry stays intact and is checked again by ImageService.
+  function historicalDrawPath(path, drawIndex) {
+    const original = Array.isArray(path) ? path : [];
+    const source = original[original.length - 1];
+    const swipe = source && TR.activeSwipe(source);
+    const draws = swipe && Array.isArray(swipe.draws) ? swipe.draws : [];
+    if (!source || source.role !== "assistant" || !swipe ||
+        !Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex >= draws.length - 1)
+      return { ok: false, reason: "not-an-earlier-authored-draw" };
+    const status = swipe.stateStatus;
+    const finalIndex = draws.length - 1;
+    if (!status || !["ok", "no-changes"].includes(status.status) ||
+        status.sourceDrawIndex !== finalIndex ||
+        status.sourceText !== String(swipe.text || "") ||
+        status.sourceDraw !== String(draws[finalIndex] && draws[finalIndex].prompt || ""))
+      return { ok: false, reason: "unverified-photo-history" };
+    if ((swipe.sceneOps || []).length || (swipe.stateCorrections || []).length)
+      return { ok: false, reason: "unsequenced-operations" };
+    const events = Array.isArray(swipe.stateEvents) ? swipe.stateEvents : [];
+    if (events.length > 32) return { ok: false, reason: "unbounded-photo-history" };
+    const kept = [];
+    for (const e of events) {
+      if (!e || e.field !== "wear" || e.certainty === "intent" ||
+          !["add", "remove", "adjust"].includes(e.action) ||
+          e.evidenceType !== "draw" || e.visualScope !== "current-self" ||
+          !Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= draws.length)
+        return { ok: false, reason: "unsequenced-state-event" };
+      const photo = draws[e.drawIndex];
+      if (!photo || typeof photo.prompt !== "string" || !String(e.evidence || "").trim() ||
+          !photo.prompt.includes(e.evidence))
+        return { ok: false, reason: "edited-photo-evidence" };
+      if (e.drawIndex <= drawIndex) kept.push(clone(e));
+    }
+    // The target photo must have an independently attributed observation.
+    // A legacy image or an unobserved earlier crop is not sufficient proof
+    // of its historical end-of-photo wardrobe state.
+    if (!kept.some((e) => e.drawIndex === drawIndex))
+      return { ok: false, reason: "target-photo-not-observed" };
+    const derived = clone(original);
+    const last = derived[derived.length - 1];
+    const chosen = last.swipes[last.swipeIdx || 0];
+    chosen.draws = chosen.draws.slice(0, drawIndex + 1);
+    chosen.stateEvents = kept;
+    chosen.stateCorrections = [];
+    chosen.sceneOps = [];
+    delete chosen.stateStatus;
+    return { ok: true, path: derived };
+  }
+
   // Одна каноническая запись в обоих режимах; вывод в разные перспективы ниже.
   function fieldOf(snapshot, actor, field) {
     const current = snapshot && snapshot.actors && snapshot.actors[actor];
@@ -403,6 +456,6 @@
     view.intentions = char.intentions.slice();
     return view;
   }
-  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, fieldOf, forCharacter, forUser };
+  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);
