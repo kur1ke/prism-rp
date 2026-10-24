@@ -4041,6 +4041,30 @@ async function foundationH() {
     assert.strictEqual(old.text,"lifting shirt, belly, navel");
     assert.strictEqual(count,2,"hybrid and tags must not share a translation");
   });
+  await ta("VIS-FF-01C: persisted pre-frame-first hybrid cache must not survive rule change",async()=>{
+    ICP.clear();
+    const scene="Она показывает живот в кадре";
+    const options={intentMode:true,format:"hybrid",embodiedOwner:true};
+    const legacyKey=["v9-final-audit","intent","regular-frame","owner-camera",
+      "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
+    const oldRecord={text:"A third-person top-down portrait.",compiled:true};
+    let saved={[legacyKey]:oldRecord},calls=0;
+    ICP.setStore({load:async()=>saved,save:(next)=>{saved=next;}});
+    try {
+      const fresh=await ICP.compile(scene,options,async()=>{
+        calls++;
+        return "Close-up photograph of her midriff.";
+      });
+      assert.strictEqual(calls,1,"old hybrid translation must be invalidated");
+      assert.strictEqual(fresh.text,"Close-up photograph of her midriff.");
+      assert.strictEqual(fresh.cached,undefined);
+      const again=await ICP.compile(scene,options,async()=>{throw Error("duplicate call");});
+      assert.strictEqual(again.cached,true,"new hybrid cache must still be reusable");
+    } finally {
+      ICP.clear();
+      ICP.setStore(null);
+    }
+  });
   await ta("VIS-HYBRID-3: bad hybrid model output fails closed rather than becoming final prompt",async()=>{
     const source="Она приподняла край футболки";
     const opts={format:"hybrid",intentMode:true};
