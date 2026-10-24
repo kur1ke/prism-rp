@@ -3847,6 +3847,49 @@ async function foundationH() {
     assert.strictEqual(yes.negative,"");
     assert.strictEqual(no.negative,"");
   });
+  await ta("VC-02-5: persisted matching author-shot roles reach the image compiler, not canon",async()=>{
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Вот фотография");
+    const draw="camera=owner; я сняла белую футболку и держу её в руках";
+    m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
+      value:["белую футболку"],certainty:"reported",evidence:"сняла белую футболку",
+      evidenceType:"draw",visualScope:"current-self"}];
+    m.swipes[0].stateStatus={status:"ok",sourceText:m.swipes[0].text,sourceDraw:draw,
+      frameObjects:[{role:"offBody",item:"белую футболку",evidence:"держу её в руках"}]};
+    await h.chat.commitMessage(m,m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
+      {enabled:true,backend:"a1111",url:"http://unused",translate:true,drawPromptMode:"intent"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;let options,sent;
+    try{
+      ICP.compile=async (_shot,o)=>{options=o;return {text:"pov, holding a white t-shirt",
+        compiled:true,wearValidated:true,negative:"",wearItems:[{index:0,item:"белую футболку",tag:"white t-shirt"}]};};
+      IB.generate=async (_,o)=>{sent=o;return {dataUrl:"data:image/png;base64,AA==",seed:7,
+        info:{width:512,height:512}};};
+      const source=h.S.messages.find(x=>x.id===m.id);
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
+      assert.deepStrictEqual(options.visualPlan.offBodyVisible,
+        [{role:"offBody",item:"белую футболку",evidence:"держу её в руках"}]);
+      assert.ok(sent.prompt.includes("holding a white t-shirt"));
+      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.plan.offBodyVisible.length,1);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
+        ["белую футболку"],"shot roles must not create wear.add");
+    }finally{ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VC-02-6: stale or incorrect frame-role metadata never reaches VisualPlan",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const wearFacts=[{actor:"char",worn:[],partiallyWorn:[],removed:[{item:"белая футболка"}]}];
+    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw:"я держу снятую футболку",
+      frameObjects:[{role:"offBody",item:"белая футболка",evidence:"на столе"}],wearFacts});
+    assert.deepStrictEqual(plan.offBodyVisible,[]);
+    assert.deepStrictEqual(VP.create({shotAuthored:true,draw:"я держу снятую футболку",
+      frameObjects:[{role:"offBody",item:"белая футболка",evidence:"я держу снятую футболку"}],
+      wearFacts}).offBodyVisible,[],"non-owner shot never inherits card's removed garment");
+  });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
     const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
