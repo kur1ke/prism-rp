@@ -15,8 +15,8 @@
   }
 
   const sameItem = (a, b) => String(a || "").toLowerCase().replace(/ё/g, "е")
-    .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim() === String(b || "").toLowerCase().replace(/ё/g, "е")
-    .replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim() === String(b || "").toLowerCase().replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
   // VC-02: Only validated source-swipe events can confirm that a REMOVED
   // item is simultaneously visible OFF the body in this exact image.
