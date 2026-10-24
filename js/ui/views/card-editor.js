@@ -102,7 +102,7 @@
       const adv = im.loraAdvanced || {};
       body = `<p class="lead">Изображения: настройки для генератора, отдельно от RP-внешности персонажа.</p>
         <div class="image-settings-grid"><details class="card-disclosure" id="image-base-panel" ${state.imageBaseOpen !== false ? "open" : ""}><summary>Базовая генерация</summary>
-          ${fi("look", "Внешность — теги", 3, "base: — всегда; «ключ: теги» — если ключ присутствует в сцене.", "base: brown eyes, long orange hair")}
+          ${fi("look", "Внешность — теги", 3, "Описательные теги отдельно от активации LoRA. base: — для внешнего изображения персонажа; «ключ: теги» — при совпадении ключа со сценой. Эти теги не обязаны попадать в кадр, снятый камерой персонажа.", "base: brown eyes, long orange hair")}
           ${fi("wardrobe", "Гардероб", 5, "Наряды по ключам из текущей сцены, без автоматической смены одежды.", "худи | hoodie: grey hoodie")}
           ${fi("styleTrigger", "Стилевые теги", 1, "Применяются, только если сцена их упоминает.")}
           ${fi("negative", "Негатив персонажа", 1, "", "short hair")}
@@ -110,7 +110,7 @@
           ${fi("nsfw", "Модификаторы по ключам сцены", 3, "Не запускаются автоматически по одежде.", "ключ: соответствующие теги")}
         </details>
         <details class="card-disclosure" id="image-lora-panel" ${state.imageLoraOpen ? "open" : ""}><summary>LoRA</summary>
-          ${fi("trigger", "Основной триггер LoRA", 2, "Точное ключевое слово автора. Старые карточки с несколькими тегами остаются совместимыми.", "lilithx")}
+          ${fi("trigger", "Триггер активации LoRA", 2, "Весь текст этого поля добавляется в positive prompt при участии персонажа, независимо от кадрирования. Для новых карточек указывайте здесь только обязательные слова активации LoRA; описания внешности задавайте отдельно выше. Существующие многотеговые триггеры сохраняются без изменений.", "lilithx")}
           <div class="field"><label>Подключённые LoRA</label>${loraRows("card-lora", im.loras || [])}<span class="help">Имя файла и вес; поддерживается Forge/A1111.</span>
           <datalist id="dl-loras">${((m.imgLists || {}).loras || []).map((x) => `<option value="${esc(x)}">`).join("")}</datalist></div>
           ${fi("aliases", "Другие имена в сценах", 0, "Варианты упоминания персонажа.", "orihime, hime")}

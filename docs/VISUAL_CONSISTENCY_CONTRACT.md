@@ -137,3 +137,28 @@ For **authored `hybrid` Draw**, camera ownership and camera perspective are dist
 - This slice intentionally **does not** redesign Card identity/LoRA injection for crops; that is a separate VIS-FF-03 experiment requiring controlled backend comparisons. `cfg.extra` final-prompt overrides are also a separate hardening issue.
 
 Test in the `testing` mirror before treating visual accuracy as established. Unit/CI results do not prove first-person imagery or framing fidelity in Forge/Perchance.
+
+## 11. VIS-FF-03A — explicit Card identity versus appearance (testing experiment)
+
+There is already a separate Card data channel for activation and appearance:
+
+- `Card.image.trigger` is an **unconditional** identity/LoRA trigger for frames attributed to the Card owner. Its entire configured string is inserted before the variable shot; a legacy multi-tag trigger is **not** automatically split, filtered or migrated.
+- `Card.image.look` is the existing appearance map. `base:` entries attach to an explicitly pictured external Card actor; keyword entries remain user-configured optional associations. For `camera=owner`, `compose()` does not treat the camera holder as an additional external figure, so it does not automatically add those external appearance tags.
+- Card authors may **explicitly** keep only essential activation words in `trigger` and place further visible identity descriptors in `look`. This is a manual Card configuration choice, **not** a hidden image-framing decision, not an instruction to RP Model and not a change to stored chat canon.
+- No recognition table for body parts, clothing, crop type or `if X then negative Y` is introduced. The same Card configuration is used regardless of the kind of image requested.
+- Changing an existing Card is optional; legacy cards retain exact positive prompt behaviour until their owner edits them. Activation requirements are model/LoRA-specific; never assume one trigger token always suffices.
+
+**Scope of VIS-FF-03A:** UI wording, contract documentation and regression coverage for the established Card fields. **No runtime image behaviour change** for existing data; no migration or new persisted fields. A controlled Forge/Perchance comparison of two explicit Card configurations is still required before claiming improved visual outcomes.
+
+## 12. Deferred UI: structured LoRA activation and contextual associations (VIS-LORA-UX, NOT IMPLEMENTED)
+
+**Product decision (2026-10-24):** Replace the rough multiline `loraAdvanced.rules` textarea in a **future, separate** UI stage with editable, repeatable entries added with a `+` control. This is a recorded requirement, **not** a feature of VIS-FF-03A.
+
+- Keep **LoRA activation words** distinct from **contextual associations**: activation words are explicit Card-author input; optional associations map author-entered natural-language mentions (including user-entered variants) to author-entered LoRA-specific tags. Do **not** hardcode a body-part, clothing, pose or negative-tag lookup table.
+- Planned editor: a separate activation area and a list of entries, each with editable **context words/phrases** and **corresponding tags**, plus add (`+`), edit, remove and optional enabled controls. Details such as order, grouping and whether multiple LoRAs each own their own entries must be designed and reviewed in that future stage.
+- Matching may use only source context within the existing image generation authority boundary; a matching entry is **not** a new fact, a state event, or a reason to modify the RP model's chosen shot. Contextual associations never force the presence of an object that is not otherwise established.
+- No hidden templates of the form `if X, force Y`, no inferred negative prompts, no hard-coded character specifics. Entries are intentional, visible Card settings, not instructions smuggled in through imports.
+- Preserve existing `image.trigger`, `image.look`, `image.loraAdvanced.enabled` and text `image.loraAdvanced.rules` records across import/export and rollback. Design migration and explicit handling of legacy free-form rules **before** implementation; never silently overwrite or reinterpret ambiguous source text.
+- Maintain branch/chat independence, origin path and swipe provenance, prompt diagnostics, FinalAudit, and backend-compatible LoRA activation. Include UI/persistence and prompt-output regression tests in the future PR.
+
+**Do not implement this deferred UI within VIS-FF-03A.** Proceed with verification of the existing trigger/look separation first.
