@@ -123,3 +123,16 @@ Each phase enters `testing` only with scoped diff review, `node tests/run.js`, `
 ## 9. Reversibility
 
 No canonical schema migration in VC-01. Revert the isolated code PR on `testing` to restore the prior image prompt pipeline. Saved chat events and Card are unchanged. Later opt-in typed shot metadata must remain backward compatible with existing swipes and backups.
+
+## 10. VIS-FF-01/02 — frame-first source ownership (experimental testing slice)
+
+For **authored `hybrid` Draw**, camera ownership and camera perspective are distinct:
+
+- `camera=owner;` remains readable as **metadata** identifying whose own-body shot is being described and which END-OF-TURN wear facts apply. It does not by itself request `pov`, a top-down angle, a separate portrait, or a perspective negative.
+- The authored Draw describes the **finished image**. The translator preserves any explicitly described viewpoint, framing, action and visible garment placement instead of inventing camera geometry from ownership. Absence of a viewpoint is not a reason to manufacture one.
+- `ImageService` resolves authored-frame actors from the **original source Draw before translation**. `ImageCompose.compose()` accepts that frozen resolution and may not re-infer Card or persona presence from translator output. A verified current-self selfie is source evidence for the owner even if the Draw omits the Card name.
+- Legacy `tags` mode retains its `embodiedShot()` handling for backward compatibility in this slice. No migration of saved Draw, `cameraRole`, promptSources, or stateEvents is introduced.
+- `StateTracker`, selected-path provenance, off-body roles, FinalAudit, and immutable VisualPlan remain authoritative within their existing boundaries. They do not infer state from generated pixels.
+- This slice intentionally **does not** redesign Card identity/LoRA injection for crops; that is a separate VIS-FF-03 experiment requiring controlled backend comparisons. `cfg.extra` final-prompt overrides are also a separate hardening issue.
+
+Test in the `testing` mirror before treating visual accuracy as established. Unit/CI results do not prove first-person imagery or framing fidelity in Forge/Perchance.
