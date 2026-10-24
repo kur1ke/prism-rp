@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "c3571c7b951ea988b42334d5c720ddf26e53dd42";
+  window.PRISM_RP_BUILD_SHA = "a44b48019099a35a2ee5cd24a48b70fe3c85660b";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5584,7 +5584,10 @@
     const rawDraw = subVars(o.draw).trim();
     const cameraOwner = !!o.cameraOwner || ownerCamera(card, rawDraw);
     const draw = rawDraw.replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
-    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
+    // For authored Draw the source-shot actors were resolved before translation.
+    // English rewording must not change who is depicted or inject Card/LoRA.
+    const actors = o.frameActors
+      ? { ...o.frameActors } : frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
     if (cameraOwner) {
       // The owner is the *camera holder*, not an externally rendered subject.
       actors.owner = false;
@@ -5792,8 +5795,10 @@
     const s = o.settings || {}, im = (o.card && o.card.image) || {}, c = o.composed || {};
     const pinned = s.promptMode !== "off" && String(s.fixedPrompt || "").trim();
     let scene = String(o.compiled == null ? c.scene : o.compiled);
-    if (c.cameraOwner) scene = o.hybrid ? ["pov", scene].filter(Boolean).join(", ") : embodiedShot(scene, o.card);
-    else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
+    // Hybrid prose owns its framing. cameraOwner attributes physical facts; it
+    // does not imply a POV angle, nor may finalise reframe an authored shot.
+    if (c.cameraOwner && !o.hybrid) scene = embodiedShot(scene, o.card);
+    else if (!c.cameraOwner && c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
     // Legacy lexical wardrobe filtering was a fallback before canonical
     // wear reached the compiler. It must NOT reinterpret the compiler's
     // reconciled clothing output, especially partial garment placement.
@@ -5831,7 +5836,8 @@
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
 
-    const pov = !!c.cameraOwner || (o.persona && o.persona.image && o.persona.image.view === "first");
+    const pov = (!o.hybrid && !!c.cameraOwner) ||
+      (!c.cameraOwner && o.persona && o.persona.image && o.persona.image.view === "first");
     const povNeg = pov ? POV_NEG.concat(c.cameraOwner ? ["third-person view", "duplicate body"] :
       (subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : [])) : [];
     // A backend negative is global to every depicted person. For a multi-
@@ -5898,7 +5904,10 @@
     const opts = o || {};
     if (opts.intentMode) return [
       "Если по контексту персонаж отправляет изображение, добавь [draw: короткое описание того, что показано].",
-      "Для вида собственного тела глазами персонажа начни описание с camera=owner; (не для фото персонажа со стороны).",
+      ...(opts.hybrid ? [
+        "Описывай готовый кадр: что в нём видно, действие и кадрирование. Не выбирай ракурс автоматически из того, кто держит камеру.",
+        "Если в кадре показан фрагмент собственного тела персонажа, можешь начать с camera=owner; для привязки тела и одежды к владельцу. Этот маркер НЕ задаёт POV и не требует вида сверху вниз.",
+      ] : ["Для вида собственного тела глазами персонажа начни описание с camera=owner; (не для фото персонажа со стороны)."]),
       "Сохраняй определённый диалогом формат (например, скриншот), объект и факты; не заменяй их портретом отправителя.",
       "Если на изображении виден персонаж карточки, явно назови его: " + (opts.characterName || "персонаж") + ". Если его нет в кадре, не называй.",
       "Не пиши технические теги, LoRA, качество, постоянную внешность из карточки.",
@@ -5948,7 +5957,7 @@
         "No Russian, no camera=owner marker; translate names when needed.",
       ];
       if (opts.embodiedOwner) rules.push(
-        "OWNER-CAMERA: the camera belongs to the character. Describe the visible first-person view; do not add an external portrait, another body or a separate person to represent the camera holder.");
+        "OWNER-CAMERA: camera ownership identifies the character whose body may be shown; it does NOT specify a viewpoint. Preserve only the framing stated in SCENE; never invent an external duplicate portrait or a separate person for the camera holder.");
       if (opts.subjectScope && opts.subjectScope.otherActorPresent) rules.push(
         "Multiple participants: retain only the people specified in SCENE and keep each described garment assigned to its original person.");
       return "VISUAL COMPOSITION TRANSLATION — concise hybrid prompt.\n" +
@@ -6388,7 +6397,9 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    const key = ["v9-final-audit", o.intentMode ? "intent" : "tags",
+    // Hybrid camera/framing rules changed in VIS-FF-01. Preserve legacy tag/intent
+    // cache hits but do not reuse translations produced under the old POV contract.
+    const key = [hybrid ? "v10-frame-first-hybrid" : "v9-final-audit", o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame", o.embodiedOwner ? "owner-camera" : "external-camera",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
@@ -9017,7 +9028,7 @@
       const allowDraw = ST.imagesOn(s, ctx.env.perchanceImages()) &&
         ST.modelDrawAllowed(s, path.map((m) => ({ role: m.role, text: TR.activeSwipe(m).text })));
       if (allowDraw) {
-        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first", fixedIdentity: !!(cd.image && (cd.image.trigger || cd.image.look)), intentMode: s.images.drawPromptMode === "intent" || s.images.drawPromptMode === "hybrid", characterName: cd.name });
+        const di = IC.drawInstruction({ format: s.images.format, qualityPinned: ST.qualityPinned(s), pov: (ctx.persona().image || {}).view === "first", fixedIdentity: !!(cd.image && (cd.image.trigger || cd.image.look)), intentMode: s.images.drawPromptMode === "intent" || s.images.drawPromptMode === "hybrid", hybrid: s.images.drawPromptMode === "hybrid", characterName: cd.name });
         extraPost = [di, extraPost].filter(Boolean).join("\n\n");
       }
       const messenger = c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.context(path, extra && extra.messengerNow !== undefined ? extra.messengerNow : undefined) : null;
@@ -9306,15 +9317,19 @@
           frameStatus.sourceDraw === String(entry.draw || "") &&
           frameStatus.sourceText === String(sourceSwipe.text || "") &&
           Array.isArray(frameStatus.frameObjects) ? frameStatus.frameObjects : [];
+        // Lock the authored frame's subjects before translation. A self-authored
+        // selfie can show the owner without repeating the Card name.
+        const resolvedActors = currentSelfie && !shotActors.owner
+          ? { ...shotActors, owner: true, reason: "current-selfie" } : shotActors;
         const visualPlan = VP.create({
           wearFacts: projected.wearFacts,
-          owner: !!shotActors.owner || currentSelfie,
+          owner: !!resolvedActors.owner,
           cameraOwner,
           shotAuthored: drawAuthored,
           draw: shot, frameObjects: verifiedFrameObjects,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
-        const shotScope = { otherActorPresent: !!shotActors.user };
+        const shotScope = { otherActorPresent: !!resolvedActors.user };
         const firstPass = intent ? await ICP.compile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true, embodiedOwner: cameraOwner,
             qualityPinned: ST.qualityPinned(S.settings),
@@ -9323,6 +9338,8 @@
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
           scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts,
+          // The translator may change wording, never actor ownership.
+          frameActors: intent && drawAuthored ? resolvedActors : null,
           shotAuthored: drawAuthored, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
