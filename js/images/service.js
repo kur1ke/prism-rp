@@ -160,9 +160,14 @@
         // Subject scoping happens on the ORIGINAL authored shot, before a
         // translator can hallucinate the card owner into a product screenshot.
         const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true });
+        // A current authored selfie need not repeat the card owner's name.
+        // Do not infer the owner from a mere portrait or screenshot.
+        const currentSelfie = drawAuthored && /(?:\\bselfie\\b|селфи)/iu.test(shot) &&
+          !/(?:скриншот|screenshot|чужое\\s+селфи|someone\\s+else)/iu.test(shot) &&
+          !shotActors.empty && !shotActors.userNamed;
         const visualPlan = VP.create({
           wearFacts: projected.wearFacts,
-          owner: !!shotActors.owner,
+          owner: !!shotActors.owner || currentSelfie,
           cameraOwner,
           shotAuthored: drawAuthored,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
