@@ -4457,7 +4457,7 @@ async function foundationH() {
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const m=h.chat.newMsg("assistant",null,"Вот фотография");
-    const draw="я сняла белую футболку и держу её в руках";
+    const draw="Селфи Химэ: я сняла белую футболку и держу её в руках";
     m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
     m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
       value:["белую футболку"],certainty:"reported",evidence:"сняла белую футболку",
@@ -4557,7 +4557,7 @@ async function foundationH() {
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
     const m=h.chat.newMsg("assistant",null,"Я сняла белую футболку");
-    const draw="сняла белую футболку, видно живот";
+    const draw="На снимке Химэ сняла белую футболку, видно живот";
     m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
     m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
       value:["белую футболку"],certainty:"reported",evidence:"сняла белую футболку",
