@@ -297,7 +297,10 @@
     const rawDraw = subVars(o.draw).trim();
     const cameraOwner = !!o.cameraOwner || ownerCamera(card, rawDraw);
     const draw = rawDraw.replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
-    const actors = frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
+    // For authored Draw the source-shot actors were resolved before translation.
+    // English rewording must not change who is depicted or inject Card/LoRA.
+    const actors = o.frameActors
+      ? { ...o.frameActors } : frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
     if (cameraOwner) {
       // The owner is the *camera holder*, not an externally rendered subject.
       actors.owner = false;
@@ -505,8 +508,10 @@
     const s = o.settings || {}, im = (o.card && o.card.image) || {}, c = o.composed || {};
     const pinned = s.promptMode !== "off" && String(s.fixedPrompt || "").trim();
     let scene = String(o.compiled == null ? c.scene : o.compiled);
-    if (c.cameraOwner) scene = o.hybrid ? ["pov", scene].filter(Boolean).join(", ") : embodiedShot(scene, o.card);
-    else if (c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
+    // Hybrid prose owns its framing. cameraOwner attributes physical facts; it
+    // does not imply a POV angle, nor may finalise reframe an authored shot.
+    if (c.cameraOwner && !o.hybrid) scene = embodiedShot(scene, o.card);
+    else if (!c.cameraOwner && c.ownerPresent !== false && im.trigger) scene = stripIdentityAliases(scene, o.card || {});
     // Legacy lexical wardrobe filtering was a fallback before canonical
     // wear reached the compiler. It must NOT reinterpret the compiler's
     // reconciled clothing output, especially partial garment placement.
@@ -544,7 +549,8 @@
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
 
-    const pov = !!c.cameraOwner || (o.persona && o.persona.image && o.persona.image.view === "first");
+    const pov = (!o.hybrid && !!c.cameraOwner) ||
+      (!c.cameraOwner && o.persona && o.persona.image && o.persona.image.view === "first");
     const povNeg = pov ? POV_NEG.concat(c.cameraOwner ? ["third-person view", "duplicate body"] :
       (subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : [])) : [];
     // A backend negative is global to every depicted person. For a multi-
@@ -611,7 +617,8 @@
     const opts = o || {};
     if (opts.intentMode) return [
       "Если по контексту персонаж отправляет изображение, добавь [draw: короткое описание того, что показано].",
-      "Для вида собственного тела глазами персонажа начни описание с camera=owner; (не для фото персонажа со стороны).",
+      "Описывай готовый кадр: что в нём видно, действие и кадрирование. Не выбирай ракурс автоматически из того, кто держит камеру.",
+      "Если в кадре показан фрагмент собственного тела персонажа, можешь начать с camera=owner; для привязки тела и одежды к владельцу. Этот маркер НЕ задаёт POV и не требует вида сверху вниз.",
       "Сохраняй определённый диалогом формат (например, скриншот), объект и факты; не заменяй их портретом отправителя.",
       "Если на изображении виден персонаж карточки, явно назови его: " + (opts.characterName || "персонаж") + ". Если его нет в кадре, не называй.",
       "Не пиши технические теги, LoRA, качество, постоянную внешность из карточки.",
@@ -661,7 +668,7 @@
         "No Russian, no camera=owner marker; translate names when needed.",
       ];
       if (opts.embodiedOwner) rules.push(
-        "OWNER-CAMERA: the camera belongs to the character. Describe the visible first-person view; do not add an external portrait, another body or a separate person to represent the camera holder.");
+        "OWNER-CAMERA: camera ownership identifies the character whose body may be shown; it does NOT specify a viewpoint. Preserve only the framing stated in SCENE; never invent an external duplicate portrait or a separate person for the camera holder.");
       if (opts.subjectScope && opts.subjectScope.otherActorPresent) rules.push(
         "Multiple participants: retain only the people specified in SCENE and keep each described garment assigned to its original person.");
       return "VISUAL COMPOSITION TRANSLATION — concise hybrid prompt.\n" +
