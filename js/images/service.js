@@ -171,8 +171,8 @@
         // A current authored selfie need not repeat the card owner's name.
         // Do not infer the owner from a mere portrait or screenshot.
         const currentSelfie = drawAuthored &&
-          /(?:\\bmy\\s+selfie\\b|\\btaking\\s+(?:a\\s+)?selfie\\b|\\bselfie\\s+of\\s+myself\\b|(?:^|[\\s,;:])я\\s+[^.!?]{0,60}селфи|(?:^|[\\s,;:])сво[её]\\s+селфи)/iu.test(shot) &&
-          !/(?:скриншот|screenshot|чужое\\s+селфи|someone\\s+else)/iu.test(shot) &&
+          /(?:\bmy\s+selfie\b|\btaking\s+(?:a\s+)?selfie\b|\bselfie\s+of\s+myself\b|(?:^|[\s,;:])я\s+[^.!?]{0,60}селфи|(?:^|[\s,;:])сво[её]\s+селфи)/iu.test(shot) &&
+          !/(?:скриншот|screenshot|чужое\s+селфи|someone\s+else)/iu.test(shot) &&
           !shotActors.empty && !shotActors.userNamed;
         const visualPlan = VP.create({
           wearFacts: projected.wearFacts,
