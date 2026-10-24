@@ -4146,7 +4146,7 @@ async function foundationH() {
       assert.strictEqual(image.drawPromptMode,"hybrid");
       h.S.settings.images.drawPromptMode="tags";
       await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0],image);
-      assert.strictEqual(calls,2,"redraw retains hybrid translation even after settings change");
+      assert.strictEqual(calls,1,"redraw retains and reuses cached hybrid translation, not tags");
       assert.strictEqual(requests,2);
       assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"hybrid");
     }finally{globalThis.PRP.llm.simple=oldModel;IB.generate=oldBackend;}
