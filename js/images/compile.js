@@ -69,14 +69,21 @@
     const issues = [];
     const mapped = Array.isArray(wearItems) ? wearItems : [];
     if (mapped.length !== removed.length || mapped.some((x, i) =>
-      !x || x.index !== i || typeof x.tag !== "string" || !garmentHead(x.tag)))
-      issues.push("Не все снятые вещи привязаны к проверенному английскому тегу");
+      !x || x.index !== i || typeof x.tag !== "string" || !garmentHead(x.tag) ||
+      (x.item != null && x.item !== removed[i].item)))
+      issues.push("Не все снятые вещи привязаны к исходному предмету и английскому тегу");
     const objects = Array.isArray(plan.offBodyVisible) ? plan.offBodyVisible : [];
     const shown = Array.isArray(offBodyTags) ? offBodyTags : [];
     if (objects.length !== shown.length || objects.some((x, i) => {
       const found = shown[i];
       const idx = removed.findIndex((r) => r.item === x.item);
+      const noun = idx < 0 ? "" : garmentHead(mapped[idx] && mapped[idx].tag);
+      // An indexed claim about a visible removed object cannot rename it
+      // into another object or disguise a newly worn/lifted garment.
+      const bodyAction = /\b(?:wearing|worn|lifting|putting on|pulled up|off shoulders)\b/i;
       return idx < 0 || !found || found.index !== idx || typeof found.tag !== "string" ||
+        !wordExists(IC.bareTag(found.tag).toLowerCase().replace(/[_-]/g, " "), noun) ||
+        bodyAction.test(found.tag) ||
         !tagParts(prompt).some((p) => sameTag(p.raw, found.tag));
     })) issues.push("Видимые снятые вещи не связаны с точными positive-тегами");
     if (issues.length) return { validated: false, scope: "invalid-mapping", issues };
