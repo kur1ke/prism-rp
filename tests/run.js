@@ -3898,6 +3898,96 @@ async function foundationH() {
       frameObjects:[{role:"offBody",item:"белая футболка",evidence:"я держу снятую футболку"}],
       wearFacts}).offBodyVisible,[],"non-owner shot never inherits card's removed garment");
   });
+  await ta("VC-03-1: compiler rejects lifting shirt as a completed removal before backend",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw:"сняла белую хлопковую футболку",
+      wearFacts:[{actor:"char",known:true,complete:true,worn:[],partiallyWorn:[],
+        removed:[{item:"белая хлопковая футболка",certainty:"reported"}]}]});
+    ICP.clear();
+    let calls=0;
+    const bad=async()=>{calls++;return JSON.stringify({
+      prompt:"pov, lifting shirt, white cotton t-shirt, exposed midriff, navel",
+      absent:[{index:0,tag:"white cotton t-shirt"}],offBody:[]});};
+    const a=await ICP.compile("сняла белую хлопковую футболку",
+      {intentMode:true,format:"tags",wearState:plan.wear,visualPlan:plan},bad);
+    const b=await ICP.compile("сняла белую хлопковую футболку",
+      {intentMode:true,format:"tags",wearState:plan.wear,visualPlan:plan},bad);
+    assert.strictEqual(a.compiled,false,JSON.stringify(a));
+    assert.ok(a.error.includes("positive"),a.error);
+    assert.strictEqual(b.compiled,false);
+    assert.strictEqual(calls,2,"rejected translations must not enter image cache");
+  });
+  await ta("VC-03-2: final positive sources cannot reintroduce removed garments",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw:"сняла футболку",
+      wearFacts:[{actor:"char",known:true,worn:[],partiallyWorn:[],removed:[{item:"белая футболка"}]}]});
+    const wearItems=[{index:0,item:"белая футболка",tag:"white cotton t-shirt"}];
+    assert.strictEqual(ICP.auditFinal("pov, white lace lingerie, navel","",plan,wearItems,[]).validated,true);
+    const bad=ICP.auditFinal("pov, navel, lifting shirt, white cotton t-shirt","",plan,wearItems,[]);
+    assert.strictEqual(bad.validated,false);
+    assert.ok(bad.issues.some(x=>x.includes("positive")),JSON.stringify(bad));
+    const weighted=ICP.auditFinal("pov, (white cotton t-shirt:1.2)","",plan,wearItems,[]);
+    assert.strictEqual(weighted.validated,false,"weighted final tags are also executable");
+    assert.strictEqual(ICP.auditFinal("pov, navel, <lora:shirt-model:0.8>","",plan,wearItems,[]).validated,true,
+      "LoRA resource names are not executable garment tags");
+  });
+  await ta("VC-03-3: visible removed objects need signed off-body tags and no global negative",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const draw="я держу снятую футболку в руках";
+    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw,
+      frameObjects:[{role:"offBody",item:"белая футболка",evidence:draw}],
+      wearFacts:[{actor:"char",known:true,worn:[],partiallyWorn:[],removed:[{item:"белая футболка"}]}]});
+    const items=[{index:0,item:"белая футболка",tag:"white t-shirt"}];
+    const tags=[{index:0,tag:"holding white t-shirt"}];
+    assert.strictEqual(ICP.auditFinal("pov, holding white t-shirt","",plan,items,tags).validated,true);
+    assert.strictEqual(ICP.auditFinal("pov, holding white t-shirt, wearing shirt","",plan,items,tags).validated,false);
+    assert.strictEqual(ICP.auditFinal("pov, holding white t-shirt","white t-shirt",plan,items,tags).validated,false);
+    assert.strictEqual(ICP.auditFinal("pov, holding white t-shirt","",plan,items,[]).validated,false);
+    ICP.clear();
+    const incomplete=await ICP.compile(draw,{intentMode:true,visualPlan:plan,wearState:plan.wear},
+      async()=>JSON.stringify({prompt:"pov, holding white t-shirt",absent:[{index:0,tag:"white t-shirt"}]}));
+    assert.strictEqual(incomplete.compiled,false,"model must supply provenance-bound off-body tag");
+  });
+  await ta("VC-03-4: fixedPrompt clothing conflicts block A1111 without changing canon",async()=>{
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Я сняла белую футболку");
+    const draw="camera=owner; сняла белую футболку, видно живот";
+    m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
+      value:["белую футболку"],certainty:"reported",evidence:"сняла белую футболку",
+      evidenceType:"draw",visualScope:"current-self"}];
+    await h.chat.commitMessage(m,m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{
+      enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"intent",
+      promptMode:"append",fixedPrompt:"white cotton t-shirt"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;let called=0;
+    try{
+      ICP.compile=async()=>({text:"pov, exposed midriff, navel",compiled:true,wearValidated:true,
+        wearItems:[{index:0,item:"белую футболку",tag:"white cotton t-shirt"}],negative:""});
+      IB.generate=async()=>{called++;throw Error("backend should not be called");};
+      const source=h.S.messages.find(x=>x.id===m.id);
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
+      assert.strictEqual(called,0);
+      assert.strictEqual(source.swipes[0].images[0].status,"error");
+      assert.ok(source.swipes[0].images[0].error.includes("Конфликт одежды"),source.swipes[0].images[0].error);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
+        ["белую футболку"]);
+    }finally{ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VC-03-5: multiple subjects cannot globally inherit owner's garment restriction",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const plan=VP.create({owner:true,shotAuthored:true,
+      wearFacts:[{actor:"char",worn:[],partiallyWorn:[],removed:[{item:"blue jacket"}]}]});
+    const audit=ICP.auditFinal("2girls, second girl in blue jacket, first girl in white dress",
+      "",plan,[{index:0,tag:"blue jacket"}],[]);
+    assert.deepStrictEqual(audit.issues,[]);
+    assert.strictEqual(audit.scope,"multi-subject");
+    assert.strictEqual(audit.validated,false,"multi-actor semantic status must not be falsely certified");
+  });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
     const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
