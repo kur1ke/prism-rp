@@ -895,77 +895,48 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
-t("VIS-POV-1: owner camera is not a second full character in frame", () => {
-  const card = { name: "Лилит (Лили)", image: {
-    trigger: "lilithx", look: "base: adult gothic catgirl, long burgundy hair, black cat ears, pale skin",
-    loras: [{ name: "lilithx_v2", weight: 0.8 }],
-    negative: "wrong eye color"
-  } };
-  const explicit = IC.compose({ draw: "camera=owner; own bare feet on grey carpet, pov, close-up", card, scene: { chars: {} }, persona: {} });
-  assert.strictEqual(explicit.cameraOwner, true);
-  assert.strictEqual(explicit.ownerPresent, false);
-  assert.strictEqual(explicit.provenance.cameraRole, "owner");
-  assert.ok(!explicit.keep.includes("burgundy hair") && !explicit.scene.includes("camera=owner"));
-  const final = IC.finalise({
-    composed: explicit, compiled: "lilithx, female, adult, 1girl, lying on back, bare feet, grey carpet, pov, soft lighting",
-    card, settings: { promptMode: "append", negative: "bad anatomy" }, backend: "a1111", persona: {}
-  });
-  assert.ok(final.prompt.includes("lilithx") && !final.prompt.includes("1girl"), final.prompt);
-  assert.ok(final.prompt.includes("<lora:lilithx_v2:0.8>"), final.prompt);
-  assert.ok(!final.prompt.includes("burgundy hair"), final.prompt);
-  assert.ok(final.prompt.includes("bare feet") && final.prompt.includes("grey carpet") && final.prompt.includes("pov"), final.prompt);
-  assert.ok(final.negative.includes("extra legs") && final.negative.includes("duplicate body"), final.negative);
+t("VIS-CAMERA-1: natural selfie names the character without camera metadata", () => {
+  const card={name:"Лилит (Лили)",image:{trigger:"lilithx",
+    look:"base: adult gothic catgirl, long burgundy hair, black cat ears, pale skin",
+    loras:[{name:"lilithx_v2",weight:0.8}]}};
+  const c=IC.compose({draw:"Selfie of Лилит (Лили), smiling at camera",
+    card,scene:{chars:{}},persona:{},shotAuthored:true});
+  assert.strictEqual(c.ownerPresent,true);
+  assert.strictEqual(c.subjects.owner,true);
+  assert.ok(c.keep.includes("burgundy hair"),c.keep);
+  assert.ok(!Object.prototype.hasOwnProperty.call(c,"cameraOwner"));
+  assert.ok(!Object.prototype.hasOwnProperty.call(c.provenance,"cameraRole"));
+  const result=IC.finalise({composed:c,card,hybrid:true,backend:"a1111",
+    settings:{promptMode:"off"}});
+  assert.ok(result.prompt.includes("lilithx"),result.prompt);
+  assert.ok(result.prompt.includes("<lora:lilithx_v2:0.8>"),result.prompt);
+  assert.ok(!/third.person view|duplicate body/.test(result.negative));
 });
-t("VIS-POV-4: owner POV preserves established outfit and physical camera pose", () => {
-  const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
-  const scene = { chars: { Лилит: { wear: ["black socks"], pose: "reclining on a sofa" } }, present: [] };
-  const c = IC.compose({ draw: "camera=owner; my own feet and carpet, POV", card, scene, persona: {}, messenger: { location: null } });
-  assert.strictEqual(c.ownerPresent, false);
-  assert.ok(c.keep.includes("black socks"), c.keep);
-  assert.ok(!c.keep.includes("camera pose:"), "camera holder is not a separate posed body");
-  assert.ok(!c.keep.includes("burgundy hair"), c.keep);
-  const final = IC.finalise({ composed: c, compiled: "female, 1girl, bare feet, carpet, pov",
-    card, settings: { promptMode: "off" }, backend: "a1111", persona: {} });
-  assert.ok(final.prompt.includes("black socks") && !final.prompt.includes("1girl"), final.prompt);
-  assert.ok(final.prompt.includes("<lora:lilithx_v2:0.8>"), final.prompt);
-  assert.ok(IC.embodiedShot("lying on back, bare feet, carpet", card).includes("reclining viewpoint"));
+t("VIS-CAMERA-2: fragment with named owner keeps identity without manufacturing POV", () => {
+  const card={name:"Лилит",image:{trigger:"lilithx",look:"base: burgundy hair",
+    loras:[{name:"lilithx_v2",weight:0.8}]}};
+  const c=IC.compose({draw:"Крупный план живота Лилит, край блузки приподнят",
+    card,scene:{chars:{}},persona:{},shotAuthored:true});
+  assert.strictEqual(c.ownerPresent,true);
+  assert.ok(c.keep.includes("burgundy hair"),c.keep);
+  const final=IC.finalise({composed:c,compiled:"Close-up of Lilith's stomach, blouse raised.",
+    card,settings:{promptMode:"off"},backend:"a1111",hybrid:true});
+  assert.ok(final.prompt.includes("Close-up"),final.prompt);
+  assert.ok(!/\\bpov\\b/i.test(final.prompt),final.prompt);
 });
-t("VIS-POV-5: screenshot case — owner LoRA stays, already drawn sweater is not duplicated and old monitor activity is excluded", () => {
-  const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", look: "base: burgundy hair",
-    loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
-  const shot = "camera=owner; вид сверху вниз на бледные ноги Лилит (Лили) в больших домашних тапочках, ноги частично скрыты краем длинного объёмного вязаного свитера серого цвета";
-  const state = { chars: { "Лилит (Лили)": {
-    wear: ["огромный, очень мягкий и уютный свитер", "уютный свитер"], pose: "залипаю в монитор"
-  } }, present: [] };
-  const c = IC.compose({ draw: shot, card, scene: state, persona: {}, messenger: { location: null } });
-  assert.strictEqual(c.cameraOwner, true);
-  assert.strictEqual(c.ownerPresent, false);
-  assert.ok(!c.stateContext.includes("свитер") && !c.stateContext.includes("монитор"), c.stateContext);
-  assert.ok(!c.keep.includes("clothing:") && !c.keep.includes("camera pose:"), c.keep);
-  assert.deepStrictEqual(c.provenance.outfit, "огромный, очень мягкий и уютный свитер, уютный свитер",
-    "canonical snapshot remains observable; only image prompt is affected");
-  const final = IC.finalise({ composed: c,
-    compiled: "masterpiece, best quality, lilith, female, young woman, 1girl, legs, feet, large house slippers, long oversized grey knitted sweater, covering legs, looking down, from above, indoor, daytime, soft lighting, high angle, close-up",
-    card, settings: { promptMode: "off" }, backend: "a1111", persona: {} });
-  assert.ok(final.prompt.includes("lilithx") && final.prompt.includes("<lora:lilithx_v2:0.8>"), final.prompt);
-  assert.ok(final.prompt.includes("long oversized grey knitted sweater") && final.prompt.includes("pov"), final.prompt);
-  assert.ok(!/свитер|уютный|монитор|camera pose:|clothing:/.test(final.prompt), final.prompt);
-  assert.ok(!/female|1girl/.test(final.prompt), "owner POV has no external duplicate figure");
-  assert.ok(c.provenance.imageLayers.shot.includes("Лилит (Лили)"), "source draw is preserved for diagnostics");
-});
-t("VIS-POV-2: legacy explicit self-body Russian description works, ordinary user POV is unchanged", () => {
-  const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", look: "base: burgundy hair" } };
-  const old = "фото из первого лица, на котором видны изящные бледные ступни Лилит (Лили) на сером ковре";
-  assert.strictEqual(IC.ownerCamera(card, old), true);
-  const c = IC.compose({ draw: old, card, scene: { chars: {} }, persona: {} });
-  assert.strictEqual(c.cameraOwner, true);
-  const other = IC.compose({ draw: "1girl, lilithx, looking at viewer, pov", card, scene: { chars: {} }, persona: { image: { view: "first" } } });
-  assert.strictEqual(other.cameraOwner, false);
-  assert.strictEqual(other.ownerPresent, true);
-  const screenshot = IC.compose({ draw: "screenshot of a dress product page", card, scene: { chars: {} }, persona: {} });
-  assert.strictEqual(screenshot.cameraOwner, false);
-  assert.strictEqual(screenshot.ownerPresent, false);
-  assert.ok(IC.rewriteRules({ embodiedOwner: true, intentMode: true }).includes("OWNER-CAMERA"));
+t("VIS-CAMERA-3: user first-person view is distinct and screenshots stay owner-free", () => {
+  const card={name:"Лилит",image:{trigger:"lilithx",look:"base: burgundy hair"}};
+  const other=IC.compose({draw:"Лилит, looking at viewer",card,scene:{chars:{}},
+    persona:{image:{view:"first"}}});
+  assert.strictEqual(other.ownerPresent,true);
+  assert.ok(other.keep.includes("pov"));
+  const screenshot=IC.compose({draw:"screenshot of a dress product page",card,
+    scene:{chars:{}},persona:{},requireNamedOwner:true});
+  assert.strictEqual(screenshot.ownerPresent,false);
+  const rules=IC.rewriteRules({intentMode:true,format:"hybrid"});
+  assert.ok(!rules.includes("OWNER-CAMERA"));
+  const instructions=IC.drawInstruction({intentMode:true,hybrid:true});
+  assert.ok(!instructions.includes("camera=owner"));
 });
 t("VIS-INTENT-3: intent distinguishes shop screenshot from named owner", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
