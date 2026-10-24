@@ -232,15 +232,19 @@
           frameStatus.sourceDraw === String(entry.draw || "") &&
           frameStatus.sourceText === String(sourceSwipe.text || "") &&
           Array.isArray(frameStatus.frameObjects) ? frameStatus.frameObjects : [];
+        // Lock the authored frame's subjects before translation. A self-authored
+        // selfie can show the owner without repeating the Card name.
+        const resolvedActors = currentSelfie && !shotActors.owner
+          ? { ...shotActors, owner: true, reason: "current-selfie" } : shotActors;
         const visualPlan = VP.create({
           wearFacts: projected.wearFacts,
-          owner: !!shotActors.owner || currentSelfie,
+          owner: !!resolvedActors.owner,
           cameraOwner,
           shotAuthored: drawAuthored,
           draw: shot, frameObjects: verifiedFrameObjects,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
-        const shotScope = { otherActorPresent: !!shotActors.user };
+        const shotScope = { otherActorPresent: !!resolvedActors.user };
         const firstPass = intent ? await ICP.compile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true, embodiedOwner: cameraOwner,
             qualityPinned: ST.qualityPinned(S.settings),
@@ -249,6 +253,8 @@
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
           scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts,
+          // The translator may change wording, never actor ownership.
+          frameActors: intent && drawAuthored ? resolvedActors : null,
           shotAuthored: drawAuthored, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.

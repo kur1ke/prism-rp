@@ -4041,6 +4041,30 @@ async function foundationH() {
     assert.strictEqual(old.text,"lifting shirt, belly, navel");
     assert.strictEqual(count,2,"hybrid and tags must not share a translation");
   });
+  await ta("VIS-FF-01C: persisted pre-frame-first hybrid cache must not survive rule change",async()=>{
+    ICP.clear();
+    const scene="Она показывает живот в кадре";
+    const options={intentMode:true,format:"hybrid",embodiedOwner:true};
+    const legacyKey=["v9-final-audit","intent","regular-frame","owner-camera",
+      "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
+    const oldRecord={text:"A third-person top-down portrait.",compiled:true};
+    let saved={[legacyKey]:oldRecord},calls=0;
+    ICP.setStore({load:async()=>saved,save:(next)=>{saved=next;}});
+    try {
+      const fresh=await ICP.compile(scene,options,async()=>{
+        calls++;
+        return "Close-up photograph of her midriff.";
+      });
+      assert.strictEqual(calls,1,"old hybrid translation must be invalidated");
+      assert.strictEqual(fresh.text,"Close-up photograph of her midriff.");
+      assert.strictEqual(fresh.cached,undefined);
+      const again=await ICP.compile(scene,options,async()=>{throw Error("duplicate call");});
+      assert.strictEqual(again.cached,true,"new hybrid cache must still be reusable");
+    } finally {
+      ICP.clear();
+      ICP.setStore(null);
+    }
+  });
   await ta("VIS-HYBRID-3: bad hybrid model output fails closed rather than becoming final prompt",async()=>{
     const source="Она приподняла край футболки";
     const opts={format:"hybrid",intentMode:true};
@@ -4067,7 +4091,9 @@ async function foundationH() {
     const english="The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
     const hybrid=IC.finalise({composed,card,compiled:english,hybrid:true,backend:"a1111",
       settings:{promptMode:"off",fixedPrompt:""}});
-    assert.ok(hybrid.prompt.includes("pov, "+english),hybrid.prompt);
+    assert.ok(hybrid.prompt.includes(english),hybrid.prompt);
+    assert.ok(!/\bpov\b/i.test(hybrid.prompt),"hybrid owner metadata must not force POV");
+    assert.ok(!hybrid.negative.includes("third-person view"),hybrid.negative);
     assert.ok(hybrid.prompt.includes("orihime_inoue") && hybrid.prompt.includes("long orange hair"),hybrid.prompt);
     assert.ok(hybrid.prompt.includes("masterpiece, best quality"),hybrid.prompt);
     assert.ok(hybrid.prompt.includes("<lora:Orihime Illustrious:0.8>"),hybrid.prompt);
@@ -4082,6 +4108,43 @@ async function foundationH() {
       backend:"a1111",settings:{promptMode:"off"}});
     assert.ok(legacy.prompt.includes("pov"));
     assert.ok(!legacy.prompt.includes("masterpiece"),"tagged format must remain unchanged");
+  });
+  await ta("VIS-FF-01: owner-camera is attribution, not automatic hybrid framing",async()=>{
+    const card={name:"Orihime Inoue",image:{trigger:"orihime_inoue",
+      loras:[{name:"Orihime Illustrious",weight:0.8}]}};
+    const composed=IC.compose({draw:"camera=owner; close-up of her stomach",
+      card,scene:{chars:{}},persona:{},shotAuthored:true});
+    const english="Close-up of her stomach as she lifts a white t-shirt.";
+    const hybrid=IC.finalise({composed,compiled:english,hybrid:true,
+      card,backend:"a1111",settings:{promptMode:"off",negative:"bad anatomy"}});
+    assert.strictEqual(composed.cameraOwner,true);
+    assert.strictEqual(composed.provenance.cameraRole,"owner");
+    assert.ok(hybrid.prompt.includes(english),hybrid.prompt);
+    assert.ok(!/\bpov\b|first.person view/i.test(hybrid.prompt),hybrid.prompt);
+    assert.ok(!/third.person view|duplicate body/i.test(hybrid.negative),hybrid.negative);
+    assert.ok(hybrid.prompt.includes("<lora:Orihime Illustrious:0.8>"),hybrid.prompt);
+    const rules=IC.rewriteRules({intentMode:true,format:"hybrid",embodiedOwner:true});
+    assert.ok(rules.includes("does NOT specify a viewpoint"),rules);
+    assert.ok(IC.drawInstruction({intentMode:true,hybrid:true}).includes("НЕ задаёт POV"));
+    assert.ok(IC.drawInstruction({intentMode:true}).includes("Для вида собственного тела"),
+      "legacy intent instructions remain unchanged");
+  });
+  await ta("VIS-FF-02: translated author shot cannot override source frame actors",async()=>{
+    const card={name:"Orihime Inoue",image:{trigger:"orihime_inoue",
+      loras:[{name:"Orihime Illustrious",weight:0.8}]}};
+    const source=IC.frameActors(card,{},"screenshot of product listing",{requireNamedOwner:true});
+    assert.strictEqual(source.owner,false);
+    const composed=IC.compose({draw:"Orihime Inoue standing in a shop",frameActors:source,
+      card,scene:{chars:{}},persona:{},shotAuthored:true});
+    const final=IC.finalise({composed,compiled:composed.scene,hybrid:true,card,
+      backend:"a1111",settings:{promptMode:"off"}});
+    assert.strictEqual(composed.ownerPresent,false,"source scope is authoritative");
+    assert.ok(!final.prompt.includes("<lora:Orihime Illustrious"),final.prompt);
+    assert.strictEqual(source.owner,false,"compose must not mutate the frozen actors");
+    const named=IC.frameActors(card,{},"Orihime Inoue lifting shirt",{requireNamedOwner:true});
+    const second=IC.compose({draw:"close-up of a white t-shirt",frameActors:named,
+      card,scene:{chars:{}},persona:{},shotAuthored:true});
+    assert.strictEqual(second.ownerPresent,true,"translation cannot drop a source actor");
   });
   await ta("VIS-HYBRID-5: removed garment is omitted, not a visible instruction, with one model call",async()=>{
     const plan=globalThis.PRP.visualPlan.create({cameraOwner:true,shotAuthored:true,
@@ -4138,7 +4201,8 @@ async function foundationH() {
       assert.strictEqual(image.status,"done",JSON.stringify(image));
       assert.strictEqual(calls,1,"one compiler call, no extra Observer or translator");
       assert.strictEqual(requests,1);
-      assert.ok(backend.prompt.includes("pov, The lower hem"),backend.prompt);
+      assert.ok(backend.prompt.includes("The lower hem"),backend.prompt);
+      assert.ok(!/\bpov\b/i.test(backend.prompt),"hybrid must not force POV");
       assert.ok(backend.prompt.includes("masterpiece, best quality"),backend.prompt);
       assert.ok(backend.prompt.includes("<lora:Orihime Illustrious:0.8>"),backend.prompt);
       assert.ok(!/bra|panties|beige skirt/i.test(backend.prompt),"no added wardrobe");
@@ -4150,6 +4214,34 @@ async function foundationH() {
       assert.strictEqual(requests,2);
       assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"hybrid");
     }finally{globalThis.PRP.llm.simple=oldModel;IB.generate=oldBackend;}
+  });
+  await ta("VIS-FF-02B: ImageService does not inject Card identity from hallucinated translation",async()=>{
+    const h=fbHarness({name:"Orihime Inoue",image:{trigger:"orihime_inoue",
+      loras:[{name:"Orihime Illustrious",weight:0.8}]}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const msg=h.chat.newMsg("assistant",null,"Here's the screenshot");
+    const shot="screenshot of a product listing";
+    msg.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{
+      enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"hybrid",
+      translate:false,promptMode:"off"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldModel=globalThis.PRP.llm.simple,oldBackend=IB.generate;
+    let received;
+    try {
+      globalThis.PRP.llm.simple=async()=>"Orihime Inoue stands in a shop.";
+      IB.generate=async(_,args)=>{received=args;
+        return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
+      const live=h.S.messages.find(x=>x.id===msg.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
+      assert.strictEqual(live.swipes[0].images[0].status,"done");
+      assert.ok(received && !received.prompt.includes("orihime_inoue"),received && received.prompt);
+      assert.ok(!received.prompt.includes("<lora:Orihime Illustrious:"),received.prompt);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.subjects.owner,false);
+    } finally {globalThis.PRP.llm.simple=oldModel;IB.generate=oldBackend;}
   });
   await ta("VIS-DRAW-SOURCE-5: Messenger intent image uses one compiler call for author's shot",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
