@@ -6623,7 +6623,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (opts.intentMode) return [
       "Когда персонаж отправляет изображение, добавь одну директиву [draw: описание изображения].",
       "В [draw:] описывай готовый визуальный кадр, а не пересказывай происходящую сцену: тип изображения, видимых участников и объекты, их действия и расположение, окружение, ракурс и границы кадра.",
-      "Передавай композицию именно изображения, а не общее описание ситуации. Описание должно быть самостоятельным, визуально конкретным и не содержать технических параметров генерации или объяснений.",
+      "Указывай всю видимую в кадре одежду. Описание должно быть самостоятельным, визуально конкретным и не содержать технических параметров генерации или объяснений.",
       "Явно называй по имени только изображённых персонажей. Имя персонажа карточки: " + (opts.characterName || "персонаж") + ".",
       "Постоянные теги внешности, LoRA и параметры качества приложение добавляет отдельно; не дублируй их в [draw:].",
       "Не больше одной директивы за ответ; не добавляй изображение без повода."
@@ -6661,7 +6661,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const rules = [
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
-        "Translate the visible image described in SCENE. Preserve its exact participants, viewpoint, action and completion, visible objects and framing. For garments, preserve the exact degree and position of movement and the areas SCENE explicitly shows as exposed or covered. Do not enlarge a partial movement into full displacement or invent additional exposure.",
+        "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name every garment visible in SCENE; do not omit or invent clothing.",
         "Do not invent ANY garments, underwear types, body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If SCENE says only 'lace underwear', do not specify a bra or panties.",
         "Do not explain ordinary garment coverage, repeat facts, tell a story of removed clothes, or mention hidden or off-camera things. A garment that is worn in CANONICAL WEAR but is not visible in SCENE is not a positive image instruction.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
@@ -7111,9 +7111,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    // Hybrid translation now preserves garment displacement degree explicitly.
-    // Do not reuse prompts translated with the older wording; leave legacy modes cached.
-    const key = [hybrid ? "v12-hybrid-garment-extent" : "v11-frame-actors",
+    // Hybrid visible-clothing translation contract changed; old translations
+    // must not hide the effect of the current instruction. Other modes keep v11.
+    const key = [hybrid ? "v13-hybrid-visible-clothing" : "v11-frame-actors",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
