@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "8c3d624fe3a6927ba6a8a4cf20ae9ffc825d3671";
+  window.PRISM_RP_BUILD_SHA = "59bd82bb5fb27e2fbe660bb7b8d0e0a9f0953aeb";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4439,15 +4439,21 @@
       if (event.action === "add" || event.action === "adjust") wear.known = true;
       for (const item of event.value) {
         const order = orderOf(item);
-        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) {
-          // Duplicate declarations do not change original item evidence.
-          wear.removed = wear.removed.filter((x) => !sameGarment(x.item, item));
-          continue;
-        }
+        const existing = previous.find((x) => sameGarment(x.item, item));
+        // One garment, one current state. Repeated reports of the same
+        // intermediate position do not create a new transition or erase its
+        // original provenance. An ordinary "adjusted" remark is not a new
+        // placement; Observer must supply a grounded position to use adjust.
+        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) continue;
+        if (event.action === "adjust" && wear.partiallyWorn.some((x) =>
+          sameGarment(x.item, item) && x.placement === event.placement)) continue;
         drop(item);
         const target = event.action === "remove" ? "removed" :
           event.action === "adjust" ? "partiallyWorn" : "worn";
-        wear[target].push(fact(item, order, event.action === "adjust" ? event.placement : ""));
+        // Preserve the established item label across abbreviated, but
+        // exactly matching, reports; no fuzzy garment identity guessing.
+        wear[target].push(fact(existing ? existing.item : item, order,
+          event.action === "adjust" ? event.placement : ""));
       }
     }
     wear.last = { certainty: event.certainty, source: clone(source) };
