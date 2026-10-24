@@ -3592,18 +3592,22 @@ async function foundationH() {
     const m=h.chat.newMsg("assistant",prev.id,"Фото!");
     const shot="1girl, white t-shirt, shirt off shoulders, shorts on bed, selfie, cinematic lighting";
     m.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+    m.swipes[0].stateStatus={status:"ok",sourceText:m.swipes[0].text,sourceDraw:shot,
+      frameObjects:[{role:"offBody",item:"шорты",evidence:"shorts on bed"}]};
     await h.chat.commitMessage(m,m.id);
     h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",url:"http://unused",translate:false,drawPromptMode:"tags"});
     h.S.drawing=new Set();h.S.imgUrls={};
     h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
     const oldC=ICP.compile,oldG=IB.generate;let compCalls=0,backend;
     try{
-      ICP.compile=async (scene,opts)=>{compCalls++;return oldC(scene,opts,async()=>{throw Error("must not CALL a translator for English draw");});};
+      ICP.compile=async (scene,opts)=>{compCalls++;return oldC(scene,opts,async()=>
+        JSON.stringify({prompt:"1girl, white t-shirt, shirt off shoulders, shorts on bed, selfie, cinematic lighting",
+          absent:[{index:0,tag:"shorts"}],offBody:[{index:0,tag:"shorts on bed"}]}));};
       IB.generate=async (_,o)=>{backend=o;return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:shot,ratio:"1:1"});
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
-      assert.strictEqual(compCalls,1,"compiler adapter may be entered, but the translation model must not run");
+      assert.strictEqual(compCalls,1,"authored English tags reconcile once with canonical clothing");
       assert.ok(backend.prompt.includes("shorts on bed")&&backend.prompt.includes("shirt off shoulders"),backend.prompt);
       assert.ok(!backend.prompt.includes("blue dress")&&!backend.prompt.includes("nipples"),backend.prompt);
       assert.ok(backend.prompt.includes("<lora:ori:0.8>")&&backend.prompt.includes("orihime_inoue"),backend.prompt);
@@ -3838,7 +3842,10 @@ async function foundationH() {
       assert.ok(instruction.includes("CANONICAL WEAR FACTS"));
       if(calls===1)assert.ok(instruction.includes("VERIFIED VISIBLE OFF-BODY OBJECTS"));
       else assert.ok(!instruction.includes("VERIFIED VISIBLE OFF-BODY OBJECTS"));
-      return JSON.stringify({prompt:"holding white t-shirt in hands",absent:[{index:0,tag:"white t-shirt"}]});
+      return calls===1
+        ? JSON.stringify({prompt:"holding white t-shirt in hands",absent:[{index:0,tag:"white t-shirt"}],
+          offBody:[{index:0,tag:"holding white t-shirt in hands"}]})
+        : JSON.stringify({prompt:"pov, close-up of hands",absent:[{index:0,tag:"white t-shirt"}],offBody:[]});
     };
     const yes=await ICP.compile(draw,{intentMode:true,visualPlan:withRole,wearState:withRole.wear},gen);
     const no=await ICP.compile(draw,{intentMode:true,visualPlan:withoutRole,wearState:withoutRole.wear},gen);
@@ -3867,7 +3874,8 @@ async function foundationH() {
     const oldC=ICP.compile,oldG=IB.generate;let options,sent;
     try{
       ICP.compile=async (_shot,o)=>{options=o;return {text:"pov, holding a white t-shirt",
-        compiled:true,wearValidated:true,negative:"",wearItems:[{index:0,item:"белую футболку",tag:"white t-shirt"}]};};
+        compiled:true,wearValidated:true,negative:"",wearItems:[{index:0,item:"белую футболку",tag:"white t-shirt"}],
+        offBodyTags:[{index:0,tag:"holding a white t-shirt"}]};};
       IB.generate=async (_,o)=>{sent=o;return {dataUrl:"data:image/png;base64,AA==",seed:7,
         info:{width:512,height:512}};};
       const source=h.S.messages.find(x=>x.id===m.id);
