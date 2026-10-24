@@ -957,6 +957,7 @@ t("VIS-DRAW-GENRE-1: visual genre and frame without content-dependent authoring"
   assert.ok(short.includes("их действия и расположение, окружение, ракурс и границы кадра"), short);
   assert.ok(short.includes("а не пересказывай происходящую сцену"), short);
   assert.ok(short.includes("Передавай композицию именно изображения"), short);
+  assert.ok(short.includes("Указывай всю видимую в кадре одежду."), short);
   assert.ok(short.includes("визуально конкретным"), short);
   assert.ok(short.includes("не содержать технических параметров генерации или объяснений"), short);
   assert.ok(short.includes("Явно называй по имени только изображённых персонажей"), short);
@@ -976,31 +977,31 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
   const legacy = IC.drawInstruction({ format: "tags", fixedIdentity: false });
   assert.ok(!legacy.includes("добавляются приложением отдельно"), legacy);
 });
-t("VIS-REVEAL-01: partial clothing motion retains stated exposure without invented negatives", () => {
+t("VIS-CLOTHING-VISIBLE-01: authored visible garments persist without hidden additions", () => {
   const rules=IC.rewriteRules({format:"hybrid",intentMode:true});
-  assert.ok(rules.includes("exact degree and position of movement"),rules);
-  assert.ok(rules.includes("explicitly shows as exposed or covered"),rules);
-  assert.ok(rules.includes("Do not enlarge a partial movement into full displacement"),rules);
-  assert.ok(rules.includes("Do not invent ANY garments"),"no relaxation of source authority");
+  assert.ok(rules.includes("Name every garment visible in SCENE; do not omit or invent clothing."),rules);
+  assert.ok(!rules.includes("exact degree and position of movement"),"retire overly detailed clothing contract");
+  assert.ok(rules.includes("Do not invent ANY garments"),"source authority unchanged");
   const card={name:"Орихимэ Иноуэ",image:{trigger:"orihime inoue",
     loras:[{name:"Orihime Illustrious",weight:0.8}]}};
-  const draw="Орихимэ Иноуэ слегка приподняла край жёлтой блузки, открыв живот и пупок.";
-  const translated="Orihime Inoue slightly lifts the hem of her yellow blouse, revealing her stomach and navel.";
+  const draw="Селфи Орихимэ Иноуэ в жёлтой блузке и белой юбке, открыта полоска живота.";
+  const translated="Orihime Inoue takes a selfie, wearing a yellow blouse and white skirt, with a strip of midriff visible.";
   const c=IC.compose({draw,card,scene:{chars:{}},persona:{},
-    shotAuthored:true,requireNamedOwner:true});
+    shotAuthored:true,requireNamedOwner:true,
+    outfit:"жёлтая блузка, белая юбка, белое кружевное белье"});
   assert.strictEqual(c.ownerPresent,true,"source names the depicted Card owner");
   const f=IC.finalise({composed:c,compiled:translated,hybrid:true,card,
     backend:"a1111",settings:{promptMode:"off"}});
   assert.ok(f.prompt.includes(translated),f.prompt);
   assert.ok(f.prompt.includes("<lora:Orihime Illustrious:0.8>"),f.prompt);
-  assert.ok(!/nude|nipples|bare breasts|cover breasts/.test(f.prompt+" "+f.negative),
-    "do not auto-add either exposure or unsupported body-specific restrictions");
+  assert.ok(!f.prompt.includes("lace underwear")&&!f.prompt.includes("кружевное белье"),
+    "outfit knowledge alone must not force a hidden garment into a photo");
   const plan=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw,
-    wearFacts:[{actor:"char",known:true,complete:true,worn:[{item:"жёлтая блузка"}],
+    wearFacts:[{actor:"char",known:true,complete:true,worn:[
+      {item:"жёлтая блузка"},{item:"белая юбка"},{item:"белое кружевное белье"}],
       partiallyWorn:[],removed:[]}]});
   const audit=ICP.auditFinal(f.prompt,f.negative,plan,[],[],{otherActorPresent:false});
-  assert.strictEqual(audit.scope,"no-removal",
-    "lexical final audit does not claim to verify generated pixels");
+  assert.strictEqual(audit.scope,"no-removal","no false claim of rendered-pixel validation");
 });
 t("VIS-WARDROBE-1: card outfit preset is a fallback, never a second copy over shot clothing", () => {
   const card = { name: "Лилит", image: { wardrobe: "Cozy sweater: oversized cozy sweater" } };
@@ -4063,9 +4064,12 @@ async function foundationH() {
     const oldRecord={text:"A third-person top-down portrait.",compiled:true};
     const previousHybridKey=["v11-frame-actors","intent","regular-frame",
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
-    // Existing image caches were translated before the movement-degree contract.
+    const previousExtentKey=["v12-hybrid-garment-extent","intent","regular-frame",
+      "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
+    // Previous contract revisions must not bypass the visibility instruction.
     let saved={[legacyKey]:oldRecord,
-      [previousHybridKey]:{text:"An older prompt ignoring partial garment placement.",compiled:true}},calls=0;
+      [previousHybridKey]:{text:"An old prompt.",compiled:true},
+      [previousExtentKey]:{text:"A prior prompt describing only some clothes.",compiled:true}},calls=0;
     ICP.setStore({load:async()=>saved,save:(next)=>{saved=next;}});
     try {
       const fresh=await ICP.compile(scene,options,async()=>{
