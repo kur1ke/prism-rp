@@ -137,3 +137,15 @@ For **authored `hybrid` Draw**, camera ownership and camera perspective are dist
 - This slice intentionally **does not** redesign Card identity/LoRA injection for crops; that is a separate VIS-FF-03 experiment requiring controlled backend comparisons. `cfg.extra` final-prompt overrides are also a separate hardening issue.
 
 Test in the `testing` mirror before treating visual accuracy as established. Unit/CI results do not prove first-person imagery or framing fidelity in Forge/Perchance.
+
+## 11. VIS-FF-03A — explicit Card identity versus appearance (testing experiment)
+
+There is already a separate Card data channel for activation and appearance:
+
+- `Card.image.trigger` is an **unconditional** identity/LoRA trigger for frames attributed to the Card owner. Its entire configured string is inserted before the variable shot; a legacy multi-tag trigger is **not** automatically split, filtered or migrated.
+- `Card.image.look` is the existing appearance map. `base:` entries attach to an explicitly pictured external Card actor; keyword entries remain user-configured optional associations. For `camera=owner`, `compose()` does not treat the camera holder as an additional external figure, so it does not automatically add those external appearance tags.
+- Card authors may **explicitly** keep only essential activation words in `trigger` and place further visible identity descriptors in `look`. This is a manual Card configuration choice, **not** a hidden image-framing decision, not an instruction to RP Model and not a change to stored chat canon.
+- No recognition table for body parts, clothing, crop type or `if X then negative Y` is introduced. The same Card configuration is used regardless of the kind of image requested.
+- Changing an existing Card is optional; legacy cards retain exact positive prompt behaviour until their owner edits them. Activation requirements are model/LoRA-specific; never assume one trigger token always suffices.
+
+**Scope of VIS-FF-03A:** UI wording, contract documentation and regression coverage for the established Card fields. **No runtime image behaviour change** for existing data; no migration or new persisted fields. A controlled Forge/Perchance comparison of two explicit Card configurations is still required before claiming improved visual outcomes.
