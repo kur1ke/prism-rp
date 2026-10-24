@@ -121,11 +121,39 @@
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
       if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
       const originSwipe = TR.activeSwipe(origin.path[origin.path.length - 1]);
-      const drawAuthored = Array.isArray(originSwipe.draws) && originSwipe.draws.some((x) =>
-        x && String(x.prompt || "") === String(reuse ? reuse.draw : d.prompt) &&
-        String(x.ratio || "1:1") === String((reuse ? reuse.ratio : d.ratio) || "1:1"));
+      const authorDraws = Array.isArray(originSwipe.draws) ? originSwipe.draws : [];
+      const selectedDraw = String(reuse ? reuse.draw : d.prompt || "");
+      const selectedRatio = String((reuse ? reuse.ratio : d.ratio) || "1:1");
+      const matching = authorDraws.map((x, i) => x &&
+        String(x.prompt || "") === selectedDraw && String(x.ratio || "1:1") === selectedRatio ? i : -1)
+        .filter((i) => i >= 0);
+      // Duplicate author photos are ambiguous unless the original image is
+      // explicitly pinned to one photo index. The caller may pass the exact
+      // authored draw object to disambiguate a newly requested image.
+      const providedIndex = !reuse && Array.isArray(sw.draws) ? sw.draws.indexOf(d) : -1;
+      const pinnedIndex = reuse && Number.isInteger(reuse.sourceDrawIndex)
+        ? reuse.sourceDrawIndex : providedIndex;
+      const authoredIndex = pinnedIndex >= 0 && matching.includes(pinnedIndex)
+        ? pinnedIndex : matching.length === 1 ? matching[0] : -1;
+      const drawAuthored = authoredIndex >= 0;
+      // A continued swipe's END-OF-TURN state belongs to the LAST authored
+      // photograph. Re-rendering an older photograph with it would rewrite
+      // history visually; without a per-photo snapshot, fail closed.
+      if (drawAuthored && authoredIndex !== authorDraws.length - 1) {
+        ui.toast("Нельзя перерисовать прежний кадр продолженного ответа по состоянию последнего фото. Выберите актуальный снимок.", true);
+        return;
+      }
+      if (matching.length > 1 && !drawAuthored) {
+        ui.toast("Невозможно определить исходный Draw среди одинаковых снимков. Рисование отменено.", true);
+        return;
+      }
+      if (reuse && Number.isInteger(reuse.sourceDrawIndex) && !drawAuthored) {
+        ui.toast("Исходный Draw этого изображения изменён. Повторное рисование отменено.", true);
+        return;
+      }
       const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1",
-        fromMessage: drawAuthored || !!d.fromMessage };
+        fromMessage: drawAuthored || !!d.fromMessage,
+        ...(drawAuthored ? { sourceDrawIndex: authoredIndex } : {}) };
       if (S.drawing.has(entry.id)) { ui.toast("Это изображение уже генерируется.", true); return; }
       if (!reuse) entry.intentMode = !!(drawAuthored && cfg.drawPromptMode === "intent");
       // Resolve physical state from the frozen origin path BEFORE the first await.
@@ -269,6 +297,7 @@
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
           promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text,
+            ...(drawAuthored ? { sourceDrawIndex: authoredIndex } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
             actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
@@ -332,7 +361,7 @@
     function drawFromMessage(msgId) {
       const msg = S.messages.find((x) => x.id === msgId);
       const sw = TR.activeSwipe(msg);
-      const d = (sw.draws && sw.draws[0]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1", fromMessage: msg.role === "assistant" };
+      const d = (sw.draws && sw.draws[sw.draws.length - 1]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1", fromMessage: msg.role === "assistant" };
       return draw(msg, sw, d);
     }
 
