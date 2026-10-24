@@ -6806,7 +6806,7 @@ async function perfTurn() {
   const initial = W.empty({ char: "Орихимэ", user: "Пользователь" });
   const apply = (state, action, value, placement, messageId) => W.apply(state, {
     actor: "char", field: "wear", action, value, certainty: "reported",
-    evidence: "", ...(placement ? { placement } : {}),
+    evidence: placement || "", ...(placement ? { placement } : {}),
   }, { role: "manual", mode: "messenger", messageId, swipeIdx: 0 });
   t("WSN-01: partial is temporary, duplicate adjust is idempotent, removal and rewear replace it", () => {
     let state = apply(initial, "set", ["белая блузка", "юбка"], "", "origin");
@@ -6831,7 +6831,7 @@ async function perfTurn() {
     assert.strictEqual(state.actors.char.wearState.known, false);
     assert.strictEqual(state.actors.char.wearState.complete, false);
     assert.strictEqual(state.actors.char.wearState.removed.length, 1);
-    assert.strictEqual(state.actors.char.wearState.removed[0].source.messageId, "m1");
+    assert.strictEqual(state.actors.char.wearState.removed[0].source.messageId, "m2");
   });
 }
 
