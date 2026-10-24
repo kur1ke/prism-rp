@@ -42,7 +42,7 @@
           typeof x.item === "string" && typeof x.evidence === "string" &&
           x.evidence.length > 0 && x.evidence.length <= 300 && shot.includes(x.evidence) &&
           wear.removed.some(g => g.item === x.item))
-        .map(x => ({ item: x.item, evidence: x.evidence })) : [];
+        .map(x => ({ role: "offBody", item: x.item, evidence: x.evidence })) : [];
     // "Removed from the body" and "absent from the frame" are distinct.
     // Until the Observer supplies typed, evidence-validated frame object roles
     // (VC-02), an authored photo MUST NOT generate a global garment negative:
