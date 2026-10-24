@@ -230,11 +230,51 @@
       // Высокоточные явные самоописания не должны исчезать только потому,
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
+      // VC-04: continued swipes contain several authored photographs. Preserve
+      // ONLY previously interpreted, source-bound visual facts whose exact
+      // prior draw still exists. The latest observer still interprets only
+      // the newest photograph, and an old crop cannot become new authority.
+      // Legacy stateEvents without a matching earlier stateStatus are never
+      // promoted into historical events.
+      const draws = msg.role === "assistant" && Array.isArray(sw.draws) ? sw.draws : [];
+      const latestIndex = draws.length - 1;
+      const priorStatus = sw.stateStatus;
+      const archivedDrawEvents = [];
+      if (latestIndex > 0 && priorStatus &&
+          ["ok", "partial", "no-changes"].includes(priorStatus.status) &&
+          typeof priorStatus.sourceText === "string" &&
+          sourceText.startsWith(priorStatus.sourceText) &&
+          typeof priorStatus.sourceDraw === "string") {
+        const candidates = draws.slice(0, -1).map((d, i) =>
+          d && String(d.prompt || "") === priorStatus.sourceDraw ? i : -1).filter(i => i >= 0);
+        const previousIndex = Number.isInteger(priorStatus.sourceDrawIndex)
+          ? priorStatus.sourceDrawIndex
+          : candidates.length === 1 ? candidates[0] : -1;
+        if (previousIndex >= 0 && previousIndex < latestIndex &&
+            draws[previousIndex] && String(draws[previousIndex].prompt || "") === priorStatus.sourceDraw) {
+          for (const event of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
+            if (!event || event.evidenceType !== "draw" || event.certainty === "intent") continue;
+            const drawIndex = event.drawIndex == null ? previousIndex : event.drawIndex;
+            const exactDraw = draws[drawIndex];
+            if (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex > previousIndex ||
+                !exactDraw || typeof exactDraw.prompt !== "string" ||
+                !event.evidence || !exactDraw.prompt.includes(event.evidence)) continue;
+            archivedDrawEvents.push({ ...event, drawIndex });
+          }
+        }
+      }
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
       // Grounded fallback intentionally reads only text. Image descriptions
       // are interpreted by the SAME Observer and independently verified
       // against their exact draw evidence on every StateTracker fold.
-      const events = result.events.slice();
+      const events = result.events.map((e) => e.evidenceType === "draw" && latestIndex > 0
+        ? { ...e, drawIndex: latestIndex } : e);
+      // Prior snapshots are evidence, not an unbounded event log. Bound the
+      // archival slice, report truncation and never override a fresh event.
+      const MAX_ARCHIVED_DRAW_EVENTS = 32;
+      const retained = archivedDrawEvents.slice(-MAX_ARCHIVED_DRAW_EVENTS);
+      events.push(...retained);
+
       // Compare common Russian inflections ('синяя куртка'/'синей куртке')
       // to avoid adding the same garment twice when model and fallback agree.
       const garmentKey = (value) => (String(value || "").toLowerCase().replace(/ё/g, "е")
@@ -266,14 +306,22 @@
       // Apply text observations first; the intentional current photo is the
       // later visual observation of that same moment. Neither is a second
       // canonical store. Preserve relative ordering within each evidence kind.
-      events.sort((a, b) => Number(a.evidenceType === "draw") - Number(b.evidenceType === "draw"));
+      // Text is processed first as before; visual events follow the exact
+      // photo order so the newest explicit observation wins only on its item.
+      const drawOrder = (event) => event.evidenceType === "draw"
+        ? (event.drawIndex == null ? latestIndex : event.drawIndex) : -1;
+      events.sort((a, b) => drawOrder(a) - drawOrder(b));
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
           pathFingerprint(chat().path()) !== originalKey) {
         return { skipped: "stale-branch" };
       }
-      const status = !result.valid ? events.length ? "partial" : "error" : result.issues.length ? "partial" : events.length ? "ok" : "no-changes";
-      const stateStatus = { status, sourceText, sourceDraw, issues: result.issues, at: Date.now(),
+      const issues = result.issues.slice();
+      if (archivedDrawEvents.length > MAX_ARCHIVED_DRAW_EVENTS)
+        issues.push("Лимит архивных draw-событий: предыдущие факты требуют ручной проверки");
+      const status = !result.valid ? events.length ? "partial" : "error" : issues.length ? "partial" : events.length ? "ok" : "no-changes";
+      const stateStatus = { status, sourceText, sourceDraw, sourceDrawIndex: latestIndex,
+        issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
         // Shot-local provenance, not wardrobe state. Same-swipe image use only.
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
@@ -284,7 +332,7 @@
       sw.stateEvents = events;
       sw.stateStatus = stateStatus;
       updateUi();
-      return { events, issues: result.issues, status };
+      return { events, issues, status };
     }
     /* PERF-01: разбор сообщения как управляемая задача.
        • Одна задача на (чат, сообщение, свайп, текст): повторный вызов возвращает ту же.
