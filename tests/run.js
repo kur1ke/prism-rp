@@ -3590,7 +3590,7 @@ async function foundationH() {
     prev.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["шорты"],certainty:"reported",evidence:"Я сняла шорты"}];
     await h.chat.commitMessage(prev,prev.id);
     const m=h.chat.newMsg("assistant",prev.id,"Фото!");
-    const shot="1girl, white t-shirt, shirt off shoulders, shorts on bed, selfie, cinematic lighting";
+    const shot="orihime_inoue, 1girl, white t-shirt, shirt off shoulders, shorts on bed, selfie, cinematic lighting";
     m.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
     m.swipes[0].stateStatus={status:"ok",sourceText:m.swipes[0].text,sourceDraw:shot,
       frameObjects:[{role:"offBody",item:"шорты",evidence:"shorts on bed"}]};
