@@ -6654,7 +6654,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const rules = [
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
-        "Translate the visible image described in SCENE. Preserve its exact participants, camera viewpoint, action and its completion, garment placement, exposed areas, visible objects and framing. Do not reinterpret the action.",
+        "Translate the visible image described in SCENE. Preserve its exact participants, viewpoint, action and completion, visible objects and framing. For garments, preserve the exact degree and position of movement and the areas SCENE explicitly shows as exposed or covered. Do not enlarge a partial movement into full displacement or invent additional exposure.",
         "Do not invent ANY garments, underwear types, body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If SCENE says only 'lace underwear', do not specify a bra or panties.",
         "Do not explain ordinary garment coverage, repeat facts, tell a story of removed clothes, or mention hidden or off-camera things. A garment that is worn in CANONICAL WEAR but is not visible in SCENE is not a positive image instruction.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
@@ -7104,8 +7104,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    // Source-actor contract changed; never reuse translations from the old camera path.
-    const key = ["v11-frame-actors", o.intentMode ? "intent" : "tags",
+    // Hybrid translation now preserves garment displacement degree explicitly.
+    // Do not reuse prompts translated with the older wording; leave legacy modes cached.
+    const key = [hybrid ? "v12-hybrid-garment-extent" : "v11-frame-actors",
+      o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
