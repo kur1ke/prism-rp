@@ -41,6 +41,7 @@ require(J("state/resolver.js"));
 require(J("state/interpreter.js"));
 require(J("state/service.js"));
 require(J("images/compose.js"));
+require(J("images/visual-plan.js"));
 require(J("images/backends.js"));
 require(J("images/compile.js"));
 require(J("assist/assist.js"));
@@ -3626,16 +3627,107 @@ async function foundationH() {
     h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
     const oldC=ICP.compile,oldG=IB.generate;let calls=[],sent;
     try{
-      ICP.compile=async (shot,o)=>{calls.push({shot,o});return {text:"1girl, orihime_inoue, red dress, mirror selfie",compiled:true};};
+      ICP.compile=async (shot,o)=>{calls.push({shot,o});return {text:"1girl, orihime_inoue, red dress, mirror selfie",compiled:true,wearValidated:true,negative:"",wearItems:[{index:0,item:"шорты",tag:"shorts"}]};};
       IB.generate=async (_,o)=>{sent=o;return {dataUrl:"data:image/png;base64,AA==",seed:4,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===msg.id);
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:visual,ratio:"1:1"});
       assert.strictEqual(calls.length,1,JSON.stringify(calls));
       assert.strictEqual(calls[0].o.intentMode,true);
-      assert.strictEqual(calls[0].o.wearState,undefined);
+      assert.deepStrictEqual(calls[0].o.wearState.removed.map(x=>x.item),["шорты"],"the first translation receives end-of-turn removed facts");
+      assert.strictEqual(calls[0].o.visualPlan.actor,"char");
+      assert.strictEqual(calls[0].o.visualPlan.allowGlobalGarmentNegative,false);
       assert.ok(sent.prompt.includes("red dress"),sent.prompt);
       assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"intent");
     }finally {ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VC-01-1: VisualPlan copies canonical post-turn status without adding a second inventory", async () => {
+    const VP=globalThis.PRP.visualPlan;
+    const worn=[{item:"белая хлопковая футболка",source:{messageId:"m1",swipeIdx:0}}];
+    const removed=[{item:"юбка",source:{messageId:"m2",swipeIdx:1}}];
+    const facts=[{actor:"char",known:true,complete:true,worn,removed,partiallyWorn:[]}];
+    const plan=VP.create({owner:true,shotAuthored:true,wearFacts:facts,source:{chatId:"c",messageId:"m2",swipeIdx:1}});
+    assert.strictEqual(plan.actor,"char");
+    assert.strictEqual(plan.wear.complete,true);
+    assert.deepStrictEqual(plan.absentFromBody,["юбка"]);
+    assert.deepStrictEqual(plan.onBodyCandidates,["белая хлопковая футболка"]);
+    assert.strictEqual(plan.allowGlobalGarmentNegative,false);
+    assert.ok(Object.isFrozen(plan) && Object.isFrozen(plan.wear.removed));
+    assert.throws(()=>{plan.wear.removed[0].item="вымышленный предмет";},TypeError);
+    assert.strictEqual(facts[0].removed[0].item,"юбка");
+    assert.strictEqual(VP.create({owner:false,wearFacts:facts}).wear,null,"other person's photo cannot acquire owner wear");
+    assert.strictEqual(VP.create({cameraOwner:true,wearFacts:facts}).actor,"char");
+  });
+  await ta("VC-01-2: authored intent translates canonical removal in one model call without global negatives",async()=>{
+    const VP=globalThis.PRP.visualPlan,plan=VP.create({cameraOwner:true,shotAuthored:true,
+      wearFacts:[{actor:"char",known:true,complete:true,worn:[],partiallyWorn:[],
+        removed:[{item:"белая хлопковая футболка",certainty:"reported"}]}]});
+    let calls=0;
+    const out=await ICP.compile("сняла белую хлопковую футболку, видно бельё",
+      {intentMode:true,format:"tags",visualPlan:plan,wearState:plan.wear},async instruction=>{
+        calls++;
+        assert.ok(instruction.includes("CANONICAL WEAR FACTS"),instruction);
+        assert.ok(instruction.includes("END-OF-TURN"),instruction);
+        return JSON.stringify({prompt:"pov, white lace lingerie, navel, from above",
+          absent:[{index:0,tag:"white cotton t-shirt"}]});
+      });
+    assert.strictEqual(calls,1);
+    assert.strictEqual(out.compiled,true,JSON.stringify(out));
+    assert.strictEqual(out.wearValidated,true);
+    assert.strictEqual(out.negative,"","a removed garment could be in hands in the same authored shot");
+    assert.deepStrictEqual(out.wearItems.map(x=>x.item),["белая хлопковая футболка"]);
+    assert.ok(!out.text.includes("t-shirt") && !out.text.includes("lifting shirt"),out.text);
+    const noOwner=VP.create({owner:false,shotAuthored:true,wearFacts:[{actor:"char",removed:[{item:"юбка"}]}]});
+    assert.strictEqual(noOwner.wear,null);
+  });
+  await ta("VC-01-3: exact user example reaches A1111 without restored raised shirt",async()=>{
+    const h=fbHarness({name:"Орихимэ Иноуэ",image:{trigger:"orihime_inoue",loras:[{name:"orihime",weight:0.8}]}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const first=h.chat.newMsg("assistant",null,"На мне белая хлопковая футболка");
+    first.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",
+      value:["белая хлопковая футболка"],certainty:"reported",evidence:"белая хлопковая футболка"}];
+    await h.chat.commitMessage(first,first.id);
+    const middle=h.chat.newMsg("assistant",first.id,"Я приподняла край белой хлопковой футболки");
+    middle.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"adjust",placement:"приподняла край",
+      value:["белая хлопковая футболка"],certainty:"reported",
+      evidence:"приподняла край белой хлопковой футболки"}];
+    await h.chat.commitMessage(middle,middle.id);
+    const last=h.chat.newMsg("assistant",middle.id,"Вот второе фото!");
+    const shot="camera=owner; вид сверху вниз на торс Орихимэ Иноуэ, она сняла белую хлопковую футболку, обнажая живот и белое кружевное бельё";
+    last.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+    last.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
+      value:["белая хлопковая футболка"],certainty:"reported",evidence:"сняла белую хлопковую футболку",
+      evidenceType:"draw",visualScope:"current-self"}];
+    await h.chat.commitMessage(last,last.id);
+    const facts=h.ctx.svc.state.snapshot().actors.char.wearState;
+    assert.deepStrictEqual(facts.partiallyWorn.map(x=>x.item),[]);
+    assert.deepStrictEqual(facts.removed.map(x=>x.item),["белая хлопковая футболка"]);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",
+      url:"http://unused",translate:true,drawPromptMode:"intent"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const originalLLM=globalThis.PRP.llm.simple,originalBackend=IB.generate;
+    let instructions=[],sent;
+    try {
+      globalThis.PRP.llm.simple=async (_,instruction)=>{
+        instructions.push(instruction);
+        return JSON.stringify({prompt:"pov, torso, white lace lingerie, navel, from above",
+          absent:[{index:0,tag:"white cotton t-shirt"}]});
+      };
+      IB.generate=async (_,options)=>{sent=options;return {dataUrl:"data:image/png;base64,AA==",
+        seed:93,info:{width:1024,height:1024}};};
+      const live=h.S.messages.find(m=>m.id===last.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:shot,ratio:"1:1"});
+      assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
+      assert.strictEqual(instructions.length,1,"one canonical compilation request");
+      assert.ok(instructions[0].includes("белая хлопковая футболка"));
+      assert.ok(!/t-shirt|lifting shirt|shirt pulled up/i.test(sent.prompt),sent.prompt);
+      assert.ok(sent.prompt.includes("white lace lingerie"),sent.prompt);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.actor,"char");
+      assert.deepStrictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.absentFromBody,
+        ["белая хлопковая футболка"]);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.negative,"");
+    } finally {globalThis.PRP.llm.simple=originalLLM;IB.generate=originalBackend;}
   });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
