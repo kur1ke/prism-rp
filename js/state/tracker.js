@@ -103,13 +103,16 @@
     // stored VIS-REF-1 events. Adjustment gets a distinct typed ID, derived
     // from the SAME bounded active-path garment facts, not a new registry.
     const requested = Array.isArray(actions) ? actions : ["remove"];
-    const allowed = ["remove", "adjust"].filter((action) => requested.includes(action));
-    const items = actor.wearState.worn.concat(actor.wearState.partiallyWorn || [])
+    const allowed = ["remove", "adjust", "add"].filter((action) => requested.includes(action));
+    const present = actor.wearState.worn.concat(actor.wearState.partiallyWorn || [])
       .sort((a, b) => (a.order || 0) - (b.order || 0)).slice(0, 12);
-    return items.flatMap((x, i) => allowed.map((action) => ({
-      id: "wear:" + actorId + ":" + i + (action === "adjust" ? ":adjust" : ""),
+    const removed = (actor.wearState.removed || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0)).slice(0, 12);
+    const items = present.flatMap((x, i) => allowed.filter((action) => action !== "add").map((action) => ({ x, i, action })))
+      .concat(removed.flatMap((x, i) => allowed.includes("add") ? [{ x, i, action: "add" }] : []));
+    return items.map(({ x, i, action }) => ({
+      id: "wear:" + actorId + ":" + i + (action === "adjust" ? ":adjust" : action === "add" ? ":add" : ""),
       actor: actorId, field: "wear", action, item: x.item, source: clone(x.source),
-    })));
+    }));
   }
   const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, scene: SC.emptyState(), diagnostics: [] });
 
@@ -161,7 +164,7 @@
       if (!str(e.evidence) || !evidenceText.includes(e.evidence))
         return "нет точного подтверждения в сообщении";
       if (e.reference) {
-        if (e.field !== "wear" || !["remove", "adjust"].includes(e.action) || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
+        if (e.field !== "wear" || !["remove", "adjust", "add"].includes(e.action) || !Array.isArray(e.value) || e.value.length !== 1) return "недопустимая контекстная ссылка";
         const candidates = Array.isArray(source.references) ? source.references : [];
         const match = candidates.find((x) => x.id === e.reference.id && x.actor === e.actor &&
           x.field === e.field && x.action === e.action && x.item === e.value[0] &&
