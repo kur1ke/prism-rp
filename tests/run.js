@@ -3994,6 +3994,75 @@ async function foundationH() {
     assert.strictEqual(audit.scope,"multi-subject");
     assert.strictEqual(audit.validated,false,"multi-actor semantic status must not be falsely certified");
   });
+  await ta("VC-04-SCENE-1: legacy RP Scene.remove preserves explicit garment absence",async()=>{
+    const SC=globalThis.PRP.scene,ST=globalThis.PRP.stateTracker;
+    const m={id:"remove-scene",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Сняла",sceneOps:SC.parseBody("Химэ.remove=футболка")}]};
+    const state=ST.fold({mode:"rp",charName:"Химэ",userName:"Лёня",
+      sceneInit:"Химэ.wear=белая футболка, синяя юбка",path:[m]});
+    const wear=state.actors.char.wearState;
+    assert.deepStrictEqual(wear.worn.map(x=>x.item),["синяя юбка"]);
+    assert.deepStrictEqual(wear.removed.map(x=>x.item),["белая футболка"]);
+    assert.strictEqual(wear.complete,true);
+    assert.strictEqual(wear.removed[0].source.messageId,"remove-scene");
+    assert.strictEqual(wear.removed[0].source.swipeIdx,0);
+    assert.strictEqual(wear.removed[0].source.kind,"legacy-rp-scene");
+    assert.deepStrictEqual(state.scene.chars["Химэ"].wear,["синяя юбка"]);
+  });
+  await ta("VC-04-SCENE-2: scene directives replay in order rather than repeatedly applying the final list",async()=>{
+    const SC=globalThis.PRP.scene,ST=globalThis.PRP.stateTracker;
+    const m={id:"single-turn-scene",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Переодевание",sceneOps:SC.parseBody(
+        "Химэ.remove=белая футболка; Химэ.add=красное платье; Химэ.remove=синяя юбка")}]};
+    const st=ST.fold({mode:"rp",charName:"Химэ",
+      sceneInit:"Химэ.wear=белая футболка, синяя юбка",path:[m]});
+    const wear=st.actors.char.wearState;
+    assert.deepStrictEqual(wear.worn.map(x=>x.item),["красное платье"]);
+    assert.deepStrictEqual(wear.removed.map(x=>x.item),["белая футболка","синяя юбка"]);
+    assert.strictEqual(wear.complete,true);
+    assert.deepStrictEqual(st.scene.chars["Химэ"].wear,["красное платье"]);
+  });
+  await ta("VC-04-SCENE-3: initial Scene and unknown removal preserve complete vs unknown",async()=>{
+    const SC=globalThis.PRP.scene,ST=globalThis.PRP.stateTracker;
+    const init=ST.fold({mode:"rp",charName:"Химэ",
+      sceneInit:"Химэ.wear=пальто, обувь; Химэ.remove=пальто",path:[]});
+    assert.deepStrictEqual(init.actors.char.wearState.worn.map(x=>x.item),["обувь"]);
+    assert.deepStrictEqual(init.actors.char.wearState.removed.map(x=>x.item),["пальто"]);
+    assert.strictEqual(init.actors.char.wearState.complete,true);
+    const unknowable=ST.fold({mode:"rp",charName:"Химэ",path:[{id:"unknown-remove",role:"assistant",swipeIdx:0,
+      swipes:[{text:"?",sceneOps:SC.parseBody("Химэ.remove=куртка")}]}]});
+    assert.deepStrictEqual(unknowable.actors.char.wearState.removed.map(x=>x.item),["куртка"]);
+    assert.strictEqual(unknowable.actors.char.wearState.known,false);
+    assert.strictEqual(unknowable.actors.char.wearState.complete,false);
+  });
+  await ta("VC-04-SCENE-4: alternate swipes isolate Scene garment deltas",async()=>{
+    const SC=globalThis.PRP.scene,ST=globalThis.PRP.stateTracker;
+    const m={id:"scene-alternatives",role:"assistant",swipeIdx:0,swipes:[
+      {text:"Сняла",sceneOps:SC.parseBody("Химэ.remove=шарф")},
+      {text:"Оставила",sceneOps:SC.parseBody("Химэ.pose=стоит")}]};
+    const args={mode:"rp",charName:"Химэ",sceneInit:"Химэ.wear=шарф, свитер"};
+    const a=ST.fold({...args,path:[m]});
+    assert.deepStrictEqual(a.actors.char.wearState.removed.map(x=>x.item),["шарф"]);
+    m.swipeIdx=1;
+    const b=ST.fold({...args,path:[m]});
+    assert.deepStrictEqual(b.actors.char.wearState.removed,[]);
+    assert.deepStrictEqual(b.actors.char.wearState.worn.map(x=>x.item),["шарф","свитер"]);
+    m.swipeIdx=0;
+    assert.deepStrictEqual(ST.fold({...args,path:[m]}).actors.char.wearState.removed.map(x=>x.item),["шарф"]);
+  });
+  await ta("VC-04-SCENE-5: complete wardrobe switch clears obsolete scene removals",async()=>{
+    const SC=globalThis.PRP.scene,ST=globalThis.PRP.stateTracker;
+    const first={id:"remove",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Сняла",sceneOps:SC.parseBody("Химэ.remove=юбка")}]};
+    const next={id:"change",role:"assistant",swipeIdx:0,
+      swipes:[{text:"Новый наряд",sceneOps:SC.parseBody("Химэ.wear=платье, ботинки")}]};
+    const st=ST.fold({mode:"rp",charName:"Химэ",
+      sceneInit:"Химэ.wear=юбка, кофта",path:[first,next]});
+    assert.deepStrictEqual(st.actors.char.wearState.worn.map(x=>x.item),["платье","ботинки"]);
+    assert.deepStrictEqual(st.actors.char.wearState.removed,[]);
+    assert.strictEqual(st.actors.char.wearState.complete,true);
+    assert.deepStrictEqual(st.scene.chars["Химэ"].wear,["платье","ботинки"]);
+  });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
     const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
