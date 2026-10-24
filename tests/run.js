@@ -3991,7 +3991,7 @@ async function foundationH() {
     assert.ok(IC.rewriteRules({format:"tags",intentMode:true}).includes("comma-separated"));
     assert.ok(IC.drawInstruction({intentMode:true}).includes("короткое описание"));
   });
-  await ta("VIS-HYBRID-2: first-person Draw retains only the source's camera composition and caches by format",async()=>{
+  await ta("VIS-HYBRID-2: natural Draw retains source framing and caches by format",async()=>{
     const scene="Орихимэ приподняла белую хлопковую футболку, открывая живот и пупок";
     const translated="The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
     ICP.clear();let count=0;
@@ -4053,7 +4053,7 @@ async function foundationH() {
     }
     ICP.clear();
   });
-  await ta("VIS-HYBRID-4: finalisation preserves prose, POV and deterministic identity/style tags",async()=>{
+  await ta("VIS-HYBRID-4: finalisation preserves prose and deterministic identity/style tags",async()=>{
     const card={name:"Орихимэ",image:{trigger:"orihime_inoue, long orange hair",
       loras:[{name:"Orihime Illustrious",weight:0.8}]}};
     const shot="Орихимэ приподняла футболку, открывая живот";
