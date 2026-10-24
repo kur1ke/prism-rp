@@ -149,6 +149,7 @@
       await DB.put("messages", msg);
       repaint();
       let finalPatch, imageData;
+      let shotOnlyGate = drawAuthored;
       try {
         const intent = !!entry.intentMode;
         const cameraOwner = IC.ownerCamera(cd, entry.draw);
@@ -232,7 +233,7 @@
         // selected-path garment events/corrections change while compiling.
         // Shot-only equality is safe ONLY for authored images whose rendered
         // content did not consume tracked state.
-        const shotOnlyGate = drawAuthored && !(intent && visualPlan.wear);
+        shotOnlyGate = drawAuthored && !(intent && visualPlan.wear);
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
         if (!(await imageOriginStillCurrent(DB, origin, shotOnlyGate)))
