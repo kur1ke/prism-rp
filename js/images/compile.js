@@ -59,7 +59,8 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    const key = ["v7-single-canonical-wear", o.intentMode ? "intent" : "tags", o.embodiedOwner ? "owner-camera" : "external-camera",
+    const key = ["v8-end-turn-visual-plan", o.intentMode ? "intent" : "tags",
+      o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame", o.embodiedOwner ? "owner-camera" : "external-camera",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear), s].join("\u0001");
     if (mem.has(key)) {
@@ -72,7 +73,9 @@
       "The absent list MUST contain precisely one entry per REMOVED item in CANONICAL WEAR FACTS, in original order, with consecutive indexes starting at 0.",
       "Each tag is only that removed garment name translated into one short English garment tag, with explicit color/material if present.",
       "Do not add nudity, bare body parts, other garments, activities, or inferred exposure to these tags.",
-      "The prompt preserves shot composition but omits any garment known removed and places partially worn garments correctly.",
+      "The prompt must never present REMOVED items as worn, lifted, pulled-up, or partially worn on the subject. PARTIAL items are still worn at their known placement.",
+      "REMOVED means absent FROM THE BODY, not necessarily absent from the image: an explicitly depicted removed garment held in hands or lying nearby remains a visible off-body object.",
+      "Do not add a garment as a visible object unless SCENE explicitly depicts it there. Never translate a completed removal into lifting a shirt.",
     ].join("\n") : "";
     const instruction = IC.rewriteRules(o) +
       (contract ? "\n\n" + contract : "") + "\n\nSCENE:\n" + s +
@@ -91,7 +94,11 @@
           return { text: s, compiled: false, error: "Некорректный перевод одежды: отсутствуют подтверждённые предметные tags" };
         result = {
           text: prompt, compiled: true, wearValidated: true,
-          negative: absent.map((x) => x.tag.trim()).join(", "),
+          // A global negative applies to the whole frame. In authored shots
+          // a REMOVED item can still be held or lie nearby. Until VC-02
+          // adds grounded off-body roles, do not forbid it globally.
+          negative: o.visualPlan && !o.visualPlan.allowGlobalGarmentNegative ? "" :
+            absent.map((x) => x.tag.trim()).join(", "),
           wearItems: absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() })),
         };
       } else {

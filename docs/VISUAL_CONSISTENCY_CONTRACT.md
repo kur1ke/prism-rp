@@ -1,0 +1,102 @@
+# VIS-CONSISTENCY — единый контракт состояния и изображения
+
+**Status:** Adopted architecture; incremental implementation in `testing`.  
+**Scope:** Observer → StateTracker → StateResolver → transient VisualPlan → ImageCompiler → ImageService/A1111.  
+**Out of scope:** new wardrobe inventory, character-specific rules, physics simulation, Card/World/Experience/Prism semantics, CTX-BUDGET-1 changes, `main` promotion.
+
+## 1. Existing mechanisms and authoritative data
+
+- `chat.initialWear` is the Messenger-only exhaustive origin fact (`known=true, complete=true`). A failed origin leaves wear unknown, never naked. Omission in a complete origin is **not worn**, but is not proof of a removal event.
+- `swipe.stateEvents`, manual `stateCorrections`, and compatible RP `sceneOps` are replayed in selected-path order by `state/tracker.js`; the resulting `wearState` is **derived**, never an independently persisted wardrobe. Keep `worn`, `partiallyWorn`, and `removed` disjoint; `fields.wear` is only a compatibility projection.
+- `state/interpreter.js` is the single semantic Observer. Source text and current assistant-authored `[draw:]` are distinct evidence surfaces; evidence, actor, action, references and branch provenance are validated. Image-model pixels, rewritten prompt tags, manual image prompts, unrelated photos, imports and memories never become canonical wardrobe events.
+- `state/resolver.js` exposes an immutable projection for an exact branch/swipe. `Card` stores stable identity and wardrobe dictionaries, not today's outfit; `World` and `Experience` cannot dress a character by implication.
+- `images/service.js` freezes the source path before asynchronous work. Automatic Draw normally runs after `state.track()` in `generation/service.js`; it must **not** be assumed that all image requests are automatic or that a successful Observer response contains all visual facts.
+- `images/compose.js` supplies identity, frame/camera metadata, optional Card/LoRA/fixed prompt tags and backdrop; `images/compile.js` translates an image intent. The final A1111 positive and negative, not an intermediate description, are executable instructions.
+
+## 2. Semantic distinctions (normative)
+
+**Wear status:** UNKNOWN (no fact), WORN, PARTIAL (still on body, displaced), REMOVED (not worn). Neither UNKNOWN nor a hidden/off-camera garment implies removal. `complete=true` makes initial worn list exhaustive, without generating fictitious `removed` events for every omitted garment.
+
+**Visibility:** ON_BODY_VISIBLE, OFF_BODY_VISIBLE (held / lying nearby), NOT_SHOWN / OUT_OF_FRAME. Visibility is not physical state. A removed shirt can be visible in the hands; a worn sock may be outside a head-and-shoulders shot. **WORN does not imply MUST_RENDER; REMOVED does not imply NOT_IN_IMAGE.**
+
+**Time:** PRE-TURN → accepted message/scene operations → validated Observer events → END-OF-TURN. At the latter point the same-turn image is composed. Explicit future/conditional intent does not change wear; an immediately executable action may be inferred from conversation time/context only by Observer, not by an image compiler.
+
+**Authority / chronology:** `initialWear / sceneInit / legacy baseline` → selected `sceneOps` → validated text events → validated current-self authored-photo events → manual corrections. A later shot can contradict an earlier shot only on facts it actually establishes; silence and crops do not erase earlier facts. In legacy RP, `.wear` means full replacement; `.add` and `.remove` must preserve item-level absence, not silently turn into full-set replacement.
+
+## 3. Transient VisualPlan
+
+A pure, immutable, bounded, **non-persisted** projection prepared for each image from the selected source's END-OF-TURN `wearState`, actor/frame ownership, source `draw`, and validated shot-local facts. It is **not** a second StateTracker and must not apply state transitions.
+
+Conceptual contract:
+
+```js
+VisualPlan {
+  actor: "char", // only when card owner/current camera actually depicted
+  source: { chatId, messageId, swipeIdx, pathFingerprint },
+  wear: { known, complete, worn, partiallyWorn, removed },
+  visibility: {
+    onBody: [],            // visually relevant worn/partial items, not all worn items
+    offBody: [],           // explicitly shown objects not worn on the body
+    absentFromBody: []     // asserted absence, never universal absence from image
+  },
+  conflicts: []            // diagnostic, not canonical state updates
+}
+```
+
+An off-body item requires grounded, typed evidence from **the current image**. Do not guess it merely from `REMOVED`; do not add a lexicon of character-specific clothes. ImageCompiler may translate a verified visual role but must not independently decide `remove` vs `adjust` or change state.
+
+The plan is immutable and never sent to RP generation as new hidden authority. Relevant source references are bounded and respect `CTX-BUDGET-1`.
+
+## 4. Compilation and authority contract
+
+- Positive garment tags describe what **is to be depicted**, not all nouns in narration. `remove shirt` must **not** turn into `lifting shirt, white shirt`. `holding removed shirt` may produce `holding white shirt` when that appearance is grounded.
+- Negative garment tags are optional reinforcement for an item **absent from the rendered frame**. Do not globally negative a garment shown off-body or worn by another depicted character.
+- Observer's typed END-OF-TURN wear state is authoritative for whether the owner wears each garment. The authored Draw determines the current shot, not a competing permanent outfit. If Observer failed on a material action, do not silently pretend the earlier `partial` is the completed `removed` state.
+- ImageCompiler should output typed, index/source-bound garment roles and scene tags with a verifiable structure. Its success flag must distinguish parse/translation success from semantic validation. Arbitrary image-model tags cannot become state evidence.
+- Finalisation must reconcile **all** positive sources (identity / Card / LoRA / fixed prompt / compiled scene), without quietly erasing explicit user directives. On a material irreconcilable conflict, report it and do not call the backend.
+- An unsupported ambiguous action should fail closed for that **material shot**, not block unrelated landscape/screenshot generation. An image already drawn is not proof the tags matched reality.
+
+## 5. Source, history and transactional contract
+
+Read selected path and active source swipe once at image start; use END-OF-TURN resolved state for that source, not current leaf state when redrawing history. Apply canonical facts only to the correct actor (camera owner != extra full figure). Before backend submission and before image commit, check frozen chat, ancestor/swipe selections, text/Draw and any state events/corrections on which the plan depends. A stale image is discarded without mutating events or resurrecting deleted messages.
+
+`A → B → C1 / C2` must reproduce `B`'s outfit independently of the later chosen branch. Manual image generation is not a canon change. Continued swipes/multiple photos need their own bounded evidence/version contract; do not treat a later cropped photo as undressing or re-dressing.
+
+## 6. Incremental implementation
+
+**VC-01 — Read-only plan and image intent reconciliation.** Build a transient plan from canonical selected-path wear. Route authored `intent` through the same wear compiler contract instead of bypassing `wearState`. Keep one translation-model call, branch identity, camera semantics, and fail-closed on unusable structured outputs. Preserve the legitimate off-body garment scenario; do not introduce indiscriminate negative tags. Add source-aware tests including Russian `remove` vs `lift` sample.
+
+**VC-02 — Typed frame visibility facts.** Reuse Observer's current-message evidence to carry bounded off-body/on-body roles for the shot; verify role evidence and origin, with no new persisted current-outfit store. Distinguish renderable removed objects from on-body garments. Revisit multiple-Draw behavior.
+
+**VC-03 — Typed compiler and final-prompt validation.** Translate semantic roles into tagged sections; validate index/mapping, no contradictory worn garment instructions, and sources injected after translation. One compiler model call, no second interpreter. Failed semantic validation prevents A1111 submission. User fixed-prompt conflicts are explicit.
+
+**VC-04 — RP Scene compatibility and complete regression matrix.** Map legacy structured garment deltas correctly without retroactively rewriting history. Test historical draws, multiple subjects, unknown vs removed, manual redraw, corrections during async render, swipe/branch changes, budget and cache behavior. Add Visual Inspector provenance and exact final prompt conflict diagnostics.
+
+Each phase enters `testing` only with scoped diff review, `node tests/run.js`, `node tests/test-mirror.js`, `node build.js`, and source-commit CI evidence. Real Perchance + A1111 verification is **NOT RUN** until manually exercised. Do not merge `main` without explicit approval.
+
+## 7. Acceptance examples
+
+| Shot and END-OF-TURN wear | Positive | Garment negative |
+|---|---|---|
+| Shirt PARTIAL, hem raised | raised hem, shirt still on body | none for shirt |
+| Shirt REMOVED, not otherwise depicted | no on-body shirt tag | only if single-owner and not visible elsewhere |
+| Shirt REMOVED, held in hands | holding shirt (object role) | **no global shirt negative** |
+| Shirt WORN, close-up face | shirt not necessarily included | none |
+| Shirt UNKNOWN | no invented presence or absence | none |
+| Shirt REMOVED + explicit deferred promise | remains removed | as dictated by current composition |
+| Two people, one removes jacket | only target's on-body jacket absent | never globally ban other person's jacket |
+
+**No source event/plan state should be inferred from A1111 output pixels.**
+
+## 8. Known pre-implementation contradictions
+
+1. `images/service.js` has `const canonicalWear = drawAuthored ? null : composed.physicalWear`, bypassing garment reconciliation exactly for authored images; `VIS-DRAW-SOURCE-5` tests this obsolete contract.
+2. ImageCompiler accepts a syntactically valid `lifting shirt` translation of `сняла футболку`. `compiled: true` is **not** proof of semantic equivalence.
+3. `images/compose.js` can introduce independently configured tags **after** translation; no final semantic authority check covers all sources.
+4. `js/prism/scene.js` represents legacy `.remove` by a reduced outfit list; `state/tracker.js` may re-encode it as full `wear.set` and lose explicit removal.
+5. A removed garment visible off-body is incompatible with a naive global garment negative. `VIS-DRAW-SOURCE-4` currently protects this case by bypass, which must be replaced by typed visibility rather than discarded.
+6. `state/interpreter.js` checks exact evidence provenance; semantic correctness of the model's inferred action is still an LLM responsibility requiring stronger typed contracts and regression fixtures.
+
+## 9. Reversibility
+
+No canonical schema migration in VC-01. Revert the isolated code PR on `testing` to restore the prior image prompt pipeline. Saved chat events and Card are unchanged. Later opt-in typed shot metadata must remain backward compatible with existing swipes and backups.
