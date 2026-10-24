@@ -74,15 +74,22 @@
       if (event.action === "add" || event.action === "adjust") wear.known = true;
       for (const item of event.value) {
         const order = orderOf(item);
-        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) {
-          // Duplicate declarations do not change original item evidence.
-          wear.removed = wear.removed.filter((x) => !sameGarment(x.item, item));
-          continue;
-        }
+        const existing = previous.find((x) => sameGarment(x.item, item));
+        // One garment, one current state. Repeated reports of the same
+        // intermediate position do not create a new transition or erase its
+        // original provenance. An ordinary "adjusted" remark is not a new
+        // placement; Observer must supply a grounded position to use adjust.
+        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) continue;
+        if (event.action === "remove" && wear.removed.some((x) => sameGarment(x.item, item))) continue;
+        if (event.action === "adjust" && wear.partiallyWorn.some((x) =>
+          sameGarment(x.item, item) && x.placement === event.placement)) continue;
         drop(item);
         const target = event.action === "remove" ? "removed" :
           event.action === "adjust" ? "partiallyWorn" : "worn";
-        wear[target].push(fact(item, order, event.action === "adjust" ? event.placement : ""));
+        // Preserve the established item label across abbreviated, but
+        // exactly matching, reports; no fuzzy garment identity guessing.
+        wear[target].push(fact(existing ? existing.item : item, order,
+          event.action === "adjust" ? event.placement : ""));
       }
     }
     wear.last = { certainty: event.certainty, source: clone(source) };
