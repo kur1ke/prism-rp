@@ -209,9 +209,7 @@
       try {
         const intent = !!entry.intentMode;
         const hybrid = intent && drawAuthored && drawMode === "hybrid";
-        const cameraOwner = IC.ownerCamera(cd, entry.draw);
-        // Camera metadata is an image-level fact, not a tag for the compiler/backend.
-        const shot = String(entry.draw || "").replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
+        const shot = String(entry.draw || "");
         // VC-01: the canonical snapshot already includes this accepted message's
         // validated Observer events. It is END-OF-TURN, not stale pre-shot wear.
         // The first (and only) intent translation must receive those facts.
@@ -239,19 +237,18 @@
         const visualPlan = VP.create({
           wearFacts: projected.wearFacts,
           owner: !!resolvedActors.owner,
-          cameraOwner,
           shotAuthored: drawAuthored,
           draw: shot, frameObjects: verifiedFrameObjects,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
         const firstPass = intent ? await ICP.compile(shot,
-          { format: hybrid ? "hybrid" : cfg.format, intentMode: true, embodiedOwner: cameraOwner,
+          { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
             qualityPinned: ST.qualityPinned(S.settings),
             wearState: visualPlan.wear, visualPlan, subjectScope: shotScope }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
-        const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
+        const composed = IC.compose({ draw: intent ? firstPass.text : shot, card: cd,
           scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts,
           // The translator may change wording, never actor ownership.
           frameActors: intent && drawAuthored ? resolvedActors : null,
@@ -273,7 +270,7 @@
         const canonicalWear = drawAuthored ? visualPlan.wear : composed.physicalWear;
         const auditPlan = drawAuthored ? visualPlan : VP.create({
           wearFacts: projected.wearFacts,
-          owner: !!composed.ownerPresent, cameraOwner: !!composed.cameraOwner,
+          owner: !!composed.ownerPresent,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
@@ -281,7 +278,7 @@
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
-            embodiedOwner: cameraOwner, frame: composed.subjects, stateContext,
+            frame: composed.subjects, stateContext,
             wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
             subjectScope }, generateText);
         // An English input or disabled general translation must not bypass
@@ -292,7 +289,7 @@
           throw new Error("Не удалось согласовать предметные ограничения с каноном.");
         // The same compiler response binds English negative tags to the
         // source-indexed removed garments. Never make a second model call.
-        const singleOwner = (composed.ownerPresent || composed.cameraOwner) &&
+        const singleOwner = composed.ownerPresent &&
           !subjectScope.otherActorPresent && IC.subjectCount(comp.text) <= 1;
         const wearNegative = singleOwner ? String(comp.negative || "") : "";
         if (changes && canonicalWear.removed && canonicalWear.removed.length &&
