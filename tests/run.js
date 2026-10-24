@@ -6800,6 +6800,41 @@ async function perfTurn() {
   }
 }
 
+/* WSN-01: only the current garment state matters; no adjustment ledger. */
+{
+  const W = globalThis.PRP.stateTracker;
+  const initial = W.empty({ char: "Орихимэ", user: "Пользователь" });
+  const apply = (state, action, value, placement, messageId) => W.apply(state, {
+    actor: "char", field: "wear", action, value, certainty: "reported",
+    evidence: "", ...(placement ? { placement } : {}),
+  }, { role: "manual", mode: "messenger", messageId, swipeIdx: 0 });
+  t("WSN-01: partial is temporary, duplicate adjust is idempotent, removal and rewear replace it", () => {
+    let state = apply(initial, "set", ["белая блузка", "юбка"], "", "origin");
+    state = apply(state, "adjust", ["белая блузка"], "приподнята", "m1");
+    const first = state.actors.char.wearState.partiallyWorn[0];
+    assert.strictEqual(first.source.messageId, "m1");
+    state = apply(state, "adjust", ["белая блузка"], "приподнята", "m2");
+    assert.strictEqual(state.actors.char.wearState.partiallyWorn[0].source.messageId, "m1");
+    state = apply(state, "adjust", ["белая блузка"], "спущена с плеч", "m3");
+    assert.strictEqual(state.actors.char.wearState.partiallyWorn[0].placement, "спущена с плеч");
+    state = apply(state, "remove", ["белая блузка"], "", "m4");
+    assert.deepStrictEqual(state.actors.char.wearState.partiallyWorn, []);
+    assert.deepStrictEqual(state.actors.char.wearState.removed.map(x => x.item), ["белая блузка"]);
+    state = apply(state, "add", ["белая блузка"], "", "m5");
+    assert.deepStrictEqual(state.actors.char.wearState.removed, []);
+    assert.deepStrictEqual(state.actors.char.wearState.partiallyWorn, []);
+    assert.deepStrictEqual(W.fieldOf(state, "char", "wear").value, ["белая блузка", "юбка"]);
+  });
+  t("WSN-01: unknown outfit can still record removal without inventing worn clothes", () => {
+    let state = apply(initial, "remove", ["блузка"], "", "m1");
+    state = apply(state, "remove", ["блузка"], "", "m2");
+    assert.strictEqual(state.actors.char.wearState.known, false);
+    assert.strictEqual(state.actors.char.wearState.complete, false);
+    assert.strictEqual(state.actors.char.wearState.removed.length, 1);
+    assert.strictEqual(state.actors.char.wearState.removed[0].source.messageId, "m1");
+  });
+}
+
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
 // Do not let an unresolved async fixture finish Node with exit code 0.
