@@ -117,7 +117,7 @@
             TR.activeSwipe(m).draws.length && TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt
             ? { draw: String(TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt).slice(0, 400) } : {}),
         })),
-        references: TRACK.references(state, actor, ["remove", "adjust"]),
+        references: TRACK.references(state, actor, ["remove", "adjust", "add"]),
       };
     }
     function pathFingerprint(path) {
