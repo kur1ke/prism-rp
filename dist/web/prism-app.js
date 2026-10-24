@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "a1f1e9ac6fbe71ece27905a21b622245086d3b77";
+  window.PRISM_RP_BUILD_SHA = "41a9702570c43912697acec19f29fa5361c38c55";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4511,11 +4511,18 @@
       return "draw не подтверждает полный комплект или очистку гардероба";
     if (drawn && e.visualScope !== "current-self")
       return "draw не подтверждён как актуальное изображение самого персонажа";
-    // A continued swipe may contain several shots. Only the final authored
-    // shot is its current visual statement; older pictures in that same swipe
-    // must not silently preserve stale clothing after a new photo was sent.
-    const currentDraw = source && Array.isArray(source.draws) && source.draws.length
-      ? source.draws[source.draws.length - 1] : null;
+    // A continued swipe may contain several shots. An explicitly indexed
+    // event retains exact provenance to an earlier authenticated shot and
+    // stays chronologically before later shots. Legacy unindexed events
+    // are valid against ONLY the current final shot (never retrospectively
+    // promoted to an earlier draw by matching the evidence text).
+    const drawList = source && Array.isArray(source.draws) ? source.draws : [];
+    if (drawn && e.drawIndex != null &&
+        (!Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= drawList.length))
+      return "недопустимый индекс авторского draw";
+    if (!drawn && e.drawIndex != null) return "индекс draw указан без draw-события";
+    const currentDraw = drawList.length
+      ? drawList[e.drawIndex == null ? drawList.length - 1 : e.drawIndex] : null;
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
       !currentDraw || typeof currentDraw.prompt !== "string" ||
       !str(e.evidence) || !currentDraw.prompt.includes(e.evidence)))
@@ -4578,7 +4585,8 @@
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
       value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
-      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}),
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
@@ -4595,7 +4603,8 @@
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
       ...(source && source.kind ? { kind: source.kind } : {}),
-      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}) };
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}) };
     if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
@@ -9074,11 +9083,40 @@
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
       if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
       const originSwipe = TR.activeSwipe(origin.path[origin.path.length - 1]);
-      const drawAuthored = Array.isArray(originSwipe.draws) && originSwipe.draws.some((x) =>
-        x && String(x.prompt || "") === String(reuse ? reuse.draw : d.prompt) &&
-        String(x.ratio || "1:1") === String((reuse ? reuse.ratio : d.ratio) || "1:1"));
+      const authorDraws = Array.isArray(originSwipe.draws) ? originSwipe.draws : [];
+      const selectedDraw = String(reuse ? reuse.draw : d.prompt || "");
+      const selectedRatio = String((reuse ? reuse.ratio : d.ratio) || "1:1");
+      const matching = authorDraws.map((x, i) => x &&
+        String(x.prompt || "") === selectedDraw && String(x.ratio || "1:1") === selectedRatio ? i : -1)
+        .filter((i) => i >= 0);
+      // Duplicate author photos are ambiguous unless the original image is
+      // explicitly pinned to one photo index. The caller may pass the exact
+      // authored draw object to disambiguate a newly requested image.
+      const providedIndex = !reuse && Array.isArray(sw.draws) ? sw.draws.indexOf(d) : -1;
+      const pinnedIndex = reuse && Number.isInteger(reuse.sourceDrawIndex)
+        ? reuse.sourceDrawIndex : providedIndex;
+      const authoredIndex = pinnedIndex >= 0
+        ? (matching.includes(pinnedIndex) ? pinnedIndex : -1)
+        : matching.length === 1 ? matching[0] : -1;
+      const drawAuthored = authoredIndex >= 0;
+      // A continued swipe's END-OF-TURN state belongs to the LAST authored
+      // photograph. Re-rendering an older photograph with it would rewrite
+      // history visually; without a per-photo snapshot, fail closed.
+      if (drawAuthored && authoredIndex !== authorDraws.length - 1) {
+        ui.toast("Нельзя перерисовать прежний кадр продолженного ответа по состоянию последнего фото. Выберите актуальный снимок.", true);
+        return;
+      }
+      if (matching.length > 1 && !drawAuthored) {
+        ui.toast("Невозможно определить исходный Draw среди одинаковых снимков. Рисование отменено.", true);
+        return;
+      }
+      if (reuse && Number.isInteger(reuse.sourceDrawIndex) && !drawAuthored) {
+        ui.toast("Исходный Draw этого изображения изменён. Повторное рисование отменено.", true);
+        return;
+      }
       const entry = reuse || { id: U.uid("img"), draw: d.prompt, ratio: d.ratio || "1:1",
-        fromMessage: drawAuthored || !!d.fromMessage };
+        fromMessage: drawAuthored || !!d.fromMessage,
+        ...(drawAuthored ? { sourceDrawIndex: authoredIndex } : {}) };
       if (S.drawing.has(entry.id)) { ui.toast("Это изображение уже генерируется.", true); return; }
       if (!reuse) entry.intentMode = !!(drawAuthored && cfg.drawPromptMode === "intent");
       // Resolve physical state from the frozen origin path BEFORE the first await.
@@ -9222,6 +9260,7 @@
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
           promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text,
+            ...(drawAuthored ? { sourceDrawIndex: authoredIndex } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
             actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
@@ -9285,7 +9324,7 @@
     function drawFromMessage(msgId) {
       const msg = S.messages.find((x) => x.id === msgId);
       const sw = TR.activeSwipe(msg);
-      const d = (sw.draws && sw.draws[0]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1", fromMessage: msg.role === "assistant" };
+      const d = (sw.draws && sw.draws[sw.draws.length - 1]) || { prompt: sw.text.replace(/\s+/g, " ").slice(0, 700), ratio: "1:1", fromMessage: msg.role === "assistant" };
       return draw(msg, sw, d);
     }
 
@@ -9557,11 +9596,51 @@
       // Высокоточные явные самоописания не должны исчезать только потому,
       // что Perchance вернул неполный JSON или не распознал простое предложение.
       // Более сложные случаи по-прежнему требуют модельного извлечения.
+      // VC-04: continued swipes contain several authored photographs. Preserve
+      // ONLY previously interpreted, source-bound visual facts whose exact
+      // prior draw still exists. The latest observer still interprets only
+      // the newest photograph, and an old crop cannot become new authority.
+      // Legacy stateEvents without a matching earlier stateStatus are never
+      // promoted into historical events.
+      const draws = msg.role === "assistant" && Array.isArray(sw.draws) ? sw.draws : [];
+      const latestIndex = draws.length - 1;
+      const priorStatus = sw.stateStatus;
+      const archivedDrawEvents = [];
+      if (latestIndex > 0 && priorStatus &&
+          ["ok", "partial", "no-changes"].includes(priorStatus.status) &&
+          typeof priorStatus.sourceText === "string" &&
+          sourceText.startsWith(priorStatus.sourceText) &&
+          typeof priorStatus.sourceDraw === "string") {
+        const candidates = draws.slice(0, -1).map((d, i) =>
+          d && String(d.prompt || "") === priorStatus.sourceDraw ? i : -1).filter(i => i >= 0);
+        const previousIndex = Number.isInteger(priorStatus.sourceDrawIndex)
+          ? priorStatus.sourceDrawIndex
+          : candidates.length === 1 ? candidates[0] : -1;
+        if (previousIndex >= 0 && previousIndex < latestIndex &&
+            draws[previousIndex] && String(draws[previousIndex].prompt || "") === priorStatus.sourceDraw) {
+          for (const event of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
+            if (!event || event.evidenceType !== "draw" || event.certainty === "intent") continue;
+            const drawIndex = event.drawIndex == null ? previousIndex : event.drawIndex;
+            const exactDraw = draws[drawIndex];
+            if (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex > previousIndex ||
+                !exactDraw || typeof exactDraw.prompt !== "string" ||
+                !event.evidence || !exactDraw.prompt.includes(event.evidence)) continue;
+            archivedDrawEvents.push({ ...event, drawIndex });
+          }
+        }
+      }
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
       // Grounded fallback intentionally reads only text. Image descriptions
       // are interpreted by the SAME Observer and independently verified
       // against their exact draw evidence on every StateTracker fold.
-      const events = result.events.slice();
+      const events = result.events.map((e) => e.evidenceType === "draw" && latestIndex > 0
+        ? { ...e, drawIndex: latestIndex } : e);
+      // Prior snapshots are evidence, not an unbounded event log. Bound the
+      // archival slice, report truncation and never override a fresh event.
+      const MAX_ARCHIVED_DRAW_EVENTS = 32;
+      const retained = archivedDrawEvents.slice(-MAX_ARCHIVED_DRAW_EVENTS);
+      events.push(...retained);
+
       // Compare common Russian inflections ('синяя куртка'/'синей куртке')
       // to avoid adding the same garment twice when model and fallback agree.
       const garmentKey = (value) => (String(value || "").toLowerCase().replace(/ё/g, "е")
@@ -9593,14 +9672,22 @@
       // Apply text observations first; the intentional current photo is the
       // later visual observation of that same moment. Neither is a second
       // canonical store. Preserve relative ordering within each evidence kind.
-      events.sort((a, b) => Number(a.evidenceType === "draw") - Number(b.evidenceType === "draw"));
+      // Text is processed first as before; visual events follow the exact
+      // photo order so the newest explicit observation wins only on its item.
+      const drawOrder = (event) => event.evidenceType === "draw"
+        ? (event.drawIndex == null ? latestIndex : event.drawIndex) : -1;
+      events.sort((a, b) => drawOrder(a) - drawOrder(b));
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
           pathFingerprint(chat().path()) !== originalKey) {
         return { skipped: "stale-branch" };
       }
-      const status = !result.valid ? events.length ? "partial" : "error" : result.issues.length ? "partial" : events.length ? "ok" : "no-changes";
-      const stateStatus = { status, sourceText, sourceDraw, issues: result.issues, at: Date.now(),
+      const issues = result.issues.slice();
+      if (archivedDrawEvents.length > MAX_ARCHIVED_DRAW_EVENTS)
+        issues.push("Лимит архивных draw-событий: предыдущие факты требуют ручной проверки");
+      const status = !result.valid ? events.length ? "partial" : "error" : issues.length ? "partial" : events.length ? "ok" : "no-changes";
+      const stateStatus = { status, sourceText, sourceDraw, sourceDrawIndex: latestIndex,
+        issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
         // Shot-local provenance, not wardrobe state. Same-swipe image use only.
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
@@ -9611,7 +9698,7 @@
       sw.stateEvents = events;
       sw.stateStatus = stateStatus;
       updateUi();
-      return { events, issues: result.issues, status };
+      return { events, issues, status };
     }
     /* PERF-01: разбор сообщения как управляемая задача.
        • Одна задача на (чат, сообщение, свайп, текст): повторный вызов возвращает ту же.
