@@ -947,11 +947,24 @@ t("VIS-INTENT-3: intent distinguishes shop screenshot from named owner", () => {
   const photo = IC.compose({ ...ctx, draw: "Лилит sitting on a sofa, wearing a grey sweater" });
   assert.strictEqual(photo.ownerPresent, true, "named owner retains card identity");
 });
-t("VIS-INTENT-1: short draw contract and distinct compilation instructions", () => {
-  const short = IC.drawInstruction({ intentMode: true, fixedIdentity: true });
+t("VIS-INTENT-1: minimal authored-frame contract and distinct compilation instructions", () => {
+  const short = IC.drawInstruction({ intentMode: true, fixedIdentity: true, characterName: "Орихимэ Иноуэ" });
+  const hybrid = IC.drawInstruction({ intentMode: true, hybrid: true, characterName: "Орихимэ Иноуэ" });
   const full = IC.drawInstruction({ format: "tags" });
-  assert.ok(short.includes("скриншот") && short.length < full.length / 2);
-  assert.ok(IC.rewriteRules({ intentMode: true }).includes("screenshot of products"));
+  assert.strictEqual(short, hybrid, "intent and hybrid share source-shot authoring");
+  assert.ok(short.includes("В [draw:] описывай готовое изображение"), short);
+  assert.ok(short.includes("видимых участников, их действия, внешний вид, окружение и композицию"), short);
+  assert.ok(short.includes("визуально конкретным"), short);
+  assert.ok(short.includes("не содержать технических параметров генерации или объяснений"), short);
+  assert.ok(short.includes("Явно называй по имени только изображённых персонажей"), short);
+  assert.ok(short.includes("Имя персонажа карточки: Орихимэ Иноуэ"), short);
+  assert.ok(short.includes("LoRA") && short.includes("не дублируй"), short);
+  assert.ok(short.includes("Не больше одной директивы за ответ"), short);
+  assert.ok(!/скриншот|живот|селфи|пользовател|по запросу|вид сверху|camera=owner/i.test(short),
+    "authored instruction must not bias framing or specific content");
+  assert.ok(short.length < full.length / 2, "intent retains a short authoring contract");
+  assert.ok(IC.rewriteRules({ intentMode: true }).includes("screenshot of products"),
+    "compiler still protects source media without branching the Draw instruction");
 });
 t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () => {
   const instruction = IC.drawInstruction({ format: "tags", fixedIdentity: true });
@@ -3989,7 +4002,7 @@ async function foundationH() {
     assert.ok(rules.includes("not a clothing checklist") || rules.includes("not a clothing checklist"));
     assert.ok(!rules.includes("danbooru tags in the prompt"),"hybrid never asks for tag-only composition");
     assert.ok(IC.rewriteRules({format:"tags",intentMode:true}).includes("comma-separated"));
-    assert.ok(IC.drawInstruction({intentMode:true}).includes("короткое описание"));
+    assert.ok(IC.drawInstruction({intentMode:true}).includes("готовое изображение"));
   });
   await ta("VIS-HYBRID-2: natural Draw retains source framing and caches by format",async()=>{
     const scene="Орихимэ приподняла белую хлопковую футболку, открывая живот и пупок";
