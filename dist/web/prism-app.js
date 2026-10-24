@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "f21285b9c3b653250a8e8b8bea92d6a7545e612d";
+  window.PRISM_RP_BUILD_SHA = "a1f1e9ac6fbe71ece27905a21b622245086d3b77";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -7644,14 +7644,57 @@
         '<li><b>' + esc(r.metric) + '</b> · ' + r.ms + ' мс' + (r.outcome ? ' · ' + esc(r.outcome) : '') + '<small> ' + esc(r.msgId || "") + '</small></li>').join("") + '</ul></div>' : '');
   }
 
+  /* VC-04: read-only inspection of the EXACT strings submitted to the
+     image backend, and their branch-scoped garment provenance. Never derive
+     or store wardrobe facts here; diagnostics from old images may be absent. */
+  function imageAuditTab(m) {
+    const rows = (m.path || []).flatMap((message) => {
+      const idx = message.swipeIdx || 0;
+      const sw = Array.isArray(message.swipes) ? message.swipes[idx] : null;
+      return (sw && Array.isArray(sw.images) ? sw.images : []).map((im) =>
+        ({ image: im, messageId: message.id, swipeIdx: idx }));
+    }).filter((x) => x.image && x.image.status === "done").slice(-5).reverse();
+    if (!rows.length) return '<p class="empty-note">На активной ветке пока нет готовых изображений.</p>';
+    const show = (title, value) => '<dt>' + esc(title) + '</dt><dd>' + esc(value == null ? "нет данных" : String(value)) + '</dd>';
+    const joined = (list) => (Array.isArray(list) ? list.map((x) => typeof x === "string" ? x : x && x.item || "").join(", ") : "");
+    return rows.map(({ image: im, messageId, swipeIdx }) => {
+      const src = im.promptSources || {};
+      const wear = src.wearConstraints || {}, plan = wear.plan || {}, audit = src.semanticAudit || {};
+      const proof = [
+        ["Источник", String(messageId) + " · swipe " + swipeIdx],
+        ["Режим Draw", src.drawPromptMode || "неизвестно"],
+        ["Участник", plan.actor || "не установлен"],
+        ["Полный комплект", plan.complete === true ? "да" : plan.known ? "нет" : "неизвестно"],
+        ["Сняты с тела", joined(plan.absentFromBody)],
+        ["Видны вне тела", joined(plan.offBodyVisible)],
+        ["Negative из одежды", wear.negative || ""],
+        ["Проверка positive", audit.validated === true ? "подтверждена (" + audit.scope + ")" :
+          audit.scope ? "не подтверждена (" + audit.scope + ")" : "не выполнялась"],
+        ["Причины", joined(audit.issues)],
+        ["Модель/бэкенд", im.backend || "неизвестно"],
+      ];
+      const mappings = Array.isArray(wear.items) ? wear.items.slice(0, 12)
+        .map((x) => String(x && x.index != null ? x.index : "?") + ": " +
+          String(x && x.item || "") + " → " + String(x && x.tag || "")).join("; ") : "";
+      return '<div class="block"><div class="block-title">Изображение · ' + esc(im.id || "") + '</div>'
+        + '<dl class="kv">' + proof.map(([k, v]) => show(k, v)).join("") +
+          show("Английские ссылки на снятые предметы", mappings) + '</dl>'
+        + '<p class="hint">Финальный positive (точно отправлен в backend)</p>'
+        + '<pre class="debug-prompt">' + esc(String(im.prompt || "").slice(0, 6000)) + '</pre>'
+        + '<p class="hint">Финальный negative (точно отправлен в backend)</p>'
+        + '<pre class="debug-prompt">' + esc(String(im.negative || "").slice(0, 6000)) + '</pre></div>';
+    }).join("");
+  }
+
   function debugModal(m, modal) {
     const section = modal.section || "prism";
-    const names = [["prism", "Prism"], ["tracker", "Трекер"], ["events", "События"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
+    const names = [["prism", "Prism"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
     const v = m.messengerView;
     const status = v && v.stateStatus;
     let content = "";
     if (section === "prism") content = prismTab(m);
     else if (section === "timing") content = timingTab(m);
+    else if (section === "images") content = imageAuditTab(m);
     else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
     else if (section === "tracker") {
       const w = v.world || {};
@@ -11441,7 +11484,7 @@
         if (!S.modal || S.modal.kind !== "debug") return;
         const body = $(".debug-modal .debug-body");
         if (!body) return;
-        const title = { prism: "Prism", tracker: "Трекер", events: "События", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
+        const title = { prism: "Prism", tracker: "Трекер", events: "События", images: "Изображения", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
         const content = (body.innerText || body.textContent || "").trim();
         const value = "Debug — " + ((ctx.card() || {}).name || "чат") + " / " + title + "\n\n" + content;
         const clipboard = typeof navigator !== "undefined" && navigator.clipboard;
