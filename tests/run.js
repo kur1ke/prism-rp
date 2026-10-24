@@ -4379,6 +4379,79 @@ async function foundationH() {
         ["белую футболку"]);
     }finally{ICP.compile=oldC;IB.generate=oldG;}
   });
+  await ta("VC-06-1: named second actor without count tags must not inherit owner's removal",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const plan=VP.create({owner:true,shotAuthored:true,
+      wearFacts:[{actor:"char",known:true,worn:[],partiallyWorn:[],
+        removed:[{item:"white cotton t-shirt"}]}]});
+    const garment=[{index:0,item:"white cotton t-shirt",tag:"white cotton t-shirt"}];
+    const positive="Химэ next to Леон, Леон in white cotton t-shirt";
+    const scoped=ICP.auditFinal(positive,"",plan,garment,[],
+      {otherActorPresent:true});
+    assert.deepStrictEqual(scoped.issues,[]);
+    assert.strictEqual(scoped.scope,"multi-subject");
+    assert.strictEqual(scoped.validated,false,
+      "a flat multi-actor prompt cannot be semantically certified");
+    const unsafe=ICP.auditFinal(positive,"",plan,garment,[],
+      {otherActorPresent:false});
+    assert.strictEqual(unsafe.validated,false);
+    assert.ok(unsafe.issues.some(x=>x.includes("positive")),
+      "the same positive is a conflict in a single-owner shot");
+  });
+  await ta("VC-06-2: compiler cache separates named multi-actor and owner-only scopes",async()=>{
+    ICP.clear();
+    const VP=globalThis.PRP.visualPlan;
+    const plan=VP.create({owner:true,shotAuthored:true,
+      wearFacts:[{actor:"char",known:true,worn:[],partiallyWorn:[],
+        removed:[{item:"white cotton t-shirt"}]}]});
+    const shot="Химэ и Леон позируют, Леон в белой футболке";
+    let calls=0;
+    const model=async()=>{calls++;return JSON.stringify({
+      prompt:"Химэ, Леон, white cotton t-shirt, standing",
+      absent:[{index:0,tag:"white cotton t-shirt"}],offBody:[]});};
+    const opts={intentMode:true,visualPlan:plan,wearState:plan.wear};
+    const allowed=await ICP.compile(shot,{...opts,subjectScope:{otherActorPresent:true}},model);
+    const rejected=await ICP.compile(shot,{...opts,subjectScope:{otherActorPresent:false}},model);
+    assert.strictEqual(calls,2);
+    assert.strictEqual(allowed.compiled,true,JSON.stringify(allowed));
+    assert.strictEqual(allowed.semanticScope,"multi-subject");
+    assert.strictEqual(allowed.semanticValidated,false);
+    assert.strictEqual(rejected.compiled,false,"single-owner audit must catch a shirt tag");
+  });
+  await ta("VC-06-3: ImageService propagates named companion scope in final A1111 prompt",async()=>{
+    const h=fbHarness({name:"Химэ",image:{trigger:"hime_char"}},{settings:{persona:{name:"Леон"}}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const prior=h.chat.newMsg("assistant",null,"I removed my white cotton t-shirt");
+    prior.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",value:["white cotton t-shirt"],
+      certainty:"reported",evidence:"white cotton t-shirt"}];
+    await h.chat.commitMessage(prior,prior.id);
+    const msg=h.chat.newMsg("assistant",prior.id,"Мы рядом");
+    const draw="Химэ и Леон в кадре; Леон в white cotton t-shirt";
+    msg.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
+      {enabled:true,backend:"a1111",url:"http://unused",translate:true,drawPromptMode:"intent"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldLLM=globalThis.PRP.llm.simple,oldBackend=IB.generate;let calls=0,sent;
+    try{
+      globalThis.PRP.llm.simple=async()=>{calls++;return JSON.stringify({
+        prompt:"Химэ, Леон, white cotton t-shirt, standing",
+        absent:[{index:0,tag:"white cotton t-shirt"}],offBody:[]});};
+      IB.generate=async(_,opts)=>{sent=opts;return {dataUrl:"data:image/png;base64,AA==",
+        seed:3,info:{width:512,height:512}};};
+      const live=h.S.messages.find(x=>x.id===msg.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
+      assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
+      assert.strictEqual(calls,1,"no secondary semantic classifier");
+      assert.ok(sent.prompt.includes("white cotton t-shirt"));
+      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.scope,"multi-subject");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.validated,false);
+      assert.ok(!sent.negative.includes("white cotton t-shirt"),
+        "do not globally suppress the other actor's shirt");
+    } finally {globalThis.PRP.llm.simple=oldLLM;IB.generate=oldBackend;}
+  });
   await ta("VC-03-5: multiple subjects cannot globally inherit owner's garment restriction",async()=>{
     const VP=globalThis.PRP.visualPlan;
     const plan=VP.create({owner:true,shotAuthored:true,
