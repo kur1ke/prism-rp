@@ -3430,7 +3430,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "Если ничего не изменилось — строку не пиши. Изменения состояния не повторяй в тексте ответа.",
   ].join("\n");
 
-  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, ageWords, describe, summaryLine, formatClock, opLabel, isLegacy, PROTOCOL };
+  PRP.scene = { emptyState, parse, parseBody, stripForDisplay, apply, fold, ageWords, describe, summaryLine, formatClock, opLabel, isLegacy, sameItem, PROTOCOL };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.scene;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -5401,54 +5401,73 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     let sceneCursor = null;
     const aliases = { char: opts.charName, user: opts.userName };
     const normName = (x) => String(x || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
-    function syncSceneActor(actorId, field, sceneValue, source, fullOutfit = true) {
-      // Legacy Scene stores a resulting full wear list. It remains a single
-      // authoritative replacement in the new canonical fold.
-      if (field === "wear") {
-        const actor = st.actors[actorId];
-        const previouslyComplete = actor.wearState.complete;
-        transitionWear(actor,
-          { action: "set", value: Array.isArray(sceneValue) ? clone(sceneValue) : [], certainty: "established" }, source);
-        // Scene.add/remove supplies a resulting list, not evidence that the
-        // character's entire outfit was established. Preserve that distinction.
-        if (!fullOutfit) actor.wearState.complete = previouslyComplete;
-      } else st.actors[actorId].fields[field] = { value: clone(sceneValue), certainty: "established", source };
-    }
     function charInScene(cursor, actorName) {
       const key = Object.keys(cursor.chars || {}).find((n) => normName(n) === normName(actorName));
       return key ? cursor.chars[key] : null;
     }
-    if (opts.mode === "rp") {
-      st.scene = SC.fold(opts.sceneInit || "", (opts.path || []).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })),
-        { charName: opts.charName, userName: opts.userName });
-      sceneCursor = SC.fold(opts.sceneInit || "", [], { charName: opts.charName, userName: opts.userName });
-      for (const actorId of ["char", "user"]) {
-        const ch = charInScene(sceneCursor, aliases[actorId]);
-        if (!ch) continue;
-        if (ch.wear.length) syncSceneActor(actorId, "wear", ch.wear, { kind: "scene-init" });
-        if (ch.pose) syncSceneActor(actorId, "pose", ch.pose, { kind: "scene-init" });
+    function matchesSceneActor(subject, actorId) {
+      const name = aliases[actorId];
+      return !!name && (normName(subject) === normName(name) ||
+        subject === (actorId === "char" ? "{{char}}" : "{{user}}"));
+    }
+    function syncSceneWear(actorId, sceneWear, source) {
+      transitionWear(st.actors[actorId], {
+        action: "set", value: clone(sceneWear), certainty: "established",
+      }, source);
+    }
+    // VC-04: replay each successfully applied legacy Scene directive in
+    // chronological order. The Scene projection remains SC.fold's result,
+    // while add/remove become item-level garment deltas instead of a full
+    // outfit replacement that discarded explicit absence and partial facts.
+    // Use Scene's existing sameItem matching to preserve a prior item label.
+    function replaySceneOps(cursor, ops, source, meta) {
+      let current = cursor;
+      for (const op of ops || []) {
+        const step = SC.apply(current, [op], meta);
+        if (!step.applied.length) { current = step.state; continue; }
+        const prior = current;
+        current = step.state;
+        if (!op.subject || !["wear", "add", "remove", "pose"].includes(op.key)) continue;
+        for (const actorId of ["char", "user"]) {
+          if (!matchesSceneActor(op.subject, actorId)) continue;
+          const name = aliases[actorId], after = charInScene(current, name);
+          if (!after) continue;
+          if (op.key === "pose") {
+            st.actors[actorId].fields.pose = { value: clone(after.pose), certainty: "established", source: clone(source) };
+            continue;
+          }
+          if (op.key === "wear") { syncSceneWear(actorId, after.wear, source); continue; }
+          const before = charInScene(prior, name);
+          const actor = st.actors[actorId];
+          const existing = actor.wearState.worn.concat(actor.wearState.partiallyWorn, actor.wearState.removed);
+          const named = String(op.value || "").split(",").map((v) => v.trim())
+            .filter((v) => v && !/^(?:-|—|–|нет|none)$/i.test(v));
+          const items = named.map((name) => {
+            const earlier = existing.find((x) => SC.sameItem(x.item, name));
+            const legacy = before && before.wear.find((x) => SC.sameItem(x, name));
+            return earlier ? earlier.item : legacy || name;
+          });
+          if (items.length) transitionWear(actor, { action: op.key, value: items, certainty: "established" }, source);
+        }
       }
+      return current;
+    }
+    if (opts.mode === "rp") {
+      st.scene = SC.fold(opts.sceneInit || "", (opts.path || []).map((m) => ({
+        msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [],
+      })), { charName: opts.charName, userName: opts.userName });
+      const meta = { charName: opts.charName, userName: opts.userName, turn: 0 };
+      sceneCursor = replaySceneOps(SC.emptyState(), SC.parseBody(opts.sceneInit || ""),
+        { kind: "scene-init" }, meta);
     }
     let turn = 0;
     for (const m of opts.path || []) {
       const sw = TR.activeSwipe(m);
       if (sceneCursor) {
         if (m.role === "assistant") turn++;
-        const r = SC.apply(sceneCursor, sw.sceneOps || [], { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
-        sceneCursor = r.state;
-        // Важен именно ПОРЯДОК событий. Если поздняя ручная дельта меняет
-        // одежду, раннее извлечённое событие не должно её вернуть.
-        for (const op of r.applied) {
-          if (!op.subject || !["wear", "add", "remove", "pose"].includes(op.key)) continue;
-          for (const actorId of ["char", "user"]) {
-            const name = aliases[actorId];
-            if (!name || normName(op.subject) !== normName(name) && op.subject !== (actorId === "char" ? "{{char}}" : "{{user}}")) continue;
-            const ch = charInScene(sceneCursor, name);
-            if (!ch) continue;
-            const field = op.key === "pose" ? "pose" : "wear";
-            syncSceneActor(actorId, field, field === "pose" ? ch.pose : ch.wear, { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 }, op.key === "wear");
-          }
-        }
+        sceneCursor = replaySceneOps(sceneCursor, sw.sceneOps || [],
+          { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 },
+          { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
       }
       for (const e of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
         st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
