@@ -47,6 +47,7 @@
     // an Observer's inferred facts do not invalidate the photo itself.
     return JSON.stringify(shotOnly ? shot : shot.concat([
       sw.sceneOps, sw.stateEvents, sw.stateCorrections, sw.messengerAt,
+      sw.stateStatus && sw.stateStatus.frameObjects,
     ]));
   }
 
@@ -174,11 +175,20 @@
           /(?:\bmy\s+selfie\b|\btaking\s+(?:a\s+)?selfie\b|\bselfie\s+of\s+myself\b|(?:^|[\s,;:])я\s+[^.!?]{0,60}селфи|(?:^|[\s,;:])сво[её]\s+селфи)/iu.test(shot) &&
           !/(?:скриншот|screenshot|чужое\s+селфи|someone\s+else)/iu.test(shot) &&
           !shotActors.empty && !shotActors.userNamed;
+        // Use only Observer metadata tied to the exact active authored shot.
+        // Rewrites, stale statuses, manual prompts and older continued photos
+        // never supply canonical frame roles.
+        const frameStatus = sourceSwipe.stateStatus;
+        const verifiedFrameObjects = drawAuthored && frameStatus &&
+          frameStatus.sourceDraw === String(entry.draw || "") &&
+          frameStatus.sourceText === String(sourceSwipe.text || "") &&
+          Array.isArray(frameStatus.frameObjects) ? frameStatus.frameObjects : [];
         const visualPlan = VP.create({
           wearFacts: projected.wearFacts,
           owner: !!shotActors.owner || currentSelfie,
           cameraOwner,
           shotAuthored: drawAuthored,
+          draw: shot, frameObjects: verifiedFrameObjects,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const firstPass = intent ? await ICP.compile(shot,
@@ -259,6 +269,7 @@
               plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
                 complete: !!(visualPlan.wear && visualPlan.wear.complete),
                 absentFromBody: visualPlan.absentFromBody,
+                offBodyVisible: visualPlan.offBodyVisible,
                 negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {

@@ -3765,6 +3765,131 @@ async function foundationH() {
       assert.strictEqual(await h.ctx.DB.get("images",source.swipes[0].images[0].id),undefined);
     } finally {ICP.compile=previousCompile;IB.generate=previousBackend;}
   });
+  await ta("VC-02-1: Observer links off-body object only to verified same-draw removal",async()=>{
+    const I=globalThis.PRP.stateInterpreter;
+    const draw="camera=owner; она сняла белую хлопковую футболку и держит снятую футболку в руках";
+    const options={role:"assistant",mode:"messenger",text:"Фото!",draw,
+      draws:[{prompt:draw}],references:[]};
+    const raw=JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",value:["белую хлопковую футболку"],
+      certainty:"reported",evidence:"сняла белую хлопковую футболку",
+      evidenceType:"draw",visualScope:"current-self"}],
+      frameObjects:[{role:"offBody",eventIndex:0,evidence:"держит снятую футболку в руках"}]});
+    const parsed=I.parse(raw,options);
+    assert.strictEqual(parsed.events.length,1,JSON.stringify(parsed.issues));
+    assert.deepStrictEqual(parsed.frameObjects,[{role:"offBody",item:"белую хлопковую футболку",
+      evidence:"держит снятую футболку в руках"}]);
+    const plan=globalThis.PRP.visualPlan.create({cameraOwner:true,shotAuthored:true,draw,
+      frameObjects:parsed.frameObjects,
+      wearFacts:[{actor:"char",known:true,removed:[{item:"белую хлопковую футболку"}],worn:[],partiallyWorn:[]}]});
+    assert.deepStrictEqual(plan.offBodyVisible,parsed.frameObjects);
+    assert.strictEqual(plan.allowGlobalGarmentNegative,false);
+    assert.ok(Object.isFrozen(plan.offBodyVisible[0]));
+    const instruction=I.instruction(options);
+    assert.ok(instruction.includes("frameObjects:"));
+  });
+  await ta("VC-02-2: forged, stale, ambiguous or not-removed frame roles are ignored",async()=>{
+    const I=globalThis.PRP.stateInterpreter,VP=globalThis.PRP.visualPlan;
+    const draw="она держит футболку в руках";
+    const options={role:"assistant",mode:"messenger",text:"Фото",draw,draws:[{prompt:draw}],references:[]};
+    const guesses=[
+      {role:"offBody",eventIndex:0,evidence:draw},
+      {role:"offBody",referenceId:"wear:char:0:add",evidence:draw},
+      {role:"offBody",eventIndex:0,evidence:"в другом кадре"},
+      {role:"onBody",eventIndex:0,evidence:draw},
+    ];
+    const parsed=I.parse(JSON.stringify({events:[],frameObjects:guesses}),options);
+    assert.deepStrictEqual(parsed.frameObjects,[]);
+    assert.strictEqual(I.parse(JSON.stringify({events:[],frameObjects:guesses}),
+      {...options,role:"user"}).frameObjects.length,0);
+    const frame=[{role:"offBody",item:"футболка",evidence:draw}];
+    const absent=VP.create({cameraOwner:true,shotAuthored:true,draw,frameObjects:frame,
+      wearFacts:[{actor:"char",worn:[{item:"футболка"}],removed:[],partiallyWorn:[]}]});
+    assert.deepStrictEqual(absent.offBodyVisible,[]);
+    const stale=VP.create({cameraOwner:true,shotAuthored:true,draw:"другой кадр",frameObjects:frame,
+      wearFacts:[{actor:"char",worn:[],removed:[{item:"футболка"}],partiallyWorn:[]}]});
+    assert.deepStrictEqual(stale.offBodyVisible,[]);
+  });
+  await ta("VC-02-3: branch-local previously removed reference yields frame object, not wear.add",async()=>{
+    const W=globalThis.PRP.stateTracker,I=globalThis.PRP.stateInterpreter;
+    let state=W.apply(W.empty({char:"А"}),{actor:"char",field:"wear",action:"remove",
+      value:["белая футболка"],certainty:"reported",evidence:""},{role:"manual",mode:"messenger"});
+    const ref=W.references(state,"char",["add"])[0];
+    const draw="я держу снятую белую футболку в руках";
+    const parsed=I.parse(JSON.stringify({events:[],frameObjects:[
+      {role:"offBody",referenceId:ref.id,evidence:draw}]}),
+      {role:"assistant",mode:"messenger",text:"Фото",draw,draws:[{prompt:draw}],references:[ref]});
+    assert.deepStrictEqual(parsed.frameObjects.map(x=>x.item),["белая футболка"]);
+    assert.deepStrictEqual(parsed.events,[],"object visibility must not become physical wear");
+    assert.strictEqual(I.parse(JSON.stringify({events:[],frameObjects:[
+      {role:"offBody",referenceId:ref.id,evidence:draw}]}),
+      {role:"assistant",mode:"messenger",text:"Фото",draw,draws:[{prompt:draw}],references:[]}).frameObjects.length,0);
+  });
+  await ta("VC-02-4: compiler consumes off-body roles in same single model call and cache key",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const facts=[{actor:"char",known:true,removed:[{item:"white t-shirt",certainty:"reported"}],
+      worn:[],partiallyWorn:[]}];
+    const draw="holding white t-shirt in hands";
+    const base={cameraOwner:true,shotAuthored:true,draw,wearFacts:facts};
+    const withRole=VP.create({...base,frameObjects:[{role:"offBody",item:"white t-shirt",evidence:draw}]});
+    const withoutRole=VP.create(base);
+    let calls=0;
+    const gen=async instruction=>{
+      calls++;
+      assert.ok(instruction.includes("CANONICAL WEAR FACTS"));
+      if(calls===1)assert.ok(instruction.includes("VERIFIED VISIBLE OFF-BODY OBJECTS"));
+      else assert.ok(!instruction.includes("VERIFIED VISIBLE OFF-BODY OBJECTS"));
+      return JSON.stringify({prompt:"holding white t-shirt in hands",absent:[{index:0,tag:"white t-shirt"}]});
+    };
+    const yes=await ICP.compile(draw,{intentMode:true,visualPlan:withRole,wearState:withRole.wear},gen);
+    const no=await ICP.compile(draw,{intentMode:true,visualPlan:withoutRole,wearState:withoutRole.wear},gen);
+    assert.strictEqual(calls,2,"different shot role must invalidate translation cache");
+    assert.deepStrictEqual(yes.wearItems,no.wearItems);
+    assert.strictEqual(yes.negative,"");
+    assert.strictEqual(no.negative,"");
+  });
+  await ta("VC-02-5: persisted matching author-shot roles reach the image compiler, not canon",async()=>{
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Вот фотография");
+    const draw="camera=owner; я сняла белую футболку и держу её в руках";
+    m.swipes[0].draws=[{prompt:draw,ratio:"1:1"}];
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
+      value:["белую футболку"],certainty:"reported",evidence:"сняла белую футболку",
+      evidenceType:"draw",visualScope:"current-self"}];
+    m.swipes[0].stateStatus={status:"ok",sourceText:m.swipes[0].text,sourceDraw:draw,
+      frameObjects:[{role:"offBody",item:"белую футболку",evidence:"держу её в руках"}]};
+    await h.chat.commitMessage(m,m.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
+      {enabled:true,backend:"a1111",url:"http://unused",translate:true,drawPromptMode:"intent"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldC=ICP.compile,oldG=IB.generate;let options,sent;
+    try{
+      ICP.compile=async (_shot,o)=>{options=o;return {text:"pov, holding a white t-shirt",
+        compiled:true,wearValidated:true,negative:"",wearItems:[{index:0,item:"белую футболку",tag:"white t-shirt"}]};};
+      IB.generate=async (_,o)=>{sent=o;return {dataUrl:"data:image/png;base64,AA==",seed:7,
+        info:{width:512,height:512}};};
+      const source=h.S.messages.find(x=>x.id===m.id);
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
+      assert.deepStrictEqual(options.visualPlan.offBodyVisible,
+        [{role:"offBody",item:"белую футболку",evidence:"держу её в руках"}]);
+      assert.ok(sent.prompt.includes("holding a white t-shirt"));
+      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.plan.offBodyVisible.length,1);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
+        ["белую футболку"],"shot roles must not create wear.add");
+    }finally{ICP.compile=oldC;IB.generate=oldG;}
+  });
+  await ta("VC-02-6: stale or incorrect frame-role metadata never reaches VisualPlan",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const wearFacts=[{actor:"char",worn:[],partiallyWorn:[],removed:[{item:"белая футболка"}]}];
+    const plan=VP.create({cameraOwner:true,shotAuthored:true,draw:"я держу снятую футболку",
+      frameObjects:[{role:"offBody",item:"белая футболка",evidence:"на столе"}],wearFacts});
+    assert.deepStrictEqual(plan.offBodyVisible,[]);
+    assert.deepStrictEqual(VP.create({shotAuthored:true,draw:"я держу снятую футболку",
+      frameObjects:[{role:"offBody",item:"белая футболка",evidence:"я держу снятую футболку"}],
+      wearFacts}).offBodyVisible,[],"non-owner shot never inherits card's removed garment");
+  });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
     const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
