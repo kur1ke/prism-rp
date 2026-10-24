@@ -3729,6 +3729,42 @@ async function foundationH() {
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.negative,"");
     } finally {globalThis.PRP.llm.simple=originalLLM;IB.generate=originalBackend;}
   });
+  await ta("VC-01-4: edited source wear facts during authored compilation skip A1111",async()=>{
+    const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const first=h.chat.newMsg("assistant",null,"Сняла юбку");
+    first.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
+      value:["юбку"],certainty:"reported",evidence:"Сняла юбку"}];
+    await h.chat.commitMessage(first,first.id);
+    const next=h.chat.newMsg("assistant",first.id,"Фото");
+    const shot="camera=owner; вид сверху на Химэ, видно ноги";
+    next.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+    await h.chat.commitMessage(next,next.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{enabled:true,backend:"a1111",
+      url:"http://unused",translate:true,drawPromptMode:"intent"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const previousCompile=ICP.compile,previousBackend=IB.generate;
+    let called=0;
+    try {
+      ICP.compile=async (_scene,_opts)=>{
+        const mutated=await h.ctx.DB.get("messages",next.id);
+        mutated.swipes[0].stateCorrections=[{actor:"char",field:"wear",action:"add",
+          value:["юбку"],certainty:"reported",evidence:""}];
+        await h.ctx.DB.put("messages",mutated);
+        return {text:"pov, legs, from above",compiled:true,wearValidated:true,negative:"",
+          wearItems:[{index:0,item:"юбку",tag:"skirt"}]};
+      };
+      IB.generate=async ()=>{called++;throw Error("backend should not receive stale plan");};
+      const source=h.S.messages.find(m=>m.id===next.id);
+      await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:shot,ratio:"1:1"});
+      assert.strictEqual(called,0,"source mutation must be checked before image backend call");
+      const saved=await h.ctx.DB.get("messages",next.id);
+      assert.notStrictEqual(saved.swipes[0].images[0].status,"done");
+      assert.strictEqual(await h.ctx.DB.get("images",source.swipes[0].images[0].id),undefined);
+    } finally {ICP.compile=previousCompile;IB.generate=previousBackend;}
+  });
   await ta("VIS-OUTFIT-1C-1: StateResolver exports read-only actor-scoped canonical garment facts", async () => {
     const STATE=globalThis.PRP.stateTracker, SR=globalThis.PRP.stateResolver;
     const snapshot=STATE.empty({char:"Химэ",user:"Лёня"});
