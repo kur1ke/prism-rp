@@ -388,8 +388,10 @@
     if (events.length > 32) return { ok: false, reason: "unbounded-photo-history" };
     const kept = [];
     for (const e of events) {
-      if (!e || e.evidenceType !== "draw" || !Number.isInteger(e.drawIndex) ||
-          e.drawIndex < 0 || e.drawIndex >= draws.length)
+      if (!e || e.field !== "wear" || e.certainty === "intent" ||
+          !["add", "remove", "adjust"].includes(e.action) ||
+          e.evidenceType !== "draw" || e.visualScope !== "current-self" ||
+          !Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= draws.length)
         return { ok: false, reason: "unsequenced-state-event" };
       const photo = draws[e.drawIndex];
       if (!photo || typeof photo.prompt !== "string" || !String(e.evidence || "").trim() ||
