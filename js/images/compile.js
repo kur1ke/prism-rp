@@ -142,8 +142,10 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    // Source-actor contract changed; never reuse translations from the old camera path.
-    const key = ["v11-frame-actors", o.intentMode ? "intent" : "tags",
+    // Hybrid translation now preserves garment displacement degree explicitly.
+    // Do not reuse prompts translated with the older wording; leave legacy modes cached.
+    const key = [hybrid ? "v12-hybrid-garment-extent" : "v11-frame-actors",
+      o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),

@@ -976,6 +976,32 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
   const legacy = IC.drawInstruction({ format: "tags", fixedIdentity: false });
   assert.ok(!legacy.includes("добавляются приложением отдельно"), legacy);
 });
+t("VIS-REVEAL-01: partial clothing motion retains stated exposure without invented negatives", () => {
+  const rules=IC.rewriteRules({format:"hybrid",intentMode:true});
+  assert.ok(rules.includes("exact degree and position of movement"),rules);
+  assert.ok(rules.includes("explicitly shows as exposed or covered"),rules);
+  assert.ok(rules.includes("Do not enlarge a partial movement into full displacement"),rules);
+  assert.ok(rules.includes("Do not invent ANY garments"),"no relaxation of source authority");
+  const card={name:"Орихимэ Иноуэ",image:{trigger:"orihime inoue",
+    loras:[{name:"Orihime Illustrious",weight:0.8}]}};
+  const draw="Орихимэ Иноуэ слегка приподняла край жёлтой блузки, открыв живот и пупок.";
+  const translated="Orihime Inoue slightly lifts the hem of her yellow blouse, revealing her stomach and navel.";
+  const c=IC.compose({draw,card,scene:{chars:{}},persona:{},
+    shotAuthored:true,requireNamedOwner:true});
+  assert.strictEqual(c.ownerPresent,true,"source names the depicted Card owner");
+  const f=IC.finalise({composed:c,compiled:translated,hybrid:true,card,
+    backend:"a1111",settings:{promptMode:"off"}});
+  assert.ok(f.prompt.includes(translated),f.prompt);
+  assert.ok(f.prompt.includes("<lora:Orihime Illustrious:0.8>"),f.prompt);
+  assert.ok(!/nude|nipples|bare breasts|cover breasts/.test(f.prompt+" "+f.negative),
+    "do not auto-add either exposure or unsupported body-specific restrictions");
+  const plan=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw,
+    wearFacts:[{actor:"char",known:true,complete:true,worn:[{item:"жёлтая блузка"}],
+      partiallyWorn:[],removed:[]}]});
+  const audit=ICP.auditFinal(f.prompt,f.negative,plan,[],[],{otherActorPresent:false});
+  assert.strictEqual(audit.scope,"no-removal",
+    "lexical final audit does not claim to verify generated pixels");
+});
 t("VIS-WARDROBE-1: card outfit preset is a fallback, never a second copy over shot clothing", () => {
   const card = { name: "Лилит", image: { wardrobe: "Cozy sweater: oversized cozy sweater" } };
   const state = { chars: { Лилит: { wear: ["Cozy sweater"] } }, present: [] };
@@ -4035,7 +4061,11 @@ async function foundationH() {
     const legacyKey=["v9-final-audit","intent","regular-frame","owner-camera",
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
     const oldRecord={text:"A third-person top-down portrait.",compiled:true};
-    let saved={[legacyKey]:oldRecord},calls=0;
+    const previousHybridKey=["v11-frame-actors","intent","regular-frame",
+      "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
+    // Existing image caches were translated before the movement-degree contract.
+    let saved={[legacyKey]:oldRecord,
+      [previousHybridKey]:{text:"An older prompt ignoring partial garment placement.",compiled:true}},calls=0;
     ICP.setStore({load:async()=>saved,save:(next)=>{saved=next;}});
     try {
       const fresh=await ICP.compile(scene,options,async()=>{

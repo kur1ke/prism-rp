@@ -608,7 +608,7 @@
       const rules = [
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
-        "Translate the visible image described in SCENE. Preserve its exact participants, camera viewpoint, action and its completion, garment placement, exposed areas, visible objects and framing. Do not reinterpret the action.",
+        "Translate the visible image described in SCENE. Preserve its exact participants, viewpoint, action and completion, visible objects and framing. For garments, preserve the exact degree and position of movement and the areas SCENE explicitly shows as exposed or covered. Do not enlarge a partial movement into full displacement or invent additional exposure.",
         "Do not invent ANY garments, underwear types, body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If SCENE says only 'lace underwear', do not specify a bra or panties.",
         "Do not explain ordinary garment coverage, repeat facts, tell a story of removed clothes, or mention hidden or off-camera things. A garment that is worn in CANONICAL WEAR but is not visible in SCENE is not a positive image instruction.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
