@@ -270,8 +270,7 @@
     const messenger = !!o.messenger;
     const shotAuthored = !!o.shotAuthored;
     const subVars = (v) => String(v || "").replace(/\{\{char\}\}/gi, card.name || "").replace(/\{\{user\}\}/gi, persona.name || "Пользователь");
-    const rawDraw = subVars(o.draw).trim();
-    const draw = rawDraw;
+    const draw = subVars(o.draw).trim();
     // For authored Draw the source-shot actors were resolved before translation.
     // English rewording must not change who is depicted or inject Card/LoRA.
     const actors = o.frameActors
