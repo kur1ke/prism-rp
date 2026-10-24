@@ -146,11 +146,18 @@
       return "draw не подтверждает полный комплект или очистку гардероба";
     if (drawn && e.visualScope !== "current-self")
       return "draw не подтверждён как актуальное изображение самого персонажа";
-    // A continued swipe may contain several shots. Only the final authored
-    // shot is its current visual statement; older pictures in that same swipe
-    // must not silently preserve stale clothing after a new photo was sent.
-    const currentDraw = source && Array.isArray(source.draws) && source.draws.length
-      ? source.draws[source.draws.length - 1] : null;
+    // A continued swipe may contain several shots. An explicitly indexed
+    // event retains exact provenance to an earlier authenticated shot and
+    // stays chronologically before later shots. Legacy unindexed events
+    // are valid against ONLY the current final shot (never retrospectively
+    // promoted to an earlier draw by matching the evidence text).
+    const drawList = source && Array.isArray(source.draws) ? source.draws : [];
+    if (drawn && e.drawIndex != null &&
+        (!Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= drawList.length))
+      return "недопустимый индекс авторского draw";
+    if (!drawn && e.drawIndex != null) return "индекс draw указан без draw-события";
+    const currentDraw = drawList.length
+      ? drawList[e.drawIndex == null ? drawList.length - 1 : e.drawIndex] : null;
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
       !currentDraw || typeof currentDraw.prompt !== "string" ||
       !str(e.evidence) || !currentDraw.prompt.includes(e.evidence)))
@@ -213,7 +220,8 @@
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
       value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
-      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}),
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
@@ -230,7 +238,8 @@
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
       ...(source && source.kind ? { kind: source.kind } : {}),
-      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}) };
+      ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}) };
     if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
