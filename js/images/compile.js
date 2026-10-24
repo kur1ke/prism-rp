@@ -142,10 +142,9 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    // Hybrid camera/framing rules changed in VIS-FF-01. Preserve legacy tag/intent
-    // cache hits but do not reuse translations produced under the old POV contract.
-    const key = [hybrid ? "v10-frame-first-hybrid" : "v9-final-audit", o.intentMode ? "intent" : "tags",
-      o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame", o.embodiedOwner ? "owner-camera" : "external-camera",
+    // Source-actor contract changed; never reuse translations from the old camera path.
+    const key = ["v11-frame-actors", o.intentMode ? "intent" : "tags",
+      o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
       o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
