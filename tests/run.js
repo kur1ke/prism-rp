@@ -3623,6 +3623,118 @@ async function foundationH() {
       assert.deepStrictEqual(oldMoment.actors.char.wearState.worn.map(e=>e.item),["white t-shirt"]);
     } finally {globalThis.PRP.llm.simple=original;}
   });
+  await ta("VC-04-REF-1: latest continued photo resolves a removed garment from earlier same-swipe photo",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const first="current mirror selfie, white cotton t-shirt removed";
+    const second="camera=owner; holding it in hands, view from above";
+    const m=h.chat.newMsg("assistant",null,"Первое фото");
+    m.swipes[0].draws=[{prompt:first,ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    const original=globalThis.PRP.llm.simple;
+    let queries=[];
+    try {
+      globalThis.PRP.llm.simple=async (_,q)=>{
+        queries.push(q);
+        return queries.length===1 ? JSON.stringify({events:[{
+          actor:"char",field:"wear",action:"remove",value:["white cotton t-shirt"],
+          certainty:"reported",evidence:"white cotton t-shirt removed",
+          evidenceType:"draw",visualScope:"current-self"}]})
+          : JSON.stringify({events:[],frameObjects:[{
+            role:"offBody",referenceId:"wear:char:0:add",evidence:"holding it in hands"}]});
+      };
+      const live=h.S.messages.find(x=>x.id===m.id);
+      assert.strictEqual((await h.ctx.svc.state.observeMessage(live,{id:"fake"})).status,"ok");
+      live.swipes[0].draws.push({prompt:second,ratio:"1:1"});
+      live.swipes[0].text+=" Второе фото";
+      await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(live)));
+      const observed=await h.ctx.svc.state.observeMessage(live,{id:"fake"});
+      assert.strictEqual(observed.status,"ok",JSON.stringify(observed));
+      assert.ok(queries[1].includes('"wear:char:0:add"') &&
+        queries[1].includes('"white cotton t-shirt"'),"previous exact visual fact must be an Observer reference");
+      assert.deepStrictEqual(live.swipes[0].stateStatus.frameObjects,
+        [{role:"offBody",item:"white cotton t-shirt",evidence:"holding it in hands"}]);
+      assert.deepStrictEqual(live.swipes[0].stateEvents.map(x=>x.drawIndex),[0]);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
+        ["white cotton t-shirt"],"holding it must not turn removed into worn");
+      const currentPlan=globalThis.PRP.visualPlan.create({
+        cameraOwner:true,shotAuthored:true,draw:second,
+        frameObjects:live.swipes[0].stateStatus.frameObjects,
+        wearFacts:globalThis.PRP.stateResolver.wearFacts({state:h.ctx.svc.state.snapshot()})});
+      assert.deepStrictEqual(currentPlan.offBodyVisible.map(x=>x.item),["white cotton t-shirt"]);
+    } finally {globalThis.PRP.llm.simple=original;}
+  });
+  await ta("VC-04-REF-2: immediate re-wearing from prior same-swipe photo reuses exact reference",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const first="current mirror selfie, white cotton t-shirt removed";
+    const second="current mirror selfie, putting it on now";
+    const m=h.chat.newMsg("assistant",null,"Первое фото");
+    m.swipes[0].draws=[{prompt:first,ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    const saved=globalThis.PRP.llm.simple;let calls=0;
+    try {
+      globalThis.PRP.llm.simple=async(_,q)=>{
+        calls++;
+        if (calls===1) return JSON.stringify({events:[{
+          actor:"char",field:"wear",action:"remove",value:["white cotton t-shirt"],
+          certainty:"reported",evidence:"white cotton t-shirt removed",
+          evidenceType:"draw",visualScope:"current-self"}]});
+        assert.ok(q.includes('"wear:char:0:add"'));
+        return JSON.stringify({events:[{
+          actor:"char",field:"wear",action:"add",referenceId:"wear:char:0:add",
+          certainty:"reported",evidence:"putting it on now",
+          evidenceType:"draw",visualScope:"current-self"}]});
+      };
+      const live=h.S.messages.find(x=>x.id===m.id);
+      assert.strictEqual((await h.ctx.svc.state.observeMessage(live,{id:"fake"})).status,"ok");
+      live.swipes[0].draws.push({prompt:second,ratio:"1:1"});
+      live.swipes[0].text+=" Второе фото";
+      await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(live)));
+      const observed=await h.ctx.svc.state.observeMessage(live,{id:"fake"});
+      assert.strictEqual(observed.status,"ok",JSON.stringify(observed));
+      assert.deepStrictEqual(live.swipes[0].stateEvents.map(x=>[x.action,x.drawIndex]),
+        [["remove",0],["add",1]]);
+      const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(wear.worn.map(x=>x.item),["white cotton t-shirt"]);
+      assert.deepStrictEqual(wear.removed,[]);
+    } finally {globalThis.PRP.llm.simple=saved;}
+  });
+  await ta("VC-04-REF-3: edited earlier photo cannot supply inherited object references",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const first="current mirror selfie, white cotton t-shirt removed";
+    const second="current selfie, holding it in hands";
+    const m=h.chat.newMsg("assistant",null,"Первое фото");
+    m.swipes[0].draws=[{prompt:first,ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    const saved=globalThis.PRP.llm.simple;let calls=0,request;
+    try {
+      globalThis.PRP.llm.simple=async(_,q)=>{
+        calls++;
+        if(calls===1)return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
+          value:["white cotton t-shirt"],certainty:"reported",evidence:"white cotton t-shirt removed",
+          evidenceType:"draw",visualScope:"current-self"}]});
+        request=q;return JSON.stringify({events:[],frameObjects:[
+          {role:"offBody",referenceId:"wear:char:0:add",evidence:"holding it in hands"}]});
+      };
+      const live=h.S.messages.find(x=>x.id===m.id);
+      assert.strictEqual((await h.ctx.svc.state.observeMessage(live,{id:"fake"})).status,"ok");
+      live.swipes[0].draws[0].prompt="unrelated landscape with no person";
+      live.swipes[0].draws.push({prompt:second,ratio:"1:1"});
+      live.swipes[0].text+=" Второе фото";
+      await h.ctx.DB.put("messages",JSON.parse(JSON.stringify(live)));
+      const out=await h.ctx.svc.state.observeMessage(live,{id:"fake"});
+      assert.ok(!request.includes('"wear:char:0:add"'),"forged earlier proof may not seed context");
+      assert.deepStrictEqual(live.swipes[0].stateEvents,[]);
+      assert.deepStrictEqual(live.swipes[0].stateStatus.frameObjects,[]);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed,[]);
+      assert.strictEqual(out.status,"partial","unverified reference is reported");
+    } finally {globalThis.PRP.llm.simple=saved;}
+  });
   await ta("VC-04-DRAW-3: indexed evidence cannot be redirected to a different shot or sibling swipe",async()=>{
     const ST=globalThis.PRP.stateTracker;
     const first="current mirror selfie, blue jacket";
