@@ -6835,6 +6835,60 @@ async function perfTurn() {
   });
 }
 
+/* OBS-TIME: context-bound rewear references, not a new outfit store. */
+{
+  const W = globalThis.PRP.stateTracker;
+  const I = globalThis.PRP.stateInterpreter;
+  const init = W.empty({ char: "Орихимэ", user: "User" });
+  const event = (action, value, evidence) => ({
+    actor: "char", field: "wear", action, value, certainty: "reported", evidence: evidence || "",
+  });
+  const origin = W.apply(init, event("set", ["белая хлопковая блузка", "юбка"], ""), { role: "initial", mode: "messenger" });
+  const removed = W.apply(origin, event("remove", ["белая хлопковая блузка"], ""), { role: "manual", mode: "messenger", messageId: "m1", swipeIdx: 0 });
+  const refs = W.references(removed, "char", ["remove", "adjust", "add"]);
+  t("OBS-TIME-1: removed garment exposes one typed rewear reference without leaking worn items", () => {
+    assert.deepStrictEqual(refs.filter(x => x.action === "add").map(x => x.item), ["белая хлопковая блузка"]);
+    assert.ok(refs.every(x => x.actor === "char"));
+    assert.strictEqual(W.references(origin, "char", ["add"]).length, 0);
+  });
+  t("OBS-TIME-2: exact current quote and active-path reference restore removed garment", () => {
+    const text = "Хорошо, тогда надену её обратно.";
+    const ref = refs.find(x => x.action === "add");
+    const options = { role: "assistant", mode: "messenger", text, references: refs };
+    const raw = JSON.stringify({ events: [{
+      actor: "char", field: "wear", action: "add", referenceId: ref.id,
+      certainty: "reported", evidence: "надену её обратно",
+    }] });
+    const parsed = I.parse(raw, options);
+    assert.strictEqual(parsed.events.length, 1, JSON.stringify(parsed.issues));
+    assert.strictEqual(parsed.events[0].value[0], "белая хлопковая блузка");
+    const next = W.apply(removed, parsed.events[0], { ...options, messageId: "m2", swipeIdx: 0 });
+    assert.deepStrictEqual(next.actors.char.wearState.removed, []);
+    assert.deepStrictEqual(W.fieldOf(next, "char", "wear").value, ["белая хлопковая блузка", "юбка"]);
+  });
+  t("OBS-TIME-3: wrong or stale reference cannot dress another garment", () => {
+    const ref = refs.find(x => x.action === "add");
+    const text = "Надену её обратно.";
+    const base = { role: "assistant", mode: "messenger", text, references: [] };
+    const raw = JSON.stringify({ events: [{
+      actor: "char", field: "wear", action: "add", referenceId: ref.id,
+      certainty: "reported", evidence: text,
+    }] });
+    assert.strictEqual(I.parse(raw, base).events.length, 0);
+    const forged = JSON.stringify({ events: [{
+      actor: "char", field: "wear", action: "add", referenceId: ref.id,
+      value: ["чужая юбка"], certainty: "reported", evidence: text,
+    }] });
+    assert.strictEqual(I.parse(forged, { ...base, references: refs }).events.length, 0);
+  });
+  t("OBS-TIME-4: interpreter instructs temporal context, not future-tense blanket", () => {
+    const instruction = I.instruction({ mode: "messenger", role: "assistant", text: "Хорошо, надену её обратно", references: refs });
+    assert.ok(instruction.includes("Будущее время само по себе не означает отложенность"));
+    assert.ok(instruction.includes("action=add"));
+    assert.ok(instruction.includes("завтра"));
+  });
+}
+
 const TR_ = globalThis.PRP.tree;
 const EX_BLANK = () => Object.assign(globalThis.PRP.experience.blank(null, null), { about: ["user"] });
 // Do not let an unresolved async fixture finish Node with exit code 0.
