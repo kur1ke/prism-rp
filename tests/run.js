@@ -4061,7 +4061,11 @@ async function foundationH() {
     const legacyKey=["v9-final-audit","intent","regular-frame","owner-camera",
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
     const oldRecord={text:"A third-person top-down portrait.",compiled:true};
-    let saved={[legacyKey]:oldRecord},calls=0;
+    const previousHybridKey=["v11-frame-actors","intent","regular-frame",
+      "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
+    // Existing image caches were translated before the movement-degree contract.
+    let saved={[legacyKey]:oldRecord,
+      [previousHybridKey]:{text:"An older prompt ignoring partial garment placement.",compiled:true}},calls=0;
     ICP.setStore({load:async()=>saved,save:(next)=>{saved=next;}});
     try {
       const fresh=await ICP.compile(scene,options,async()=>{
