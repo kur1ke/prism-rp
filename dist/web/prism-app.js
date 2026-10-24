@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "434330fa04a87c3abfe21ab3d9b33e4140c57274";
+  window.PRISM_RP_BUILD_SHA = "eea5a6f1689c788f958a8fce4ef462a0fdbb9f40";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6280,7 +6280,7 @@
   const wordExists = (str, word) => !!word && (String(str || "").match(/[a-z][a-z0-9]*/g) || []).includes(word);
   const sameTag = (a, b) => IC.bareTag(a).replace(/[_-]/g, " ").toLowerCase() ===
     IC.bareTag(b).replace(/[_-]/g, " ").toLowerCase();
-  function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags) {
+  function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags, subjectScope) {
     const plan = visualPlan && visualPlan.wear ? visualPlan : null;
     if (!plan || plan.actor !== "char") return { validated: false, scope: "not-owner", issues: [] };
     const removed = Array.isArray(plan.wear.removed) ? plan.wear.removed : [];
@@ -6306,9 +6306,11 @@
         !tagParts(prompt).some((p) => sameTag(p.raw, found.tag));
     })) issues.push("Видимые снятые вещи не связаны с точными positive-тегами");
     if (issues.length) return { validated: false, scope: "invalid-mapping", issues };
-    // A scene with another person is not globally garment-scoped. Do not
-    // remove that person's shirt because the camera owner removed theirs.
-    if (IC.subjectCount(prompt) > 1)
+    // The actual shot may name a second participant without any explicit
+    // 2girls/1boy count token in its positive tags. ImageService's source
+    // actor resolution is more authoritative than a heuristic counting tags.
+    // Never apply the owner's garment exclusion to the other participant.
+    if ((subjectScope && subjectScope.otherActorPresent === true) || IC.subjectCount(prompt) > 1)
       return { validated: false, scope: "multi-subject", issues: [] };
     const positives = tagParts(prompt), negatives = tagParts(negative);
     for (let i = 0; i < mapped.length; i++) {
@@ -6346,7 +6348,8 @@
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame", o.embodiedOwner ? "owner-camera" : "external-camera",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
-      o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "", s].join("\u0001");
+      o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
+      o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only", s].join("\u0001");
     if (mem.has(key)) {
       const cached = mem.get(key);
       return typeof cached === "string" ? { text: cached, compiled: true, cached: true } : { ...cached, cached: true };
@@ -6402,7 +6405,7 @@
           }
         }
         const wearItems = absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() }));
-        const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags);
+        const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags, o.subjectScope);
         if (semantic.issues.length)
           return { text: s, compiled: false, error: semantic.issues.join("; ").slice(0, 240) };
         result = {
@@ -9246,10 +9249,11 @@
           draw: shot, frameObjects: verifiedFrameObjects,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
+        const shotScope = { otherActorPresent: !!shotActors.user };
         const firstPass = intent ? await ICP.compile(shot,
           { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner,
             qualityPinned: ST.qualityPinned(S.settings),
-            wearState: visualPlan.wear, visualPlan }, generateText) : null;
+            wearState: visualPlan.wear, visualPlan, subjectScope: shotScope }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
           throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, cameraOwner, card: cd,
@@ -9275,12 +9279,14 @@
           owner: !!composed.ownerPresent, cameraOwner: !!composed.cameraOwner,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
+        const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             embodiedOwner: cameraOwner, frame: composed.subjects, stateContext,
-            wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined }, generateText);
+            wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
+            subjectScope }, generateText);
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.
@@ -9290,7 +9296,7 @@
         // The same compiler response binds English negative tags to the
         // source-indexed removed garments. Never make a second model call.
         const singleOwner = (composed.ownerPresent || composed.cameraOwner) &&
-          !composed.userPresent && IC.subjectCount(comp.text) <= 1;
+          !subjectScope.otherActorPresent && IC.subjectCount(comp.text) <= 1;
         const wearNegative = singleOwner ? String(comp.negative || "") : "";
         if (changes && canonicalWear.removed && canonicalWear.removed.length &&
             ((!visualPlan.shotAuthored && !comp.negative) || !Array.isArray(comp.wearItems)))
@@ -9300,7 +9306,7 @@
         // The compiler is not the last positive-tag source: Card, LoRA
         // rules and fixedPrompt can reintroduce a removed garment. Audit the
         // actual executable strings immediately before the backend.
-        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags);
+        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
         if (finalAudit.issues.length)
           throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
