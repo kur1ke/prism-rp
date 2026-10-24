@@ -1,4 +1,4 @@
-/* PrismRP VC-01 — transient, branch-scoped image garment plan.
+/* PrismRP VC-01/02 — transient, branch-scoped image garment plan.
    No persistence, model calls, state transitions, inventory, or scene authority.
    Unknown body state cannot be fabricated from a crop or missing tag. */
 (function (root) {
@@ -12,6 +12,33 @@
       Object.freeze(v);
     }
     return v;
+  }
+
+  const sameItem = (a, b) => String(a || "").toLowerCase().replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim() === String(b || "").toLowerCase().replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+  // VC-02: Only validated source-swipe events can confirm that a REMOVED
+  // item is simultaneously visible OFF the body in this exact image.
+  // The folded canonical fact must point back to that same event; a copied
+  // event from another branch or an edited source draw never qualifies.
+  function offBodyEvidence(wear, source, events, draw) {
+    if (!wear || !source || !draw || !Array.isArray(events)) return [];
+    const accepted = [];
+    for (const event of events.slice(0, 6)) {
+      if (!event || event.actor !== "char" || event.field !== "wear" ||
+          event.action !== "remove" || event.frameRole !== "off-body" ||
+          event.evidenceType !== "draw" || event.visualScope !== "current-self" ||
+          event.certainty === "intent" || !Array.isArray(event.value) ||
+          event.value.length !== 1 || !event.evidence || !draw.includes(event.evidence)) continue;
+      const known = wear.removed.find((item) => sameItem(item.item, event.value[0]) &&
+        item.source && item.source.messageId === source.messageId &&
+        Number(item.source.swipeIdx || 0) === source.swipeIdx &&
+        item.source.evidence === event.evidence && item.source.evidenceType === "draw");
+      if (known && !accepted.some((x) => sameItem(x.item, known.item)))
+        accepted.push({ item: known.item, evidence: event.evidence });
+    }
+    return accepted;
   }
 
   function create(input) {
@@ -32,9 +59,9 @@
       swipeIdx: Number(o.source.swipeIdx) || 0,
     };
     // "Removed from the body" and "absent from the frame" are distinct.
-    // Until the Observer supplies typed, evidence-validated frame object roles
-    // (VC-02), an authored photo MUST NOT generate a global garment negative:
-    // that same garment may be held or lying on the bed.
+    // Authored photo object evidence can put a removed garment off-body.
+    // Never emit a global absence tag before subject- and object-scoping is
+    // proven by the structured final compilation (VC-03).
     const authored = !!o.shotAuthored;
     const result = {
       actor: owner ? "char" : null,
@@ -43,7 +70,7 @@
       wear,
       onBodyCandidates: wear ? wear.worn.concat(wear.partiallyWorn).map((x) => x.item) : [],
       absentFromBody: wear ? wear.removed.map((x) => x.item) : [],
-      offBodyVisible: [], // never inferred from REMOVED; VC-02 binds exact shot evidence.
+      offBodyVisible: owner && authored ? offBodyEvidence(wear, source, o.currentEvents, String(o.draw || "")) : [],
       allowGlobalGarmentNegative: owner && !authored,
     };
     return freeze(result);

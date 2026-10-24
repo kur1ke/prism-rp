@@ -180,6 +180,8 @@
           cameraOwner,
           shotAuthored: drawAuthored,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
+          currentEvents: sourceSwipe.stateEvents || [],
+          draw: entry.draw,
         });
         const firstPass = intent ? await ICP.compile(shot,
           { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner,
@@ -259,6 +261,7 @@
               plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
                 complete: !!(visualPlan.wear && visualPlan.wear.complete),
                 absentFromBody: visualPlan.absentFromBody,
+                offBodyVisible: visualPlan.offBodyVisible,
                 negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {

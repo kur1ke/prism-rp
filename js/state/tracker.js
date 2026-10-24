@@ -140,6 +140,13 @@
     // replay must prove the exact quoted fragment is still in its source shot.
     const drawn = e.evidenceType === "draw";
     if (e.evidenceType != null && !drawn) return "неизвестный источник цитаты";
+    // VC-02: shot-local visibility does not change the canonical wear status.
+    // It is valid only as bounded metadata on an evidenced CURRENT self-photo
+    // removal. A text event or manual correction cannot forge image presence.
+    if (e.frameRole != null && (e.frameRole !== "off-body" || !drawn ||
+        e.field !== "wear" || e.action !== "remove" || e.visualScope !== "current-self" ||
+        e.certainty === "intent" || !Array.isArray(e.value) || e.value.length !== 1))
+      return "недопустимая роль предмета в кадре";
     // A photo proves only depicted items. Even a full-body frame cannot
     // establish all potentially hidden clothes or clear the entire outfit.
     if (drawn && !["add", "remove", "adjust"].includes(e.action))
@@ -214,6 +221,7 @@
       value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self" } : {}),
+      ...(e.frameRole === "off-body" ? { frameRole: "off-body" } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };

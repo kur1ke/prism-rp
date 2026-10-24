@@ -45,6 +45,14 @@ VisualPlan {
 
 An off-body item requires grounded, typed evidence from **the current image**. Do not guess it merely from `REMOVED`; do not add a lexicon of character-specific clothes. ImageCompiler may translate a verified visual role but must not independently decide `remove` vs `adjust` or change state.
 
+### VC-02 shot-local evidence transport (implemented in experimental `testing`)
+
+Observer may attach `frameRole: "off-body"` **only** to a single-item, non-intent, `evidenceType: "draw"`, `visualScope: "current-self"`, `wear.remove` event. Its `evidence` must be a literal fragment of the current authored Draw. This property is saved only as a **shot-local annotation on the existing swipe event**, not as a current outfit or permanent scene location.
+
+VisualPlan additionally verifies that the folded `wearState.removed` item points back to the same event's message ID, swipe index, exact evidence, and draw evidence type, and that the original Draw still contains that fragment. It then exposes `offBodyVisible: [{ item, evidence }]`. Other swipes, stale photos, user text and non-owner shots never inherit these objects. No `frameRole` means visibility is **unknown**, not forced absent from the whole frame. A legacy event without this optional property still replays normally.
+
+The compiler may describe these evidenced objects as held/nearby but never as worn on the owner. This is a contextual rendering contract, **not** yet a deterministic semantic proof of all free-text tags (VC-03).
+
 The plan is immutable and never sent to RP generation as new hidden authority. Relevant source references are bounded and respect `CTX-BUDGET-1`.
 
 ## 4. Compilation and authority contract
