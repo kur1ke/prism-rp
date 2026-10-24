@@ -1060,6 +1060,38 @@ t("VIS-ID-1: canonical identity precedes shot details and never leaks into anoth
   const otherPrompt = IC.finalise({ composed: other, card: cd, backend: "a1111", settings: { promptMode: "off" } }).prompt;
   assert.ok(!otherPrompt.includes("Lilithx"), otherPrompt);
 });
+t("VIS-FF-03A: explicit trigger/look split preserves owner-camera crop framing", () => {
+  const card={name:"Orihime Inoue",image:{
+    trigger:"orihime_inoue",
+    look:"base: female, young woman, orange hair, brown eyes, large breasts",
+    loras:[{name:"Orihime Illustrious",weight:0.8}]
+  }};
+  const camera=IC.compose({draw:"camera=owner; close-up of the midriff",
+    shotAuthored:true,card,scene:{chars:{}},persona:{}});
+  const short=IC.finalise({composed:camera,card,hybrid:true,backend:"a1111",
+    compiled:"Close-up of the stomach as the hem of a blouse is raised.",
+    settings:{promptMode:"off"}});
+  assert.strictEqual(camera.provenance.cameraRole,"owner");
+  assert.ok(short.prompt.includes("orihime_inoue"),short.prompt);
+  assert.ok(short.prompt.includes("<lora:Orihime Illustrious:0.8>"),short.prompt);
+  assert.ok(!/orange hair|brown eyes|large breasts|young woman/i.test(short.prompt),short.prompt);
+  assert.ok(!/pov|third-person view/i.test(short.negative),short.negative);
+
+  const portrait=IC.compose({draw:"Orihime Inoue stands in a room, smiling at the camera",
+    shotAuthored:true,card,scene:{chars:{}},persona:{}});
+  const full=IC.finalise({composed:portrait,card,hybrid:true,backend:"a1111",
+    settings:{promptMode:"off"}});
+  assert.ok(full.prompt.includes("orange hair") && full.prompt.includes("large breasts"),full.prompt);
+  assert.ok(full.prompt.includes("<lora:Orihime Illustrious:0.8>"),full.prompt);
+
+  // Old imported multi-tag triggers remain authoritative until a human edits Card.
+  const imported={...card,image:{...card.image,trigger:"orihime_inoue, orange hair, brown eyes"}};
+  const oldCamera=IC.compose({draw:"camera=owner; close-up of the midriff",
+    shotAuthored:true,card:imported,scene:{chars:{}},persona:{}});
+  const old=IC.finalise({composed:oldCamera,card:imported,hybrid:true,backend:"a1111",
+    settings:{promptMode:"off"}});
+  assert.ok(old.prompt.includes("orange hair") && old.prompt.includes("brown eyes"),old.prompt);
+});
 t("finalise: другой названный персонаж без неё → её триггер, LoRA и негатив не идут", () => {
   const composed = IC.compose({ draw: "1boy, ichigo_kurosaki, standing", card: imgCard, scene: st0, persona: {} });
   const f = IC.finalise({ composed, card: imgCard, backend: "a1111", settings: { negative: "lowres" } });
@@ -7366,6 +7398,9 @@ t("CARD-Q: V3 nickname is custom info; technical V3 fields are not active", () =
     assert.ok(img.includes('id="image-lora-panel" open'));
     assert.ok(!img.includes('id="image-base-panel" open'));
     assert.ok(img.includes('class="card-disclosure lora-advanced-panel" open'));
+    assert.ok(img.includes("Триггер активации LoRA"));
+    assert.ok(img.includes("Весь текст этого поля добавляется"));
+    assert.ok(img.includes("многотеговые триггеры сохраняются без изменений"));
     const basic = V.cardModal(m, d, "main");
     assert.ok(basic.includes('class="card-identity"'));
     assert.ok(basic.includes('class="card-fields"'));
