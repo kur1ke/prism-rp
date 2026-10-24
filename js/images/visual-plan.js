@@ -6,6 +6,13 @@
   const PRP = (root.PRP = root.PRP || {});
   const clone = (x) => JSON.parse(JSON.stringify(x));
   const bounded = (rows) => (Array.isArray(rows) ? rows : []).slice(0, 12).map(clone);
+  function freeze(v) {
+    if (v && typeof v === "object" && !Object.isFrozen(v)) {
+      Object.values(v).forEach(freeze);
+      Object.freeze(v);
+    }
+    return v;
+  }
 
   function create(input) {
     const o = input || {};
@@ -39,7 +46,7 @@
       offBodyVisible: [], // never inferred from REMOVED; VC-02 binds exact shot evidence.
       allowGlobalGarmentNegative: owner && !authored,
     };
-    return result;
+    return freeze(result);
   }
 
   PRP.visualPlan = { create };
