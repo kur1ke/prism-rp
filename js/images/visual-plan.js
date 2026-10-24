@@ -31,11 +31,22 @@
       messageId: String(o.source.messageId || ""),
       swipeIdx: Number(o.source.swipeIdx) || 0,
     };
+    const authored = !!o.shotAuthored;
+    // VC-02: only exact author-shot evidence, bound to the SAME source text,
+    // may place a removed garment visibly off the body. Role metadata never
+    // changes wearState and cannot promote an unknown garment to removed.
+    const shot = String(o.draw || "");
+    const frameObjects = Array.isArray(o.frameObjects) ? o.frameObjects : [];
+    const offBodyVisible = wear && authored && shot
+      ? frameObjects.slice(0, 6).filter(x => x && x.role === "offBody" &&
+          typeof x.item === "string" && typeof x.evidence === "string" &&
+          x.evidence.length > 0 && x.evidence.length <= 300 && shot.includes(x.evidence) &&
+          wear.removed.some(g => g.item === x.item))
+        .map(x => ({ item: x.item, evidence: x.evidence })) : [];
     // "Removed from the body" and "absent from the frame" are distinct.
     // Until the Observer supplies typed, evidence-validated frame object roles
     // (VC-02), an authored photo MUST NOT generate a global garment negative:
     // that same garment may be held or lying on the bed.
-    const authored = !!o.shotAuthored;
     const result = {
       actor: owner ? "char" : null,
       source: source || null,
@@ -43,8 +54,8 @@
       wear,
       onBodyCandidates: wear ? wear.worn.concat(wear.partiallyWorn).map((x) => x.item) : [],
       absentFromBody: wear ? wear.removed.map((x) => x.item) : [],
-      offBodyVisible: [], // never inferred from REMOVED; VC-02 binds exact shot evidence.
-      allowGlobalGarmentNegative: owner && !authored,
+      offBodyVisible,
+      allowGlobalGarmentNegative: owner && !authored && !offBodyVisible.length,
     };
     return freeze(result);
   }
