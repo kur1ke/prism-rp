@@ -3994,6 +3994,36 @@ async function foundationH() {
     assert.strictEqual(audit.scope,"multi-subject");
     assert.strictEqual(audit.validated,false,"multi-actor semantic status must not be falsely certified");
   });
+  await ta("VC-04-DEBUG-1: inspector shows exact backend positive/negative with escaped provenance",async()=>{
+    require(J("ui/views/kit.js"));require(J("ui/views/drawer.js"));
+    const view=globalThis.PRP.views;
+    const shot={id:"img1",status:"done",backend:"a1111",
+      prompt:"pov, white lace lingerie, <img src=x onerror=alert(1)>",
+      negative:"white cotton t-shirt, <script>danger</script>",
+      promptSources:{drawPromptMode:"intent",semanticAudit:{validated:true,scope:"single-owner",issues:[]},
+        wearConstraints:{negative:"",plan:{actor:"char",known:true,complete:true,
+          absentFromBody:["белая хлопковая футболка"],
+          offBodyVisible:[{item:"<блузка>",evidence:"держит в руках"}]},
+          items:[{index:0,item:"белая хлопковая футболка",tag:"white cotton t-shirt"}]}}};
+    const m={card:{name:"Орихимэ"},path:[{id:"m1",swipeIdx:0,
+      swipes:[{text:"Фото!",images:[shot]},{text:"Другая ветка",images:[{id:"secret",status:"done",
+        prompt:"SIBLING_SECRET",negative:""}]}]}]};
+    const html=view.debugModal(m,{section:"images"});
+    assert.ok(html.includes("Финальный positive") && html.includes("Финальный negative"));
+    assert.ok(html.includes("белая хлопковая футболка"));
+    assert.ok(html.includes("single-owner"));
+    assert.ok(html.includes("&lt;img src=x onerror=alert(1)&gt;") && !html.includes("<img src=x"));
+    assert.ok(html.includes("&lt;script&gt;danger&lt;/script&gt;") && !html.includes("<script>danger"));
+    assert.ok(!html.includes("SIBLING_SECRET"),"other swipe's image may not enter inspector");
+  });
+  await ta("VC-04-DEBUG-2: old images without audit metadata remain inspectable and do not fabricate clothing",async()=>{
+    require(J("ui/views/kit.js"));require(J("ui/views/drawer.js"));
+    const html=globalThis.PRP.views.debugModal({path:[{id:"legacy",swipeIdx:0,
+      swipes:[{images:[{id:"old",status:"done",prompt:"1girl, standing",negative:"blurry"}]}]}]},
+      {section:"images"});
+    assert.ok(html.includes("old") && html.includes("1girl, standing"));
+    assert.ok(html.includes("не выполнялась") && html.includes("неизвестно"));
+  });
   await ta("VC-04-SCENE-1: legacy RP Scene.remove preserves explicit garment absence",async()=>{
     const SC=globalThis.PRP.scene,ST=globalThis.PRP.stateTracker;
     const m={id:"remove-scene",role:"assistant",swipeIdx:0,
