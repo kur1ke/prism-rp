@@ -113,7 +113,11 @@
       <div class="field"><label>Негатив</label><textarea data-imgcfg="negative" rows="2" placeholder="lowres, bad anatomy, bad hands, extra digits">${esc(c.negative || "")}</textarea></div>
       ${c.backend === "a1111" ? `<p class="hint">LoRA задаются в карточке каждого персонажа: «Редактировать карточку → Изображения». Так они переезжают вместе с карточкой и не попадают в чужие картинки.</p>` : ""}
       <div class="block-title" style="margin-top:20px">Когда рисовать</div>
-      <div class="field"><label>Формирование [draw:]</label><select data-img-sel="drawPromptMode"><option value="tags" ${c.drawPromptMode !== "intent" ? "selected" : ""}>Теги напрямую (текущий)</option><option value="intent" ${c.drawPromptMode === "intent" ? "selected" : ""}>Краткий замысел → компилятор (эксперимент)</option></select><span class="help">Второй режим вызывает текстовый компилятор при генерации изображения.</span></div><div class="field"><label>Предлагать иллюстрации</label><select data-img-sel="modelDrawPolicy">
+      <div class="field"><label>Формирование [draw:]</label><select data-img-sel="drawPromptMode">
+        <option value="tags" ${!["intent", "hybrid"].includes(c.drawPromptMode) ? "selected" : ""}>Теги напрямую (текущий)</option>
+        <option value="intent" ${c.drawPromptMode === "intent" ? "selected" : ""}>Краткий замысел → теги (эксперимент)</option>
+        <option value="hybrid" ${c.drawPromptMode === "hybrid" ? "selected" : ""}>Краткий замысел → гибрид (короткий английский текст + теги, эксперимент)</option>
+      </select><span class="help">Гибридный режим сохраняет состав и действие из [draw:] без дополнительных деталей: короткий перевод сцены словами, identity и качество — отдельными тегами. Один вызов компилятора. Старые режимы остаются доступны.</span></div><div class="field"><label>Предлагать иллюстрации</label><select data-img-sel="modelDrawPolicy">
         ${[["off", "Не предлагать (ручная кнопка остаётся)"], ["on-request", "Только по явной просьбе (рекомендуется)"], ["contextual", "По ситуации — модель может предложить сама"]]
           .map(([v, l]) => `<option value="${v}" ${c.modelDrawPolicy === v ? "selected" : ""}>${l}</option>`).join("")}</select>
         <span class="help">В обычном разговоре правила [draw:] не занимают промпт. При выборе «По ситуации» модель может предложить одну картинку, но не обязана. Ручное «Нарисовать» доступно отдельно.</span></div>

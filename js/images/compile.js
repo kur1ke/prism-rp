@@ -109,11 +109,28 @@
     return { validated: issues.length === 0, scope: "single-owner", issues };
   }
 
+  // Only the NEW experimental author-Draw mode uses this compact prose
+  // contract. Older tag and description modes retain their exact behavior.
+  // This checks output structure, not LLM semantic truth; source/garment
+  // contradictions continue through the existing canonical FinalAudit.
+  function validateHybrid(text) {
+    const s = String(text || "").trim();
+    const words = s.match(/[\p{L}\p{N}]+/gu) || [];
+    if (s.length < 8 || s.length > 600 || words.length > 65 ||
+        /[\u0400-\u052f]/u.test(s) ||
+        /(?:<lora:|camera\s*=|\x60\x60\x60)/i.test(s) ||
+        /^[\[{]/.test(s) || /^(?:prompt|tags)\s*:/i.test(s) ||
+        IC.splitTags(s).length > 6)
+      return "Гибридный перевод должен содержать только короткое английское описание кадра";
+    return "";
+  }
+
   // One compiler call owns both the reconciled positive shot and negative
   // garment tags from the SAME selected-path wear facts, never a second model.
   async function compile(scene, opts, generateText) {
     const s = String(scene || "").trim(), o = opts || {};
     const stateContext = String(o.stateContext || "").trim();
+    const hybrid = !!(o.intentMode && o.format === "hybrid");
     const wear = visualWear(o.wearState);
     const reconcile = hasWearChange(wear);
     const negativesRequired = reconcile && wear.removed.length > 0;
@@ -144,6 +161,10 @@
       "The prompt must never present REMOVED items as worn, lifted, pulled-up, or partially worn on the subject. PARTIAL items are still worn at their known placement.",
       "REMOVED means absent FROM THE BODY, not necessarily absent from the image: an explicitly depicted removed garment held in hands or lying nearby remains a visible off-body object.",
       "Do not add a garment as a visible object unless SCENE explicitly depicts it there. Never translate a completed removal into lifting a shirt.",
+      ...(hybrid ? [
+        "For hybrid output, the JSON prompt field must contain only one or two concise English visual sentences (no Danbooru list).",
+        'Each offBody.tag must be an EXACT comma-separated segment of the English positive, not a new visual item.',
+      ] : []),
       ...(o.visualPlan && o.visualPlan.shotAuthored ? [
         'Also return "offBody":[{"index":0,"tag":"exact English positive tag"}] for EACH VERIFIED VISIBLE OFF-BODY OBJECT. Use the removed garment index. Otherwise return "offBody":[]; never invent an object.',
         "Put every offBody tag verbatim as a separate tag in prompt. Never put an on-body/lifted garment tag in prompt when it is removed.",
@@ -165,6 +186,8 @@
         const decoded = JSON.parse(raw);
         const prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";
         const absent = decoded.absent;
+        if (hybrid && validateHybrid(prompt))
+          return { text: s, compiled: false, error: validateHybrid(prompt) };
         if (prompt.length < 4 || !Array.isArray(absent) || absent.length !== wear.removed.length ||
             absent.some((x, i) => !x || x.index !== i || typeof x.tag !== "string" ||
               !/^[a-z][a-z0-9 _-]{1,79}$/i.test(x.tag.trim())))
@@ -203,6 +226,8 @@
         let out = raw.replace(/\s+/g, " ").replace(/^[\x60"']+|[\x60"']+$/g, "").trim();
         out = out.replace(/^(prompt|tags)\s*:\s*/i, "");
         if (out.length < 4) return { text: s, compiled: false, error: "Пустой ответ переводчика" };
+        if (hybrid && validateHybrid(out))
+          return { text: s, compiled: false, error: validateHybrid(out) };
         result = { text: out, compiled: true,
           ...(reconcile ? { wearValidated: true, negative: "", wearItems: [] } : {}) };
       }

@@ -4010,6 +4010,147 @@ async function foundationH() {
       assert.strictEqual(live.swipes[0].images[0].promptSources.imageLayers.drawAuthored,true);
     }finally {ICP.compile=oldC;IB.generate=oldG;}
   });
+  await ta("VIS-HYBRID-1: authored Draw compiles as a concise description, not a second scene",async()=>{
+    const rules=IC.rewriteRules({format:"hybrid",intentMode:true,embodiedOwner:true,
+      visualPlan:{wear:{worn:[],removed:[],partiallyWorn:[]}}});
+    assert.ok(rules.includes("faithful visual translator") && rules.includes("NOT a scene writer"));
+    assert.ok(rules.includes("Do not invent ANY garments") && rules.includes("OWNER-CAMERA"));
+    assert.ok(rules.includes("not a clothing checklist") || rules.includes("not a clothing checklist"));
+    assert.ok(!rules.includes("danbooru tags in the prompt"),"hybrid never asks for tag-only composition");
+    assert.ok(IC.rewriteRules({format:"tags",intentMode:true}).includes("comma-separated"));
+    assert.ok(IC.drawInstruction({intentMode:true}).includes("короткое описание"));
+  });
+  await ta("VIS-HYBRID-2: first-person Draw retains only the source's camera composition and caches by format",async()=>{
+    const scene="Орихимэ приподняла белую хлопковую футболку, открывая живот и пупок";
+    const translated="The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
+    ICP.clear();let count=0;
+    const model=async instruction=>{
+      count++;
+      assert.ok(instruction.includes("SCENE:\n"+scene),instruction.slice(-550));
+      assert.ok(instruction.includes("one or two short"));
+      return translated;
+    };
+    const opts={format:"hybrid",intentMode:true,embodiedOwner:true,translate:false};
+    const a=await ICP.compile(scene,opts,model);
+    const b=await ICP.compile(scene,opts,model);
+    assert.strictEqual(count,1,"single translator and same-input cache");
+    assert.strictEqual(a.text,translated);
+    assert.strictEqual(b.text,translated);
+    assert.strictEqual(b.cached,true);
+    const old=await ICP.compile(scene,{...opts,format:"tags"},async()=>{count++;return "lifting shirt, belly, navel";});
+    assert.strictEqual(old.text,"lifting shirt, belly, navel");
+    assert.strictEqual(count,2,"hybrid and tags must not share a translation");
+  });
+  await ta("VIS-HYBRID-3: bad hybrid model output fails closed rather than becoming final prompt",async()=>{
+    const source="Она приподняла край футболки";
+    const opts={format:"hybrid",intentMode:true};
+    const bad=[
+      "1girl, t-shirt, lifting shirt, navel, bra, skirt, indoors, masterpiece, best quality",
+      "Она поднимает футболку, открывая живот.",
+      "A short line. ".repeat(90),
+      '{"prompt":"She lifts a shirt."}',
+    ];
+    for (const reply of bad) {
+      ICP.clear();
+      const result=await ICP.compile(source,opts,async()=>reply);
+      assert.strictEqual(result.compiled,false,JSON.stringify({reply,result}));
+      assert.ok(result.error.includes("Гибридный"));
+    }
+    ICP.clear();
+  });
+  await ta("VIS-HYBRID-4: finalisation preserves prose, POV and deterministic identity/style tags",async()=>{
+    const card={name:"Орихимэ",image:{trigger:"orihime_inoue, long orange hair",
+      loras:[{name:"Orihime Illustrious",weight:0.8}]}};
+    const shot="Орихимэ приподняла футболку, открывая живот";
+    const composed=IC.compose({draw:shot,card,scene:S.emptyState(),persona:{},
+      messenger:null,cameraOwner:true,shotAuthored:true});
+    const english="The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
+    const hybrid=IC.finalise({composed,card,compiled:english,hybrid:true,backend:"a1111",
+      settings:{promptMode:"off",fixedPrompt:""}});
+    assert.ok(hybrid.prompt.includes("pov, "+english),hybrid.prompt);
+    assert.ok(hybrid.prompt.includes("orihime_inoue") && hybrid.prompt.includes("long orange hair"),hybrid.prompt);
+    assert.ok(hybrid.prompt.includes("masterpiece, best quality"),hybrid.prompt);
+    assert.ok(hybrid.prompt.includes("<lora:Orihime Illustrious:0.8>"),hybrid.prompt);
+    assert.ok(!/\b1girl\b/.test(hybrid.prompt),"owner-camera is not another subject");
+    assert.ok(!/bra|panties|lace underwear|beige skirt/i.test(hybrid.prompt),
+      "hidden/undrawn wardrobe must not be injected");
+    const pinned=IC.finalise({composed,card,compiled:english,hybrid:true,backend:"a1111",
+      settings:{promptMode:"append",fixedPrompt:"cinematic lighting"}});
+    assert.ok(pinned.prompt.includes("cinematic lighting"));
+    assert.ok(!pinned.prompt.includes("masterpiece"),"manual fixed block owns quality");
+    const legacy=IC.finalise({composed,card,compiled:"lifting shirt, stomach, navel",
+      backend:"a1111",settings:{promptMode:"off"}});
+    assert.ok(legacy.prompt.includes("pov"));
+    assert.ok(!legacy.prompt.includes("masterpiece"),"tagged format must remain unchanged");
+  });
+  await ta("VIS-HYBRID-5: removed garment is omitted, not a visible instruction, with one model call",async()=>{
+    const plan=globalThis.PRP.visualPlan.create({cameraOwner:true,shotAuthored:true,
+      draw:"Орихимэ сняла белую хлопковую футболку; видны белое кружевное бельё и юбка",
+      wearFacts:[{actor:"char",known:true,complete:true,
+        worn:[{item:"белое кружевное бельё"},{item:"бежевая юбка"}],
+        partiallyWorn:[],removed:[{item:"белая хлопковая футболка"}]}]});
+    ICP.clear();let n=0;
+    const shot="Орихимэ сняла белую хлопковую футболку; видны белое кружевное бельё и юбка";
+    const result=await ICP.compile(shot,{intentMode:true,format:"hybrid",
+      wearState:plan.wear,visualPlan:plan},async (instruction)=>{
+      n++;
+      assert.ok(instruction.includes("CANONICAL OUTPUT CONTRACT"));
+      assert.ok(instruction.includes("put those sentences ONLY in its prompt field"));
+      return JSON.stringify({prompt:"She wears white lace underwear and a beige skirt.",
+        absent:[{index:0,tag:"white cotton t-shirt"}],offBody:[]});
+    });
+    assert.strictEqual(result.compiled,true,JSON.stringify(result));
+    assert.strictEqual(result.wearValidated,true);
+    assert.strictEqual(n,1);
+    assert.ok(!result.text.includes("t-shirt"),"the removed object is not a positive image instruction");
+    assert.strictEqual(result.negative,"","authored off-body potential excludes global negatives");
+    assert.strictEqual(result.semanticValidated,true);
+  });
+  await ta("VIS-HYBRID-6: ImageService sends minimal authored camera sentence with original mode provenance",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue",
+      loras:[{name:"Orihime Illustrious",weight:0.8}]}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const msg=h.chat.newMsg("assistant",null,"Вот фотография");
+    const shot="camera=owner; Орихимэ Иноуэ приподняла белую хлопковую футболку, открывая живот и пупок";
+    msg.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+    await h.chat.commitMessage(msg,msg.id);
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{
+      enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"hybrid",
+      format:"tags",translate:false,promptMode:"off"});
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldModel=globalThis.PRP.llm.simple,oldBackend=IB.generate;
+    let calls=0,requests=0,backend;
+    try{
+      globalThis.PRP.llm.simple=async (_,instruction)=>{
+        calls++;
+        assert.ok(instruction.includes("SCENE:\nОрихимэ Иноуэ приподняла"),instruction.slice(-850));
+        assert.ok(instruction.includes("visual translator"));
+        assert.ok(!instruction.includes("camera=owner;"),"camera directive is metadata");
+        return "The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
+      };
+      IB.generate=async (_,opts)=>{requests++;backend=opts;
+        return {dataUrl:"data:image/png;base64,AA==",seed:8,info:{width:512,height:512}};};
+      const live=h.S.messages.find(x=>x.id===msg.id);
+      await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
+      const image=live.swipes[0].images[0];
+      assert.strictEqual(image.status,"done",JSON.stringify(image));
+      assert.strictEqual(calls,1,"one compiler call, no extra Observer or translator");
+      assert.strictEqual(requests,1);
+      assert.ok(backend.prompt.includes("pov, The lower hem"),backend.prompt);
+      assert.ok(backend.prompt.includes("masterpiece, best quality"),backend.prompt);
+      assert.ok(backend.prompt.includes("<lora:Orihime Illustrious:0.8>"),backend.prompt);
+      assert.ok(!/bra|panties|beige skirt/i.test(backend.prompt),"no added wardrobe");
+      assert.strictEqual(image.promptSources.drawPromptMode,"hybrid");
+      assert.strictEqual(image.drawPromptMode,"hybrid");
+      h.S.settings.images.drawPromptMode="tags";
+      await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0],image);
+      assert.strictEqual(calls,1,"redraw retains and reuses cached hybrid translation, not tags");
+      assert.strictEqual(requests,2);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"hybrid");
+    }finally{globalThis.PRP.llm.simple=oldModel;IB.generate=oldBackend;}
+  });
   await ta("VIS-DRAW-SOURCE-5: Messenger intent image uses one compiler call for author's shot",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");

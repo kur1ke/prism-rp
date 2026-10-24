@@ -159,7 +159,15 @@
         fromMessage: drawAuthored || !!d.fromMessage,
         ...(drawAuthored ? { sourceDrawIndex: authoredIndex } : {}) };
       if (S.drawing.has(entry.id)) { ui.toast("Это изображение уже генерируется.", true); return; }
-      if (!reuse) entry.intentMode = !!(drawAuthored && cfg.drawPromptMode === "intent");
+      // Regeneration retains the source image's mode instead of silently
+      // converting an older tagged/intent image using today's settings.
+      const savedMode = reuse && (reuse.drawPromptMode || reuse.promptSources && reuse.promptSources.drawPromptMode);
+      const drawMode = ["tags", "intent", "hybrid"].includes(savedMode) ? savedMode :
+        ["tags", "intent", "hybrid"].includes(cfg.drawPromptMode) ? cfg.drawPromptMode : "tags";
+      if (!reuse) {
+        entry.intentMode = !!(drawAuthored && drawMode !== "tags");
+        entry.drawPromptMode = drawMode;
+      }
       // Resolve physical state from the frozen origin path BEFORE the first await.
       // Do not let a later UI branch/chat selection change this image's source.
       const upto = historical ? historical.path : origin.path;
@@ -200,6 +208,7 @@
       let shotOnlyGate = drawAuthored;
       try {
         const intent = !!entry.intentMode;
+        const hybrid = intent && drawAuthored && drawMode === "hybrid";
         const cameraOwner = IC.ownerCamera(cd, entry.draw);
         // Camera metadata is an image-level fact, not a tag for the compiler/backend.
         const shot = String(entry.draw || "").replace(/^\s*camera\s*=\s*owner\s*[;,]\s*/i, "");
@@ -233,7 +242,7 @@
         });
         const shotScope = { otherActorPresent: !!shotActors.user };
         const firstPass = intent ? await ICP.compile(shot,
-          { format: cfg.format, intentMode: true, embodiedOwner: cameraOwner,
+          { format: hybrid ? "hybrid" : cfg.format, intentMode: true, embodiedOwner: cameraOwner,
             qualityPinned: ST.qualityPinned(S.settings),
             wearState: visualPlan.wear, visualPlan, subjectScope: shotScope }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled))
@@ -284,7 +293,7 @@
             ((!visualPlan.shotAuthored && !comp.negative) || !Array.isArray(comp.wearItems)))
           throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
-          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative });
+          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative, hybrid });
         // The compiler is not the last positive-tag source: Card, LoRA
         // rules and fixedPrompt can reintroduce a removed garment. Audit the
         // actual executable strings immediately before the backend.
@@ -310,7 +319,7 @@
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
-          promptSources: { draw: entry.draw, drawPromptMode: intent ? "intent" : "tags", ...composed.provenance,
+          promptSources: { draw: entry.draw, drawPromptMode: hybrid ? "hybrid" : intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text,
             ...(drawAuthored ? { sourceDrawIndex: authoredIndex,
               historicalDrawState: !!historical } : {}),
