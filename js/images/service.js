@@ -228,9 +228,14 @@
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
         if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
+        // A VisualPlan derived from canonical wear is invalid if the source's
+        // selected-path garment events/corrections change while compiling.
+        // Shot-only equality is safe ONLY for authored images whose rendered
+        // content did not consume tracked state.
+        const shotOnlyGate = drawAuthored && !(intent && visualPlan.wear);
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
-        if (!(await imageOriginStillCurrent(DB, origin, drawAuthored)))
+        if (!(await imageOriginStillCurrent(DB, origin, shotOnlyGate)))
           throw new Error("Исходная ветка изменилась во время подготовки изображения. Повторите рисование.");
         const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
@@ -258,10 +263,10 @@
         // visible text has not changed.
         const currentSource = latest && JSON.parse(JSON.stringify(latest));
         if (currentSource) currentSource.swipeIdx = origin.swipeIdx;
-        const originValid = currentSource && (drawAuthored
+        const originValid = currentSource && (shotOnlyGate
           ? stateVersion(currentSource, origin.swipeIdx, true) === origin.sourceDrawVersion
           : stateVersion(currentSource, origin.swipeIdx) === origin.sourceStateVersion) &&
-          await imageOriginStillCurrent(DB, origin, drawAuthored);
+          await imageOriginStillCurrent(DB, origin, shotOnlyGate);
         if (finalPatch.status === "done" && !originValid) {
           finalPatch = { status: "error", error: "Исходное состояние ветки или свайпа изменилось. Повторите рисование." };
           imageData = null;
