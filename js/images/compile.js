@@ -150,7 +150,7 @@
     await warm();
     // Known worn layers now reach the hybrid translator even without a removal.
     // Invalidate only the hybrid cache; legacy modes retain their existing key.
-    const key = [hybrid ? "v14-hybrid-worn-layers" : "v11-frame-actors",
+    const key = [hybrid ? "v15-hybrid-action-priority" : "v11-frame-actors",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
