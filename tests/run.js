@@ -4110,6 +4110,28 @@ async function foundationH() {
       });
       assert.strictEqual(result.compiled,true);
     }
+    // Same garments but unknown certainty must not reuse a cached known-layer prompt.
+    ICP.clear();
+    const confirmed=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw:scene,wearFacts});
+    const uncertain=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw:scene,
+      wearFacts:[{...wearFacts[0],known:false}]});
+    let requests=0;
+    const first=await ICP.compile(scene,{intentMode:true,format:"hybrid",
+      wearState:confirmed.wear,visualPlan:confirmed},async instruction=>{
+      requests++;
+      assert.ok(instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"));
+      return "A mirror selfie with a known garment worn under the outer clothing.";
+    });
+    const second=await ICP.compile(scene,{intentMode:true,format:"hybrid",
+      wearState:uncertain.wear,visualPlan:uncertain},async instruction=>{
+      requests++;
+      assert.ok(!instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"));
+      return "A portrait in a mirror.";
+    });
+    assert.strictEqual(first.compiled,true);
+    assert.strictEqual(second.compiled,true);
+    assert.strictEqual(second.cached,undefined,"unknown status must not reuse an established-layer translation");
+    assert.strictEqual(requests,2,"known-status transition changes the hybrid cache key");
     ICP.clear();
   });
   await ta("VIS-FF-01C: persisted pre-frame-first hybrid cache must not survive rule change",async()=>{
