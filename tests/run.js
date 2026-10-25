@@ -4398,6 +4398,33 @@ async function foundationH() {
     assert.strictEqual(result.negative,"","authored off-body potential excludes global negatives");
     assert.strictEqual(result.semanticValidated,true);
   });
+  await ta("VIS-MODE-CAMERA-3: Prism injects only active mode visual contract",async()=>{
+    for (const mode of ["rp","messenger"]) {
+      const h=fbHarness({name:"Орихимэ Иноуэ",description:"Персонаж"});
+      h.S.settings.images.backend="a1111";
+      h.S.settings.images.modelDrawPolicy="contextual";
+      h.S.settings.images.drawPromptMode="hybrid";
+      h.S.settings.persona={name:"Лёня",description:"",image:{
+        view:"first",povTags:"pov hands",appearance:"base: 1boy, black hair"
+      }};
+      await h.chat.createChat(mode,"c1");
+      const built=h.prism.build(h.chat.path());
+      assert.strictEqual(built.report.imageDirectiveAllowed,true,mode);
+      assert.ok(!built.report.overflow,JSON.stringify(built.report));
+      const prompt=allText(built.messages);
+      assert.ok(prompt.includes("В [draw:] описывай готовый визуальный кадр"),mode);
+      if (mode==="rp") {
+        assert.ok(prompt.includes("внешняя иллюстрация текущего события сцены"),prompt);
+        assert.ok(!prompt.includes("фотография, которую персонаж отправляет собеседнику на расстоянии"));
+      } else {
+        assert.ok(prompt.includes("фотография, которую персонаж отправляет собеседнику на расстоянии"),prompt);
+        assert.ok(!prompt.includes("внешняя иллюстрация текущего события сцены"));
+        assert.ok(!prompt.includes("Сейчас в сцене"),"Messenger has no RP Scene snapshot");
+      }
+      assert.ok(!/Начни с pov|pov hands|FIRST-PERSON VIEW/.test(prompt),
+        "saved Persona POV cannot create model instructions");
+    }
+  });
   await ta("VIS-HYBRID-6: ImageService sends minimal authored camera sentence with original mode provenance",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue",
       loras:[{name:"Orihime Illustrious",weight:0.8}]}});
