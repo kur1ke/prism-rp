@@ -66,6 +66,13 @@
         const vis = EX.visibility(d, { chatId: S.chatId, path: ME.provenancePath(chat().path()) });
         if (!vis.visible) return "Источник изменился или находится в другой ветке. Проверьте опыт заново.";
       }
+      if (d.source && d.source.proposedBy === "memory-extract-v1" &&
+          S.experience.some((x) => x.chatId === S.chatId && x.id !== d.id && x.source &&
+            x.source.proposedBy === "memory-extract-v1" &&
+            x.source.messageIds && x.source.messageIds[0] === d.source.messageIds[0] &&
+            x.source.evidence === d.source.evidence &&
+            x.source.textHashes && x.source.textHashes[d.source.messageIds[0]] === d.source.textHashes[d.source.messageIds[0]]))
+        return "Этот эпизод уже сохранён из данного источника.";
       d.event = d.event.trim();
       if (!d.event) return "Опишите, что произошло.";
       if (!d.id) d.id = U.uid("x");
@@ -116,6 +123,7 @@
         prompt = ME.prompt(window, names, ctx.chat().mode);
       }
       if (!window.length) return { status: "overflow" };
+      S.expCandidates = null;
       S.expExtractBusy = true;
       try {
         const response = await LLM.chat(prov, [
