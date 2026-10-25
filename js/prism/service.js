@@ -28,7 +28,7 @@
     const selected = new Set(chosen);
     return messages.map((m, i) => {
       const sw = TR.activeSwipe(m);
-      const base = String(sw.text || "");
+      const base = m.role === "user" ? PRP.chatAttachments.historyText(sw.text, sw.attachments) : String(sw.text || "");
       if (!selected.has(i)) return { role: m.role, text: base };
       const d = sw.draws[0];
       const prompt = String(d.prompt || "").replace(/\s+/g, " ").trim().slice(0, 700);
