@@ -155,6 +155,7 @@
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
+      hybrid ? (establishedLayers ? "known-owner-layers" : "no-known-owner-layers") : "",
       o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
       o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only", s].join("\u0001");
     if (mem.has(key)) {
