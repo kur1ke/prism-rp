@@ -4034,6 +4034,37 @@ async function foundationH() {
     assert.ok(IC.rewriteRules({format:"tags",intentMode:true}).includes("comma-separated"));
     assert.ok(IC.drawInstruction({intentMode:true}).includes("готовый визуальный кадр"));
   });
+  await ta("VIS-ORDER-01: hybrid prioritizes source-authored action without inventing facts",async()=>{
+    const rules=IC.rewriteRules({format:"hybrid",intentMode:true});
+    const priority="source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last";
+    assert.ok(rules.includes(priority),rules);
+    assert.ok(rules.includes("Never invent absent subjects, hand assignments, or object placement"),rules);
+    assert.ok(rules.includes("Preserve medium, viewpoint, framing, and all depicted facts"),rules);
+    for (const format of ["tags","description"])
+      assert.ok(!IC.rewriteRules({format,intentMode:true}).includes(priority),
+        "other image modes retain their previous translator contract");
+    const shot="Фотография пустой кухни с чашкой на столе, вид сбоку.";
+    const plan=globalThis.PRP.visualPlan.create({owner:false,shotAuthored:true,draw:shot,
+      wearFacts:[{actor:"char",known:true,complete:true,worn:[{item:"красная блузка"}],
+        removed:[],partiallyWorn:[]}]});
+    ICP.clear();
+    let calls=0;
+    const translate=async instruction=>{
+      calls++;
+      assert.ok(instruction.includes("SCENE:\n"+shot),"original authored frame remains input");
+      assert.ok(instruction.includes(priority),"new ordering is in the actual compiler request");
+      assert.ok(!instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"),
+        "ordering never promotes absent owner's outfit");
+      return "A side-view photograph of an empty kitchen, with a cup resting on a table.";
+    };
+    const opts={format:"hybrid",intentMode:true,visualPlan:plan,wearState:plan.wear};
+    const first=await ICP.compile(shot,opts,translate);
+    const second=await ICP.compile(shot,opts,translate);
+    assert.strictEqual(first.compiled,true,JSON.stringify(first));
+    assert.ok(second.cached,"same source facts reuse only the new hybrid cache");
+    assert.strictEqual(calls,1,"ordering does not add a model call");
+    ICP.clear();
+  });
   await ta("VIS-HYBRID-2: natural Draw retains source framing and caches by format",async()=>{
     const scene="Орихимэ приподняла белую хлопковую футболку, открывая живот и пупок";
     const translated="The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
@@ -4147,11 +4178,14 @@ async function foundationH() {
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
     const previousVisibleKey=["v13-hybrid-visible-clothing","intent","regular-frame",
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
-    // Previous hybrid rule revisions must not bypass canonical layers.
+    const previousWornKey=["v14-hybrid-worn-layers","intent","regular-frame",
+      "hybrid","std","","","","","null","no-known-owner-layers","","owner-only",scene].join("\u0001");
+    // Previous hybrid rule revisions must not bypass canonical layers or action priority.
     let saved={[legacyKey]:oldRecord,
       [previousHybridKey]:{text:"An old prompt.",compiled:true},
       [previousExtentKey]:{text:"A prior prompt describing only some clothes.",compiled:true},
-      [previousVisibleKey]:{text:"A prior prompt without known hidden layers.",compiled:true}},calls=0;
+      [previousVisibleKey]:{text:"A prior prompt without known hidden layers.",compiled:true},
+      [previousWornKey]:{text:"A v14 prompt without action priority.",compiled:true}},calls=0;
     ICP.setStore({load:async()=>saved,save:(next)=>{saved=next;}});
     try {
       const fresh=await ICP.compile(scene,options,async()=>{
