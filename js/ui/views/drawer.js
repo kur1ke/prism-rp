@@ -106,13 +106,13 @@
       <p class="hint">Пережитое в этом чате — в этом мире. Другие чаты с ${esc(m.card.name)} его не видят. Событие из сообщения видно только в своей ветке; добавленное вручную — во всех ветках чата.${ev.hiddenInChat ? ` В других ветках этого чата ещё ${ev.hiddenInChat} ${R.plural(ev.hiddenInChat, "запись", "записи", "записей")}.` : ""}</p>
       <div class="row">
         <button class="btn btn-sm" data-act="exp-new">${icon("plus")}Добавить событие</button>
-        <button class="btn btn-sm" data-act="exp-extract" ${m.expExtractBusy ? "disabled" : ""}>${m.expExtractBusy ? "Анализ…" : "Извлечь из переписки"}</button>
+        <button class="btn btn-sm" data-act="exp-extract" ${m.expExtractBusy ? "disabled" : ""}>${m.expExtractBusy ? "Анализ…" : "Найти эпизоды"}</button>
       </div>
-      <p class="hint">Извлечение проверяет последние 16 сообщений активной ветки. Нужна текстовая модель; результаты — только предложения, пока вы их не проверите и не сохраните. Возможен отдельный платный запрос.</p>
+      <p class="hint">Проверяются последние 16 сообщений активной ветки. Модель предложит воспоминания — это гипотезы, не подтверждённые факты. Проверьте пересказ по цитате до сохранения. Возможен отдельный платный запрос.</p>
       ${proposed.length ? `<div class="block"><div class="block-title">Предложенные воспоминания <small>${proposed.length}</small></div>
         ${proposed.map((c, i) => `<div class="memo">
           <div class="ev">${esc(c.event)}</div>
-          <p class="hint">Источник: ${esc(c.quote)} · сообщение ${esc(c.messageId)}</p>
+          <p class="hint">${c.sourceRole === "assistant" ? "Сообщение персонажа" : "Сообщение пользователя"}: «${esc(c.quote)}» · ${esc(c.messageId)}</p>
           ${c.interpretation ? `<div class="in">${esc(c.interpretation)}</div>` : ""}
           <button class="btn btn-sm" data-act="exp-candidate" data-v="${i}">Проверить и сохранить…</button>
         </div>`).join("")}
