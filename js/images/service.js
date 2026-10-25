@@ -252,7 +252,7 @@
           // Surface the compiler's actual failure; the previous generic text
           // hid whether the model timed out, returned tags, JSON or bad wear.
           const reason = String(firstPass && firstPass.error || "нет результата переводчика")
-            .replace(/\\s+/g, " ").trim().slice(0, 240);
+            .replace(/\s+/g, " ").trim().slice(0, 240);
           if (S.settings.developerMode) translationFailure = {
             stage: "first-pass", reason,
             ...(firstPass && typeof firstPass.translationPreview === "string"
