@@ -4239,6 +4239,7 @@ async function foundationH() {
     const tags=[
       "1girl, solo, long hair, brown eyes, white blouse, indoors, smile, masterpiece",
       "orange hair, brown eyes, floral hairpin, white blouse, pleated skirt, smartphone, indoors.",
+      "1girl, solo, long hair, white blouse, ((pink sneakers:1.2)), indoors",
     ];
     const opts={format:"hybrid",intentMode:true};
     for (const text of tags) {
