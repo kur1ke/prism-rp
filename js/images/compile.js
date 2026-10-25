@@ -114,6 +114,9 @@
   // instead. This is a format check, not a semantic or grammar classifier.
   function tagOnlyHybrid(text) {
     const parts = String(text || "").split(",").map(x => x.trim());
+    // Explicit Danbooru subject-count markers must never be accepted as prose,
+    // even when other tag fragments use weighting punctuation.
+    if (/(?:^|,)\s*(?:[1-9]\d*(?:girls?|boys?)|solo)\s*(?:,|$)/i.test(text)) return true;
     // Subject + verb clauses are prose, even if the sentence uses many short
     // comma-delimited clauses. The check below is only for *bare* tag lists.
     const proseClause = /\b(?:she|he|they|it|we|i)\s+\p{L}{2,}\b/iu.test(text) ||
