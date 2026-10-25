@@ -34,7 +34,7 @@
     }).filter((m) => m.excerpt.length >= 8);
   }
   function sameSnapshot(before, path) {
-    const now = snapshot(path);
+    const all = snapshot(path), now = all.slice(-before.length);
     return before.length === now.length && before.every((m, i) =>
       now[i].id === m.id && now[i].swipeIdx === m.swipeIdx && now[i].hash === m.hash);
   }
