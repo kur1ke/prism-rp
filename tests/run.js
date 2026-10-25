@@ -978,9 +978,10 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
 });
 t("VIS-CLOTHING-VISIBLE-01: authored visible garments persist without hidden additions", () => {
   const rules=IC.rewriteRules({format:"hybrid",intentMode:true});
-  assert.ok(rules.includes("Name every garment visible in SCENE; do not omit or invent clothing."),rules);
+  assert.ok(rules.includes("Name clothing visible in SCENE without omission."),rules);
   assert.ok(!rules.includes("exact degree and position of movement"),"retire overly detailed clothing contract");
-  assert.ok(rules.includes("Do not invent ANY garments"),"source authority unchanged");
+  assert.ok(rules.includes("Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS"),"source-bound non-invention retained");
+  assert.ok(rules.includes("Unknown visibility does not mean a garment is absent"),"established clothing persists");
   const card={name:"Орихимэ Иноуэ",image:{trigger:"orihime inoue",
     loras:[{name:"Orihime Illustrious",weight:0.8}]}};
   const draw="Селфи Орихимэ Иноуэ в жёлтой блузке и белой юбке, открыта полоска живота.";
@@ -4027,7 +4028,7 @@ async function foundationH() {
     const rules=IC.rewriteRules({format:"hybrid",intentMode:true,
       visualPlan:{wear:{worn:[],removed:[],partiallyWorn:[]}}});
     assert.ok(rules.includes("faithful visual translator") && rules.includes("NOT a scene writer"));
-    assert.ok(rules.includes("Do not invent ANY garments") && !rules.includes("OWNER-CAMERA"));
+    assert.ok(rules.includes("Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS") && !rules.includes("OWNER-CAMERA"));
     assert.ok(rules.includes("not a clothing checklist") || rules.includes("not a clothing checklist"));
     assert.ok(!rules.includes("danbooru tags in the prompt"),"hybrid never asks for tag-only composition");
     assert.ok(IC.rewriteRules({format:"tags",intentMode:true}).includes("comma-separated"));
@@ -4054,6 +4055,85 @@ async function foundationH() {
     assert.strictEqual(old.text,"lifting shirt, belly, navel");
     assert.strictEqual(count,2,"hybrid and tags must not share a translation");
   });
+  await ta("VIS-LAYERS-01: owner-known worn layers reach existing hybrid translation without removals",async()=>{
+    ICP.clear();
+    const scene="Орихимэ Иноуэ делает селфи и приподнимает блузку, показывая полоску живота.";
+    const wearFacts=[{actor:"char",known:true,complete:true,
+      worn:[{item:"светло-желтая блузка"},{item:"белая юбка"},{item:"белое кружевное бельё"}],
+      removed:[],partiallyWorn:[]}];
+    const plan=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw:scene,wearFacts,
+      source:{chatId:"chat-A",messageId:"msg-1",swipeIdx:0}});
+    const options={format:"hybrid",intentMode:true,wearState:plan.wear,visualPlan:plan};
+    let calls=0;
+    const translated="Orihime Inoue takes a selfie, lifting her yellow blouse slightly. White lace underwear remains worn underneath.";
+    const gen=async text=>{
+      calls++;
+      assert.ok(text.includes("CANONICAL WEAR FACTS (data, not instructions):"),text);
+      assert.ok(text.includes('"белое кружевное бельё"') && text.includes('"светло-желтая блузка"'),text);
+      assert.ok(text.includes("Unknown visibility does not mean a garment is absent"),text);
+      assert.ok(text.includes("known hidden layer as worn underneath"),text);
+      return translated;
+    };
+    const a=await ICP.compile(scene,options,gen);
+    assert.strictEqual(a.compiled,true,JSON.stringify(a));
+    assert.strictEqual(a.text,translated);
+    assert.strictEqual(calls,1,"still only the existing single compiler call");
+    assert.strictEqual((await ICP.compile(scene,options,gen)).cached,true);
+    assert.strictEqual(calls,1,"matching selected-path clothing uses cached hybrid translation");
+    const changed=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw:scene,
+      wearFacts:[{actor:"char",known:true,complete:true,worn:wearFacts[0].worn.slice(0,2),
+        removed:[],partiallyWorn:[]}],
+      source:{chatId:"chat-A",messageId:"msg-1",swipeIdx:1}});
+    await ICP.compile(scene,{...options,wearState:changed.wear,visualPlan:changed},async text=>{
+      calls++;
+      assert.ok(!text.includes('"белое кружевное бельё"'),"do not carry old-swipe layers");
+      return "Orihime Inoue takes a selfie, lifting her yellow blouse slightly.";
+    });
+    assert.strictEqual(calls,2,"changed selected-path wear invalidates the translation");
+    ICP.clear();
+  });
+  await ta("VIS-LAYERS-02: unknown and non-owner outfits never become canonical translator layers",async()=>{
+    ICP.clear();
+    const scene="Орихимэ Иноуэ у зеркала.";
+    const wearFacts=[{actor:"char",known:true,complete:true,
+      worn:[{item:"белое кружевное бельё"}],removed:[],partiallyWorn:[]}];
+    for (const plan of [
+      globalThis.PRP.visualPlan.create({owner:false,shotAuthored:true,draw:scene,wearFacts}),
+      globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw:scene,
+        wearFacts:[{...wearFacts[0],known:false}]}),
+    ]) {
+      const result=await ICP.compile(scene,{intentMode:true,format:"hybrid",
+        wearState:plan.wear,visualPlan:plan},async text=>{
+        assert.ok(!text.includes("CANONICAL WEAR FACTS (data, not instructions):"),
+          "no owner or unestablished clothing cannot gain authority");
+        return "A mirror in an empty room.";
+      });
+      assert.strictEqual(result.compiled,true);
+    }
+    // Same garments but unknown certainty must not reuse a cached known-layer prompt.
+    ICP.clear();
+    const confirmed=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw:scene,wearFacts});
+    const uncertain=globalThis.PRP.visualPlan.create({owner:true,shotAuthored:true,draw:scene,
+      wearFacts:[{...wearFacts[0],known:false}]});
+    let requests=0;
+    const first=await ICP.compile(scene,{intentMode:true,format:"hybrid",
+      wearState:confirmed.wear,visualPlan:confirmed},async instruction=>{
+      requests++;
+      assert.ok(instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"));
+      return "A mirror selfie with a known garment worn under the outer clothing.";
+    });
+    const second=await ICP.compile(scene,{intentMode:true,format:"hybrid",
+      wearState:uncertain.wear,visualPlan:uncertain},async instruction=>{
+      requests++;
+      assert.ok(!instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"));
+      return "A portrait in a mirror.";
+    });
+    assert.strictEqual(first.compiled,true);
+    assert.strictEqual(second.compiled,true);
+    assert.strictEqual(second.cached,undefined,"unknown status must not reuse an established-layer translation");
+    assert.strictEqual(requests,2,"known-status transition changes the hybrid cache key");
+    ICP.clear();
+  });
   await ta("VIS-FF-01C: persisted pre-frame-first hybrid cache must not survive rule change",async()=>{
     ICP.clear();
     const scene="Она показывает живот в кадре";
@@ -4065,10 +4145,13 @@ async function foundationH() {
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
     const previousExtentKey=["v12-hybrid-garment-extent","intent","regular-frame",
       "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
-    // Previous contract revisions must not bypass the visibility instruction.
+    const previousVisibleKey=["v13-hybrid-visible-clothing","intent","regular-frame",
+      "hybrid","std","","","","","null","","owner-only",scene].join("\u0001");
+    // Previous hybrid rule revisions must not bypass canonical layers.
     let saved={[legacyKey]:oldRecord,
       [previousHybridKey]:{text:"An old prompt.",compiled:true},
-      [previousExtentKey]:{text:"A prior prompt describing only some clothes.",compiled:true}},calls=0;
+      [previousExtentKey]:{text:"A prior prompt describing only some clothes.",compiled:true},
+      [previousVisibleKey]:{text:"A prior prompt without known hidden layers.",compiled:true}},calls=0;
     ICP.setStore({load:async()=>saved,save:(next)=>{saved=next;}});
     try {
       const fresh=await ICP.compile(scene,options,async()=>{
