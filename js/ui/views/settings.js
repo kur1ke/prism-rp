@@ -53,10 +53,9 @@
         <div class="field"><label>Имя</label><input id="p-name" value="${esc(m.persona.name)}"></div>
         <div class="field"><label>Описание</label><textarea id="p-desc" rows="5" placeholder="Внешность, характер, кем вы приходитесь персонажам">${esc(m.persona.description)}</textarea></div>
         <div class="block-title" style="margin-top:20px">Вы на картинках</div>
-        <div class="field"><label>Как рисовать сцену</label><select id="p-view"><option value="third" ${pi.view !== "first" ? "selected" : ""}>Со стороны — вы в кадре, если указаны</option><option value="first" ${pi.view === "first" ? "selected" : ""}>От первого лица — камера это ваши глаза (POV)</option></select></div>
+        <p class="hint">В Scene персонаж и пользователь могут взаимодействовать напрямую; в Messenger картинки — отправленные фотографии. Камера и состав кадра определяются Draw.</p>
         <div class="field"><label>Ваша внешность для картинок</label><textarea id="p-appearance" rows="4" placeholder="base: 1boy, short black hair, grey eyes&#10;костюм | suit: black suit, white shirt">${esc(pi.appearance || "")}</textarea>
           <span class="help">Добавляется только когда вы действительно указаны в кадре (не просто присутствуете рядом). Строка base: — всегда при вашем появлении; «ключ: теги» — по явному совпадению. Можно указать свою LoRA: &lt;lora:имя:0.8&gt;.</span></div>
-        <div class="field"><label>Видимые части тела в POV</label><input id="p-povtags" value="${esc(pi.povTags || "")}" placeholder="pov hands"><span class="help">Только если они должны быть в кадре.</span></div>
         <div class="modal-foot"><button class="btn btn-primary" data-act="persona-save">Сохранить</button></div>`;
     } else if (section === "look") {
       body = `<h3>Внешний вид</h3><p class="lead">Тема и размер текста сцены.</p>

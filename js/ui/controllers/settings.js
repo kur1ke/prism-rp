@@ -88,7 +88,7 @@
       },
       "persona-save": async () => {
         S.settings.persona = { name: $("#p-name").value.trim() || "Пользователь", description: $("#p-desc").value,
-          image: { view: $("#p-view").value, appearance: $("#p-appearance").value, povTags: $("#p-povtags").value.trim() } };
+          image: { appearance: $("#p-appearance").value } };
         await save(); ui.refreshAfterSettings(); ui.toast("Сохранено.");
       },
       // Изображения

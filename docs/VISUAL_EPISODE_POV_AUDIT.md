@@ -1,5 +1,7 @@
 # Visual Episode / embodied POV — audit and implementation boundary (2026-10-22)
 
+> **Historical audit (superseded for current implementation):** VIS-MODE-CAMERA retires the Persona-controlled POV mechanics discussed below. The notes document previous experiments, not active camera contracts. See [VISUAL_CONSISTENCY_CONTRACT.md](VISUAL_CONSISTENCY_CONTRACT.md), section 19.
+
 **Branch:** `testing` (feature PR only). **Authority:** `AGENTS.md`, `PRISMRP_REVIEW_PROTOCOL.md`, testing review protocol.  
 **Scope of this PR:** B2 — distinction between the camera holder and an externally depicted character.  
 **Not in scope:** B1 episode resolution, inference from image pixels, automatic canon updates, new persistent collections, changes to `main`.

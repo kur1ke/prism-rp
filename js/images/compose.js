@@ -16,7 +16,7 @@
      и не переписывает, они ставятся в начало промпта без изменений.
    • Триггер, негатив и LoRA персонажа — только когда он в кадре.
    • Повтор тега ничего не даёт; «solo» неверен, когда в кадре двое.
-   • POV: камера — глаза пользователя; его внешность не добавляется. */
+   • Состав кадра и ракурс принадлежат исходному Draw, не настройке Persona. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -222,7 +222,7 @@
     return result;
   }
   const FRAME_EMPTY = /\b(?:empty|unoccupied|nobody|no[ _-]one|no[ _-]people|no[ _-]person|without[ _-]people|vacant|landscape[ _-]only|scenery[ _-]only|still[ _-]life)\b|пуст(?:ая|ой|ое|ые|ом|ую)?\b|без\s+людей|никого\s+нет/i;
-  const FRAME_HUMAN = /\b(?:[1-9]girls?|[1-9]boys?|girls?|boys?|woman|women|man|men|person|people|portrait|selfie|face|smil(?:e|ing)|sitting|standing|hug(?:ging)?|posing|looking[ _-]at[ _-]viewer|pov)\b|портрет|селфи|улыба|сидит|стоит|обнима/i;
+  const FRAME_HUMAN = /\b(?:[1-9]girls?|[1-9]boys?|girls?|boys?|woman|women|man|men|person|people|portrait|selfie|face|smil(?:e|ing)|sitting|standing|hug(?:ging)?|posing|looking[ _-]at[ _-]viewer)\b|портрет|селфи|улыба|сидит|стоит|обнима/i;
   const COUNT_TAG = /^([1-9])(girls?|boys?)$/i;
   function genderOf(tags) {
     const t = splitTags(parseMap(tags).map((x) => x.tags).join(", ") || tags).map((x) => x.toLowerCase());
@@ -251,12 +251,12 @@
     const charGender = genderOf([card.image && card.image.trigger, card.image && card.image.look].filter(Boolean).join(", "));
     const userGender = genderOf((persona && persona.image && persona.image.appearance) || "");
     // Один портрет с установленным полом пользователя и несовместимым полом карточки.
-    const userOnlyByGender = !ownerNamed && !userNamed && total === 1 && !!charGender && !!userGender &&
+    const userOnlyByGender = !(opts && opts.requireNamedUser) && !ownerNamed && !userNamed && total === 1 && !!charGender && !!userGender &&
       declared[0].gender === userGender && declared[0].gender !== charGender;
     const owner = ownerNamed || (!(opts && opts.requireNamedOwner) && !empty && !otherName && !userNamed && !userOnlyByGender && (FRAME_HUMAN.test(text) || !raw.trim() || !!(opts && opts.assumeOwner)));
     // Смешанный состав явно указан в кадре (например, 1girl + 1boy),
     // второй actor допускается только если его пол совпадает с профилем пользователя.
-    const mixed = owner && !userNamed && total >= 2 && !!userGender && declared.some((x) => x.gender === userGender) &&
+    const mixed = !(opts && opts.requireNamedUser) && owner && !userNamed && total >= 2 && !!userGender && declared.some((x) => x.gender === userGender) &&
       (charGender ? declared.some((x) => x.gender === charGender) : declared.length >= 2);
     const user = userNamed || userOnlyByGender || mixed;
     return { owner, user, empty, ownerNamed, userNamed, reason: ownerNamed ? "owner-mentioned" : userNamed ? "user-mentioned" : empty ? "empty" : mixed ? "count-with-persona" : "fallback" };
@@ -274,7 +274,8 @@
     // For authored Draw the source-shot actors were resolved before translation.
     // English rewording must not change who is depicted or inject Card/LoRA.
     const actors = o.frameActors
-      ? { ...o.frameActors } : frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
+      ? { ...o.frameActors } : frameActors(card, persona, draw, { assumeOwner: o.assumeOwner,
+        requireNamedOwner: o.requireNamedOwner, requireNamedUser: o.requireNamedUser });
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
     const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
@@ -335,10 +336,7 @@
     }
 
     let userTags = "", userTail = "";
-    if (pim.view === "first") {
-      // POV — камера, а не ещё один нарисованный человек.
-      if (actors.owner || actors.user) userTags = ["pov", actors.owner && !actors.user ? "solo" : "", cleanTags(pim.povTags)].filter(Boolean).join(", ");
-    } else if (actors.user && pim.appearance) {
+    if (actors.user && pim.appearance) {
       const u = resolveAppearance(subVars(pim.appearance), sceneText, [persona.name]);
       userTags = u.tags; userTail = u.suffix;
     }
@@ -441,8 +439,6 @@
   }
 
   /* ── finalise: итоговый промпт и негатив ───────────────────────────── */
-  const POV_NEG = ["extra legs", "extra arms", "disembodied limb", "floating limbs", "headless body", "extra torso"];
-  const POV_SOLO_NEG = ["1boy", "male focus", "multiple boys"];
 
   function loraTokens(list) {
     return (list || []).filter((l) => l && l.name && Number(l.weight) !== 0).map((l) => `<lora:${l.name}:${Number(l.weight) || 1}>`).join(" ");
@@ -503,14 +499,12 @@
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
 
-    const pov = !!(o.persona && o.persona.image && o.persona.image.view === "first");
-    const povNeg = pov ? POV_NEG.concat(subjectCount(prompt) < 2 && !/\b1boy\b/.test(prompt) ? POV_SOLO_NEG : []) : [];
     // A backend negative is global to every depicted person. For a multi-
     // person shot a character-specific garment must instead be resolved in
     // the positive scene compiler, not globally forbid the other person's outfit.
     const scopedNegative = present && !c.userPresent && subjectCount(prompt) <= 1
       ? o.wearNegative : "";
-    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative, povNeg.join(", "));
+    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative);
     return { prompt, negative };
   }
 
@@ -564,6 +558,14 @@
   }
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
 
+  // Mode-specific visual contracts are injected only for the active chat.
+  // The actual RP/Message context is prepared by PrismService separately.
+  const DRAW_MODE_INSTRUCTIONS = Object.freeze({
+    rp: "Кадр — внешняя иллюстрация текущего события сцены. Пользователь может взаимодействовать с персонажами напрямую, но попадает в кадр только если изображён в нём.",
+    messenger: "Кадр — фотография, которую персонаж отправляет собеседнику на расстоянии. Описывай содержимое снимка; получатель сообщения не становится участником кадра автоматически.",
+  });
+  const drawModeInstruction = (mode) => DRAW_MODE_INSTRUCTIONS[mode] || DRAW_MODE_INSTRUCTIONS.rp;
+
   /* Инструкция модели, когда она может «нарисовать» момент сама. */
   function drawInstruction(o) {
     const opts = o || {};
@@ -573,6 +575,7 @@
       "Указывай всю видимую в кадре одежду. Описание должно быть самостоятельным, визуально конкретным и не содержать технических параметров генерации или объяснений.",
       "Явно называй по имени только изображённых персонажей. Имя персонажа карточки: " + (opts.characterName || "персонаж") + ".",
       "Постоянные теги внешности, LoRA и параметры качества приложение добавляет отдельно; не дублируй их в [draw:].",
+      drawModeInstruction(opts.mode),
       "Не больше одной директивы за ответ; не добавляй изображение без повода."
     ].join("\n");
     const tags = opts.format !== "description";
@@ -586,9 +589,8 @@
       opts.fixedIdentity
         ? "- Постоянная внешность и триггер владельца карточки добавляются приложением отдельно. Не повторяй в [draw:] его волосы, глаза, уши, хвост, возраст или другие уже известные постоянные признаки. Описывай видимых участников и только происходящее сейчас: одежду, действие, место, фокус, ракурс и свет. Изменение внешности указывай, только если оно действительно произошло в сюжете."
         : "- Порядок: персонажи в кадре и их внешность → действие, поза, выражение, одежда, место → свет и ракурс.",
-      opts.pov
-        ? "- Вид от первого лица: камера — глаза собеседника, его самого в кадре нет. Начни с pov, его лицо и одежду не описывай; видимые части тела — только тегами pov hands / pov feet и т. п. Если в кадре один человек — это solo."
-        : "- Указывай только тех людей, которые действительно видны в кадре. Присутствие рядом не означает обязательного попадания на фото. Если пользователь виден — явно назови его или покажи состав кадра (1girl, 1boy). Не дублируй одного персонажа разными именами. solo — только когда в кадре один человек. Каждый видимый человек: имя + пол + возраст + 1–2 приметы (например, ichigo_kurosaki, male, young man, short orange hair).",
+      "- Указывай только тех людей, которые действительно видны в кадре. Не дублируй одного персонажа разными именами. solo — только когда в кадре один человек. Каждый видимый человек: имя + пол + возраст + 1–2 приметы (например, ichigo_kurosaki, male, young man, short orange hair).",
+      drawModeInstruction(opts.mode),
       "- Покажи действие, а не только позу, и сохрани градус сцены: ничего откровеннее и ничего целомудреннее, чем происходит. Обычный момент остаётся обычным.",
       "- Продолжая показанный момент, сохраняй его обстановку и одежду, если не было события, меняющего их; новый ракурс сам по себе не означает переодевание или перемещение.",
       "- Промпт всегда на английском; нелатинские имена — в латинской транскрипции.",
@@ -647,7 +649,6 @@
       opts.format === "description" ? "60 words or fewer." : "50 tags or fewer.",
     ];
     let txt = base + "\nRULES:\n" + rules.map((r, i) => `${i + 1}. ${r}`).join("\n");
-    if (opts.pov) txt += "\nFIRST-PERSON VIEW: the camera is the viewer's eyes. Start with pov; never describe the viewer; only one person in frame unless the scene shows the viewer's hands etc.";
     if (opts.frame) {
       const f = opts.frame;
       txt += "\nFRAME IDENTITY (do not invent extra copies or people):\n" +

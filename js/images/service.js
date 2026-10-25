@@ -216,7 +216,8 @@
         // The first (and only) intent translation must receive those facts.
         // Subject scoping happens on the ORIGINAL authored shot, before a
         // translator can hallucinate the card owner into a product screenshot.
-        const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true });
+        const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true,
+          requireNamedUser: currentChat.mode === "messenger" });
         // A current authored selfie need not repeat the card owner's name.
         // Do not infer the owner from a mere portrait or screenshot.
         const currentSelfie = drawAuthored &&
@@ -264,7 +265,8 @@
           scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts,
           // The translator may change wording, never actor ownership.
           frameActors: intent && drawAuthored ? resolvedActors : null,
-          shotAuthored: drawAuthored, assumeOwner: !intent && !!entry.fromMessage, requireNamedOwner: intent });
+          shotAuthored: drawAuthored, assumeOwner: !intent && !!entry.fromMessage,
+          requireNamedOwner: intent, requireNamedUser: currentChat.mode === "messenger" });
         // Контекст вопроса добавляем на этапе компиляции, ПОСЛЕ определения
         // участников кадра: имена в репликах не должны создавать лишних людей.
         const dialogue = !intent && ms && entry.fromMessage && shouldAppendDialogue(sourceSwipe, entry) ? dialogueImageContext(upto, sourceMsg) : "";
@@ -288,7 +290,7 @@
         const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
-          await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate, pov: (pers.image || {}).view === "first",
+          await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate,
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             frame: composed.subjects, stateContext,
             wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
