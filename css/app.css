@@ -704,3 +704,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .home-greeting-mark .brand-glyph { width: 56px; height: 56px; }
 .home-greeting-actions { justify-content: center; margin-top: 24px; }
 .rail-chat .t2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Локальные вложения: в сообщении — кнопка скачивания, в поле ввода — съёмные чипы. */
+.chat-files { display: flex; flex-wrap: wrap; gap: 6px; margin: 7px 0; min-width: 0; }
+.chat-file { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: min(100%, 320px);
+  border: 1px solid var(--line); background: var(--raised); color: var(--text); padding: 6px 9px;
+  border-radius: var(--r-m); font: inherit; font-size: 12px; cursor: pointer; }
+.chat-file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-file small { color: var(--muted); white-space: nowrap; }
+.chat-file svg { width: 15px; height: 15px; flex: none; }
+.pending-files { margin: 2px 0 9px; }
+.pending-files .chat-file { cursor: default; }
+.file-remove { border: 0; background: none; display: inline-flex; align-items: center; color: var(--muted); cursor: pointer; padding: 0 2px; }
+.file-remove:hover, .chat-file:hover { color: var(--accent); }
+.attach-btn { max-width: 82px; }

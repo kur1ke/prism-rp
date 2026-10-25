@@ -53,7 +53,8 @@
       if (!c) return;
       const last = path().slice(-1)[0];
       const t = last ? TR.activeSwipe(last).text : "";
-      c.preview = (last && last.role === "user" ? "Вы: " : "") + t.replace(/\s+/g, " ").slice(0, 90);
+      const sw = last ? TR.activeSwipe(last) : null;
+      c.preview = (last && last.role === "user" ? "Вы: " : "") + (t.trim() || (sw && sw.attachments && sw.attachments.length ? "📎 " + sw.attachments.map((f) => f.name).join(", ") : "")).replace(/\s+/g, " ").slice(0, 90);
       await putChat(c);
     }
     /* Атомарная запись сообщения и состояния чата (leafId, превью) — ОДНОЙ транзакцией (DB.putAll).
@@ -67,7 +68,8 @@
       if (leafId !== undefined) next.leafId = leafId;
       const p = TR.path(TR.index(S.messages.filter((x) => x.id !== m.id).concat([m])), next.leafId);
       const last = p.slice(-1)[0];
-      next.preview = (last && last.role === "user" ? "Вы: " : "") + (last ? TR.activeSwipe(last).text : "").replace(/\s+/g, " ").slice(0, 90);
+      const sw = last ? TR.activeSwipe(last) : null;
+      next.preview = (last && last.role === "user" ? "Вы: " : "") + (sw ? (String(sw.text || "").trim() || (sw.attachments && sw.attachments.length ? "📎 " + sw.attachments.map((f) => f.name).join(", ") : "")) : "").replace(/\s+/g, " ").slice(0, 90);
       await DB.putAll([["messages", m], ["chats", next]]);
       const i = S.messages.findIndex((x) => x.id === m.id);
       if (i >= 0) { for (const k of Object.keys(S.messages[i])) if (!(k in m)) delete S.messages[i][k]; Object.assign(S.messages[i], m); }
@@ -244,7 +246,11 @@
     /* ── Прочее ────────────────────────────────────────────────────────── */
     function exportText() {
       const c = ctx.chat(), cd = ctx.card();
-      const lines = path().map((m) => `${m.role === "user" ? ctx.persona().name : cd.name}: ${TR.activeSwipe(m).text}`);
+      const lines = path().map((m) => {
+        const sw = TR.activeSwipe(m);
+        const files = (sw.attachments || []).map((f) => f.name).join(", ");
+        return `${m.role === "user" ? ctx.persona().name : cd.name}: ${sw.text || ""}${files ? "\n[Вложения: " + files + "]" : ""}`;
+      });
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 

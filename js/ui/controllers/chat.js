@@ -9,6 +9,7 @@
   PRP.controllers.chat = function (ctx) {
     const { S, ui, svc, nav } = ctx;
     const { $ } = ui;
+    const readingFiles = new Set();
 
     /* PERF-01: отправка принимается и во время разбора предыдущего ответа. Порядок хода (дождаться разбора,
        сверить чат и ветку, записать реплику, разобрать её, сгенерировать) — в сервисе генерации (gen.send). */
@@ -16,9 +17,11 @@
       const input = $("#input");
       if (!input) return;
       const text = input.value.trim();
-      if (!text) return;
-      if (S.view === "assist") { if (S.gen) return; input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
+      if (S.view === "assist") { if (!text || S.gen) return; input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
       const c = ctx.chat();
+      if (c && readingFiles.has(c.id)) { ui.toast("Дождитесь чтения прикреплённых файлов.", true); return; }
+      const files = c ? (S.chatFiles[c.id] || []).slice() : [];
+      if (!text && !files.length) return;
       // Ход этого чата уже принят или идёт ответ: второе нажатие ничего не отправляет, текст остаётся в поле.
       if (!c || S.gen || (S.turn && S.turn.chatId === c.id)) return;
       input.value = "";
@@ -26,7 +29,35 @@
       ui.clearDraft(c.id);
       // Переписка: метка времени и положения — на момент нажатия (её даёт сервис переписки).
       const stamp = c.mode === "messenger" ? svc.messenger.stampForNew() : null;
-      await svc.gen.send(text, stamp ? { messengerAt: stamp } : null);
+      const outcome = await svc.gen.send(text, Object.assign({}, stamp ? { messengerAt: stamp } : {}, files.length ? { attachments: files } : {}));
+      // Снимаем только уже отправленные вложения — файлы, добавленные во время ответа, остаются в черновике.
+      if (outcome && (outcome.outcome === "sent" || outcome.outcome === "left-chat")) {
+        S.chatFiles[c.id] = (S.chatFiles[c.id] || []).filter((f) => !files.includes(f));
+        if (S.view === "chat" && S.chatId === c.id) ui.renderComposer();
+      }
+    }
+    async function change(t) {
+      if (t.id !== "file-chat") return false;
+      const c = ctx.chat(), id = c && c.id;
+      const chosen = Array.from(t.files || []);
+      t.value = ""; // повторно выбрать тот же файл можно без дополнительного сброса
+      if (!id || readingFiles.has(id)) return true;
+      readingFiles.add(id);
+      try {
+        const pending = (S.chatFiles[id] = S.chatFiles[id] || []);
+        for (const file of chosen) {
+          if (pending.length >= PRP.chatAttachments.MAX_FILES) {
+            ui.toast("Можно прикрепить не более четырёх файлов.", true);
+            break;
+          }
+          try { pending.push(await ctx.files.readChatAttachment(file)); }
+          catch (e) { ui.toast(e.message || String(e), true); }
+        }
+      } finally {
+        readingFiles.delete(id);
+        if (S.view === "chat" && S.chatId === id) ui.renderComposer();
+      }
+      return true;
     }
     async function afterBranchChange() {
       svc.prism.refresh();
@@ -36,6 +67,20 @@
 
     const actions = {
       send: sendUser,
+      "attach-chat-file": () => { const input = $("#file-chat"); if (input) { input.value = ""; input.click(); } },
+      "remove-chat-file": (t) => {
+        const files = S.chatFiles[S.chatId] || [];
+        const idx = Number(t.dataset.index);
+        if (Number.isInteger(idx) && idx >= 0 && idx < files.length) files.splice(idx, 1);
+        ui.renderComposer();
+      },
+      "download-chat-file": async (t) => {
+        const msg = S.messages.find((m) => m.id === t.dataset.mid);
+        const sw = msg && PRP.tree.activeSwipe(msg);
+        const file = sw && sw.attachments && sw.attachments[Number(t.dataset.index)];
+        if (!file) throw new Error("Файл не найден в выбранном варианте сообщения.");
+        await ctx.files.saveChatAttachment(file);
+      },
       // Отменить отправку, ожидающую разбора предыдущего ответа: текст вернётся в поле ввода.
       "send-cancel": () => svc.gen.cancelTurn(),
       stop: () => svc.gen.stop(),
@@ -115,6 +160,6 @@
       return false;
     }
 
-    return { actions, input, key, shortcut };
+    return { actions, change, input, key, shortcut };
   };
 })(typeof window !== "undefined" ? window : globalThis);

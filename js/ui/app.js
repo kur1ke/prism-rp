@@ -28,6 +28,7 @@
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
     assist: null, assistList: [],
+    chatFiles: {}, // неотправленные локальные файлы по чатам; в IndexedDB попадают только после отправки
     worldPacks: [], worldLenses: [], worldDraft: null,
     worldOverlay: null, worldEdit: null, // наложение мира текущего чата; черновик действия во вкладке «Мир чата»
     messengerEnv: null, envEdit: null, // среда текущей переписки (у сцены — null); черновик правки во вкладке «Среда»

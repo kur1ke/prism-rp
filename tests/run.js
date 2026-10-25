@@ -36,6 +36,7 @@ require(J("cards/validate.js"));
 require(J("cards/import.js"));
 require(J("providers/openai.js"));
 require(J("chat/tree.js"));
+require(J("chat/attachments.js"));
 require(J("state/tracker.js"));
 require(J("state/resolver.js"));
 require(J("state/interpreter.js"));
@@ -57,6 +58,40 @@ let passed = 0, failed = 0;
 function t(name, fn) {
   try { fn(); passed++; }
   catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.message || e)); }
+}
+
+/* ── CHAT-FILES: safe bounded attachment projection in branch history ── */
+{
+  const F = globalThis.PRP.chatAttachments;
+  t("CHAT-FILES: only user-supplied text excerpt appears; never binary bytes", () => {
+    const src = F.historyText("Привет", [
+      { name: "story.txt", kind: "text", excerpt: "Содержимое рассказа", dataUrl: "data:text/plain;base64,U0VDUkVU" },
+      { name: "photo.png", kind: "image", dataUrl: "data:image/png;base64,UE5H" },
+    ]);
+    assert.ok(src.includes("Привет"));
+    assert.ok(src.includes("Содержимое рассказа"));
+    assert.ok(src.includes("photo.png"));
+    assert.ok(src.includes("не передаётся текстовой модели"));
+    assert.ok(!src.includes("U0VDUkVU"));
+    assert.ok(!src.includes("UE5H"));
+  });
+  t("CHAT-FILES: read-only projection truncates imported oversized texts and lists", () => {
+    const list = Array.from({ length: 9 }, (_, i) => ({ name: "doc" + i + ".txt", kind: "text", excerpt: "z".repeat(18000) }));
+    const src = F.historyText("", list);
+    assert.ok(src.length < 4 * (F.MAX_TEXT_CHARS + 200));
+    assert.ok(src.includes("doc3.txt"));
+    assert.ok(!src.includes("doc4.txt"));
+    assert.ok(src.includes("Дальнейший текст файла не передан"));
+  });
+  t("CHAT-FILES: validate number-independent file size and type", () => {
+    assert.strictEqual(F.kind("file.json"), "text");
+    assert.strictEqual(F.kind("photo.png"), "image");
+    assert.strictEqual(F.kind("scan.pdf"), "binary");
+    assert.strictEqual(F.validate({ name: "note.txt", size: 23 }), "text");
+    assert.throws(() => F.validate({ name: "huge.png", size: F.MAX_BYTES + 1 }), /превышает/);
+    assert.throws(() => F.validate({ name: "empty.txt", size: 0 }), /Пустые/);
+    assert.ok(!F.historyText("обычный текст", []).includes("Вложение"));
+  });
 }
 
 /* ── SR-1: one read-only StateResolver across consumer modules ── */

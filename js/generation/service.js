@@ -428,7 +428,8 @@
     async function send(text, extra) {
       const c = ctx.chat();
       const body = String(text || "").trim();
-      if (!c || !body) return { outcome: "busy" };
+      const attachments = extra && Array.isArray(extra.attachments) ? extra.attachments : [];
+      if (!c || (!body && !attachments.length)) return { outcome: "busy" };
       if (S.gen || (S.turn && S.turn.chatId === c.id)) return { outcome: "busy" };
       // Ход, ждущий в другом чате, отменяется: его текст вернётся в тот чат.
       if (S.turn) cancelTurn();
@@ -441,7 +442,7 @@
       // have no persistent effect.
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
       const roleProvider = ctx.provider();
-      const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
+      const prepared = body && w0 && st && st.prepareUser && observerProvider && roleProvider &&
         observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
       let turn;
       if (w0) {
@@ -464,7 +465,7 @@
         ui.renderFeed();
         ui.scrollBottom();
         // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
-        if (st) { await st.track(sent, observerProvider, prepared ? { prepared } : undefined); await st.settle(c.id); }
+        if (st) { if (body) await st.track(sent, observerProvider, prepared ? { prepared } : undefined); await st.settle(c.id); }
         // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
         if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
         turn.phase = "generating";

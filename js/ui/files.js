@@ -61,5 +61,24 @@
     }
   }
 
-  PRP.files = { download, readFile, avatarPngBytes, copyText };
+  // Храним оригинальные байты в варианте сообщения; лишь текстовый отрывок поступает в Prism.
+  async function readChatAttachment(file) {
+    const A = PRP.chatAttachments;
+    const kind = A.validate(file);
+    const dataUrl = await readFile(file, "dataurl");
+    const full = kind === "text" ? String(await readFile(file, "text")) : "";
+    return {
+      name: A.fileName(file.name), kind, mime: file.type || "application/octet-stream",
+      size: file.size, dataUrl,
+      ...(kind === "text" ? { excerpt: full.slice(0, A.MAX_TEXT_CHARS), truncated: full.length > A.MAX_TEXT_CHARS } : {}),
+    };
+  }
+  async function saveChatAttachment(item) {
+    if (!item || !/^data:[^,]*;base64,[a-z0-9+/=]+$/i.test(item.dataUrl || "")) throw new Error("Файл недоступен.");
+    const response = await fetch(item.dataUrl);
+    const blob = await response.blob();
+    download(item.name || "файл", blob, item.mime);
+  }
+
+  PRP.files = { download, readFile, avatarPngBytes, copyText, readChatAttachment, saveChatAttachment };
 })(typeof window !== "undefined" ? window : globalThis);
