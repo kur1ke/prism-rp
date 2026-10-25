@@ -109,6 +109,17 @@
     return { validated: issues.length === 0, scope: "single-owner", issues };
   }
 
+  // Do not use comma count to validate prose: a grammatical description can
+  // list many objects. Reject homogeneous short Danbooru-style tag fragments
+  // instead. This is a format check, not a semantic or grammar classifier.
+  function tagOnlyHybrid(text) {
+    const parts = String(text || "").split(",").map(x => x.trim());
+    return parts.length >= 5 && parts.every((part, i) => {
+      const token = i === parts.length - 1 ? part.replace(/[.!?]$/, "").trim() : part;
+      return /^[\\p{L}\\p{N}_-]+(?:\\s+[\\p{L}\\p{N}_-]+){0,3}$/u.test(token);
+    });
+  }
+
   // Only the NEW experimental author-Draw mode uses this compact prose
   // contract. Older tag and description modes retain their exact behavior.
   // This checks output structure, not LLM semantic truth; source/garment
@@ -120,7 +131,7 @@
         /[\u0400-\u052f]/u.test(s) ||
         /(?:<lora:|camera\s*=|\x60\x60\x60)/i.test(s) ||
         /^[\[{]/.test(s) || /^(?:prompt|tags)\s*:/i.test(s) ||
-        IC.splitTags(s).length > 6)
+        tagOnlyHybrid(s))
       return "Гибридный перевод должен содержать только короткое английское описание кадра";
     return "";
   }
