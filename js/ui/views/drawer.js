@@ -77,6 +77,7 @@
 
   function memoryTab(m) {
     const d = m.expDraft;
+    const proposed = m.expCandidates || [];
     const ev = m.expView || { visible: [], hiddenInChat: 0, legacy: [] };
     const list = ev.visible.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     const scopeTag = (r) => (PRP.experience.scopeOf(r) === "branch" ? `<span class="tag" title="Видна только в этой ветке чата">ветка</span>` : `<span class="tag" title="Видна во всех ветках этого чата">весь чат</span>`);
@@ -103,7 +104,21 @@
     }
     return `<div class="block"><div class="block-title">Опыт ${esc(m.card.name)} <small>${list.length}</small></div>
       <p class="hint">Пережитое в этом чате — в этом мире. Другие чаты с ${esc(m.card.name)} его не видят. Событие из сообщения видно только в своей ветке; добавленное вручную — во всех ветках чата.${ev.hiddenInChat ? ` В других ветках этого чата ещё ${ev.hiddenInChat} ${R.plural(ev.hiddenInChat, "запись", "записи", "записей")}.` : ""}</p>
-      <button class="btn btn-sm" data-act="exp-new">${icon("plus")}Добавить событие</button></div>
+      <div class="row">
+        <button class="btn btn-sm" data-act="exp-new">${icon("plus")}Добавить событие</button>
+        <button class="btn btn-sm" data-act="exp-extract" ${m.expExtractBusy ? "disabled" : ""}>${m.expExtractBusy ? "Анализ…" : "Найти эпизоды"}</button>
+      </div>
+      <p class="hint">Проверяются последние 16 сообщений активной ветки. Модель предложит воспоминания — это гипотезы, не подтверждённые факты. Проверьте пересказ по цитате до сохранения. Возможен отдельный платный запрос.</p>
+      ${proposed.length ? `<div class="block"><div class="block-title">Предложенные воспоминания <small>${proposed.length}</small></div>
+        ${proposed.map((c, i) => `<div class="memo">
+          <div class="ev">${esc(c.event)}</div>
+          <p class="hint">${c.sourceRole === "assistant" ? "Сообщение персонажа" : "Сообщение пользователя"}: «${esc(c.quote)}» · ${esc(c.messageId)}</p>
+          ${c.interpretation ? `<div class="in">${esc(c.interpretation)}</div>` : ""}
+          <button class="btn btn-sm" data-act="exp-candidate" data-v="${i}">Проверить и сохранить…</button>
+        </div>`).join("")}
+        <button class="btn btn-sm btn-ghost" data-act="exp-discard">Скрыть предложения</button>
+      </div>` : ""}
+      </div>
       ${list.map((r) => `<div class="memo ${r.status !== "active" ? "off" : ""}" data-act="exp-edit" data-id="${r.id}" role="button" tabindex="0">
         <span class="memo-bar" style="background:${valColor(r.valence)}"></span>
         <div class="ev">${esc(r.event || "Без описания")}</div>

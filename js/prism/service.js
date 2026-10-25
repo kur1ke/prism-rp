@@ -9,7 +9,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
+  const TR = PRP.tree, EX = PRP.experience, ME = PRP.memoryExtract, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
 
   // Bring at most two latest selected-swipe visual directives back into the
   // text model history. These are shot references, NOT canonical scene updates.
@@ -73,7 +73,7 @@
       const history = historyWithDraws(path, allowDraw);
       const recent = history.slice(-4).map((h) => h.text).join("\n");
       const ex = EX.rank(S.experience, {
-        chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(here.present),
+        chatId: c.id, path: ME.provenancePath(path), ownerId: cd.id, present: ["user"].concat(here.present),
         text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
       });
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
