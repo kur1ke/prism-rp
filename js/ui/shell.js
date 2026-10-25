@@ -53,6 +53,7 @@
         turn: S.turn && ctx.chat() && S.turn.chatId === ctx.chat().id ? S.turn : null,
         statePending: ctx.chat() && svc().state && svc().state.pending ? svc().state.pending(ctx.chat().id) > 0 : false,
         draft: ctx.chat() && S.sendDrafts ? S.sendDrafts[ctx.chat().id] || "" : "",
+        pendingFiles: ctx.chat() && S.chatFiles ? S.chatFiles[ctx.chat().id] || [] : [],
         perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
       };
     }
