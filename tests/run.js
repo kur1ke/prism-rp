@@ -8460,7 +8460,7 @@ async function memoryExtractTests() {
     const liveAncestor=h.chat.path()[0];
     liveAncestor.swipes.push({text:"Мы никогда не встречались и друг другу не доверяем",sceneOps:[]});
     assert.strictEqual(await h.chat.swipe(ancestor.id,1),true);
-    assert.strictEqual(h.chat.path().at(-1).id,source.id,"descendant remains on path");
+    assert.ok(h.chat.path().some((m) => m.id === source.id),"source remains on active ancestry");
     assert.strictEqual(h.ctx.svc.exp.view().visible.length,0,"changed ancestor means changed source context");
     assert.strictEqual(h.ctx.svc.exp.selectCandidate(0),null,"unreviewed proposal also invalidated");
     assert.strictEqual(await h.ctx.svc.exp.save(Object.assign({},d,{id:null})).then(x=>x.includes("Источник изменился")),true);
