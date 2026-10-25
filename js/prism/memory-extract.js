@@ -64,6 +64,7 @@
   }
   function parse(raw, rows) {
     const str = String(raw || "").trim();
+    if (str.length > 12000) return { status: "invalid", candidates: [], rejected: ["response-too-long"] };
     let data;
     try {
       const body = str.replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/, "");
@@ -93,6 +94,7 @@
         .map((v) => v.trim()).slice(0, 5);
       candidates.push({
         messageId: src.id, swipeIdx: src.swipeIdx, hash: src.hash, quote,
+        sourceRole: src.role,
         event, interpretation: optional(x.interpretation), consequences: optional(x.consequences),
         domains, aboutUser: x.aboutUser === true,
       });
