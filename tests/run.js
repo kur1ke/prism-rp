@@ -8450,6 +8450,7 @@ async function memoryExtractTests() {
     assert.strictEqual(r.candidates.length,1);
     assert.strictEqual(r.rejected.length,3);
     assert.strictEqual(ME.parse("not-json",src).status,"invalid");
+    assert.strictEqual(ME.parse("x".repeat(12001),src).status,"invalid");
     assert.strictEqual(ME.parse(JSON.stringify({events:Array(5).fill(fake(phrase))}),src).status,"invalid");
     assert.strictEqual(ME.parse(JSON.stringify({events:[]}),src).status,"empty");
     const saved=JSON.stringify(src);
@@ -8470,6 +8471,17 @@ async function memoryExtractTests() {
     fbLLM=async()=>{called++;await h.chat.saveEdit(m.id,"Изменённая история");return {text:'{"events":[]}'};};
     assert.strictEqual((await h.ctx.svc.exp.extractCandidates()).status,"stale");
     assert.strictEqual((h.store.experience||new Map()).size,0);
+  });
+  await ta("EXTRACT-8: cannot save duplicate confirmation of same event evidence", async () => {
+    const h=make();await h.chat.createChat("rp","c1");
+    const m=h.chat.newMsg("assistant",null,phrase);await h.chat.commitMessage(m,m.id);
+    fbLLM=async()=>({text:JSON.stringify({events:[{messageId:m.id,quote:phrase,event:"Обещание встречи",domains:["встреча"]}]})});
+    await h.ctx.svc.exp.extractCandidates();
+    const d=h.ctx.svc.exp.selectCandidate(0);
+    assert.strictEqual(await h.ctx.svc.exp.save(d),null);
+    const duplicate=h.ctx.svc.exp.selectCandidate(0);
+    assert.match(await h.ctx.svc.exp.save(duplicate),/уже сохранён/);
+    assert.strictEqual(h.S.experience.length,1);
   });
   await ta("EXTRACT-7: Messenger extraction is separated from roleplay and from instructions", async () => {
     const h=make();await h.chat.createChat("messenger","c1");
