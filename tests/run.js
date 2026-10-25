@@ -872,10 +872,15 @@ t("compose: NSFW-теги только по сцене, а не по одежд�
   assert.ok(!IC.compose({ draw: "1girl, smile", card: imgCard, scene: st0, persona: {} }).keep.includes("nude"));
   assert.ok(IC.compose({ draw: "1girl, nude, bed", card: imgCard, scene: st0, persona: {} }).keep.includes("nipples"));
 });
-t("compose: POV — внешность пользователя не добавляется, solo для одного", () => {
-  const c = IC.compose({ draw: "1girl, looking at viewer", card: imgCard, scene: st0, persona: { image: { view: "first", appearance: "base: 1boy, black hair" } } });
-  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pose: сидит у окна, pov, solo");
+t("VIS-MODE-CAMERA: legacy persona POV fields cannot inject camera or negatives", () => {
+  const persona={name:"Лёня",image:{view:"first",povTags:"pov hands",appearance:"base: 1boy, black hair"}};
+  const c = IC.compose({ draw: "1girl, looking at viewer", card: imgCard, scene: st0, persona });
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pose: сидит у окна");
   assert.ok(!c.keep.includes("black hair"));
+  assert.ok(!c.keep.includes("pov"));
+  const fin=IC.finalise({composed:c,card:imgCard,persona,settings:{promptMode:"off"},backend:"a1111"});
+  assert.ok(!/\bpov\b|pov hands/i.test(fin.prompt),fin.prompt);
+  assert.ok(!fin.negative.includes("headless body")&&!fin.negative.includes("male focus"),fin.negative);
 });
 t("compose: пользователь не подмешивается по умолчанию, но явно названный участвует", () => {
   const persona = { name: "Лёня", image: { appearance: "base: 1boy, black hair" } };
@@ -924,19 +929,19 @@ t("VIS-CAMERA-2: fragment with named owner keeps identity without manufacturing 
   assert.ok(final.prompt.includes("Close-up"),final.prompt);
   assert.ok(!/\\bpov\\b/i.test(final.prompt),final.prompt);
 });
-t("VIS-CAMERA-3: user first-person view is distinct and screenshots stay owner-free", () => {
+t("VIS-CAMERA-3: source composition wins over abandoned POV; screenshots stay owner-free", () => {
   const card={name:"Лилит",image:{trigger:"lilithx",look:"base: burgundy hair"}};
   const other=IC.compose({draw:"Лилит, looking at viewer",card,scene:{chars:{}},
-    persona:{image:{view:"first"}}});
+    persona:{image:{view:"first",povTags:"pov hands"}}});
   assert.strictEqual(other.ownerPresent,true);
-  assert.ok(other.keep.includes("pov"));
+  assert.ok(!other.keep.includes("pov"),other.keep);
   const screenshot=IC.compose({draw:"screenshot of a dress product page",card,
     scene:{chars:{}},persona:{},requireNamedOwner:true});
   assert.strictEqual(screenshot.ownerPresent,false);
-  const rules=IC.rewriteRules({intentMode:true,format:"hybrid"});
-  assert.ok(!rules.includes("OWNER-CAMERA"));
-  const instructions=IC.drawInstruction({intentMode:true,hybrid:true});
-  assert.ok(!instructions.includes("camera=owner"));
+  const rules=IC.rewriteRules({intentMode:true,format:"hybrid",pov:true});
+  assert.ok(!rules.includes("OWNER-CAMERA")&&!rules.includes("FIRST-PERSON VIEW"));
+  const instructions=IC.drawInstruction({intentMode:true,hybrid:true,pov:true});
+  assert.ok(!instructions.includes("camera=owner")&&!instructions.includes("pov hands"));
 });
 t("VIS-INTENT-3: intent distinguishes shop screenshot from named owner", () => {
   const card = { name: "Лилит", image: { trigger: "lilithx", look: "base: burgundy hair" } };
@@ -963,11 +968,41 @@ t("VIS-DRAW-GENRE-1: visual genre and frame without content-dependent authoring"
   assert.ok(short.includes("Имя персонажа карточки: Орихимэ Иноуэ"), short);
   assert.ok(short.includes("LoRA") && short.includes("не дублируй"), short);
   assert.ok(short.includes("Не больше одной директивы за ответ"), short);
-  assert.ok(!/скриншот|живот|селфи|пользовател|по запросу|вид сверху|camera=owner/i.test(short),
+  assert.ok(!/скриншот|живот|селфи|по запросу|вид сверху|camera=owner/i.test(short),
     "genre-level frame instruction must not bias genre, body parts or requests");
   assert.ok(short.length < full.length / 2, "intent retains a short authoring contract");
   assert.ok(IC.rewriteRules({ intentMode: true }).includes("screenshot of products"),
     "compiler still protects source media without branching the Draw instruction");
+});
+t("VIS-MODE-CAMERA-1: inject only the active mode's compact Draw contract", () => {
+  for (const intentMode of [true,false]) {
+    const opts={intentMode,format:"tags",characterName:"Орихимэ Иноуэ",pov:true};
+    const rp=IC.drawInstruction({...opts,mode:"rp"});
+    const messenger=IC.drawInstruction({...opts,mode:"messenger"});
+    assert.ok(rp.includes("внешняя иллюстрация текущего события сцены"),rp);
+    assert.ok(!rp.includes("собеседнику на расстоянии"),rp);
+    assert.ok(messenger.includes("фотография, которую персонаж отправляет собеседнику на расстоянии"),messenger);
+    assert.ok(!messenger.includes("внешняя иллюстрация текущего события сцены"),messenger);
+    assert.ok(!/pov hands|камера — глаза собеседника|Начни с pov/.test(rp+messenger));
+    assert.ok(rp.includes("[draw:")&&messenger.includes("[draw:"),"same technical Draw contract");
+  }
+});
+t("VIS-MODE-CAMERA-2: remote Messenger cannot infer user from person counts or gender", () => {
+  const card={name:"Орихимэ",image:{trigger:"orihime_inoue, 1girl"}};
+  const persona={name:"Лёня",image:{appearance:"base: 1boy, black hair"}};
+  const shot="Орихимэ, 1girl, 1boy, standing together";
+  const inScene=IC.frameActors(card,persona,shot,{requireNamedOwner:true});
+  const byMessage=IC.frameActors(card,persona,shot,{requireNamedOwner:true,requireNamedUser:true});
+  assert.strictEqual(inScene.owner,true);
+  assert.strictEqual(inScene.user,true,"the RP user may be a direct participant");
+  assert.strictEqual(byMessage.owner,true);
+  assert.strictEqual(byMessage.user,false,"a second person in a sent photo is not the remote recipient");
+  const explicit=IC.frameActors(card,persona,"Орихимэ и Лёня на общей фотографии",
+    {requireNamedOwner:true,requireNamedUser:true});
+  assert.strictEqual(explicit.user,true,"explicitly depicted user may appear in an old/shared photo");
+  const composed=IC.compose({draw:shot,card,persona,scene:{chars:{}},requireNamedOwner:true,requireNamedUser:true});
+  assert.strictEqual(composed.userPresent,false);
+  assert.ok(!composed.keep.includes("1boy, black hair"),composed.keep);
 });
 t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () => {
   const instruction = IC.drawInstruction({ format: "tags", fixedIdentity: true });
