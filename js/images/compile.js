@@ -189,39 +189,44 @@
           JSON.stringify(o.visualPlan.offBodyVisible) +
           "\nPreserve these as off-body objects only; they never imply wear.add. Do not generate a global negative for any of them."
         : "");
+    // Diagnostics are opt-in and bounded. Never store the instruction, provider
+    // configuration or entire model response as persistent error metadata.
+    let rawReply = "";
+    const failure = (error) => ({ text: s, compiled: false, error,
+      ...(hybrid && o.debug && rawReply ? { translationPreview: rawReply.slice(0, 600) } : {}) });
     try {
-      const raw = String((await generateText(instruction)) || "").trim();
+      const raw = rawReply = String((await generateText(instruction)) || "").trim();
       let result;
       if (negativesRequired) {
         const decoded = JSON.parse(raw);
         const prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";
         const absent = decoded.absent;
         if (hybrid && validateHybrid(prompt))
-          return { text: s, compiled: false, error: validateHybrid(prompt) };
+          return failure(validateHybrid(prompt));
         if (prompt.length < 4 || !Array.isArray(absent) || absent.length !== wear.removed.length ||
             absent.some((x, i) => !x || x.index !== i || typeof x.tag !== "string" ||
               !/^[a-z][a-z0-9 _-]{1,79}$/i.test(x.tag.trim())))
-          return { text: s, compiled: false, error: "Некорректный перевод одежды: отсутствуют подтверждённые предметные tags" };
+          return failure("Некорректный перевод одежды: отсутствуют подтверждённые предметные tags");
         const visible = o.visualPlan && Array.isArray(o.visualPlan.offBodyVisible)
           ? o.visualPlan.offBodyVisible : [];
         const offBodyTags = [];
         if (o.visualPlan && o.visualPlan.shotAuthored) {
           const supplied = decoded.offBody == null ? [] : decoded.offBody;
           if (!Array.isArray(supplied) || supplied.length !== visible.length)
-            return { text: s, compiled: false, error: "Отсутствуют подтверждённые off-body роли для текущего кадра" };
+            return failure("Отсутствуют подтверждённые off-body роли для текущего кадра");
           for (const object of visible) {
             const index = wear.removed.findIndex(x => x.item === object.item);
             const matching = supplied.filter(x => x && x.index === index &&
               typeof x.tag === "string" && x.tag.length >= 3 && x.tag.length <= 140);
             if (index < 0 || matching.length !== 1 || !tagParts(prompt).some(p => sameTag(p.raw, matching[0].tag)))
-              return { text: s, compiled: false, error: "Off-body роль не подтверждается финальным positive" };
+              return failure("Off-body роль не подтверждается финальным positive");
             offBodyTags.push({ index, tag: matching[0].tag });
           }
         }
         const wearItems = absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() }));
         const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags, o.subjectScope);
         if (semantic.issues.length)
-          return { text: s, compiled: false, error: semantic.issues.join("; ").slice(0, 240) };
+          return failure(semantic.issues.join("; ").slice(0, 240));
         result = {
           text: prompt, compiled: true, wearValidated: true,
           semanticValidated: semantic.validated, semanticScope: semantic.scope, offBodyTags,
@@ -235,16 +240,16 @@
       } else {
         let out = raw.replace(/\s+/g, " ").replace(/^[\x60"']+|[\x60"']+$/g, "").trim();
         out = out.replace(/^(prompt|tags)\s*:\s*/i, "");
-        if (out.length < 4) return { text: s, compiled: false, error: "Пустой ответ переводчика" };
+        if (out.length < 4) return failure("Пустой ответ переводчика");
         if (hybrid && validateHybrid(out))
-          return { text: s, compiled: false, error: validateHybrid(out) };
+          return failure(validateHybrid(out));
         result = { text: out, compiled: true,
           ...(reconcile ? { wearValidated: true, negative: "", wearItems: [] } : {}) };
       }
       remember(key, result);
       return result;
     } catch (e) {
-      return { text: s, compiled: false, error: "Ошибка компиляции канонической одежды: " + String(e && e.message || e).slice(0, 120) };
+      return failure("Ошибка компиляции канонической одежды: " + String(e && e.message || e).slice(0, 120));
     }
   }
 
