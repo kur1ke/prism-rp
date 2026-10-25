@@ -8431,8 +8431,9 @@ async function memoryExtractTests() {
     fbLLM=async()=>({text:JSON.stringify({events:[{messageId:m.id,quote:phrase,event:"Было обещание",domains:["обещания"]}]})});
     assert.strictEqual((await h.ctx.svc.exp.extractCandidates()).count,1);
     const d=h.ctx.svc.exp.selectCandidate(0);assert.strictEqual(await h.ctx.svc.exp.save(d),null);
-    m.swipes.push({text:"Больше никаких обещаний",sceneOps:[]});
-    await h.chat.swipe(m.id,1);
+    const live=h.chat.path()[0];
+    live.swipes.push({text:"Больше никаких обещаний",sceneOps:[]});
+    assert.strictEqual(await h.chat.swipe(live.id,1),true,"selected actual stored variant");
     assert.strictEqual(h.ctx.svc.exp.candidates().length,0);
     assert.strictEqual(h.ctx.svc.exp.view().visible.length,0);
     await h.chat.swipe(m.id,-1);
