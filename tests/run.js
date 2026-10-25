@@ -8442,6 +8442,28 @@ async function memoryExtractTests() {
     await h.chat.commitMessage(fork,fork.id);
     assert.strictEqual(h.ctx.svc.exp.view().visible.length,0);
   });
+  await ta("EXTRACT-9: ancestor swipe change invalidates proposals and persisted memories", async () => {
+    const h=make();await h.chat.createChat("rp","c1");
+    const ancestor=h.chat.newMsg("user",null,"Мы знакомы с детства и доверяем друг другу");
+    await h.chat.commitMessage(ancestor,ancestor.id);
+    const source=h.chat.newMsg("assistant",ancestor.id,phrase);
+    await h.chat.commitMessage(source,source.id);
+    fbLLM=async()=>({text:JSON.stringify({events:[{messageId:source.id,quote:phrase,
+      event:"Орихимэ пообещала прийти вечером",domains:["обещания"]}]})});
+    assert.strictEqual((await h.ctx.svc.exp.extractCandidates()).count,1);
+    const d=h.ctx.svc.exp.selectCandidate(0);
+    assert.strictEqual(await h.ctx.svc.exp.save(d),null);
+    assert.strictEqual(h.ctx.svc.exp.view().visible.length,1);
+    const liveAncestor=h.chat.path()[0];
+    liveAncestor.swipes.push({text:"Мы никогда не встречались и друг другу не доверяем",sceneOps:[]});
+    assert.strictEqual(await h.chat.swipe(ancestor.id,1),true);
+    assert.strictEqual(h.chat.path().at(-1).id,source.id,"descendant remains on path");
+    assert.strictEqual(h.ctx.svc.exp.view().visible.length,0,"changed ancestor means changed source context");
+    assert.strictEqual(h.ctx.svc.exp.selectCandidate(0),null,"unreviewed proposal also invalidated");
+    assert.strictEqual(await h.ctx.svc.exp.save(Object.assign({},d,{id:null})).then(x=>x.includes("Источник изменился")),true);
+    assert.strictEqual(await h.chat.swipe(ancestor.id,-1),true);
+    assert.strictEqual(h.ctx.svc.exp.view().visible.length,1,"return to original ancestry restores episode");
+  });
   await ta("EXTRACT-5: fabricated source, unsupported quote, duplicates and malformed JSON fail closed", async () => {
     const src=ME.snapshot([{id:"m1",role:"assistant",swipeIdx:0,swipes:[{text:phrase}]}]);
     const fake=(quote,id="m1")=>({messageId:id,quote,event:"Некое значимое событие",domains:["обещание"]});
