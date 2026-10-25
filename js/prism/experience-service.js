@@ -6,7 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, EX = PRP.experience, SC = PRP.scene;
+  const U = PRP.util, EX = PRP.experience, ME = PRP.memoryExtract, SC = PRP.scene, LLM = PRP.llm;
 
   function create(ctx) {
     const { S, DB } = ctx;
@@ -34,7 +34,7 @@
 
     // Что показывать во вкладке «Опыт»: видимое в этой ветке, скрытое в других ветках, непривязанное.
     function view(p) {
-      const vctx = { chatId: S.chatId, path: chat().pathCtx(p) };
+      const vctx = { chatId: S.chatId, path: ME.provenancePath(p || chat().path()) };
       const inChat = S.experience.filter((r) => r.chatId === S.chatId && !r.legacyUnscoped);
       const visible = inChat.filter((r) => EX.visibility(r, vctx).visible);
       return { visible, hiddenInChat: inChat.length - visible.length, legacy: S.experience.filter((r) => EX.scopeOf(r) === "legacy") };
@@ -51,12 +51,21 @@
       const d = EX.blank(S.cardId, S.chatId);
       d.about = ["user"];
       const msg = p[idx];
-      d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 }, sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
+      d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 },
+        textHashes: msg ? { [msgId]: ME.fingerprint(PRP.tree.activeSwipe(msg).text || "") } : {},
+        sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
       return d;
     }
 
     // Сохранить черновик. → строка ошибки для пользователя или null.
     async function save(d) {
+      if (!d || !ctx.chat()) return "Нет активного чата.";
+      // A reviewed source must still exist on the selected path in the same swipe
+      // and retain its exact original text. Never silently broaden to chat scope.
+      if (d.source && d.source.textHashes && Object.keys(d.source.textHashes).length) {
+        const vis = EX.visibility(d, { chatId: S.chatId, path: ME.provenancePath(chat().path()) });
+        if (!vis.visible) return "Источник изменился или находится в другой ветке. Проверьте опыт заново.";
+      }
       d.event = d.event.trim();
       if (!d.event) return "Опишите, что произошло.";
       if (!d.id) d.id = U.uid("x");
@@ -82,9 +91,70 @@
       S.legacyExperience = Math.max(0, (S.legacyExperience || 1) - 1);
       return true;
     }
+    // Candidates are ephemeral; model responses do not write to IndexedDB or Prism.
+    function candidates() {
+      const data = S.expCandidates;
+      if (!data || !ctx.chat() || data.chatId !== S.chatId || data.ownerId !== S.cardId ||
+          !ME.sameSnapshot(data.window, chat().path())) return [];
+      return data.items;
+    }
+    async function extractCandidates() {
+      if (!ctx.chat() || !ctx.card()) return { status: "no-chat" };
+      if (S.gen || S.expExtractBusy) return { status: "busy" };
+      const prov = ctx.provider();
+      if (!prov) return { status: "no-provider" };
+      let window = ME.snapshot(chat().path());
+      if (!window.length) return { status: "empty-history" };
+      const ownerId = S.cardId, chatId = S.chatId;
+      const names = { character: ctx.card().name, user: ctx.persona().name };
+      let prompt = ME.prompt(window, names, ctx.chat().mode);
+      // Independent one-shot operation: bound complete outbound input and output,
+      // regardless of current RP history/context. No silent over-budget call.
+      const inputLimit = ctx.contextTokens() - 850;
+      while (window.length && U.estimateTokens(ME.INSTRUCTION + prompt) > inputLimit) {
+        window = window.slice(1);
+        prompt = ME.prompt(window, names, ctx.chat().mode);
+      }
+      if (!window.length) return { status: "overflow" };
+      S.expExtractBusy = true;
+      try {
+        const response = await LLM.chat(prov, [
+          { role: "system", content: ME.INSTRUCTION },
+          { role: "user", content: prompt },
+        ], {
+          names: { char: "Анализатор", user: "Источник" },
+          sampler: { temperature: 0.15, max_tokens: 700 },
+          outputFormat: "message-body",
+        });
+        if (S.chatId !== chatId || S.cardId !== ownerId ||
+            !ME.sameSnapshot(window, chat().path())) return { status: "stale" };
+        const parsed = ME.parse(PRP.openai.splitThink(response.text || "").text, window);
+        if (parsed.status === "invalid") return parsed;
+        S.expCandidates = { chatId, ownerId, window, items: parsed.candidates };
+        return Object.assign({ count: parsed.candidates.length }, parsed);
+      } catch (err) {
+        return { status: "error", reason: err && err.message || String(err) };
+      } finally { S.expExtractBusy = false; }
+    }
+    function selectCandidate(index) {
+      const candidate = candidates()[Number(index)];
+      if (!candidate || !ME.candidateIsCurrent(candidate, chat().path())) return null;
+      const d = EX.blank(S.cardId, S.chatId);
+      d.event = candidate.event;
+      d.interpretation = candidate.interpretation;
+      d.consequences = candidate.consequences;
+      d.domains = candidate.domains.slice();
+      d.about = candidate.aboutUser ? ["user"] : [];
+      d.source = { chatId: S.chatId, messageIds: [candidate.messageId],
+        swipes: { [candidate.messageId]: candidate.swipeIdx },
+        textHashes: { [candidate.messageId]: candidate.hash },
+        evidence: candidate.quote, proposedBy: "memory-extract-v1", sceneTime: "" };
+      return d;
+    }
     function find(id) { return S.experience.find((x) => x.id === id); }
 
-    return { loadForCard, migrate, view, legacyCount, blankDraft, draftFromMessage, save, remove, assign, find };
+    return { loadForCard, migrate, view, legacyCount, blankDraft, draftFromMessage, save, remove,
+      assign, find, candidates, extractCandidates, selectCandidate };
   }
 
   PRP.experienceService = { create };
