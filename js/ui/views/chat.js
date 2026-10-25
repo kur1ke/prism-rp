@@ -153,6 +153,17 @@
       <dt>Где</dt><dd>${esc({ perchance: "Perchance", a1111: "Forge / A1111", openai: "API" }[im.backend] || im.backend || "—")}${im.info && im.info.model ? " · " + esc(im.info.model) : ""}</dd></dl>`;
   }
 
+  // Вложение принадлежит выбранному варианту сообщения; скачивается как локальный файл.
+  function messageFiles(files, msgId) {
+    if (!Array.isArray(files) || !files.length) return "";
+    return `<div class="chat-files">${files.map((f, idx) => `<button class="chat-file" data-act="download-chat-file" data-mid="${esc(msgId)}" data-index="${idx}" title="${f.kind === "text" ? "Скачать текстовый файл" : "Скачать (модель видит только название)"}">${icon(f.kind === "image" ? "image" : "download")}<span>${esc(f.name || "файл")}</span><small>${f.size ? esc(Math.ceil(f.size / 1024) + " КБ") : ""}</small></button>`).join("")}</div>`;
+  }
+
+  function pendingFiles(files) {
+    if (!files || !files.length) return "";
+    return `<div class="chat-files pending-files">${files.map((f, idx) => `<span class="chat-file">${icon(f.kind === "image" ? "image" : "upload")}<span title="${esc(f.name)}">${esc(f.name)}</span><button class="file-remove" data-act="remove-chat-file" data-index="${idx}" title="Убрать вложение" aria-label="Убрать ${esc(f.name)}">${icon("x")}</button></span>`).join("")}</div>`;
+  }
+
   function rpFeed(m) {
     const me = { name: m.persona.name, me: true };
     return m.path.map((msg, idx) => {
@@ -167,7 +178,8 @@
         const text = live ? (m.gen.prefix || "") + liveText(m) : sw.text;
         const prose = R.rpText(text);
         body = `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}
-          <div class="prose ${live ? "cursor" : ""}" id="text-${msg.id}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>
+          ${text ? `<div class="prose ${live ? "cursor" : ""}" id="text-${msg.id}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>` : ""}
+          ${msg.role === "user" ? messageFiles(sw.attachments, msg.id) : ""}
           ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
           ${!live ? shots(m, msg, sw) : ""}
           ${!live ? deltas(sw) : ""}
@@ -202,9 +214,9 @@
         const parts = R.bubbles(liveText(m));
         return mark + `<div class="msg-row them" id="text-${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
       }
-      const parts = R.bubbles(sw.text);
+      const parts = sw.text ? R.bubbles(sw.text) : [];
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
-      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
+      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${msg.role === "user" ? messageFiles(sw.attachments, msg.id) : ""}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
         <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
@@ -233,9 +245,10 @@
       ? `<div class="turn-status" role="status"><span class="spin" aria-hidden="true"></span><span>${t.kind === "send" ? "Разбираю предыдущий ответ — сообщение отправится автоматически" : "Разбираю предыдущий ответ — действие начнётся автоматически"}</span>${t.kind === "send" ? `<span class="turn-text">«${esc(String(t.text || "").slice(0, 80))}${String(t.text || "").length > 80 ? "…" : ""}»</span>` : ""}<button class="btn btn-sm btn-ghost" data-act="send-cancel">Отменить</button></div>`
       : t && t.phase === "user-state" ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ваше сообщение перед ответом…</span></div>`
       : !t && m.statePending && !m.gen ? `<div class="turn-status quiet" role="status"><span class="spin" aria-hidden="true"></span><span>Разбираю ответ — можно писать</span></div>` : "";
-    return `<div class="composer-wrap">${status}<div class="composer">
+    return `<div class="composer-wrap">${status}<div class="composer">${pendingFiles(m.pendingFiles)}
       <textarea id="input" data-chat="${esc(m.chat.id)}" rows="1" placeholder="${m.chat.mode === "messenger" ? "Сообщение" : `Что делает и говорит ${esc(m.persona.name)}…`}" aria-label="Сообщение">${esc(m.draft || "")}</textarea>
       <div class="composer-bar">
+        <button class="pill attach-btn" data-act="attach-chat-file" title="Прикрепить файл (до 4 файлов по 2 МБ)">${icon("upload")}<span>Файл</span></button>
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}
         <span class="spacer"></span>
