@@ -58,9 +58,20 @@
     if (scope === "legacy") return { visible: false, reason: "не привязана к чату" };
     if (r.chatId !== c.chatId) return { visible: false, reason: "другой чат" };
     if (scope === "chat") return { visible: true, reason: "на весь чат" };
-    // Правило ветки — общее с наложением мира на чат (chat/branch.js).
+    // Существующий путь и swipe проверяет общий branch-модуль.
     const v = BR.visibleOnPath(r.source, c.path);
-    return { visible: v.visible, reason: v.reason };
+    if (!v.visible) return { visible: false, reason: v.reason };
+    // Для новых записей с зафиксированным исходным текстом редактирование
+    // сообщения без смены id/swipe НЕ оставляет старое воспоминание активным.
+    const hashes = r.source && r.source.textHashes;
+    if (hashes && Object.keys(hashes).length) {
+      for (const id of r.source.messageIds || []) {
+        const selected = (c.path || []).find((m) => m.id === id);
+        if (!selected || typeof selected.textHash !== "string" || selected.textHash !== hashes[id])
+          return { visible: false, reason: "текст источника изменён" };
+      }
+    }
+    return { visible: true, reason: v.reason };
   }
 
   /* Миграция старых записей. Чистая функция, идемпотентна.
