@@ -4219,6 +4219,41 @@ async function foundationH() {
     }
     ICP.clear();
   });
+  await ta("VIS-HYBRID-PROSE-01: real bookshelf prose with seven comma clauses is valid",async()=>{
+    const scene="Фотография книжной полки в комнате Орихимэ.";
+    const reply="A photograph of a bookshelf in Orihime Inoue's room, featuring books of various sizes and colors, some leaning, alongside cute trinkets, a small plush toy, and several notebooks. A hand wearing a white cotton t-shirt partially enters the frame, pointing toward one of the books.";
+    assert.strictEqual(IC.splitTags(reply).length,7,"reproduction has exactly seven comma segments");
+    ICP.clear();
+    let calls=0;
+    const opts={format:"hybrid",intentMode:true,debug:true};
+    const first=await ICP.compile(scene,opts,async()=>{calls++;return reply;});
+    assert.strictEqual(first.compiled,true,JSON.stringify(first));
+    assert.strictEqual(first.text,reply,"compiler must not alter the model's prose");
+    const second=await ICP.compile(scene,opts,async()=>{throw Error("cache expected");});
+    assert.strictEqual(second.cached,true);
+    assert.strictEqual(calls,1,"no extra translator call");
+    ICP.clear();
+  });
+  await ta("VIS-HYBRID-PROSE-02: tag lists still fail, including trailing period",async()=>{
+    const scene="Орихимэ делает фото.";
+    const tags=[
+      "1girl, solo, long hair, brown eyes, white blouse, indoors, smile, masterpiece",
+      "orange hair, brown eyes, floral hairpin, white blouse, pleated skirt, smartphone, indoors.",
+    ];
+    const opts={format:"hybrid",intentMode:true};
+    for (const text of tags) {
+      ICP.clear();
+      const result=await ICP.compile(scene,opts,async()=>text);
+      assert.strictEqual(result.compiled,false,JSON.stringify({text,result}));
+      assert.ok(result.error.includes("Гибридный"));
+    }
+    const oneSentence="A close-up photograph shows Orihime beside her bookshelf, smiling gently, holding a book, looking toward the window, surrounded by novels, warm wooden shelving, a glass vase, and small flowers.";
+    ICP.clear();
+    const valid=await ICP.compile(scene,opts,async()=>oneSentence);
+    assert.strictEqual(valid.compiled,true,JSON.stringify(valid));
+    assert.strictEqual(valid.text,oneSentence);
+    ICP.clear();
+  });
   await ta("VIS-DIAG-01: failed hybrid response keeps bounded opt-in preview, not a second call",async()=>{
     const src="Орихимэ показывает комнату";
     const raw="Это не английский prompt. " + "слова ".repeat(200);
