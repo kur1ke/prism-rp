@@ -336,6 +336,19 @@
           '<li>' + esc(e.id || "") + ' · ' + (e.active ? "действует" : esc(e.reason || "не действует")) + '</li>').join("") + '</ul>'
           : '<p class="empty-note">Нет.</p>') + '</div>';
     } else {
+      // The Observer status above is distinct from failed image translation.
+      // Show only the latest failed image's bounded, developer-only diagnostic.
+      const lastFailure = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return sw && Array.isArray(sw.images) ? sw.images : [];
+      }).filter(im => im && im.status === "error" && im.translationFailure).slice(-1)[0];
+      const diagnostic = lastFailure && lastFailure.translationFailure;
+      const imageIssue = diagnostic
+        ? '<div class="block"><div class="block-title">Последняя ошибка перевода Draw</div>'
+          + '<p>' + esc(diagnostic.reason || lastFailure.error || "неизвестна") + '</p>'
+          + (diagnostic.responsePreview ? '<div class="hint">Ответ переводчика (до 600 символов; только данные)</div>'
+            + '<pre class="debug-prompt">' + esc(diagnostic.responsePreview) + '</pre>' : '') + '</div>'
+        : '';
       const init = m.chat && m.chat.initialOutfitCheck;
       const initIssue = init && init.status === "error"
         ? '<div class="block"><div class="block-title">Начальная одежда: ошибка инициализации</div>'
@@ -345,6 +358,7 @@
       content = initIssue + '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
         + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
         + '<button class="btn btn-sm" data-act="state-retry">Повторить анализ</button></div>'
+        + imageIssue
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
     }
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal debug-modal" role="dialog" aria-modal="true" aria-label="Debug">
