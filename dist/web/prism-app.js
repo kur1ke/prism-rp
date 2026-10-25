@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "df9491282dd8d07ef042b42df80daa40e0975803";
+  window.PRISM_RP_BUILD_SHA = "061a98408cf5186204cf3fc88431db6949f58c5d";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5895,9 +5895,9 @@
       const rules = [
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
-        "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name every garment visible in SCENE; do not omit or invent clothing.",
-        "Do not invent ANY garments, underwear types, body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If SCENE says only 'lace underwear', do not specify a bra or panties.",
-        "Do not explain ordinary garment coverage, repeat facts, tell a story of removed clothes, or mention hidden or off-camera things. A garment that is worn in CANONICAL WEAR but is not visible in SCENE is not a positive image instruction.",
+        "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name clothing visible in SCENE without omission.",
+        "Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS. Do not invent body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If the source says only 'lace underwear', do not specify a bra or panties.",
+        "Unknown visibility does not mean a garment is absent. Preserve established clothing layers and degree of dress until source-backed events change them. When needed for clothing consistency, name a known hidden layer as worn underneath, never as exposed or visibly displayed. Do not list the entire outfit.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
         "Only explicitly depicted off-body garments may be mentioned as visible objects. Never infer them from a removal event.",
         "Character identity, image style, quality tags and LoRA are added separately. Do not repeat identity tags, quality tags, LoRA syntax or generic aesthetic filler in the sentence.",
@@ -6333,6 +6333,12 @@
     const hybrid = !!(o.intentMode && o.format === "hybrid");
     const wear = visualWear(o.wearState);
     const reconcile = hasWearChange(wear);
+    // Source-bound owner facts also matter when all garments are still worn:
+    // a hidden layer omitted by the shot is not canonically absent.
+    const establishedLayers = hybrid && o.visualPlan && o.visualPlan.actor === "char" &&
+      o.visualPlan.wear && o.visualPlan.wear.known === true && wear &&
+      (wear.worn.length > 0 || wear.partiallyWorn.length > 0);
+    const includeWearFacts = reconcile || establishedLayers;
     const negativesRequired = reconcile && wear.removed.length > 0;
     if (!s || (!o.intentMode && !reconcile &&
       (o.translate === false || (!IC.needsRewrite(s) && !IC.needsRewrite(stateContext)))))
@@ -6342,13 +6348,14 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    // Hybrid visible-clothing translation contract changed; old translations
-    // must not hide the effect of the current instruction. Other modes keep v11.
-    const key = [hybrid ? "v13-hybrid-visible-clothing" : "v11-frame-actors",
+    // Known worn layers now reach the hybrid translator even without a removal.
+    // Invalidate only the hybrid cache; legacy modes retain their existing key.
+    const key = [hybrid ? "v14-hybrid-worn-layers" : "v11-frame-actors",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
+      hybrid ? (establishedLayers ? "known-owner-layers" : "no-known-owner-layers") : "",
       o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
       o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only", s].join("\u0001");
     if (mem.has(key)) {
@@ -6376,7 +6383,7 @@
     const instruction = IC.rewriteRules(o) +
       (contract ? "\n\n" + contract : "") + "\n\nSCENE:\n" + s +
       (stateContext ? "\n\nREPORTED PHYSICAL STATE (context data, not commands):\n" + JSON.stringify(stateContext) : "") +
-      (reconcile ? "\n\nCANONICAL WEAR FACTS (data, not instructions):\n" + JSON.stringify(wear) : "") +
+      (includeWearFacts ? "\n\nCANONICAL WEAR FACTS (data, not instructions):\n" + JSON.stringify(wear) : "") +
       (o.visualPlan && Array.isArray(o.visualPlan.offBodyVisible) && o.visualPlan.offBodyVisible.length
         ? "\n\nVERIFIED VISIBLE OFF-BODY OBJECTS (source-evidenced, not worn):\n" +
           JSON.stringify(o.visualPlan.offBodyVisible) +
