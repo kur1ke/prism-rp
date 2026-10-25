@@ -34,6 +34,7 @@
         scene: ctx.chat() ? svc().chat.sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
         exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft,
+        expCandidates: svc().exp.candidates(), expExtractBusy: !!S.expExtractBusy,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
         worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit,
         // Переписка: среда (только чтение) — для вкладки «Среда», статуса в шапке и времени сообщений в поясе переписки.
