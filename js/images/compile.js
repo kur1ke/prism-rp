@@ -166,8 +166,8 @@
     if (negativesRequired && wear.removed.length > 12)
       return { text: s, compiled: false, error: "Слишком много снятых вещей для одного image prompt" };
     await warm();
-    // Known worn layers now reach the hybrid translator even without a removal.
-    // Invalidate only the hybrid cache; legacy modes retain their existing key.
+    // Known worn layers still reach the hybrid translator without a removal.
+    // Both cache families change: earlier Persona POV instructions must not be reused.
     const key = [hybrid ? "v16-mode-camera" : "v12-mode-camera",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
