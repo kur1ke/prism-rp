@@ -178,7 +178,7 @@
         const text = live ? (m.gen.prefix || "") + liveText(m) : sw.text;
         const prose = R.rpText(text);
         body = `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}
-          ${text ? `<div class="prose ${live ? "cursor" : ""}" id="text-${msg.id}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>` : ""}
+          ${live || text ? `<div class="prose ${live ? "cursor" : ""}" id="text-${msg.id}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>` : ""}
           ${msg.role === "user" ? messageFiles(sw.attachments, msg.id) : ""}
           ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
           ${!live ? shots(m, msg, sw) : ""}
