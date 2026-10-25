@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "061a98408cf5186204cf3fc88431db6949f58c5d";
+  window.PRISM_RP_BUILD_SHA = "7120958d0ba989e4d97e15e24a468e885604d6d2";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5896,6 +5896,7 @@
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
         "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name clothing visible in SCENE without omission.",
+        "Order the concise prompt by source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last. Preserve medium, viewpoint, framing, and all depicted facts regardless of their original order. Never invent absent subjects, hand assignments, or object placement to fill an ordering slot.",
         "Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS. Do not invent body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If the source says only 'lace underwear', do not specify a bra or panties.",
         "Unknown visibility does not mean a garment is absent. Preserve established clothing layers and degree of dress until source-backed events change them. When needed for clothing consistency, name a known hidden layer as worn underneath, never as exposed or visibly displayed. Do not list the entire outfit.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
@@ -6350,7 +6351,7 @@
     await warm();
     // Known worn layers now reach the hybrid translator even without a removal.
     // Invalidate only the hybrid cache; legacy modes retain their existing key.
-    const key = [hybrid ? "v14-hybrid-worn-layers" : "v11-frame-actors",
+    const key = [hybrid ? "v15-hybrid-action-priority" : "v11-frame-actors",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.pov ? "pov" : "std", o.qualityPinned ? "q" : "", o.identity || "",
