@@ -608,9 +608,9 @@
       const rules = [
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
-        "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name every garment visible in SCENE; do not omit or invent clothing.",
-        "Do not invent ANY garments, underwear types, body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If SCENE says only 'lace underwear', do not specify a bra or panties.",
-        "Do not explain ordinary garment coverage, repeat facts, tell a story of removed clothes, or mention hidden or off-camera things. A garment that is worn in CANONICAL WEAR but is not visible in SCENE is not a positive image instruction.",
+        "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name clothing visible in SCENE without omission.",
+        "Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS. Do not invent body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If the source says only 'lace underwear', do not specify a bra or panties.",
+        "Unknown visibility does not mean a garment is absent. Preserve established clothing layers and degree of dress until source-backed events change them. When needed for clothing consistency, name a known hidden layer as worn underneath, never as exposed or visibly displayed. Do not list the entire outfit.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
         "Only explicitly depicted off-body garments may be mentioned as visible objects. Never infer them from a removal event.",
         "Character identity, image style, quality tags and LoRA are added separately. Do not repeat identity tags, quality tags, LoRA syntax or generic aesthetic filler in the sentence.",
