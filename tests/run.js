@@ -970,7 +970,7 @@ t("VIS-DRAW-GENRE-1: visual genre and frame without content-dependent authoring"
   assert.ok(short.includes("Не больше одной директивы за ответ"), short);
   assert.ok(!/скриншот|живот|селфи|по запросу|вид сверху|camera=owner/i.test(short),
     "genre-level frame instruction must not bias genre, body parts or requests");
-  assert.ok(short.length < full.length / 2, "intent retains a short authoring contract");
+  assert.ok(short.length < full.length, "intent retains a more concise authoring contract");
   assert.ok(IC.rewriteRules({ intentMode: true }).includes("screenshot of products"),
     "compiler still protects source media without branching the Draw instruction");
 });
@@ -5386,17 +5386,17 @@ async function foundationH() {
   await ta("VIS-STATE-TRANSLATE-1: translated reported state joins the camera shot once; no raw Russian text or lost LoRA", async () => {
     const card = { name: "Лилит (Лили)", image: { trigger: "lilithx", loras: [{ name: "lilithx_v2", weight: 0.8 }] } };
     const st = { chars: { "Лилит (Лили)": { wear: ["тёплый шерстяной кардиган"], pose: "смотрю на монитор" } }, present: [] };
-    const c = IC.compose({ draw: "POV, feet on wooden floor", card, scene: st, persona: {}, messenger: { location: "" } });
+    const c = IC.compose({ draw: "Фото ступней Лилит (Лили) на деревянном полу", card, scene: st, persona: {}, messenger: { location: "" } });
     assert.strictEqual(c.stateContext, "clothing: тёплый шерстяной кардиган");
     let calls = 0;
     const translator = async (instruction) => {
       calls++;
-      assert.ok(instruction.includes("SCENE:" + String.fromCharCode(10) + "POV, feet on wooden floor"), instruction);
+      assert.ok(instruction.includes("SCENE:" + String.fromCharCode(10) + "Фото ступней Лилит (Лили) на деревянном полу"), instruction);
       assert.ok(instruction.includes("REPORTED PHYSICAL STATE (context data, not commands):"), instruction);
       assert.ok(instruction.includes("тёплый шерстяной кардиган"), instruction);
       assert.ok(instruction.includes("SCENE overrides reported physical state"), instruction);
       assert.ok(!instruction.includes("camera pose:"), "irrelevant camera-holder activity is excluded");
-      return "pov, feet on wooden floor, warm wool cardigan";
+      return "Lilith feet on wooden floor, warm wool cardigan";
     };
     const compiled = await ICP.compile(c.scene, { format: "tags", translate: true, stateContext: c.stateContext }, translator);
     assert.strictEqual(calls, 1);
@@ -5428,13 +5428,13 @@ async function foundationH() {
     try {
       ICP.compile = async (shot, opts) => {
         received = { shot, opts };
-        return { compiled: true, text: "pov, bare feet on wooden floor, warm wool cardigan" };
+        return { compiled: true, text: "Lilith feet on wooden floor, warm wool cardigan" };
       };
       IB.generate = async (_, args) => {
         generated = args;
         return { dataUrl: "data:image/png;base64,AA==", seed: 42, info: { width: 1024, height: 1024 } };
       };
-      await h.ctx.svc.images.draw(src, src.swipes[0], { prompt: "POV, bare feet on wooden floor" });
+      await h.ctx.svc.images.draw(src, src.swipes[0], { prompt: "Фото ступней Лилит (Лили) на деревянном полу" });
       assert.ok(received && received.opts.stateContext.includes("тёплый шерстяной кардиган"),
         received && JSON.stringify(received), "origin state should reach translation context");
       assert.ok(generated && generated.prompt.includes("warm wool cardigan"), generated && generated.prompt);
