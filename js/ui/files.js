@@ -74,7 +74,7 @@
     };
   }
   async function saveChatAttachment(item) {
-    if (!item || !/^data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,/i.test(item.dataUrl || "")) throw new Error("Файл недоступен.");
+    if (!item || !/^data:[^,]*;base64,[a-z0-9+/=]+$/i.test(item.dataUrl || "")) throw new Error("Файл недоступен.");
     const response = await fetch(item.dataUrl);
     const blob = await response.blob();
     download(item.name || "файл", blob, item.mime);
