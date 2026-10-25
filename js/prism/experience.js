@@ -71,6 +71,12 @@
           return { visible: false, reason: "текст источника изменён" };
       }
     }
+    if (r.source && r.source.ancestryHash) {
+      const lastId = (r.source.messageIds || []).slice(-1)[0];
+      const selected = (c.path || []).find((m) => m.id === lastId);
+      if (!selected || selected.prefixHash !== r.source.ancestryHash)
+        return { visible: false, reason: "контекст источника изменён" };
+    }
     return { visible: true, reason: v.reason };
   }
 
