@@ -116,7 +116,7 @@
     const parts = String(text || "").split(",").map(x => x.trim());
     return parts.length >= 5 && parts.every((part, i) => {
       const token = i === parts.length - 1 ? part.replace(/[.!?]$/, "").trim() : part;
-      return /^[\\p{L}\\p{N}_-]+(?:\\s+[\\p{L}\\p{N}_-]+){0,3}$/u.test(token);
+      return /^[\p{L}\p{N}_-]+(?:\s+[\p{L}\p{N}_-]+){0,3}$/u.test(token);
     });
   }
 
