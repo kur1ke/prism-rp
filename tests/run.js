@@ -4253,6 +4253,11 @@ async function foundationH() {
     assert.strictEqual(valid.compiled,true,JSON.stringify(valid));
     assert.strictEqual(valid.text,oneSentence);
     ICP.clear();
+    const shortClauses="Orihime smiles, she waves, she holds a book, she leans forward, beside the shelf.";
+    const grammatical=await ICP.compile(scene,opts,async()=>shortClauses);
+    assert.strictEqual(grammatical.compiled,true,JSON.stringify(grammatical));
+    assert.strictEqual(grammatical.text,shortClauses);
+    ICP.clear();
   });
   await ta("VIS-DIAG-01: failed hybrid response keeps bounded opt-in preview, not a second call",async()=>{
     const src="Орихимэ показывает комнату";
