@@ -51,8 +51,11 @@
       const d = EX.blank(S.cardId, S.chatId);
       d.about = ["user"];
       const msg = p[idx];
+      const provenance = ME.provenancePath(p);
+      const sourcePath = provenance.find((x) => x.id === msgId);
       d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 },
         textHashes: msg ? { [msgId]: ME.fingerprint(PRP.tree.activeSwipe(msg).text || "") } : {},
+        ancestryHash: sourcePath && sourcePath.prefixHash || "",
         sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
       return d;
     }
@@ -102,6 +105,7 @@
     function candidates() {
       const data = S.expCandidates;
       if (!data || !ctx.chat() || data.chatId !== S.chatId || data.ownerId !== S.cardId ||
+          data.pathSignature !== ME.pathSignature(chat().path()) ||
           !ME.sameSnapshot(data.window, chat().path())) return [];
       return data.items;
     }
@@ -113,6 +117,7 @@
       let window = ME.snapshot(chat().path());
       if (!window.length) return { status: "empty-history" };
       const ownerId = S.cardId, chatId = S.chatId;
+      const pathSignature = ME.pathSignature(chat().path());
       const names = { character: ctx.card().name, user: ctx.persona().name };
       let prompt = ME.prompt(window, names, ctx.chat().mode);
       // Independent one-shot operation: bound complete outbound input and output,
@@ -135,10 +140,11 @@
           outputFormat: "message-body",
         });
         if (S.chatId !== chatId || S.cardId !== ownerId ||
+            pathSignature !== ME.pathSignature(chat().path()) ||
             !ME.sameSnapshot(window, chat().path())) return { status: "stale" };
         const parsed = ME.parse(PRP.openai.splitThink(response.text || "").text, window);
         if (parsed.status === "invalid") return parsed;
-        S.expCandidates = { chatId, ownerId, window, items: parsed.candidates };
+        S.expCandidates = { chatId, ownerId, pathSignature, window, items: parsed.candidates };
         return Object.assign({ count: parsed.candidates.length }, parsed);
       } catch (err) {
         return { status: "error", reason: err && err.message || String(err) };
@@ -153,9 +159,12 @@
       d.consequences = candidate.consequences;
       d.domains = candidate.domains.slice();
       d.about = candidate.aboutUser ? ["user"] : [];
+      const ancestry = ME.provenancePath(chat().path()).find((x) => x.id === candidate.messageId);
+      if (!ancestry) return null;
       d.source = { chatId: S.chatId, messageIds: [candidate.messageId],
         swipes: { [candidate.messageId]: candidate.swipeIdx },
         textHashes: { [candidate.messageId]: candidate.hash },
+        ancestryHash: ancestry.prefixHash,
         evidence: candidate.quote, proposedBy: "memory-extract-v1", sceneTime: "" };
       return d;
     }
