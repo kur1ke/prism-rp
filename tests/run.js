@@ -4219,6 +4219,23 @@ async function foundationH() {
     }
     ICP.clear();
   });
+  await ta("VIS-DIAG-01: failed hybrid response keeps bounded opt-in preview, not a second call",async()=>{
+    const src="Орихимэ показывает комнату";
+    const raw="Это не английский prompt. " + "слова ".repeat(200);
+    let calls=0;
+    ICP.clear();
+    const diag=await ICP.compile(src,{format:"hybrid",intentMode:true,debug:true},async()=>{calls++;return raw;});
+    assert.strictEqual(diag.compiled,false);
+    assert.ok(diag.error.includes("Гибридный перевод"),diag.error);
+    assert.strictEqual(diag.translationPreview,raw.slice(0,600));
+    assert.strictEqual(diag.translationPreview.length,600);
+    assert.strictEqual(calls,1);
+    ICP.clear();
+    const plain=await ICP.compile(src,{format:"hybrid",intentMode:true},async()=>raw);
+    assert.strictEqual(plain.compiled,false);
+    assert.strictEqual(plain.translationPreview,undefined,"do not persist model text outside developer mode");
+    ICP.clear();
+  });
   await ta("VIS-HYBRID-4: finalisation preserves prose and deterministic identity/style tags",async()=>{
     const card={name:"Орихимэ",image:{trigger:"orihime_inoue, long orange hair",
       loras:[{name:"Orihime Illustrious",weight:0.8}]}};
@@ -4350,6 +4367,48 @@ async function foundationH() {
       assert.strictEqual(requests,2);
       assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"hybrid");
     }finally{globalThis.PRP.llm.simple=oldModel;IB.generate=oldBackend;}
+  });
+  await ta("VIS-DIAG-02: failed authored hybrid exposes real cause in Debug, never reaches Forge",async()=>{
+    const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const m=h.chat.newMsg("assistant",null,"Вот фото");
+    const shot="Орихимэ Иноуэ фотографирует свою книжную полку";
+    m.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+    await h.chat.commitMessage(m,m.id);
+    h.S.settings.developerMode=true;
+    h.S.settings.images=Object.assign({},STG.DEFAULTS.images,{
+      enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"hybrid",translate:true
+    });
+    h.S.drawing=new Set();h.S.imgUrls={};
+    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const oldModel=globalThis.PRP.llm.simple,oldBackend=IB.generate;
+    const raw="Неверный ответ переводчика <img src=x onerror=alert(1)>";
+    let calls=0,backendCalls=0;
+    try{
+      ICP.clear();
+      globalThis.PRP.llm.simple=async()=>{calls++;return raw;};
+      IB.generate=async()=>{backendCalls++;throw Error("backend must not be called");};
+      const source=h.S.messages.find(x=>x.id===m.id);
+      await h.ctx.svc.images.draw(source,source.swipes[0],source.swipes[0].draws[0]);
+      const im=source.swipes[0].images[0];
+      assert.strictEqual(im.status,"error",JSON.stringify(im));
+      assert.ok(im.error.includes("Гибридный перевод должен"),im.error);
+      assert.strictEqual(im.translationFailure.stage,"first-pass");
+      assert.strictEqual(im.translationFailure.responsePreview,raw);
+      assert.strictEqual(calls,1);
+      assert.strictEqual(backendCalls,0,"no image backend call when translation fails");
+      const persisted=await h.ctx.DB.get("messages",source.id);
+      assert.strictEqual(persisted.swipes[0].images[0].translationFailure.responsePreview,raw);
+      assert.strictEqual(await h.ctx.DB.get("images",im.id),undefined);
+      const html=globalThis.PRP.views.debugModal({
+        card:{name:"Орихимэ"},path:[source],chat:{},
+        messengerView:{stateStatus:{status:"partial",issues:[],eventCount:0},warnings:[]}
+      },{section:"errors"});
+      assert.ok(html.includes("Последняя ошибка перевода Draw"),html.slice(-500));
+      assert.ok(html.includes("&lt;img src=x onerror=alert(1)&gt;"),"untrusted output is HTML-escaped");
+      assert.ok(!html.includes("<img src=x onerror=alert(1)>"),"raw output never enters active markup");
+    }finally{globalThis.PRP.llm.simple=oldModel;IB.generate=oldBackend;ICP.clear();}
   });
   await ta("VIS-FF-02B: ImageService does not inject Card identity from hallucinated translation",async()=>{
     const h=fbHarness({name:"Orihime Inoue",image:{trigger:"orihime_inoue",
@@ -4554,6 +4613,22 @@ async function foundationH() {
     assert.ok(Object.isFrozen(plan.offBodyVisible[0]));
     const instruction=I.instruction(options);
     assert.ok(instruction.includes("frameObjects:"));
+  });
+  await ta("VIS-DIAG-03: Observer explicitly excludes ordinary objects from frameObjects",async()=>{
+    const I=globalThis.PRP.stateInterpreter;
+    const opts={role:"assistant",mode:"messenger",text:"Вот полка!",
+      draw:"Фотография книжной полки с книгами и вазой",references:[]};
+    const instruction=I.instruction(opts);
+    assert.ok(instruction.includes("frameObjects:[]"),"empty roles are explicit in Observer contract");
+    assert.ok(instruction.includes("книги, кружки, телефон"),"normal props are not off-body garments");
+    const ordinary=I.parse(JSON.stringify({events:[],frameObjects:[]}),opts);
+    assert.strictEqual(ordinary.valid,true);
+    assert.deepStrictEqual(ordinary.frameObjects,[]);
+    assert.deepStrictEqual(ordinary.issues,[]);
+    const invented=I.parse(JSON.stringify({events:[],frameObjects:[
+      {role:"book",evidence:"книжной полки"}]}),opts);
+    assert.strictEqual(invented.frameObjects.length,0);
+    assert.ok(invented.issues.includes("Недопустимая визуальная роль предмета"));
   });
   await ta("VC-02-2: forged, stale, ambiguous or not-removed frame roles are ignored",async()=>{
     const I=globalThis.PRP.stateInterpreter,VP=globalThis.PRP.visualPlan;
