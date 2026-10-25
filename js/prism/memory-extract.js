@@ -39,9 +39,18 @@
       now[i].id === m.id && now[i].swipeIdx === m.swipeIdx && now[i].hash === m.hash);
   }
   function provenancePath(path) {
-    return (path || []).map((m) => ({
-      id: m.id, swipeIdx: m.swipeIdx || 0, textHash: fingerprint(TR.activeSwipe(m).text || "")
-    }));
+    let prefix = "root";
+    return (path || []).map((m) => {
+      const swipeIdx = m.swipeIdx || 0, textHash = fingerprint(TR.activeSwipe(m).text || "");
+      // The selected ancestor swipe/text can change without removing this node
+      // from the active tree path. Bind source meaning to its full ancestry.
+      prefix = fingerprint(prefix + "|" + m.id + ":" + swipeIdx + ":" + textHash);
+      return { id: m.id, swipeIdx, textHash, prefixHash: prefix };
+    });
+  }
+  function pathSignature(path) {
+    const rows = provenancePath(path);
+    return rows.length ? rows[rows.length - 1].prefixHash : "root";
   }
   const INSTRUCTION = [
     "Ты анализируешь отрывок уже состоявшейся ролевой игры или переписки, а НЕ продолжаешь разговор.",
@@ -108,6 +117,6 @@
       (TR.activeSwipe(m).text || "").includes(c.quote));
   }
   PRP.memoryExtract = { WINDOW, MAX_EVENTS, fingerprint, snapshot, sameSnapshot,
-    provenancePath, INSTRUCTION, prompt, parse, candidateIsCurrent };
+    provenancePath, pathSignature, INSTRUCTION, prompt, parse, candidateIsCurrent };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryExtract;
 })(typeof window !== "undefined" ? window : globalThis);
