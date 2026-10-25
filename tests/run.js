@@ -978,7 +978,7 @@ t("VIS-ARCH-1: source ownership in draw instruction (identity versus shot)", () 
 });
 t("VIS-CLOTHING-VISIBLE-01: authored visible garments persist without hidden additions", () => {
   const rules=IC.rewriteRules({format:"hybrid",intentMode:true});
-  assert.ok(rules.includes("Name every garment visible in SCENE; do not omit or invent clothing."),rules);
+  assert.ok(rules.includes("Name clothing visible in SCENE without omission."),rules);
   assert.ok(!rules.includes("exact degree and position of movement"),"retire overly detailed clothing contract");
   assert.ok(rules.includes("Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS"),"source-bound non-invention retained");
   assert.ok(rules.includes("Unknown visibility does not mean a garment is absent"),"established clothing persists");
