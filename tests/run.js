@@ -8454,6 +8454,9 @@ async function memoryExtractTests() {
     const d=h.ctx.svc.exp.selectCandidate(0);
     assert.strictEqual(await h.ctx.svc.exp.save(d),null);
     assert.strictEqual(h.ctx.svc.exp.view().visible.length,1);
+    const later=h.chat.newMsg("user",source.id,"Сегодня поговорим о другом");
+    await h.chat.commitMessage(later,later.id);
+    assert.strictEqual(h.ctx.svc.exp.view().visible.length,1,"later conversation retains valid earlier memory");
     const liveAncestor=h.chat.path()[0];
     liveAncestor.swipes.push({text:"Мы никогда не встречались и друг другу не доверяем",sceneOps:[]});
     assert.strictEqual(await h.chat.swipe(ancestor.id,1),true);
