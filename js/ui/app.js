@@ -23,7 +23,7 @@
   const S = {
     settings: null, cards: [], chats: [],
     view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [],
-    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null, expDraft: null,
+    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null, expDraft: null, expCandidates: null, expExtractBusy: false,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
