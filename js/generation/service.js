@@ -442,7 +442,7 @@
       // have no persistent effect.
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
       const roleProvider = ctx.provider();
-      const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
+      const prepared = body && w0 && st && st.prepareUser && observerProvider && roleProvider &&
         observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
       let turn;
       if (w0) {
