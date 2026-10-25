@@ -121,6 +121,28 @@
         setTimeout(() => { const e = $("#x-event"); if (e) e.focus(); }, 280);
       },
       "exp-new": () => { S.expDraft = svc.exp.blankDraft(); ui.renderDrawer(); },
+      "exp-extract": async () => {
+        if (S.gen || S.expExtractBusy) { ui.toast("Сейчас занят другой запрос.", true); return; }
+        S.expDraft = null;
+        const originChat = S.chatId;
+        const task = svc.exp.extractCandidates();
+        ui.renderDrawer();
+        const result = await task;
+        if (S.chatId !== originChat) return;
+        ui.renderDrawer();
+        if (result.status === "candidates") ui.toast("Предложено воспоминаний: " + result.count + ". Проверьте каждое.");
+        else if (result.status === "empty") ui.toast("Подтверждённых эпизодов в отрывке не найдено.");
+        else if (result.status === "empty-history") ui.toast("В этом чате пока нечего анализировать.");
+        else if (result.status === "stale") ui.toast("История изменилась во время анализа. Повторите извлечение.", true);
+        else if (result.status === "overflow") ui.toast("Для анализа не хватает контекстного бюджета.", true);
+        else ui.toast(result.reason || "Не удалось извлечь проверяемые эпизоды (" + result.status + ").", true);
+      },
+      "exp-candidate": (t) => {
+        const d = svc.exp.selectCandidate(t.dataset.v);
+        if (!d) { ui.toast("Источник изменился. Выполните новый анализ.", true); ui.renderDrawer(); return; }
+        S.expDraft = d; ui.renderDrawer();
+      },
+      "exp-discard": () => { S.expCandidates = null; ui.renderDrawer(); },
       "exp-edit": (t) => { S.expDraft = U.clone(svc.exp.find(t.dataset.id)); ui.renderDrawer(); },
       "exp-cancel": () => { S.expDraft = null; ui.renderDrawer(); },
       "exp-save": async () => {
