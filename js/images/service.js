@@ -198,13 +198,14 @@
       }
       Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
       delete entry.error;
+      delete entry.translationFailure;
       if (!reuse) (sw.images = sw.images || []).push(entry);
       S.drawing.add(entry.id);
       const repaint = () => { if (ctx.chat() && ctx.chat().id === origin.chatId) ui.renderFeed(); };
       // Persist only the image entry; never repopulate the active chat's message list.
       await DB.put("messages", msg);
       repaint();
-      let finalPatch, imageData;
+      let finalPatch, imageData, translationFailure;
       let shotOnlyGate = drawAuthored;
       try {
         const intent = !!entry.intentMode;
@@ -245,9 +246,20 @@
         const firstPass = intent ? await ICP.compile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
             qualityPinned: ST.qualityPinned(S.settings),
-            wearState: visualPlan.wear, visualPlan, subjectScope: shotScope }, generateText) : null;
-        if (intent && (!firstPass || !firstPass.compiled))
-          throw new Error("Не удалось преобразовать визуальный замысел. Изображение не отправлено.");
+            wearState: visualPlan.wear, visualPlan, subjectScope: shotScope,
+            debug: !!S.settings.developerMode }, generateText) : null;
+        if (intent && (!firstPass || !firstPass.compiled)) {
+          // Surface the compiler's actual failure; the previous generic text
+          // hid whether the model timed out, returned tags, JSON or bad wear.
+          const reason = String(firstPass && firstPass.error || "нет результата переводчика")
+            .replace(/\s+/g, " ").trim().slice(0, 240);
+          if (S.settings.developerMode) translationFailure = {
+            stage: "first-pass", reason,
+            ...(firstPass && typeof firstPass.translationPreview === "string"
+              ? { responsePreview: firstPass.translationPreview.slice(0, 600) } : {}),
+          };
+          throw new Error("Не удалось преобразовать визуальный замысел: " + reason + ". Изображение не отправлено.");
+        }
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, card: cd,
           scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts,
           // The translator may change wording, never actor ownership.
@@ -337,7 +349,8 @@
                 negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
-        finalPatch = { status: "error", error: e.message || String(e) };
+        finalPatch = { status: "error", error: e.message || String(e),
+          ...(translationFailure ? { translationFailure } : {}) };
       }
       try {
         const latest = await DB.get("messages", origin.messageId);
@@ -358,6 +371,7 @@
         }
         // Deleted/edited messages and images cannot be resurrected by a late callback.
         if (savedSwipe && savedSwipe.text === origin.sourceText && savedImage) {
+          delete savedImage.translationFailure;
           Object.assign(savedImage, finalPatch);
           delete savedImage.stage;
           if (finalPatch.status === "done") delete savedImage.error;
