@@ -274,7 +274,8 @@
     // For authored Draw the source-shot actors were resolved before translation.
     // English rewording must not change who is depicted or inject Card/LoRA.
     const actors = o.frameActors
-      ? { ...o.frameActors } : frameActors(card, persona, draw, { assumeOwner: o.assumeOwner, requireNamedOwner: o.requireNamedOwner });
+      ? { ...o.frameActors } : frameActors(card, persona, draw, { assumeOwner: o.assumeOwner,
+        requireNamedOwner: o.requireNamedOwner, requireNamedUser: o.requireNamedUser });
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
     const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
