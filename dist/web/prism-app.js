@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "f65a32818b291b4192b3b7a6aca86b9e9c5a790e";
+  window.PRISM_RP_BUILD_SHA = "e46cad98d9a11cf5809b3035bc92e8a71f6f949b";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6310,6 +6310,24 @@
     return { validated: issues.length === 0, scope: "single-owner", issues };
   }
 
+  // Do not use comma count to validate prose: a grammatical description can
+  // list many objects. Reject homogeneous short Danbooru-style tag fragments
+  // instead. This is a format check, not a semantic or grammar classifier.
+  function tagOnlyHybrid(text) {
+    const parts = String(text || "").split(",").map(x => x.trim());
+    // Explicit Danbooru subject-count markers must never be accepted as prose,
+    // even when other tag fragments use weighting punctuation.
+    if (/(?:^|,)\s*(?:[1-9]\d*(?:girls?|boys?)|solo)\s*(?:,|$)/i.test(text)) return true;
+    // Subject + verb clauses are prose, even if the sentence uses many short
+    // comma-delimited clauses. The check below is only for *bare* tag lists.
+    const proseClause = /\b(?:she|he|they|it|we|i)\s+\p{L}{2,}\b/iu.test(text) ||
+      /^\p{Lu}\p{Ll}+\s+\p{Ll}+(?:s|ed)\b/u.test(String(text).trim());
+    return !proseClause && parts.length >= 5 && parts.every((part, i) => {
+      const token = i === parts.length - 1 ? part.replace(/[.!?]$/, "").trim() : part;
+      return /^[\p{L}\p{N}_-]+(?:\s+[\p{L}\p{N}_-]+){0,3}$/u.test(token);
+    });
+  }
+
   // Only the NEW experimental author-Draw mode uses this compact prose
   // contract. Older tag and description modes retain their exact behavior.
   // This checks output structure, not LLM semantic truth; source/garment
@@ -6321,7 +6339,7 @@
         /[\u0400-\u052f]/u.test(s) ||
         /(?:<lora:|camera\s*=|\x60\x60\x60)/i.test(s) ||
         /^[\[{]/.test(s) || /^(?:prompt|tags)\s*:/i.test(s) ||
-        IC.splitTags(s).length > 6)
+        tagOnlyHybrid(s))
       return "Гибридный перевод должен содержать только короткое английское описание кадра";
     return "";
   }
