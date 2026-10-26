@@ -54,7 +54,7 @@ function harness() {
     contextTokens: () => 12000, provider: () => ({ id: "mock" })
   };
   const memory = PRP.memoryService.create(ctx);
-  return { S, DB, path, storage, memory, model: { id: "mock" } };
+  return { S, DB, ctx, path, storage, memory, model: { id: "mock" } };
 }
 function automaticReply(_, messages) {
   const data = JSON.parse(messages[1].content);
@@ -280,6 +280,48 @@ async function distinctSimilarEventsRemainSeparate() {
   assert.equal(h.storage.memories.size, 2, "independent repetitions must remain separate episodes");
   console.log("PASS: two similar but separate events retain their own Memory");
 }
+
+async function extractionBudgetYieldsPriorMemoryFirst() {
+  const h = harness(), M = PRP.memoryCycle;
+  const a = message("a", "Утром купили новых плюшевых медведей.");
+  const b = message("b", "Потом вместе приготовили ужин.", "a");
+  const c = message("c", "Мы договорились встретиться завтра.", "b");
+  h.path.push(a, b, c);
+  const snapshot = M.pathSnapshot(h.path);
+  for (let i = 0; i < 2; i++) {
+    const src = snapshot[i];
+    h.storage.memories.set("prior" + i, { id: "prior" + i, chatId: "ch", owner: "owner",
+      kind: "observed", event: "Персонаж помнит конкретный вечер и его отличительные детали номер " + i,
+      source: { messageId: src.id, swipeIdx: src.swipeIdx, textHash: src.textHash,
+        prefixHash: src.prefixHash } });
+  }
+  const minimal = JSON.stringify({ mode: "rp", sources: [
+    { messageId: "c", role: "character", text: c.swipes[0].text }
+  ], priorMemories: [] });
+  h.ctx.contextTokens = () => 750 + 220 + PRP.util.estimateTokens(M.EXTRACT_SYSTEM) +
+    PRP.util.estimateTokens(minimal) + 1;
+  let received;
+  modelReply = async (_, messages) => {
+    received = JSON.parse(messages[1].content);
+    return { text: JSON.stringify({ memories: [] }) };
+  };
+  assert.equal((await h.memory.observe(c, h.model)).status, "no-new-memory");
+  assert.ok(received, "small budget must still allow extraction without optional prior memories");
+  assert.deepEqual(received.priorMemories, [], "optional novelty context is dropped before source extraction");
+  assert.equal(h.storage.memorySources.size, 1, "only the new source receives a processed receipt");
+  console.log("PASS: memory extraction sheds optional prior context under strict budget");
+
+  const blocked = harness(), fresh = message("x", "Мы вечером гуляли у моря.");
+  blocked.path.push(fresh);
+  blocked.ctx.contextTokens = () => 512;
+  let providerCalls = 0;
+  modelReply = async () => { providerCalls++; return { text: '{"memories":[]}' }; };
+  assert.equal((await blocked.memory.observe(fresh, blocked.model)).status, "overflow-extract");
+  assert.equal(providerCalls, 0, "preflight overflow must not call provider");
+  assert.equal(blocked.storage.memorySources.size, 0, "preflight overflow must not commit source receipt");
+  console.log("PASS: extraction overflow is explicit and does not mutate state");
+}
+
 function extractionSelectionContract() {
   const M = PRP.memoryCycle;
   assert.match(M.EXTRACT_SYSTEM, /memories: \[\]/, "empty extraction must be the explicit default for routine messages");
@@ -333,6 +375,7 @@ async function run() {
   await noMemoryStillMarksSource();
   await repeatedMentionDoesNotBecomeSecondMemory();
   await distinctSimilarEventsRemainSeparate();
+  await extractionBudgetYieldsPriorMemoryFirst();
   await pathAndLegacyAreIndependent();
   extractionSelectionContract();
   backupJournalValidation();
