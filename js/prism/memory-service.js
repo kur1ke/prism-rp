@@ -41,6 +41,11 @@
       const c = ctx.chat();
       return c ? M.currentReflection((S.reflections || []).filter(x => x.chatId === c.id && x.owner === c.cardId), p) : null;
     }
+    function timeline(path) {
+      const c = ctx.chat();
+      return c ? M.experienceTimeline(S.memories || [], S.reflections || [],
+        M.pathSnapshot(path || ctx.svc.chat.path()), c.id, c.cardId) : null;
+    }
     function footprint(text) { return U.estimateTokens(text); }
     function fits(system, user, maxOutput) {
       return ctx.contextTokens() >= maxOutput + 220 + footprint(system) + footprint(user);
@@ -313,7 +318,7 @@
       task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
       return task;
     }
-    return { load, visibleMemories, experience, observe, retireChat };
+    return { load, visibleMemories, experience, timeline, observe, retireChat };
   }
   PRP.memoryService = { create };
 })(typeof window !== "undefined" ? window : globalThis);

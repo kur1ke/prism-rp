@@ -238,6 +238,61 @@
     }
     return null;
   }
+  // Read-only projection for the Memory drawer. Trust the *active path* and
+  // the exact checkpoint/integration membership, never the raw stored counts.
+  // This mirrors the grouping rules without modifying or promoting any data.
+  function experienceTimeline(memories, reflections, path, chatId, owner) {
+    const ordered = recent((memories || []).filter((m) =>
+      m.chatId === chatId && m.owner === owner), path, Infinity).reverse();
+    const scoped = (reflections || []).filter((r) =>
+      r.chatId === chatId && r.owner === owner && visible(r.anchor, path));
+    const batchesById = new Map(scoped.filter((r) => r.kind === "batch")
+      .map((r) => [r.id, r]));
+    const batches = [];
+    for (let start = 0; start + BATCH_SIZE <= ordered.length; start += BATCH_SIZE) {
+      const group = ordered.slice(start, start + BATCH_SIZE);
+      const memoryIds = group.map((m) => m.id);
+      const id = "exp-batch:" + JSON.stringify([chatId, owner, ...memoryIds]);
+      const row = batchesById.get(id);
+      if (!row || !Array.isArray(row.memoryIds) ||
+          row.memoryIds.length !== BATCH_SIZE ||
+          row.memoryIds.some((mid, i) => mid !== memoryIds[i]) ||
+          sourceKey(chatId, owner, row.anchor) !==
+            sourceKey(chatId, owner, group[group.length - 1].source)) break;
+      batches.push({ id: row.id, number: batches.length + 1,
+        perspective: String(row.perspective || ""), change: row.change,
+        memoryCount: BATCH_SIZE });
+    }
+    const integratedById = new Map(scoped.filter((r) => r.kind === "integrated")
+      .map((r) => [r.id, r]));
+    const integrations = [];
+    let previous = null;
+    for (let start = 0; start + BATCH_SIZE <= batches.length; start += BATCH_SIZE) {
+      const group = batches.slice(start, start + BATCH_SIZE);
+      const ids = group.map((b) => b.id);
+      const id = "exp-integrated:" + fingerprint(JSON.stringify([chatId, owner, ...ids]));
+      const row = integratedById.get(id);
+      const lastBatch = batchesById.get(ids[ids.length - 1]);
+      if (!row || !Array.isArray(row.batchIds) ||
+          row.batchIds.length !== BATCH_SIZE ||
+          row.batchIds.some((bid, i) => bid !== ids[i]) ||
+          (row.previousId || null) !== (previous ? previous.id : null) ||
+          sourceKey(chatId, owner, row.anchor) !==
+            sourceKey(chatId, owner, lastBatch.anchor)) break;
+      integrations.push({ id: row.id, number: integrations.length + 1,
+        perspective: String(row.perspective || ""), change: row.change,
+        batchCount: BATCH_SIZE });
+      previous = row;
+    }
+    return {
+      memoryCount: ordered.length, memoryStep: ordered.length % BATCH_SIZE,
+      batchCount: batches.length, batchStep: batches.length % BATCH_SIZE,
+      integratedCount: integrations.length,
+      checkpointPending: Math.floor(ordered.length / BATCH_SIZE) > batches.length,
+      integrationPending: Math.floor(batches.length / BATCH_SIZE) > integrations.length,
+      batches, integrations
+    };
+  }
   const INTEGRATE_SYSTEM = [
     "Ты выполняешь Reflection над десятью последовательными порциями Experience персонажа.",
     "Каждый batch получен из отдельной десятки Memory; здесь нет стенограммы и нет объективной истины о других людях.",
@@ -286,7 +341,7 @@
     return { change: o.change, perspective: o.perspective.trim() };
   }
   PRP.memoryCycle = { WINDOW, LIMIT, BATCH_SIZE, fingerprint, pathSnapshot, visible, sourceKey, clean,
-    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, checkpointPlan, BATCH_SYSTEM, integrationPlan, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
+    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, checkpointPlan, BATCH_SYSTEM, integrationPlan, experienceTimeline, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
 })(typeof window !== "undefined" ? window : globalThis);
