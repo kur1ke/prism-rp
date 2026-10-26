@@ -35,7 +35,8 @@ function photo(id, shotText = shot, evidence = quote) {
 function state(path) {
   const snap = T.fold({ mode: "messenger", path, initialWear: initial,
     charName: "Орихимэ", userName: "Пользователь" });
-  return { state: snap, character: T.forCharacter(snap), latestPhotoWear: T.latestPhotoWear(path) };
+  return { state: snap, character: T.forCharacter(snap), latestPhotoWear: T.latestPhotoWear(path),
+    latestAuthoredShot: T.latestAuthoredShot(path) };
 }
 function assertBase() {
   const origin = state([]);
@@ -98,7 +99,33 @@ function assertNewerState() {
   assert.deepEqual(T.latestPhotoWear([first, user]).items, nowVisible);
   console.log("PASS: later wardrobe changes invalidate photo cue; unrelated conversation does not");
 }
+function assertUnverifiedDrawRemainsHistoryOnly() {
+  const first = photo("photo-unverified");
+  first.swipes[0].stateEvents = [];
+  first.swipes[0].stateStatus.status = "partial";
+  const before = state([]);
+  const after = state([first]);
+  assert.equal(after.latestPhotoWear, null, "zero events cannot establish a photographed wardrobe");
+  assert.ok(after.latestAuthoredShot.text.includes("белое кружевное белье"));
+  assert.deepEqual(after.character.visualWear, before.character.visualWear,
+    "an unverified authored shot cannot rewrite initial physical state");
+  const world = R.world({ visualWear: [] }, after);
+  const txt = M.messengerSections({ world, conversation: {}, temporal: {} }).place;
+  assert.ok(txt.includes("последний авторский [draw:]"), txt);
+  assert.ok(txt.includes("не подтверждённая трекером"), txt);
+  assert.ok(!txt.includes("ПОЛНЫЙ перечень надетой сейчас одежды"),
+    "the last image must be distinguished from the historical origin outfit");
+  const swapped = JSON.parse(JSON.stringify(first));
+  swapped.swipes.push({ text: "другой ответ", draws: [], stateEvents: [], sceneOps: [] });
+  swapped.swipeIdx = 1;
+  assert.equal(T.latestAuthoredShot([swapped]), null, "a sibling swipe cannot leak its draw");
+  const followed = { id: "normal", role: "user", swipeIdx: 0,
+    swipes: [{ text: "Мне понравилось твоё фото", draws: [], sceneOps: [] }] };
+  assert.equal(T.latestAuthoredShot([first, followed]).messageId, "photo-unverified");
+  console.log("PASS: unverified author photo remains bounded, branch-scoped history, not canon");
+}
 assertBase();
 assertCurrentPhoto();
 assertSourceBound();
 assertNewerState();
+assertUnverifiedDrawRemainsHistoryOnly();
