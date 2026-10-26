@@ -817,8 +817,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const PRP = (root.PRP = root.PRP || {});
   // Тестовый загрузчик выбирает отдельную IndexedDB до подключения приложения.
   const DB_NAME = root.__PRP_TEST_MIRROR === true ? "prism-rp-testing" : "prism-rp";
-  const DB_VERSION = 7;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments", "memories", "reflections"];
+  const DB_VERSION = 8;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments", "memories", "reflections", "memorySources"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
   const OPEN_TIMEOUT_MS = 7000;
   let dbPromise = null;
@@ -867,6 +867,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         // v7: Memory (episodic evidence) and Experience (reflective interpretations) are separate stores.
         if (!db.objectStoreNames.contains("memories")) db.createObjectStore("memories", { keyPath: "id" }).createIndex("chatId", "chatId");
         if (!db.objectStoreNames.contains("reflections")) db.createObjectStore("reflections", { keyPath: "id" }).createIndex("chatId", "chatId");
+        // v8: durable source receipts, including sources yielding zero Memory.
+        // Unique sourceKey prevents two extractions of one branch/swipe source
+        // from committing independently, even across simultaneous browser tabs.
+        if (!db.objectStoreNames.contains("memorySources")) {
+          const receipts = db.createObjectStore("memorySources", { keyPath: "id" });
+          receipts.createIndex("chatId", "chatId");
+          receipts.createIndex("sourceKey", "sourceKey", { unique: true });
+        }
       };
       req.onsuccess = () => {
         const db = req.result;
@@ -949,7 +957,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 7, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 8, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
@@ -1019,7 +1027,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
 
-  const ID_STORES = ["cards", "chats", "messages", "experience", "images", "assist", "worldPacks", "worldLenses", "memories", "reflections"];
+  const ID_STORES = ["cards", "chats", "messages", "experience", "images", "assist", "worldPacks", "worldLenses", "memories", "reflections", "memorySources"];
   const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
   const sid = (v) => (v == null ? "" : String(v));
 
@@ -1078,9 +1086,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     byChat("images", "image-orphan-chat", "Картинка");
     byChat("memories", "memory-orphan-chat", "Воспоминание");
     byChat("reflections", "reflection-orphan-chat", "Осмысление");
+    byChat("memorySources", "memory-source-orphan-chat", "Источник памяти");
     // Ownership must match the actual chat's character, not just a plausible chatId.
     const chatOwners = new Map((out.chats || []).map((c) => [sid(c.id), sid(c.cardId)]));
-    for (const st of ["memories", "reflections"]) if (Array.isArray(out[st])) {
+    for (const st of ["memories", "reflections", "memorySources"]) if (Array.isArray(out[st])) {
       out[st] = out[st].filter((r) => {
         const expected = chatOwners.get(sid(r.chatId));
         // For additive restores an existing chat ID may be known but not in this backup.
@@ -1088,6 +1097,27 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         // Additive imports into chats absent from this backup are rejected: chat owner cannot be verified here.
         reject(st, r.id, "memory-owner-mismatch", "Память или опыт привязаны к чужому персонажу.");
         return false;
+      });
+    }
+    // Imported receipts gate future autonomous extraction. Reject fabricated
+    // provenance, duplicate keys and mismatched owners before importAll.
+    if (Array.isArray(out.memorySources)) {
+      const counts = new Map();
+      for (const r of out.memorySources)
+        if (typeof r.sourceKey === "string")
+          counts.set(r.sourceKey, (counts.get(r.sourceKey) || 0) + 1);
+      out.memorySources = out.memorySources.filter((r) => {
+        const src = r.source;
+        const valid = src && typeof src.messageId === "string" && src.messageId &&
+          Number.isInteger(src.swipeIdx) && src.swipeIdx >= 0 &&
+          typeof src.textHash === "string" && src.textHash &&
+          typeof src.prefixHash === "string" && src.prefixHash &&
+          ["memory", "empty"].includes(r.result) &&
+          r.sourceKey === JSON.stringify([r.chatId, r.owner, src.messageId,
+            src.swipeIdx, src.textHash, src.prefixHash]);
+        if (!valid) { reject("memorySources", r.id, "memory-source-invalid", "Недостоверный источник обработки Memory."); return false; }
+        if (counts.get(r.sourceKey) > 1) { reject("memorySources", r.id, "memory-source-duplicate", "Повтор обработки одного источника Memory."); return false; }
+        return true;
       });
     }
     if (Array.isArray(out.experience)) out.experience = out.experience.filter((r) => {
@@ -5182,7 +5212,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
-  const WINDOW = 4, LIMIT = 10, MAX_NEW = 3;
+  const WINDOW = 4, LIMIT = 10, MAX_NEW = 4;
   function fingerprint(input) {
     const s = String(input || "");
     let a = 2166136261, b = 5381;
@@ -5207,6 +5237,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       m.swipeIdx === source.swipeIdx && m.prefixHash === source.prefixHash &&
       (!source.textHash || m.textHash === source.textHash)));
   }
+  // One exact source is one chat + character owner + selected swipe +
+  // ancestor path fingerprint. An alternate swipe is an independent source.
+  function sourceKey(chatId, owner, source) {
+    return JSON.stringify([chatId, owner, source.messageId, source.swipeIdx,
+      source.textHash, source.prefixHash]);
+  }
   function clean(text) {
     return String(text || "").replace(/\[(?:scene|draw|image):[^\]\n]*\]/gi, "")
       .replace(/<image\b[^>]*>[\s\S]*?<\/image>/gi, "").trim();
@@ -5219,9 +5255,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
   const EXTRACT_SYSTEM = [
     "Выполни независимый от RP анализ уже состоявшихся сообщений. Ты НЕ отвечаешь персонажем.",
-    "Выдели от 0 до 3 потенциальных воспоминаний: крупные события ИЛИ мелкие наблюдения, реплики, жесты, разговоры.",
+    "Выдели не более ОДНОГО воспоминания на каждый messageId из SOURCES (всего от 0 до 4). Даже если в сообщении несколько эпизодов, выбери один наиболее цельный и представительный. Не дроби одно сообщение на самостоятельные Memory.",
     "Не оценивай психологическое влияние; Memory — свидетельство, НЕ Experience и НЕ объективная истина мира.",
-    "Указывай точную подстроку quote из указанного messageId; чужие утверждения остаются утверждениями.",
+    "Каждый SOURCE в этом запросе ранее успешно не обрабатывался. Указывай точную подстроку quote из указанного messageId; чужие утверждения остаются утверждениями. Не используй контекст соседнего сообщения вместо источника.",
     "Не выдумывай фактов, скрытых мыслей и свершившихся действий из обещаний/намерений. Скрытые мысли пользователя/других актёров не являются знаниями персонажа, если он не узнал их явно.",
     "Ответ ТОЛЬКО JSON: {\"memories\":[{\"messageId\":\"...\",\"quote\":\"...\",\"event\":\"...\",\"kind\":\"observed\"}]}",
     "kind: observed (явное событие в сцене) или reported (сообщённое, в том числе в Messenger).",
@@ -5262,7 +5298,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const quote = item.quote.trim(), event = item.event.trim();
       if (quote.length < 5 || quote.length > 500 || !row.text.includes(quote) ||
           event.length < 6 || event.length > 280) return null;
-      const key = item.messageId + "|" + quote;
+      // One canonical episode per selected-path message, regardless of how
+      // many different quotes the model returns for that same source.
+      const key = item.messageId;
       if (seen.has(key)) continue;
       seen.add(key);
       // A Messenger message can report circumstances but is not direct observation of a shared scene.
@@ -5274,10 +5312,19 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
   function recent(memories, path, limit) {
     const positions = new Map((path || []).map((x, i) => [x.id, i]));
-    return (memories || []).filter((m) => visible(m.source, path))
+    const ranked = (memories || []).filter((m) => visible(m.source, path))
       .sort((a,b) => (positions.get(b.source.messageId) - positions.get(a.source.messageId)) ||
-        ((b.createdAt || 0) - (a.createdAt || 0)))
-      .slice(0, limit || LIMIT);
+        ((a.createdAt || 0) - (b.createdAt || 0)));
+    // Old v7 records can contain several quotes from one source. Keep the
+    // earliest original Memory as a read-only projection; never delete data.
+    const seen = new Set();
+    return ranked.filter((m) => {
+      const source = m.source || {};
+      const key = JSON.stringify([source.messageId, source.swipeIdx, source.prefixHash]);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, limit || LIMIT);
   }
   function weighted(memories) {
     return (memories || []).slice(0, LIMIT).map((m, i) => ({
@@ -5305,7 +5352,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         (o.change === "unchanged" && o.perspective.trim())) return null;
     return { change: o.change, perspective: o.perspective.trim() };
   }
-  PRP.memoryCycle = { WINDOW, LIMIT, fingerprint, pathSnapshot, visible, clean,
+  PRP.memoryCycle = { WINDOW, LIMIT, fingerprint, pathSnapshot, visible, sourceKey, clean,
     extractionInput, parseExtraction, recent, weighted, currentReflection,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
@@ -9756,6 +9803,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
       await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
       await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
+      await DB.delMany("memorySources", (await DB.byIndex("memorySources", "chatId", c.id)).map((x) => x.id));
       await DB.delMany("messages", ms.map((m) => m.id));
       await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
       await DB.del("worldOverlays", c.id);
@@ -9861,7 +9909,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        (сообщения, картинки, опыт, наложение мира, среда переписки): иначе чужие сообщения попали бы в местный чат
        или режим переключился бы молча. При замене локальных чатов не остаётся — конфликтов нет.
        opts: { replace, existingChats: [{ id, mode }] } → { data, rejected, issues } */
-    const CHAT_BOUND = [["messages", "chatId"], ["images", "chatId"], ["experience", "chatId"], ["memories", "chatId"], ["reflections", "chatId"], ["worldOverlays", "chatId"], ["messengerEnvironments", "chatId"]];
+    const CHAT_BOUND = [["messages", "chatId"], ["images", "chatId"], ["experience", "chatId"], ["memories", "chatId"], ["reflections", "chatId"], ["memorySources", "chatId"], ["worldOverlays", "chatId"], ["messengerEnvironments", "chatId"]];
     function checkBackupChats(data, opts) {
       const o = opts || {};
       if (!data || o.replace !== false || !Array.isArray(data.chats)) return { data, rejected: 0, issues: [] };
@@ -10051,12 +10099,47 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const path = M.pathSnapshot(ctx.svc.chat.path());
       const anchor = path.find((x) => x.id === sourceMsg.id);
       if (!anchor || !anchor.text.trim()) return finish("empty");
+      const relevant = () => {
+        if (obsolete(chatId, revision) || !ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
+        return M.visible({messageId:anchor.id,swipeIdx:anchor.swipeIdx,
+          textHash:anchor.textHash,prefixHash:anchor.prefixHash}, M.pathSnapshot(ctx.svc.chat.path()));
+      };
+      if (!relevant()) return finish("stale");
+
+      // Journal every successfully examined selected-path source, including
+      // [] results. Old v7 Memory also counts as processed on its own branch.
+      // Read persisted receipts rather than trusting only UI state: reopening
+      // the chat must not resubmit earlier sources to the model.
+      let existing, sources;
+      try {
+        const [journal, stored] = await Promise.all([
+          DB.byIndex("memorySources", "chatId", chatId),
+          DB.byIndex("memories", "chatId", chatId)
+        ]);
+        if (!relevant()) return finish("stale");
+        existing = stored.filter((x) => x.owner === owner);
+        const processed = new Set(journal.filter((x) => x.owner === owner &&
+          M.visible(x.source, path)).map((x) => x.sourceKey));
+        for (const item of existing) {
+          if (M.visible(item.source, path))
+            processed.add(M.sourceKey(chatId, owner, item.source));
+        }
+        const eligible = new Map(path.map((x) => [x.id, x]));
+        sources = M.extractionInput(path.slice(0, path.indexOf(anchor) + 1))
+          .filter((row) => {
+            const src = eligible.get(row.messageId);
+            return src && !processed.has(M.sourceKey(chatId, owner, {
+              messageId: src.id, swipeIdx: src.swipeIdx,
+              textHash: src.textHash, prefixHash: src.prefixHash
+            }));
+          });
+      } catch (_) { return finish("source-read-error"); }
+      if (!sources.length) return finish("no-unprocessed-source");
+
       const model = prov || (ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
       if (!model) return finish("no-provider");
-      const sources = M.extractionInput(path.slice(0, path.indexOf(anchor) + 1));
-      if (!sources.length) return finish("empty");
       const extractionUser = JSON.stringify({ mode: initialChat.mode, sources });
-      const MAX_EXTRACT_OUT = 600, MAX_REFLECT_OUT = 500;
+      const MAX_EXTRACT_OUT = 750, MAX_REFLECT_OUT = 500;
       if (!fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT))
         return finish("overflow-extract");
       const call = async (system, user, max_tokens) => {
@@ -10067,33 +10150,41 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           outputFormat: "message-body", sampler: { temperature: 0.35, max_tokens } });
         return PRP.openai.splitThink(response.text || "").text;
       };
-      const relevant = () => {
-        if (obsolete(chatId, revision) || !ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
-        return M.visible({messageId:anchor.id,swipeIdx:anchor.swipeIdx,
-          textHash:anchor.textHash,prefixHash:anchor.prefixHash}, M.pathSnapshot(ctx.svc.chat.path()));
-      };
-      if (!relevant()) return finish("stale");
       let proposed;
       try {
         proposed = M.parseExtraction(await call(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT), sources, path, initialChat.mode);
       } catch (e) { return finish("extract-error"); }
       if (!relevant()) return finish("stale");
       if (!proposed) return finish("invalid-extract");
-      const existing = (S.memories || []).filter((m) => m.chatId === chatId && m.owner === owner);
-      const newOnes = proposed.filter((m) => !existing.some((x) =>
-        x.source.messageId === m.source.messageId &&
-        x.source.prefixHash === m.source.prefixHash && x.quote === m.quote))
-        .map((m) => Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
-      if (!newOnes.length) return finish("no-new-memory");
-      // Memory is independent of Experience. Its valid evidence is committed
-      // immediately; failure of later reflection must never erase an episode.
+      const newOnes = proposed.map((m) =>
+        Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
+      const eligible = new Map(path.map((x) => [x.id, x]));
+      const receipts = sources.map((row) => {
+        const src = eligible.get(row.messageId);
+        const source = { messageId: src.id, swipeIdx: src.swipeIdx,
+          textHash: src.textHash, prefixHash: src.prefixHash };
+        return { id: U.uid("msrc"), schema: 1, chatId, owner, source,
+          sourceKey: M.sourceKey(chatId, owner, source), processedAt: Date.now(),
+          result: proposed.some((m) => m.source.messageId === src.id) ? "memory" : "empty" };
+      });
+      // One atomic commit across memories and source receipts. Once a source
+      // was successfully examined, even an empty answer permanently excludes
+      // it from later extractions for this exact chat/branch/swipe.
+      // The unique sourceKey index also blocks competing tab transactions.
       if (!relevant()) return finish("stale");
-      await DB.putAll(newOnes.map((m) => ["memories", m]));
+      try {
+        await DB.putAll(newOnes.map((m) => ["memories", m])
+          .concat(receipts.map((m) => ["memorySources", m])));
+      } catch (_) { return finish("source-commit-error"); }
       if (obsolete(chatId, revision)) {
-        await DB.delMany("memories", newOnes.map((m) => m.id));
+        await Promise.all([
+          DB.delMany("memories", newOnes.map((m) => m.id)),
+          DB.delMany("memorySources", receipts.map((m) => m.id))
+        ]);
         return finish("stale");
       }
       if (!relevant()) return finish("stale");
+      if (!newOnes.length) return finish("no-new-memory");
       if (S.chatId === chatId) {
         S.memories = (S.memories || []).concat(newOnes);
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
@@ -11772,6 +11863,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         await DB.del("messengerEnvironments", c.id); // как и среда переписки
         await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
         await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
+        await DB.delMany("memorySources", (await DB.byIndex("memorySources", "chatId", c.id)).map((x) => x.id));
         await DB.del("chats", c.id);
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);
