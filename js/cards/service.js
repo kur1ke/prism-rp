@@ -91,6 +91,7 @@
         await DB.del("messengerEnvironments", c.id); // как и среда переписки
         await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
         await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
+        await DB.delMany("memorySources", (await DB.byIndex("memorySources", "chatId", c.id)).map((x) => x.id));
         await DB.del("chats", c.id);
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);

@@ -59,12 +59,47 @@
       const path = M.pathSnapshot(ctx.svc.chat.path());
       const anchor = path.find((x) => x.id === sourceMsg.id);
       if (!anchor || !anchor.text.trim()) return finish("empty");
+      const relevant = () => {
+        if (obsolete(chatId, revision) || !ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
+        return M.visible({messageId:anchor.id,swipeIdx:anchor.swipeIdx,
+          textHash:anchor.textHash,prefixHash:anchor.prefixHash}, M.pathSnapshot(ctx.svc.chat.path()));
+      };
+      if (!relevant()) return finish("stale");
+
+      // Journal every successfully examined selected-path source, including
+      // [] results. Old v7 Memory also counts as processed on its own branch.
+      // Read persisted receipts rather than trusting only UI state: reopening
+      // the chat must not resubmit earlier sources to the model.
+      let existing, sources;
+      try {
+        const [journal, stored] = await Promise.all([
+          DB.byIndex("memorySources", "chatId", chatId),
+          DB.byIndex("memories", "chatId", chatId)
+        ]);
+        if (!relevant()) return finish("stale");
+        existing = stored.filter((x) => x.owner === owner);
+        const processed = new Set(journal.filter((x) => x.owner === owner &&
+          M.visible(x.source, path)).map((x) => x.sourceKey));
+        for (const item of existing) {
+          if (M.visible(item.source, path))
+            processed.add(M.sourceKey(chatId, owner, item.source));
+        }
+        const eligible = new Map(path.map((x) => [x.id, x]));
+        sources = M.extractionInput(path.slice(0, path.indexOf(anchor) + 1))
+          .filter((row) => {
+            const src = eligible.get(row.messageId);
+            return src && !processed.has(M.sourceKey(chatId, owner, {
+              messageId: src.id, swipeIdx: src.swipeIdx,
+              textHash: src.textHash, prefixHash: src.prefixHash
+            }));
+          });
+      } catch (_) { return finish("source-read-error"); }
+      if (!sources.length) return finish("no-unprocessed-source");
+
       const model = prov || (ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
       if (!model) return finish("no-provider");
-      const sources = M.extractionInput(path.slice(0, path.indexOf(anchor) + 1));
-      if (!sources.length) return finish("empty");
       const extractionUser = JSON.stringify({ mode: initialChat.mode, sources });
-      const MAX_EXTRACT_OUT = 600, MAX_REFLECT_OUT = 500;
+      const MAX_EXTRACT_OUT = 750, MAX_REFLECT_OUT = 500;
       if (!fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT))
         return finish("overflow-extract");
       const call = async (system, user, max_tokens) => {
@@ -75,33 +110,41 @@
           outputFormat: "message-body", sampler: { temperature: 0.35, max_tokens } });
         return PRP.openai.splitThink(response.text || "").text;
       };
-      const relevant = () => {
-        if (obsolete(chatId, revision) || !ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
-        return M.visible({messageId:anchor.id,swipeIdx:anchor.swipeIdx,
-          textHash:anchor.textHash,prefixHash:anchor.prefixHash}, M.pathSnapshot(ctx.svc.chat.path()));
-      };
-      if (!relevant()) return finish("stale");
       let proposed;
       try {
         proposed = M.parseExtraction(await call(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT), sources, path, initialChat.mode);
       } catch (e) { return finish("extract-error"); }
       if (!relevant()) return finish("stale");
       if (!proposed) return finish("invalid-extract");
-      const existing = (S.memories || []).filter((m) => m.chatId === chatId && m.owner === owner);
-      const newOnes = proposed.filter((m) => !existing.some((x) =>
-        x.source.messageId === m.source.messageId &&
-        x.source.prefixHash === m.source.prefixHash && x.quote === m.quote))
-        .map((m) => Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
-      if (!newOnes.length) return finish("no-new-memory");
-      // Memory is independent of Experience. Its valid evidence is committed
-      // immediately; failure of later reflection must never erase an episode.
+      const newOnes = proposed.map((m) =>
+        Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
+      const eligible = new Map(path.map((x) => [x.id, x]));
+      const receipts = sources.map((row) => {
+        const src = eligible.get(row.messageId);
+        const source = { messageId: src.id, swipeIdx: src.swipeIdx,
+          textHash: src.textHash, prefixHash: src.prefixHash };
+        return { id: U.uid("msrc"), schema: 1, chatId, owner, source,
+          sourceKey: M.sourceKey(chatId, owner, source), processedAt: Date.now(),
+          result: proposed.some((m) => m.source.messageId === src.id) ? "memory" : "empty" };
+      });
+      // One atomic commit across memories and source receipts. Once a source
+      // was successfully examined, even an empty answer permanently excludes
+      // it from later extractions for this exact chat/branch/swipe.
+      // The unique sourceKey index also blocks competing tab transactions.
       if (!relevant()) return finish("stale");
-      await DB.putAll(newOnes.map((m) => ["memories", m]));
+      try {
+        await DB.putAll(newOnes.map((m) => ["memories", m])
+          .concat(receipts.map((m) => ["memorySources", m])));
+      } catch (_) { return finish("source-commit-error"); }
       if (obsolete(chatId, revision)) {
-        await DB.delMany("memories", newOnes.map((m) => m.id));
+        await Promise.all([
+          DB.delMany("memories", newOnes.map((m) => m.id)),
+          DB.delMany("memorySources", receipts.map((m) => m.id))
+        ]);
         return finish("stale");
       }
       if (!relevant()) return finish("stale");
+      if (!newOnes.length) return finish("no-new-memory");
       if (S.chatId === chatId) {
         S.memories = (S.memories || []).concat(newOnes);
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();

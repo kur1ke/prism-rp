@@ -19,6 +19,7 @@ const PRP = (globalThis.PRP = {
 });
 require("../js/prism/memory-cycle.js");
 require("../js/prism/memory-service.js");
+require("../js/core/backup.js");
 
 const QUOTE1 = "Сегодня мы встретились в парке.";
 const QUOTE2 = "Мы вместе обсуждали план на завтра.";
@@ -38,7 +39,7 @@ function harness() {
   const chat = { id: "ch", cardId: "owner", mode: "rp" };
   const S = { chatId: "ch", memories: [], reflections: [], drawerOpen: false, tab: "scene" };
   const path = [];
-  const storage = { memories: new Map(), reflections: new Map() };
+  const storage = { memories: new Map(), reflections: new Map(), memorySources: new Map() };
   const DB = {
     byIndex: async (type, index, id) => [...storage[type].values()].filter((r) => r.chatId === id),
     putAll: async (records) => records.forEach(([type, row]) => storage[type].set(row.id, row)),
@@ -78,7 +79,7 @@ async function fifo() {
     return { text: unchanged };
   };
   const p1 = h.memory.observe(first, h.model);
-  assert.equal(typeof release, "function", "first extraction must begin immediately");
+  await microtasksUntil(() => typeof release === "function");
   h.path.push(second);
   const p2 = h.memory.observe(second, h.model);
   assert.equal(count, 1, "same-chat requests must not overlap");
@@ -105,6 +106,7 @@ async function deletionDuringMemoryWrite() {
   assert.equal((await task).status, "stale");
   assert.equal(h.storage.memories.size, 0, "late Memory write must be compensated");
   assert.equal(h.storage.reflections.size, 0);
+  assert.equal(h.storage.memorySources.size, 0, "source receipt must be compensated with Memory");
   assert.equal((await h.memory.observe(first, h.model)).status, "stale");
   console.log("PASS: retired chat rejects and compensates a late Memory write");
 }
@@ -125,6 +127,7 @@ async function deletionDuringReflectionWrite() {
   commit();
   assert.equal((await task).status, "stale");
   assert.equal(h.storage.reflections.size, 0, "late Experience write must be compensated");
+  assert.equal(h.storage.memorySources.size, 1, "Memory and its source receipt survive Reflection failure");
   console.log("PASS: retired chat compensates a late Reflection write");
 }
 async function sameIdRestoreKeepsOldWorkInvalid() {
@@ -142,7 +145,7 @@ async function sameIdRestoreKeepsOldWorkInvalid() {
     return { text: extraction("a", QUOTE1) };
   };
   const oldTask = h.memory.observe(first, h.model);
-  assert.equal(typeof release, "function");
+  await microtasksUntil(() => typeof release === "function");
   h.memory.retireChat("ch");
   // An import recreated the chat with the same ID and triggered the normal load.
   await h.memory.load("ch");
@@ -153,10 +156,106 @@ async function sameIdRestoreKeepsOldWorkInvalid() {
   assert.equal(h.storage.memories.size, 1, "retired model call must not write into restored chat");
   console.log("PASS: same-ID restore revives the chat but not its obsolete requests");
 }
+async function oneSourceOnlyAcrossTurnsAndReload() {
+  const h = harness();
+  const q = "Сегодня мы встретились в парке, поговорили, подарили цветы и попрощались.";
+  const old = message("a", q), next = message("b", QUOTE2, "a");
+  h.path.push(old);
+  const attempts = [];
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (!data.sources) return { text: unchanged };
+    attempts.push(data.sources.map((x) => x.messageId));
+    const id = data.sources.at(-1).messageId;
+    const quote = data.sources.at(-1).text;
+    const first = { messageId: id, quote,
+      event: "Персонажи пережили одну встречу с несколькими деталями", kind: "reported" };
+    return { text: JSON.stringify({ memories: id === "a" ? [
+      first,
+      { messageId: id, quote: "поговорили", event: "Они говорили о своих переживаниях", kind: "reported" },
+      { messageId: id, quote: "подарили цветы", event: "Они обменялись цветами", kind: "reported" }
+    ] : [first] }) };
+  };
+  const first = await h.memory.observe(old, h.model);
+  assert.equal(first.status, "remembered-unchanged");
+  assert.equal(h.storage.memories.size, 1, "one source cannot fan out into several Memory records");
+  assert.equal(h.storage.memorySources.size, 1);
+  assert.equal((await h.memory.observe(old, h.model)).status, "no-unprocessed-source");
+  assert.equal(attempts.length, 1, "duplicate observe does not call provider again");
+  await h.memory.load("ch");
+  h.path.push(next);
+  assert.equal((await h.memory.observe(next, h.model)).status, "remembered-unchanged");
+  assert.deepEqual(attempts, [["a"], ["b"]], "older a never returns to extraction");
+  assert.equal(h.storage.memories.size, 2);
+  assert.equal(h.storage.memorySources.size, 2);
+  console.log("PASS: one Memory per source and durable skip across later turns/reload");
+}
+async function noMemoryStillMarksSource() {
+  const h = harness(), a = message("a", QUOTE1), b = message("b", QUOTE2, "a");
+  h.path.push(a);
+  let calls = 0;
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (data.sources) {
+      calls++;
+      return { text: JSON.stringify({ memories: [] }) };
+    }
+    throw Error("No reflection for empty extraction");
+  };
+  assert.equal((await h.memory.observe(a, h.model)).status, "no-new-memory");
+  assert.equal(h.storage.memorySources.size, 1);
+  assert.equal((await h.memory.observe(a, h.model)).status, "no-unprocessed-source");
+  h.path.push(b);
+  assert.equal((await h.memory.observe(b, h.model)).status, "no-new-memory");
+  assert.equal(calls, 2, "empty a must not be sent to the model a second time");
+  assert.equal(h.storage.memorySources.size, 2);
+  console.log("PASS: empty successful extraction is remembered as processed");
+}
+async function pathAndLegacyAreIndependent() {
+  const M = PRP.memoryCycle;
+  const raw = [{ messageId: "same", role: "character", text: "Много деталей о встрече и подарке" }];
+  const path = M.pathSnapshot([message("same", raw[0].text)]);
+  const parsed = M.parseExtraction(JSON.stringify({ memories: [
+    { messageId: "same", quote: "Много деталей о встрече", event: "Случилась запоминающаяся встреча", kind: "observed" },
+    { messageId: "same", quote: "деталей о встрече и подарке", event: "Один разговор о многих предметах", kind: "observed" }
+  ] }), raw, path, "rp");
+  assert.equal(parsed.length, 1);
+  const old = { id: "legacy1", createdAt: 100, source: { messageId: "same",
+    swipeIdx: 0, textHash: path[0].textHash, prefixHash: path[0].prefixHash }, event: "Событие А" };
+  const newer = { ...old, id: "legacy2", createdAt: 200, event: "Повтор события" };
+  assert.deepEqual(M.recent([newer,old],path,10).map(x=>x.id), ["legacy1"]);
+  const alt = { ...old.source, swipeIdx: 1, prefixHash: "alternate" };
+  assert.notEqual(M.sourceKey("ch","owner",old.source),M.sourceKey("ch","owner",alt));
+  console.log("PASS: legacy duplicate projection and alternate swipe provenance");
+}
+function backupJournalValidation() {
+  const M = PRP.memoryCycle, snap = M.pathSnapshot([message("evt", QUOTE1)])[0];
+  const row = { id: "r", chatId: "ch", owner: "owner",
+    source: { messageId: snap.id, swipeIdx: snap.swipeIdx,
+      textHash: snap.textHash, prefixHash: snap.prefixHash }, result: "empty" };
+  row.sourceKey = M.sourceKey("ch", "owner", row.source);
+  const data = { cards: [{ id: "owner" }, { id: "other" }],
+    chats: [{ id: "ch", cardId: "owner" }], memorySources: [row] };
+  const B = PRP.backup;
+  assert.equal(B.check(data, { replace: true }).data.memorySources.length, 1);
+  const foreign = { ...row, owner: "other", id: "foreign",
+    sourceKey: M.sourceKey("ch", "other", row.source) };
+  const bad = B.check({ ...data, memorySources: [foreign] }, { replace: true });
+  assert.equal(bad.data.memorySources.length, 0, "foreign owner must not inject a processed marker");
+  const forged = { ...row, id: "forged", sourceKey: "invented" };
+  assert.equal(B.check({ ...data, memorySources: [forged] }, { replace: true }).data.memorySources.length, 0);
+  const repeated = { ...row, id: "dupe" };
+  assert.equal(B.check({ ...data, memorySources: [row, repeated] }, { replace: true }).data.memorySources.length, 0);
+  console.log("PASS: backup refuses forged, cross-owner and repeated source receipts");
+}
 async function run() {
   await fifo();
   await deletionDuringMemoryWrite();
   await deletionDuringReflectionWrite();
   await sameIdRestoreKeepsOldWorkInvalid();
+  await oneSourceOnlyAcrossTurnsAndReload();
+  await noMemoryStillMarksSource();
+  await pathAndLegacyAreIndependent();
+  backupJournalValidation();
 }
 run().catch((e) => { console.error(e); process.exitCode = 1; });

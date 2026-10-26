@@ -19,7 +19,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
 
-  const ID_STORES = ["cards", "chats", "messages", "experience", "images", "assist", "worldPacks", "worldLenses", "memories", "reflections"];
+  const ID_STORES = ["cards", "chats", "messages", "experience", "images", "assist", "worldPacks", "worldLenses", "memories", "reflections", "memorySources"];
   const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
   const sid = (v) => (v == null ? "" : String(v));
 
@@ -78,9 +78,10 @@
     byChat("images", "image-orphan-chat", "Картинка");
     byChat("memories", "memory-orphan-chat", "Воспоминание");
     byChat("reflections", "reflection-orphan-chat", "Осмысление");
+    byChat("memorySources", "memory-source-orphan-chat", "Источник памяти");
     // Ownership must match the actual chat's character, not just a plausible chatId.
     const chatOwners = new Map((out.chats || []).map((c) => [sid(c.id), sid(c.cardId)]));
-    for (const st of ["memories", "reflections"]) if (Array.isArray(out[st])) {
+    for (const st of ["memories", "reflections", "memorySources"]) if (Array.isArray(out[st])) {
       out[st] = out[st].filter((r) => {
         const expected = chatOwners.get(sid(r.chatId));
         // For additive restores an existing chat ID may be known but not in this backup.
@@ -88,6 +89,27 @@
         // Additive imports into chats absent from this backup are rejected: chat owner cannot be verified here.
         reject(st, r.id, "memory-owner-mismatch", "Память или опыт привязаны к чужому персонажу.");
         return false;
+      });
+    }
+    // Imported receipts gate future autonomous extraction. Reject fabricated
+    // provenance, duplicate keys and mismatched owners before importAll.
+    if (Array.isArray(out.memorySources)) {
+      const counts = new Map();
+      for (const r of out.memorySources)
+        if (typeof r.sourceKey === "string")
+          counts.set(r.sourceKey, (counts.get(r.sourceKey) || 0) + 1);
+      out.memorySources = out.memorySources.filter((r) => {
+        const src = r.source;
+        const valid = src && typeof src.messageId === "string" && src.messageId &&
+          Number.isInteger(src.swipeIdx) && src.swipeIdx >= 0 &&
+          typeof src.textHash === "string" && src.textHash &&
+          typeof src.prefixHash === "string" && src.prefixHash &&
+          ["memory", "empty"].includes(r.result) &&
+          r.sourceKey === JSON.stringify([r.chatId, r.owner, src.messageId,
+            src.swipeIdx, src.textHash, src.prefixHash]);
+        if (!valid) { reject("memorySources", r.id, "memory-source-invalid", "Недостоверный источник обработки Memory."); return false; }
+        if (counts.get(r.sourceKey) > 1) { reject("memorySources", r.id, "memory-source-duplicate", "Повтор обработки одного источника Memory."); return false; }
+        return true;
       });
     }
     if (Array.isArray(out.experience)) out.experience = out.experience.filter((r) => {
