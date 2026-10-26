@@ -78,25 +78,6 @@
     byChat("images", "image-orphan-chat", "Картинка");
     byChat("memories", "memory-orphan-chat", "Воспоминание");
     byChat("reflections", "reflection-orphan-chat", "Осмысление");
-    // For imported chats the owner is known: Memory and Experience must
-    // belong to that chat's Card, not merely to any existing Card.
-    // In append mode existing chat ownership may be unavailable to this pure
-    // checker; the live runtime additionally filters by chatId AND cardId.
-    const chatOwners = new Map((out.chats || []).map((c) => [sid(c.id), sid(c.cardId)]));
-    for (const st of ["memories", "reflections"]) if (Array.isArray(out[st])) {
-      out[st] = out[st].filter((r) => {
-        if (!cards.has(sid(r.owner))) {
-          reject(st, r.id, "autobiography-orphan-card", "Автоматическая память принадлежит отсутствующему персонажу.");
-          return false;
-        }
-        const owner = chatOwners.get(sid(r.chatId));
-        if (owner && owner !== sid(r.owner)) {
-          reject(st, r.id, "autobiography-wrong-owner", "Автоматическая память не принадлежит персонажу этого чата.");
-          return false;
-        }
-        return true;
-      });
-    }
     // Ownership must match the actual chat's character, not just a plausible chatId.
     const chatOwners = new Map((out.chats || []).map((c) => [sid(c.id), sid(c.cardId)]));
     for (const st of ["memories", "reflections"]) if (Array.isArray(out[st])) {
