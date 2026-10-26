@@ -14,13 +14,26 @@
     // A deleted chat cannot receive late model results, including writes that
     // were already waiting for IndexedDB when deletion started.
     const retiredChats = new Set();
-    function retireChat(chatId) { if (chatId) retiredChats.add(chatId); }
+    const revisions = new Map();
+    const obsolete = (chatId, revision) => retiredChats.has(chatId) || (revisions.get(chatId) || 0) !== revision;
+    function retireChat(chatId) {
+      if (!chatId) return;
+      retiredChats.add(chatId);
+      revisions.set(chatId, (revisions.get(chatId) || 0) + 1);
+      // An old request must not block a subsequently restored chat with the same ID.
+      pendingByChat.delete(chatId);
+    }
     async function load(chatId) {
       const [memories, reflections] = await Promise.all([
         DB.byIndex("memories", "chatId", chatId),
         DB.byIndex("reflections", "chatId", chatId)
       ]);
-      if (S.chatId === chatId) { S.memories = memories; S.reflections = reflections; S.memoryStatus = ""; }
+      if (S.chatId === chatId) {
+        // A backup may restore the same chat ID. Old requests keep their prior
+        // revision and cannot write into the restored chat.
+        if ((S.chats || []).some((c) => c.id === chatId)) retiredChats.delete(chatId);
+        S.memories = memories; S.reflections = reflections; S.memoryStatus = "";
+      }
     }
     function visibleMemories(path) { const c = ctx.chat(); return c ? M.recent((S.memories || []).filter(x => x.chatId === c.id && x.owner === c.cardId), M.pathSnapshot(path || ctx.svc.chat.path()), Infinity) : []; }
     function experience(path) {
@@ -37,12 +50,12 @@
       if (S.drawerOpen && S.tab === "memory" && ctx.ui && ctx.ui.renderDrawer) ctx.ui.renderDrawer();
       return { status: code };
     }
-    async function cycle(sourceMsg, prov) {
+    async function cycle(sourceMsg, prov, revision) {
       const initialChat = ctx.chat();
       if (!initialChat || sourceMsg.chatId !== initialChat.id) return { status: "stale" };
       const chatId = initialChat.id, owner = initialChat.cardId;
-      if (retiredChats.has(chatId)) return { status: "stale" };
-      const finish = (code) => S.chatId === chatId ? recordStatus(code) : { status: code };
+      if (obsolete(chatId, revision)) return { status: "stale" };
+      const finish = (code) => S.chatId === chatId && !obsolete(chatId, revision) ? recordStatus(code) : { status: code };
       const path = M.pathSnapshot(ctx.svc.chat.path());
       const anchor = path.find((x) => x.id === sourceMsg.id);
       if (!anchor || !anchor.text.trim()) return finish("empty");
@@ -63,7 +76,7 @@
         return PRP.openai.splitThink(response.text || "").text;
       };
       const relevant = () => {
-        if (retiredChats.has(chatId) || !ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
+        if (obsolete(chatId, revision) || !ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
         return M.visible({messageId:anchor.id,swipeIdx:anchor.swipeIdx,
           textHash:anchor.textHash,prefixHash:anchor.prefixHash}, M.pathSnapshot(ctx.svc.chat.path()));
       };
@@ -84,7 +97,7 @@
       // immediately; failure of later reflection must never erase an episode.
       if (!relevant()) return finish("stale");
       await DB.putAll(newOnes.map((m) => ["memories", m]));
-      if (retiredChats.has(chatId)) {
+      if (obsolete(chatId, revision)) {
         await DB.delMany("memories", newOnes.map((m) => m.id));
         return finish("stale");
       }
@@ -129,7 +142,7 @@
       // Memory is already safely stored as a separate class of evidence.
       if (record) {
         await DB.put("reflections", record);
-        if (retiredChats.has(chatId)) {
+        if (obsolete(chatId, revision)) {
           await DB.del("reflections", record.id);
           return finish("stale");
         }
@@ -147,9 +160,10 @@
       const chatId = msg && msg.chatId;
       if (!chatId) return Promise.resolve({ status: "no-source" });
       if (retiredChats.has(chatId)) return Promise.resolve({ status: "stale" });
+      const revision = revisions.get(chatId) || 0;
       const preceding = pendingByChat.get(chatId);
-      const run = () => cycle(msg, prov).catch(() =>
-        S.chatId === chatId ? recordStatus("error") : { status: "error" });
+      const run = () => cycle(msg, prov, revision).catch(() =>
+        S.chatId === chatId && !obsolete(chatId, revision) ? recordStatus("error") : { status: "error" });
       const task = preceding ? preceding.then(run, run) : run();
       pendingByChat.set(chatId, task);
       task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
