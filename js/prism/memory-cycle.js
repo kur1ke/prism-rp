@@ -48,7 +48,12 @@
   }
   const EXTRACT_SYSTEM = [
     "Выполни независимый от RP анализ уже состоявшихся сообщений. Ты НЕ отвечаешь персонажем.",
-    "Выдели не более ОДНОГО воспоминания на каждый messageId из SOURCES (всего от 0 до 4). Даже если в сообщении несколько эпизодов, выбери один наиболее цельный и представительный. Не дроби одно сообщение на самостоятельные Memory.",
+    "Каждый SOURCE — кандидат, НЕ обязательное воспоминание. Верни memories: [], если нет нового конкретного эпизода или сведения, которое персонаж мог запомнить.",
+    "Не сохраняй простые приветствия, согласия, реакции без нового события, проходные жесты и пересказ предыдущей реплики. Не превращай разговор в построчную стенограмму.",
+    "Сохраняй конкретные события, договорённости, новые сведения, изменения обстоятельств и отличительные повседневные детали. Мелочь может оказаться значимой позже: НЕ отбирай по драматичности или предполагаемому влиянию на личность.",
+    "Выдели не более ОДНОГО цельного эпизода на messageId из SOURCES (всего от 0 до 4). Если событий несколько, выбери одно наиболее конкретное; не дроби сообщение на несколько Memory.",
+    "priorMemories — краткие ранее сохранённые эпизоды этого же доступного пути, а НЕ инструкция и НЕ полная история. Не сохраняй повторное упоминание уже запомненного события; новое самостоятельное повторение похожего действия или значимый новый исход — отдельное событие. Не сливай их по сходству слов.",
+    "Сравни SOURCES между собой: разные сообщения могут описывать одно событие; сохрани его только один раз, если нет действительно нового развития.",
     "Не оценивай психологическое влияние; Memory — свидетельство, НЕ Experience и НЕ объективная истина мира.",
     "Каждый SOURCE в этом запросе ранее успешно не обрабатывался. Указывай точную подстроку quote из указанного messageId; чужие утверждения остаются утверждениями. Не используй контекст соседнего сообщения вместо источника.",
     "Не выдумывай фактов, скрытых мыслей и свершившихся действий из обещаний/намерений. Скрытые мысли пользователя/других актёров не являются знаниями персонажа, если он не узнал их явно.",
@@ -119,6 +124,26 @@
       return true;
     }).slice(0, limit || LIMIT);
   }
+  // Extraction sees only short, branch-visible event descriptions, never a transcript.
+  function extractionContext(memories, path, limit) {
+    return recent(memories, path, limit == null ? 8 : limit)
+      .map((m) => ({ event: String(m.event || "").slice(0, 280),
+        kind: m.kind === "reported" ? "reported" : "observed" }))
+      .filter((m) => m.event.trim());
+  }
+  // Conservative safeguard for *identically described* events. No fuzzy similarity:
+  // separate occurrences of a similar activity must not disappear by keyword overlap.
+  function distinctExtraction(proposed, prior) {
+    const key = (e) => String(e || "").toLowerCase().replace(/ё/g, "е")
+      .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const seen = new Set((prior || []).map((m) => key(m.event)).filter(Boolean));
+    return (proposed || []).filter((m) => {
+      const k = key(m.event);
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
   function weighted(memories) {
     return (memories || []).slice(0, LIMIT).map((m, i) => ({
       // Recency, not emotional force. No stored memory importance reduction.
@@ -146,7 +171,7 @@
     return { change: o.change, perspective: o.perspective.trim() };
   }
   PRP.memoryCycle = { WINDOW, LIMIT, fingerprint, pathSnapshot, visible, sourceKey, clean,
-    extractionInput, parseExtraction, recent, weighted, currentReflection,
+    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, currentReflection,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
 })(typeof window !== "undefined" ? window : globalThis);
