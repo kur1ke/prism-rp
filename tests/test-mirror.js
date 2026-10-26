@@ -26,6 +26,15 @@ assert.match(html, /cdn\.jsdelivr\.net\/gh\/kur1ke\/prism-rp@/);
 assert.doesNotMatch(html, /kur1ke\.github\.io\/prism-rp\/dist\/web/);
 const bare = html.replace(/<script[\s\S]*?<\/script>/g, "");
 assert.doesNotMatch(bare, /[\[\]{}]/);
+// Test-pinned offline bundle must use the current IndexedDB schema: otherwise
+// API downtime can silently load v6 code over an existing v7/v8 database.
+const storeJs=fs.readFileSync(path.join(ROOT, "js/core/store.js"), "utf8");
+const currentDbVersion=Number(storeJs.match(/const DB_VERSION = (\d+)/)[1]);
+const fallbackDbVersion=Number(html.match(/var safeDbVersion = (\d+)/)[1]);
+assert.equal(fallbackDbVersion,currentDbVersion,
+  "the immutable fallback is declared for a stale IndexedDB schema; repin a verified testing bundle");
+assert.match(html,/var safeRevision = "c92f1c685a237c989047f327f9cedac1d9f750e2"/);
+assert.doesNotMatch(html,/9355480089a1dd2d25b25be528b5bf93bc3a847b/);
 const scriptCode = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 async function run(reply,fail) {
   let src="", scripts=[],badge={textContent:""},boot={textContent:""};
@@ -56,7 +65,7 @@ async function run(reply,fail) {
   assert.ok(!ok.scripts[1].src.includes("/main/"));
   ok.scripts[1].onerror();
   assert.match(ok.boot.textContent,/оба источника недоступны/);
-  const pinned="9355480089a1dd2d25b25be528b5bf93bc3a847b";
+  const pinned="c92f1c685a237c989047f327f9cedac1d9f750e2";
   // API blocked: never fetch mutable @testing, even with a query parameter.
   const fallback=await run(null,true);
   assert.equal(fallback.ctx.PRISM_RP_TEST_REVISION,pinned);
@@ -66,7 +75,8 @@ async function run(reply,fail) {
   fallback.ctx.PRP={}; fallback.ctx.PRISM_RP_VERSION="test";
   fallback.ctx.PRISM_RP_BUILD_SHA=sha;
   fallback.scripts[0].onload();
-  assert.match(fallback.badge.textContent,/закреплено 9355480/);
+  assert.match(fallback.badge.textContent,/закреплено c92f1c6/);
+  assert.match(fallback.badge.textContent,/DB v8/);
   assert.match(fallback.badge.textContent,/сборка e338fa4/);
   assert.match(fallback.badge.textContent,/API недоступен/);
   const noMarker=await run(null,true);
