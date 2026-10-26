@@ -8527,6 +8527,9 @@ async function autoMemoryTests() {
       return {text:reflect("Аля почувствовала, что разговор стал для неё уютным и доверительным.")};
     };
     const oldTask=h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"});
+    // Durable source receipts are fetched before the first provider call.
+    for (let i=0; i<20 && typeof unblock!=="function"; i++)
+      await new Promise((resolve)=>setImmediate(resolve));
     assert.strictEqual(typeof unblock,"function");
     await h.chat.createChat("messenger","c1");
     const freshId=h.S.chatId;
