@@ -60,6 +60,9 @@ function assertCurrentPhoto() {
   assert.ok(text.includes("ранее установленные вещи"), text);
   assert.ok(!text.includes("ПОЛНЫЙ перечень надетой сейчас одежды"),
     "the complete origin must not masquerade as the new shot");
+  const lowBudget = M.messengerSections({ world, temporal: {}, conversation: {} }, { lists: false, plans: 0 }).place;
+  assert.ok(!lowBudget.includes("на последнем подтверждённом снимке"),
+    "verified photo must be optional under Messenger budget");
   assert.equal(t.state.actors.char.wearState.removed.length, 0);
   console.log("PASS: recent verified photograph takes presentation priority without removal inference");
 }
@@ -116,6 +119,9 @@ function assertUnverifiedDrawRemainsHistoryOnly() {
   assert.ok(txt.includes("не подтверждённая трекером"), txt);
   assert.ok(!txt.includes("ПОЛНЫЙ перечень надетой сейчас одежды"),
     "the last image must be distinguished from the historical origin outfit");
+  const lowBudget = M.messengerSections({ world, conversation: {}, temporal: {} }, { lists: false, plans: 0 }).place;
+  assert.ok(!lowBudget.includes("последний авторский [draw:]"),
+    "unverified raw photo data must drop before protected context");
   const swapped = JSON.parse(JSON.stringify(first));
   swapped.swipes.push({ text: "другой ответ", draws: [], stateEvents: [], sceneOps: [] });
   swapped.swipeIdx = 1;
