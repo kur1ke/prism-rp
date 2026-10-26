@@ -80,7 +80,9 @@
       const wearFacts = projected.wearFacts;
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
-        sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
+        sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked,
+        reflection: ctx.svc.memory ? ctx.svc.memory.experience(path) : null,
+        worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
