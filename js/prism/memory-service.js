@@ -70,11 +70,12 @@
       const candidates = M.recent(existing.concat(newOnes), path, M.LIMIT);
       const prior = experience(ctx.svc.chat.path());
       const cd = ctx.card() || {};
-      const core = cd.prismCore && cd.prismCore.reviewed !== false
-        ? { name: cd.name, identity: cd.prismCore.identity, traits: cd.prismCore.traits,
-          voice: cd.prismCore.voice, durable: cd.prismCore.durableContext }
-        : { name: cd.name, description: String(cd.description || "").slice(0, 850),
-          personality: String(cd.personality || "").slice(0, 850) };
+      // Exactly the same Core interpretation as normal Prism assembly. Do not
+      // let reflection construct a second, divergent character baseline.
+      const canonical = PRP.cardContext.core(cd, (x) => x);
+      const core = { name: cd.name, source: canonical.source,
+        identity: canonical.identity, personality: canonical.personality,
+        traits: canonical.traits, voice: canonical.voice, durableContext: canonical.durableContext };
       const payload = { mode: initialChat.mode, coreGuide: core,
         previousExperience: prior ? prior.perspective : null,
         memories: M.weighted(candidates) };
