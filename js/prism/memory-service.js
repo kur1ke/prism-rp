@@ -175,7 +175,15 @@
       const payload = { mode: initialChat.mode, coreGuide: core,
         previousExperience: prior ? prior.perspective : null,
         memories: M.weighted(candidates, path) };
+      const lateIntegrated = M.unappliedIntegration(S.reflections || [], path, prior);
+      if (lateIntegrated) payload.recentIntegrated = lateIntegrated.perspective;
       let reflectionUser = JSON.stringify(payload);
+      // The late summary is optional; preserve the Memory evidence before
+      // giving up current Reflection to the strict token budget.
+      while (!fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT) && payload.recentIntegrated) {
+        delete payload.recentIntegrated;
+        reflectionUser = JSON.stringify(payload);
+      }
       while (payload.memories.length && !fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)) {
         payload.memories.pop();
         reflectionUser = JSON.stringify(payload);
