@@ -519,6 +519,181 @@ async function batchFailureDoesNotRollbackCurrentReflection() {
   console.log("PASS: batch failure retries after new Memory without rollback or false current Experience");
 }
 
+async function experienceIntegrationOverTwoHundredMemories() {
+  const h = harness(), counts = { reflect: 0, batch: 0, integrated: 0 };
+  const payloads = [];
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (data.sources) {
+      const last = data.sources.at(-1);
+      return { text: JSON.stringify({ memories: [{
+        messageId: last.messageId, quote: last.text,
+        event: "Персонаж запомнил независимое событие " + last.messageId, kind: "observed"
+      }] }) };
+    }
+    if (data.batches) {
+      counts.integrated++;
+      payloads.push(data);
+      assert.equal(data.batches.length, 10, "an integration wave only contains ten batch perspectives");
+      assert.equal(data.batches[0].order, 1);
+      assert.equal(data.batches[9].order, 10);
+      assert.equal(Object.hasOwn(data, "memories"), false, "integration never transfers raw Memory");
+      assert.equal(Object.hasOwn(data, "previousExperience"), false,
+        "integration cannot recursively include current rolling Experience");
+      return { text: JSON.stringify({ change: "changed",
+        perspective: "Персонаж приобрёл общее восприятие после волны " + counts.integrated + "." }) };
+    }
+    if (Object.hasOwn(data, "previousExperience")) {
+      counts.reflect++;
+      if (counts.reflect === 101)
+        assert.equal(data.previousExperience, "Персонаж приобрёл общее восприятие после волны 1.",
+          "next continuous Reflection must inherit the active integration");
+      return { text: changed };
+    }
+    counts.batch++;
+    assert.equal(data.memories.length, 10);
+    assert.equal(Object.hasOwn(data, "previousExperience"), false);
+    return { text: JSON.stringify({ change: "changed",
+      perspective: "Независимый опыт порции " + counts.batch + " сформирован." }) };
+  };
+  for (let i = 1; i <= 201; i++) {
+    const prior = h.path.at(-1);
+    const msg = message("long-" + i, "Состоялось самостоятельное памятное событие номер " + i + ".", prior?.id);
+    h.path.push(msg);
+    const outcome = await h.memory.observe(msg, h.model);
+    assert.ok(["reflected", "remembered-unchanged"].includes(outcome.status), "cycle " + i);
+    if (i === 100 || i === 200) {
+      const current = h.memory.experience();
+      assert.equal(current.kind, "integrated", "integrated summary must be the single active Experience at a wave boundary");
+      assert.equal(current.perspective, "Персонаж приобрёл общее восприятие после волны " + (i / 100) + ".");
+    }
+  }
+  assert.deepEqual(counts, { reflect: 201, batch: 20, integrated: 2 },
+    "continuous Reflection persists; only one integration call per ten independent batches");
+  assert.equal(payloads[0].previousIntegrated, null);
+  assert.equal(payloads[1].previousIntegrated, "Персонаж приобрёл общее восприятие после волны 1.",
+    "subsequent integration inherits only previous integrated Experience");
+  assert.equal(payloads[1].batches[0].perspective, "Независимый опыт порции 11 сформирован.",
+    "second wave begins after first hundred Memory");
+  assert.equal(payloads[1].batches[9].perspective, "Независимый опыт порции 20 сформирован.");
+  const records = [...h.storage.reflections.values()];
+  assert.equal(records.filter(r=>r.kind==="batch").length,20);
+  const summaries=records.filter(r=>r.kind==="integrated");
+  assert.equal(summaries.length,2);
+  assert.equal(summaries[1].previousId,summaries[0].id);
+  assert.equal(summaries[0].batchIds.length,10);
+  assert.equal(summaries[1].batchIds.length,10);
+  assert.ok(summaries[0].batchIds.every(id=>!summaries[1].batchIds.includes(id)),
+    "old batch cannot re-enter a later integration wave");
+  await h.memory.load("ch");
+  const plan=PRP.memoryCycle.integrationPlan([...h.storage.memories.values()],
+    [...h.storage.reflections.values()], PRP.memoryCycle.pathSnapshot(h.path),"ch","owner");
+  assert.equal(plan,null,"reload must not repeat an already completed integration");
+  assert.notEqual(h.memory.experience().kind,"batch","batch records never enter normal Prism");
+  console.log("PASS: 200 Memory -> 20 disjoint batches -> 2 cumulative integrations with one active Experience");
+}
+function integrationPlanRejectsWrongOwnershipAndBranch() {
+  const M=PRP.memoryCycle,path=[],mem=[];
+  for(let i=0;i<100;i++) {
+    const node=message("src-int-"+i,"Состоялось самостоятельное событие "+i+".",path.at(-1)?.id);
+    path.push(node);
+  }
+  const snap=M.pathSnapshot(path);
+  for(let i=0;i<100;i++) {
+    const row=snap[i];
+    mem.push({id:"im"+i,event:"Эпизод "+i,
+      source:{messageId:row.id,swipeIdx:row.swipeIdx,
+        textHash:row.textHash,prefixHash:row.prefixHash}});
+  }
+  const batches=[];
+  for(let i=0;i<10;i++) {
+    const start=i*10, memoryIds=mem.slice(start,start+10).map(x=>x.id);
+    batches.push({id:"exp-batch:"+JSON.stringify(["ch","owner",...memoryIds]),
+      kind:"batch",chatId:"ch",owner:"owner",memoryIds,anchor:mem[start+9].source,
+      change:"changed",perspective:"Сформировалась перспектива "+i});
+  }
+  const plan=M.integrationPlan(mem,batches,snap,"ch","owner");
+  assert.equal(plan.batchIds.length,10);
+  assert.equal(M.integrationPlan(mem,batches,snap,"another-chat","owner"),null,
+    "cannot use batches owned by another chat");
+  assert.equal(M.integrationPlan(mem,batches,snap,"ch","other-owner"),null,
+    "cannot use batches owned by another character");
+  assert.equal(M.integrationPlan(mem,batches.slice(1),snap,"ch","owner"),null,
+    "missing earlier checkpoint blocks later integration");
+  const alternative=path.map((x,i)=>i===30?{...x,swipeIdx:1,
+    swipes:x.swipes.concat([{text:"Альтернативная встреча.",sceneOps:[]}])}:x);
+  assert.equal(M.integrationPlan(mem,batches,M.pathSnapshot(alternative),"ch","owner"),null,
+    "altered ancestor swipe blocks sibling integration input");
+  const old=M.currentReflection([...batches, {kind:"current",anchor:mem[99].source,perspective:"Текущий опыт",createdAt:3}],
+    snap);
+  assert.equal(old.kind,"current","batch never selected as live Experience");
+  const completed={id:plan.id,kind:"integrated",owner:"owner",chatId:"ch",
+    batchIds:plan.batchIds,anchor:plan.anchor,perspective:"Общий опыт",
+    previousId:null,createdAt:4};
+  assert.equal(M.currentReflection([...batches, old, completed],snap).id,plan.id,
+    "integrated perspective wins when anchored to same last source");
+  assert.equal(M.integrationPlan(mem,batches.concat([completed]),snap,"ch","owner"),null,
+    "an existing valid integration cannot be executed twice");
+  console.log("PASS: integration verifies all ten source batches and selects branch-visible summary");
+}
+
+async function recoveredLateIntegrationDoesNotEraseRecentExperience() {
+  const h = harness();
+  let integrationAttempts = 0, currentCalls = 0, resumedInput;
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (data.sources) {
+      const src = data.sources.at(-1);
+      return { text: JSON.stringify({ memories: [{
+        messageId: src.messageId, quote: src.text,
+        event: "Новое эпизодическое воспоминание " + src.messageId, kind: "observed"
+      }] }) };
+    }
+    if (data.batches) {
+      integrationAttempts++;
+      if (integrationAttempts === 1) return { text: "not valid JSON" };
+      return { text: JSON.stringify({ change: "changed",
+        perspective: "Долгосрочный общий опыт принят после поздней Reflection." }) };
+    }
+    if (Object.hasOwn(data, "previousExperience")) {
+      currentCalls++;
+      if (currentCalls === 102) resumedInput = data;
+      if (currentCalls === 101) return { text: JSON.stringify({
+        change: "changed", perspective: "Воспоминания о недавней встрече оказались особенно свежими."
+      }) };
+      return { text: currentCalls === 102 ? JSON.stringify({
+        change: "changed", perspective: "Долгосрочный опыт включён вместе с последними событиями."
+      }) : changed };
+    }
+    return { text: JSON.stringify({ change: "changed",
+      perspective: "В отдельном блоке возникло новое субъективное ощущение." }) };
+  };
+  for (let i = 1; i <= 102; i++) {
+    const p = h.path.at(-1);
+    const msg = message("late-" + i, "Произошло отдельное наблюдаемое событие номер " + i + ".", p?.id);
+    h.path.push(msg);
+    await h.memory.observe(msg, h.model);
+    if (i === 100)
+      assert.equal([...h.storage.reflections.values()].filter(r=>r.kind==="integrated").length,0,
+        "invalid integration must not commit");
+    if (i === 101) {
+      assert.equal([...h.storage.reflections.values()].filter(r=>r.kind==="integrated").length,1,
+        "retry succeeded at 101st new Memory");
+      assert.notEqual(h.memory.experience().kind,"integrated",
+        "integration anchored at 100 must not erase a newer 101st current Experience");
+    }
+  }
+  assert.equal(integrationAttempts,2);
+  assert.equal(resumedInput.recentIntegrated,
+    "Долгосрочный общий опыт принят после поздней Reflection.",
+    "next current Reflection receives recovered integration as optional bounded context");
+  assert.equal(h.memory.experience().perspective,
+    "Долгосрочный опыт включён вместе с последними событиями.");
+  const records=[...h.storage.reflections.values()].filter(r=>r.kind==="integrated");
+  assert.equal(records.length,1,"recovery must not create duplicate summaries");
+  console.log("PASS: delayed integration is incorporated without overwriting newer current Experience");
+}
+
 function extractionSelectionContract() {
   const M = PRP.memoryCycle;
   assert.match(M.EXTRACT_SYSTEM, /memories: \[\]/, "empty extraction must be the explicit default for routine messages");
@@ -578,6 +753,9 @@ async function run() {
   await tenMemoriesMakeIndependentBatch();
   checkpointPlanRespectsBranchAndGaps();
   await batchFailureDoesNotRollbackCurrentReflection();
+  await experienceIntegrationOverTwoHundredMemories();
+  integrationPlanRejectsWrongOwnershipAndBranch();
+  await recoveredLateIntegrationDoesNotEraseRecentExperience();
   await pathAndLegacyAreIndependent();
   extractionSelectionContract();
   backupJournalValidation();

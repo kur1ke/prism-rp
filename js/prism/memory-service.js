@@ -175,7 +175,15 @@
       const payload = { mode: initialChat.mode, coreGuide: core,
         previousExperience: prior ? prior.perspective : null,
         memories: M.weighted(candidates, path) };
+      const lateIntegrated = M.unappliedIntegration(S.reflections || [], path, prior);
+      if (lateIntegrated) payload.recentIntegrated = lateIntegrated.perspective;
       let reflectionUser = JSON.stringify(payload);
+      // The late summary is optional; preserve the Memory evidence before
+      // giving up current Reflection to the strict token budget.
+      while (!fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT) && payload.recentIntegrated) {
+        delete payload.recentIntegrated;
+        reflectionUser = JSON.stringify(payload);
+      }
       while (payload.memories.length && !fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)) {
         payload.memories.pop();
         reflectionUser = JSON.stringify(payload);
@@ -239,6 +247,50 @@
             }
             if (committed && relevant() && S.chatId === chatId) {
               S.reflections = (S.reflections || []).filter((x) => x.id !== checkpoint.id).concat([checkpoint]);
+              if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
+            }
+          }
+        }
+      }
+      // Every ten complete checkpoints are reflected into ONE integrated
+      // Experience. Earlier waves are inherited only by their prior integrated
+      // summary, not by re-reading all old batches or the whole chat.
+      const integration = M.integrationPlan(existing.concat(newOnes),
+        S.reflections || [], path, chatId, owner);
+      if (integration && relevant()) {
+        const integratePayload = {
+          mode: initialChat.mode, coreGuide: core,
+          previousIntegrated: integration.previous ? integration.previous.perspective : null,
+          batches: integration.batches.map((b, i) => ({
+            order: i + 1, change: b.change || "changed", perspective: b.perspective || ""
+          }))
+        };
+        const integrateUser = JSON.stringify(integratePayload);
+        if (fits(M.INTEGRATE_SYSTEM, integrateUser, MAX_REFLECT_OUT)) {
+          let merged;
+          try { merged = M.parseReflection(await call(M.INTEGRATE_SYSTEM, integrateUser, MAX_REFLECT_OUT)); }
+          catch (_) { merged = null; }
+          if (!relevant()) return finish("stale");
+          if (merged) {
+            const previousText = integration.previous && integration.previous.perspective || "";
+            const integratedRecord = {
+              id: integration.id, kind: "integrated", schema: 1, chatId, owner,
+              anchor: integration.anchor, batchIds: integration.batchIds,
+              previousId: integration.previous ? integration.previous.id : null,
+              // "unchanged" retains a prior integrated baseline, if one exists.
+              perspective: merged.change === "changed" ? merged.perspective : previousText,
+              change: merged.change, createdAt: Date.now()
+            };
+            let committed = false;
+            try { await DB.put("reflections", integratedRecord); committed = true; }
+            catch (_) { /* Retry after a future new Memory without losing other results. */ }
+            if (obsolete(chatId, revision)) {
+              if (committed) await DB.del("reflections", integratedRecord.id).catch(() => {});
+              return finish("stale");
+            }
+            if (committed && relevant() && S.chatId === chatId) {
+              S.reflections = (S.reflections || []).filter((x) => x.id !== integratedRecord.id).concat([integratedRecord]);
+              if (ctx.svc.prism) ctx.svc.prism.refresh();
               if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
             }
           }
