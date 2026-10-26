@@ -8400,6 +8400,7 @@ async function autoMemoryTests() {
     assert.strictEqual(h.ctx.svc.memory.experience().perspective.includes("тревогой"),true);
     const rp=h.prism.build(h.chat.path());
     assert.ok(allText(rp.messages).includes("Аля хочет доверять"));
+    assert.strictEqual(rp.report.experienceKept,0,"new runtime does not include manual legacy Experience");
     assert.strictEqual(rp.report.reflectionKept,true);
     assert.strictEqual(allText(rp.messages).includes(baseText),true);
   });
@@ -8462,6 +8463,36 @@ async function autoMemoryTests() {
     assert.ok(secondPrompt.includes("memories"),"Memories given independently");
     assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,2);
     assert.strictEqual((h.store.reflections||new Map()).size,1,"unchanged does not create spurious state");
+  });
+  await ta("AUTO-M8: separate chats and Messenger report cannot become physical observations", async()=>{
+    const h=fbHarness(card,{autoMemory:true});
+    await h.chat.createChat("messenger","c1");
+    const msg=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(msg,msg.id);
+    let n=0;
+    fbLLM=async()=>({text:++n===1?JSON.stringify({memories:[{
+      messageId:msg.id,quote:baseText,event:"В переписке дано обещание",kind:"observed"
+    }]}):reflect("Аля немного сомневается в собственных ожиданиях, но не отказывается от них.")});
+    assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"reflected");
+    assert.strictEqual(h.S.memories[0].kind,"reported","Messenger cannot claim direct physical observation");
+    const oldId=h.S.chatId, oldMem=h.S.memories[0];
+    await h.chat.createChat("rp","c1");
+    // Replicate normal app.openChat loading; no old chat memory belongs here.
+    await h.ctx.svc.memory.load(h.S.chatId);
+    assert.notStrictEqual(h.S.chatId,oldId);
+    assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,0);
+    assert.strictEqual(h.ctx.svc.memory.experience(),null);
+    assert.ok(oldMem.source.messageId);
+  });
+  await ta("AUTO-M9: authored Experience in legacy store cannot enter automatic runtime Prism",async()=>{
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
+    const msg=h.chat.newMsg("user",null,"Классический разговор о доверии");
+    await h.chat.commitMessage(msg,msg.id);
+    await h.ctx.svc.exp.save(Object.assign(EX_BLANK(),{
+      event:"LEGACY_MANUAL_NEVER_INJECT", domains:["доверии"]
+    }));
+    const rendered=h.prism.build(h.chat.path());
+    assert.ok(!allText(rendered.messages).includes("LEGACY_MANUAL_NEVER_INJECT"));
+    assert.strictEqual(rendered.report.experienceKept,0);
   });
   await ta("AUTO-M7: in-flight ancestor mutation cannot persist stale model output",async()=>{
     const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
