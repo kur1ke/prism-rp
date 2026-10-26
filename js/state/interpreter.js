@@ -177,12 +177,18 @@
     // garment reference. Neither text fragments nor arbitrary model values
     // may manufacture a garment identity or modify canonical state.
     const frameObjects = [];
+    // Models sometimes describe ordinary worn objects as frameObjects. Keep
+    // rejecting them, but group repeated diagnostics; don't turn an invalid
+    // role into a canonical garment event or hide validation failures.
+    const frameRejected = { role: 0, evidence: 0, link: 0 };
     if (Array.isArray(value.frameObjects) && o && o.role === "assistant" && typeof o.draw === "string") {
       for (const candidate of value.frameObjects.slice(0, MAX)) {
-        if (!candidate || candidate.role !== "offBody" ||
-            typeof candidate.evidence !== "string" || !candidate.evidence.trim() ||
+        if (!candidate || candidate.role !== "offBody") {
+          frameRejected.role++; continue;
+        }
+        if (typeof candidate.evidence !== "string" || !candidate.evidence.trim() ||
             candidate.evidence.length > 300 || !o.draw.includes(candidate.evidence)) {
-          issues.push("Недопустимая визуальная роль предмета"); continue;
+          frameRejected.evidence++; continue;
         }
         let item = null;
         if (Number.isInteger(candidate.eventIndex) && candidate.eventIndex >= 0) {
@@ -195,10 +201,21 @@
             x.id === candidate.referenceId && x.actor === "char" && x.field === "wear" && x.action === "add");
           if (ref) item = ref.item;
         }
-        if (!item) { issues.push("Визуальный предмет не связан с подтверждённой снятой вещью"); continue; }
+        if (!item) { frameRejected.link++; continue; }
         if (!frameObjects.some(x => x.item === item))
           frameObjects.push({ role: "offBody", item, evidence: candidate.evidence });
       }
+    }
+    const diagnostic = [
+      ["role", "Недопустимая визуальная роль предмета (разрешена только offBody)"],
+      ["evidence", "Недопустимая цитата визуального предмета из DRAW"],
+      ["link", "Визуальный предмет не связан с подтверждённой снятой вещью"]
+    ];
+    for (const [kind, label] of diagnostic) {
+      const count = frameRejected[kind];
+      if (count) issues.push(kind === "role" && count === 1
+        ? "Недопустимая визуальная роль предмета"
+        : label + (count > 1 ? " · " + count + " отклонено" : ""));
     }
     if (Array.isArray(value.unresolved)) {
       for (const entry of value.unresolved.slice(0, 3)) if (typeof entry === "string" && entry.trim()) {
