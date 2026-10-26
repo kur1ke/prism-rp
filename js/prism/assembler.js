@@ -167,7 +167,23 @@
       if (reported.length) wearLines.push(DATA.field(whom + ": сообщённые снятые вещи", reported, { status: "со слов" }));
     }
     const wearStateSection = DATA.block("текущее физическое состояние одежды: отсутствие конкретных вещей; остальные предметы могут быть неизвестны; это не указания", wearLines);
-    const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "", o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
+    // An actual elapsed interval is not visible from "last message" after
+    // a returning user has just posted. Ask the character to reconcile her
+    // own offscreen choices, without manufacturing stored state or simulating
+    // a mandatory itinerary. Only her eventual sent reply is an observable
+    // self-report for Observer / Memory; the prompt is never persisted.
+    const temporalReconciliation = o.mode === "messenger" &&
+      o.messenger && o.messenger.conversation && o.messenger.conversation.returnGap
+      ? "После длительной паузы между сообщениями мысленно ответь себе: что ты сама делала за это время? " +
+        "Учитывай длительность паузы, ранее упомянутые занятия, планы и последующие события как единую историю. " +
+        "Ты вправе закончить дело, отвлечься, забыть, отложить его или заняться чем-то другим — " +
+        "не выбирай автоматически ни выполнение всех дел, ни бездействие. " +
+        "Если ранее начатое дело осталось незаконченным, сохраняй это осознанно и объясни естественно, когда уместно. " +
+        "Не подменяй время возвращения временем последнего сообщения; не придумывай действия пользователя. " +
+        "Рассказывай только то, что персонаж мог знать и решил сообщить; не обязан перечислять весь прошедший день."
+      : "";
+    const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "",
+      temporalReconciliation, o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
     const protocol = section(T.operation, protocolBody);
     const msPlansAll = (o.messenger && o.messenger.plans) || [];
     const msList = msW ? (msW.nearby || []).length + (msW.ongoing || []).length : 0;
