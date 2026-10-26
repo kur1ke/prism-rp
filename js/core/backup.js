@@ -85,7 +85,7 @@
         const expected = chatOwners.get(sid(r.chatId));
         // For additive restores an existing chat ID may be known but not in this backup.
         if (expected && expected === sid(r.owner)) return true;
-        if (!expected && !replace && chats.has(sid(r.chatId)) && cards.has(sid(r.owner))) return true;
+        // Additive imports into chats absent from this backup are rejected: chat owner cannot be verified here.
         reject(st, r.id, "memory-owner-mismatch", "Память или опыт привязаны к чужому персонажу.");
         return false;
       });
