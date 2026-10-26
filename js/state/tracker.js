@@ -415,6 +415,62 @@
     return { ok: true, path: derived };
   }
 
+  // Last authored DRAW is history, not a garment fact. An Observer with
+  // zero accepted events cannot be worked around by inventing wear.remove.
+  function latestAuthoredShot(path) {
+    const messages = Array.isArray(path) ? path : [];
+    for (let i = messages.length - 1; i >= Math.max(0, messages.length - 8); i--) {
+      const m = messages[i], sw = m && TR.activeSwipe(m);
+      const draws = m && m.role === "assistant" && sw && Array.isArray(sw.draws) ? sw.draws : [];
+      const last = draws.length ? draws[draws.length - 1] : null;
+      if (last && typeof last.prompt === "string" && last.prompt.trim())
+        return { text: last.prompt.trim().slice(0, 440), messageId: m.id, swipeIdx: m.swipeIdx || 0 };
+    }
+    return null;
+  }
+
+  // Read-only last photographed clothes. This is a bounded VIEW of already
+  // validated, active-swipe author DRAW events, never a new wardrobe or proof
+  // that other garments were removed. A later wear change supersedes this
+  // visual cue; unrelated chat messages do not.
+  function latestPhotoWear(path) {
+    const messages = Array.isArray(path) ? path : [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i], sw = m && TR.activeSwipe(m);
+      const events = sw && Array.isArray(sw.stateEvents) ? sw.stateEvents : [];
+      if (sw && (sw.stateCorrections || []).some(e => e && e.actor === "char" && e.field === "wear"))
+        return null;
+      const wear = events.filter(e => e && e.actor === "char" && e.field === "wear" && e.certainty !== "intent");
+      if (!wear.length) {
+        // A newer authored photograph without verified wear observations
+        // provides no grounds to keep calling an older photo the latest.
+        if (m.role === "assistant" && Array.isArray(sw.draws) && sw.draws.length) return null;
+        continue;
+      }
+      // Any later text/correction changes the outfit; older photo cannot
+      // silently override it. Nor can an unverified source status be used.
+      if ((sw.stateCorrections || []).some(e => e && e.actor === "char" && e.field === "wear") ||
+          m.role !== "assistant" || !sw.stateStatus ||
+          !["ok", "partial", "no-changes"].includes(sw.stateStatus.status) ||
+          sw.stateStatus.sourceText !== String(sw.text || "")) return null;
+      const draws = Array.isArray(sw.draws) ? sw.draws : [];
+      const last = draws.length - 1;
+      if (last < 0 || sw.stateStatus.sourceDraw !== String(draws[last].prompt || "") ||
+          sw.stateStatus.sourceDrawIndex !== last) return null;
+      const visual = wear.filter(e => e.evidenceType === "draw" &&
+        e.visualScope === "current-self" && ["add", "adjust"].includes(e.action) &&
+        (e.drawIndex == null ? last : e.drawIndex) === last &&
+        !validateEvent(e, { role: m.role, draws, text: sw.text, mode: "messenger" }));
+      // A later text change in this very message has no unambiguous temporal
+      // order relative to its photograph; refuse to assert a photo override.
+      if (wear.some(e => e.evidenceType !== "draw" || (e.drawIndex != null && e.drawIndex !== last)))
+        return null;
+      const items = [...new Set(visual.flatMap(e => e.value || []))].slice(0, 12);
+      return items.length ? { items, messageId: m.id, swipeIdx: m.swipeIdx || 0, drawIndex: last } : null;
+    }
+    return null;
+  }
+
   // Одна каноническая запись в обоих режимах; вывод в разные перспективы ниже.
   function fieldOf(snapshot, actor, field) {
     const current = snapshot && snapshot.actors && snapshot.actors[actor];
@@ -456,6 +512,6 @@
     view.intentions = char.intentions.slice();
     return view;
   }
-  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, fieldOf, forCharacter, forUser };
+  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);

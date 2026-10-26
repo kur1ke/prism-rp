@@ -26,7 +26,9 @@
 
     function context(path, opts) {
       const state = snapshot(path, opts);
-      return { state, character: TRACK.forCharacter(state), userView: TRACK.forUser(state, ctx.chat() && ctx.chat().mode) };
+      return { state, character: TRACK.forCharacter(state), userView: TRACK.forUser(state, ctx.chat() && ctx.chat().mode),
+        latestPhotoWear: TRACK.latestPhotoWear(path || chat().path()),
+        latestAuthoredShot: TRACK.latestAuthoredShot(path || chat().path()) };
     }
 
     // InitialOutfit: invoked ONCE by new Messenger chat orchestration, after

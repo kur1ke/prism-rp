@@ -35,6 +35,11 @@
     out.visualWearRemoved = clone(known.visualWearRemoved || []);
     out.visualWearPartial = clone(known.visualWearPartial || []);
     out.intentions = clone(known.intentions || []);
+    // Latest authenticated on-body visual evidence is NOT a full outfit and
+    // does not negate other known garment facts. It must be rendered distinctly
+    // from the initial outfit to avoid presenting the origin as a new photo.
+    out.latestPhotoWear = tracked.latestPhotoWear ? clone(tracked.latestPhotoWear) : null;
+    out.latestAuthoredShot = tracked.latestAuthoredShot ? clone(tracked.latestAuthoredShot) : null;
     return out;
   }
 
