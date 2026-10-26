@@ -8419,11 +8419,15 @@ async function autoMemoryTests() {
     assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"invalid-reflection");
     assert.strictEqual((h.store.memories||new Map()).size,1,"Memory persists independently of Reflection");
     assert.strictEqual((h.store.reflections||new Map()).size,0);
-    c=0;fbLLM=async()=>({text:++c===1?extract(msg.id,"Вымышленная цитата","Ложное воспоминание"):JSON.stringify({change:"unchanged",perspective:""})});
-    assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"invalid-extract");
+    // A successfully extracted source is never examined again, including
+    // when its later Reflection failed. Test bad extraction on a NEW source.
+    const next=h.chat.newMsg("assistant",msg.id,"Я вспомнила ещё одно событие.");
+    await h.chat.commitMessage(next,next.id);
+    c=0;fbLLM=async()=>({text:++c===1?extract(next.id,"Вымышленная цитата","Ложное воспоминание"):JSON.stringify({change:"unchanged",perspective:""})});
+    assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path().at(-1),{kind:"mock"})).status,"invalid-extract");
     assert.strictEqual((h.store.memories||new Map()).size,1,"fabrication never adds a new Memory");
     h.ctx.contextTokens=()=>400;c=0;
-    assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"overflow-extract");
+    assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path().at(-1),{kind:"mock"})).status,"overflow-extract");
     assert.strictEqual(c,0);
   });
   await ta("AUTO-M5: edit/swipe ancestor hides reflections and memories, return restores",async()=>{
