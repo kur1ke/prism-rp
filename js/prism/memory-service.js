@@ -98,8 +98,17 @@
 
       const model = prov || (ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
       if (!model) return finish("no-provider");
-      const extractionUser = JSON.stringify({ mode: initialChat.mode, sources });
+      // Prior Memory is evidence for novelty, not a transcript or character instruction.
+      // The oldest context entries yield before rejecting extraction on budget.
+      const extractionPayload = { mode: initialChat.mode, sources,
+        priorMemories: M.extractionContext(existing, path) };
       const MAX_EXTRACT_OUT = 750, MAX_REFLECT_OUT = 500;
+      let extractionUser = JSON.stringify(extractionPayload);
+      while (extractionPayload.priorMemories.length &&
+          !fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT)) {
+        extractionPayload.priorMemories.pop();
+        extractionUser = JSON.stringify(extractionPayload);
+      }
       if (!fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT))
         return finish("overflow-extract");
       const call = async (system, user, max_tokens) => {
@@ -116,6 +125,9 @@
       } catch (e) { return finish("extract-error"); }
       if (!relevant()) return finish("stale");
       if (!proposed) return finish("invalid-extract");
+      // Only branch-visible prior episodes may suppress an exact repeat.
+      // Different events with similar language remain distinct.
+      proposed = M.distinctExtraction(proposed, M.recent(existing, path, M.LIMIT));
       const newOnes = proposed.map((m) =>
         Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
       const eligible = new Map(path.map((x) => [x.id, x]));
