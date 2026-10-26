@@ -383,6 +383,142 @@ function legacyMemorySpeakerDerivedFromActivePath() {
   console.log("PASS: legacy Memory speaker is inferred from active path, never model-supplied text");
 }
 
+async function tenMemoriesMakeIndependentBatch() {
+  const h = harness(), calls = { current: 0, batch: 0 }, speeches = [];
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (data.sources) {
+      const row = data.sources.at(-1);
+      return { text: JSON.stringify({ memories: [{ messageId: row.messageId,
+        quote: row.text, event: "Отдельный эпизод разговора номер " + row.messageId,
+        kind: "reported" }] }) };
+    }
+    if (Object.hasOwn(data, "previousExperience")) {
+      calls.current++;
+      speeches.push(data.memories.length);
+      return { text: changed };
+    }
+    calls.batch++;
+    assert.equal(data.memories.length, 10, "batch Reflection receives exactly ten Memory entries");
+    assert.equal(data.memories[0].speaker, "character");
+    assert.equal(data.memories[9].speaker, "character");
+    assert.equal(Object.hasOwn(data, "previousExperience"), false,
+      "batch Reflection must not recursively consume current Experience");
+    return { text: JSON.stringify({ change: "changed", perspective: "У нас сформировались новые общие воспоминания." }) };
+  };
+  for (let i = 1; i <= 11; i++) {
+    const prev = h.path.at(-1);
+    const msg = message("episode" + i, "Вечером произошло отдельное событие номер " + i + ".", prev && prev.id);
+    h.path.push(msg);
+    assert.ok(["reflected", "remembered-unchanged"].includes((await h.memory.observe(msg, h.model)).status));
+    const batches = [...h.storage.reflections.values()].filter((r) => r.kind === "batch");
+    if (i < 10) assert.equal(batches.length, 0, "no premature batch");
+    if (i >= 10) assert.equal(batches.length, 1, "only one checkpoint for the first ten Memory");
+  }
+  assert.equal(calls.current, 11, "Reflection remains continuous after every accepted Memory");
+  assert.equal(calls.batch, 1, "checkpoint Reflection fires at exactly one full Memory group");
+  assert.deepEqual(speeches, [1,2,3,4,5,6,7,8,9,10,10],
+    "current Reflection still uses only last ten accessible Memory");
+  const batch = [...h.storage.reflections.values()].find((r) => r.kind === "batch");
+  assert.equal(batch.memoryIds.length, 10);
+  assert.deepEqual(batch.memoryIds, [...h.storage.memories.values()].slice(0,10).map((m) => m.id));
+  assert.equal(h.memory.experience().perspective, changed && JSON.parse(changed).perspective,
+    "batch text must not replace current Experience delivered to Prism");
+  await h.memory.load("ch");
+  assert.equal(h.memory.experience().kind, undefined, "old current Reflection schema still loads");
+  assert.equal(PRP.memoryCycle.checkpointPlan([...h.storage.memories.values()],
+    [...h.storage.reflections.values()], PRP.memoryCycle.pathSnapshot(h.path), "ch", "owner"), null,
+    "reloaded checkpoint cannot be recomputed from the same ten Memory");
+  console.log("PASS: ten distinct Memory trigger one independent checkpoint, current Reflection never stops");
+}
+
+function checkpointPlanRespectsBranchAndGaps() {
+  const M = PRP.memoryCycle, path = [], mem = [];
+  for (let i = 0; i < 22; i++) {
+    const prior = path.at(-1);
+    const m = message("src-" + i, "Персонаж участвует в событии номер " + i + ".", prior && prior.id);
+    path.push(m);
+  }
+  const snap = M.pathSnapshot(path);
+  for (let i = 0; i < 22; i++) {
+    const row = snap[i];
+    mem.push({ id: "m" + i, chatId: "ch", owner: "owner",
+      event: "Произошло событие " + i, quote: row.text, kind: "observed", createdAt: i,
+      source: { messageId: row.id, swipeIdx: row.swipeIdx,
+        textHash: row.textHash, prefixHash: row.prefixHash } });
+  }
+  const group1 = M.checkpointPlan(mem, [], snap, "ch", "owner");
+  assert.deepEqual(group1.memoryIds, mem.slice(0,10).map(x=>x.id));
+  const group2 = M.checkpointPlan(mem, [{ id: group1.id, chatId: "ch", owner: "owner",
+    kind: "batch", anchor: group1.anchor }], snap, "ch", "owner");
+  assert.deepEqual(group2.memoryIds, mem.slice(10,20).map(x=>x.id),
+    "second group must not overlap the first and must not skip memory at 10th boundary");
+  const done = [{ id: group1.id, chatId: "ch", owner: "owner", kind: "batch", anchor: group1.anchor },
+    { id: group2.id, chatId: "ch", owner: "owner", kind: "batch", anchor: group2.anchor }];
+  assert.equal(M.checkpointPlan(mem, done, snap, "ch", "owner"), null,
+    "no partially completed third group");
+  const alternate = path.map((x,i)=>i===5 ? { ...x, swipeIdx: 1,
+    swipes: x.swipes.concat([{ text: "Иное начало линии событий.", sceneOps: [] }]) } : x);
+  assert.equal(M.checkpointPlan(mem, done, M.pathSnapshot(alternate), "ch", "owner"), null,
+    "branch change invalidates all descendant Memory groups, never leaks sibling batches");
+  console.log("PASS: checkpoint groups are disjoint, reload-safe and branch/swipe scoped");
+}
+async function batchFailureDoesNotRollbackCurrentReflection() {
+  const h = harness(), M = PRP.memoryCycle;
+  const path = [], mem = [];
+  for (let i = 0; i < 9; i++) {
+    const m = message("old" + i, "Произошёл памятный разговор " + i + ".", path.at(-1)?.id);
+    path.push(m);
+  }
+  const snap = M.pathSnapshot(path);
+  for (let i = 0; i < 9; i++) {
+    const m = snap[i];
+    const memory = { id: "prior-" + i, chatId: "ch", owner: "owner", event: "Память номер " + i,
+      quote: m.text, kind: "observed", source: { messageId: m.id, swipeIdx: m.swipeIdx,
+        textHash: m.textHash, prefixHash: m.prefixHash } };
+    h.storage.memories.set(memory.id, memory);
+  }
+  h.path.push(...path);
+  const tenth = message("tenth", "Десятая значимая встреча состоялась.", path.at(-1).id);
+  h.path.push(tenth);
+  let batches = 0;
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (data.sources) {
+      return { text: JSON.stringify({ memories: data.sources.map((row) => ({
+        messageId: row.messageId, quote: row.text,
+        event: "Новая память для " + row.messageId, kind: "observed" })) }) };
+    }
+    if (Object.hasOwn(data, "previousExperience")) return { text: changed };
+    batches++;
+    return { text: "invalid JSON from batch Reflection" };
+  };
+  const first = await h.memory.observe(tenth, h.model);
+  assert.equal(first.status, "reflected");
+  assert.equal(h.storage.memories.size, 10);
+  assert.equal(h.storage.reflections.size, 1, "batch failure must not corrupt current Experience");
+  assert.equal(batches, 1);
+  const next = message("next", "На следующий день персонаж вспомнил встречу.", tenth.id);
+  h.path.push(next);
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (data.sources) return { text: JSON.stringify({ memories: data.sources.map((row) => ({
+      messageId: row.messageId, quote: row.text,
+      event: "Дополнительное событие " + row.messageId, kind: "observed" })) }) };
+    if (Object.hasOwn(data, "previousExperience")) return { text: changed };
+    return { text: JSON.stringify({ change: "unchanged", perspective: "" }) };
+  };
+  assert.equal((await h.memory.observe(next, h.model)).status, "remembered-unchanged");
+  const checkpoint = [...h.storage.reflections.values()].find(r=>r.kind==="batch");
+  assert.ok(checkpoint, "failed batch must retry when next Memory arrives");
+  assert.equal(checkpoint.change, "unchanged");
+  assert.equal(checkpoint.perspective, "");
+  assert.equal(checkpoint.memoryIds.length, 10, "retry still covers only original ten memories");
+  assert.equal(h.storage.memories.size, 11);
+  assert.equal(h.memory.experience().perspective, JSON.parse(changed).perspective);
+  console.log("PASS: batch failure retries after new Memory without rollback or false current Experience");
+}
+
 function extractionSelectionContract() {
   const M = PRP.memoryCycle;
   assert.match(M.EXTRACT_SYSTEM, /memories: \[\]/, "empty extraction must be the explicit default for routine messages");
@@ -439,6 +575,9 @@ async function run() {
   await extractionBudgetYieldsPriorMemoryFirst();
   await reflectionDistinguishesSpeakerAndSubject();
   legacyMemorySpeakerDerivedFromActivePath();
+  await tenMemoriesMakeIndependentBatch();
+  checkpointPlanRespectsBranchAndGaps();
+  await batchFailureDoesNotRollbackCurrentReflection();
   await pathAndLegacyAreIndependent();
   extractionSelectionContract();
   backupJournalValidation();
