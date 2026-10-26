@@ -6,6 +6,7 @@ require("../js/prism/scene.js");
 require("../js/chat/tree.js");
 const T = require("../js/state/tracker.js");
 const R = require("../js/state/resolver.js");
+const INT = require("../js/state/interpreter.js");
 require("../js/prism/modes.js");
 const M = globalThis.PRP.prismModes;
 
@@ -129,3 +130,28 @@ assertCurrentPhoto();
 assertSourceBound();
 assertNewerState();
 assertUnverifiedDrawRemainsHistoryOnly();
+function assertInvalidFrameObjectsCannotInventWear() {
+  const bad = Array.from({ length: 4 }, () => ({
+    role: "onBody", evidence: "белое кружевное белье"
+  }));
+  const parsed = INT.parse(JSON.stringify({ events: [], frameObjects: bad, unresolved: [] }), {
+    mode: "messenger", role: "assistant", text: "Фото", draw: shot,
+    draws: [{ prompt: shot }], references: []
+  });
+  assert.equal(parsed.valid, true);
+  assert.deepEqual(parsed.events, []);
+  assert.deepEqual(parsed.frameObjects, []);
+  assert.equal(parsed.issues.length, 1, "four identical problems should be grouped in Debug");
+  assert.ok(parsed.issues[0].includes("4 отклонено"), parsed.issues[0]);
+  const withWear = INT.parse(JSON.stringify({ events: [{
+    actor: "char", field: "wear", action: "add", value: nowVisible,
+    certainty: "reported", evidence: quote, evidenceType: "draw", visualScope: "current-self"
+  }], frameObjects: bad, unresolved: [] }), {
+    mode: "messenger", role: "assistant", text: "Фото", draw: shot,
+    draws: [{ prompt: shot }], references: []
+  });
+  assert.equal(withWear.events.length, 1, "invalid frame objects cannot delete an otherwise accepted wear event");
+  assert.equal(withWear.frameObjects.length, 0);
+  console.log("PASS: invalid frameObjects are reported once and never promoted into wear");
+}
+assertInvalidFrameObjectsCannotInventWear();
