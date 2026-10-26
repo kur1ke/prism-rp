@@ -207,6 +207,43 @@
         if (ctx.svc.prism) ctx.svc.prism.refresh();
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
       }
+      // Checkpoint a disjoint group of ten observed Memory sources. This is a
+      // separate Reflection operation, not a new store or continuous baseline.
+      // Its failure cannot undo previously committed Memory/current Experience.
+      const plan = M.checkpointPlan(existing.concat(newOnes),
+        S.reflections || [], path, chatId, owner);
+      if (plan && relevant()) {
+        const batchPayload = {
+          mode: initialChat.mode, coreGuide: core,
+          memories: M.weighted(plan.memories.slice().reverse(), path)
+        };
+        const batchUser = JSON.stringify(batchPayload);
+        if (fits(M.BATCH_SYSTEM, batchUser, MAX_REFLECT_OUT)) {
+          let batch;
+          try { batch = M.parseReflection(await call(M.BATCH_SYSTEM, batchUser, MAX_REFLECT_OUT)); }
+          catch (_) { batch = null; }
+          if (!relevant()) return finish("stale");
+          if (batch) {
+            const checkpoint = {
+              id: plan.id, kind: "batch", schema: 1, chatId, owner,
+              anchor: plan.anchor, memoryIds: plan.memoryIds,
+              perspective: batch.perspective, change: batch.change,
+              createdAt: Date.now()
+            };
+            let committed = false;
+            try { await DB.put("reflections", checkpoint); committed = true; }
+            catch (_) { /* Retry on the next Memory; no partial current rollback. */ }
+            if (obsolete(chatId, revision)) {
+              if (committed) await DB.del("reflections", checkpoint.id).catch(() => {});
+              return finish("stale");
+            }
+            if (committed && relevant() && S.chatId === chatId) {
+              S.reflections = (S.reflections || []).filter((x) => x.id !== checkpoint.id).concat([checkpoint]);
+              if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
+            }
+          }
+        }
+      }
       return finish(record ? "reflected" : "remembered-unchanged");
     }
     // Preserve every committed reply: same-chat cycles run in FIFO order,
