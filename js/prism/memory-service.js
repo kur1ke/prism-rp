@@ -174,7 +174,7 @@
         traits: canonical.traits, voice: canonical.voice, durableContext: canonical.durableContext };
       const payload = { mode: initialChat.mode, coreGuide: core,
         previousExperience: prior ? prior.perspective : null,
-        memories: M.weighted(candidates) };
+        memories: M.weighted(candidates, path) };
       let reflectionUser = JSON.stringify(payload);
       while (payload.memories.length && !fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)) {
         payload.memories.pop();
