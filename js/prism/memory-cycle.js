@@ -71,7 +71,7 @@
     } catch (_) { return null; }
     return obj && typeof obj === "object" && !Array.isArray(obj) && Array.isArray(obj[prop]) ? obj : null;
   }
-  function parseExtraction(raw, input, path) {
+  function parseExtraction(raw, input, path, mode) {
     const data = json(raw, "memories", 12000);
     if (!data || data.memories.length > MAX_NEW) return null;
     const sources = new Map(input.map((x) => [x.messageId, x]));
@@ -88,7 +88,8 @@
       const key = item.messageId + "|" + quote;
       if (seen.has(key)) continue;
       seen.add(key);
-      result.push({ event, quote, kind: item.kind, source: {
+      // A Messenger message can report circumstances but is not direct observation of a shared scene.
+      result.push({ event, quote, kind: mode === "messenger" ? "reported" : item.kind, source: {
         messageId: src.id, swipeIdx: src.swipeIdx, textHash: src.textHash, prefixHash: src.prefixHash
       } });
     }
