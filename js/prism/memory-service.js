@@ -1,6 +1,6 @@
 /* PrismRP — automatic Memory -> Reflection -> Experience service.
    One bounded post-reply cycle. No user prompts, approval or manual edits.
-   Domain and provider remain independent; commits only after both analyses validate. */
+   Domain and provider remain independent; Memory survives failed Reflection. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -68,6 +68,14 @@
         x.source.prefixHash === m.source.prefixHash && x.quote === m.quote))
         .map((m) => Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
       if (!newOnes.length) return recordStatus("no-new-memory");
+      // Memory is independent of Experience. Its valid evidence is committed
+      // immediately; failure of later reflection must never erase an episode.
+      if (!relevant()) return recordStatus("stale");
+      await DB.putAll(newOnes.map((m) => ["memories", m]));
+      if (S.chatId === chatId) {
+        S.memories = (S.memories || []).concat(newOnes);
+        if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
+      }
       const candidates = M.recent(existing.concat(newOnes), path, M.LIMIT);
       const prior = experience(ctx.svc.chat.path());
       const cd = ctx.card() || {};
@@ -97,13 +105,10 @@
         perspective: result.perspective, memoryIds: candidates.map((x) => x.id),
         createdAt: Date.now()
       } : null;
-      const entries = newOnes.map((m) => ["memories", m]);
-      if (record) entries.push(["reflections", record]);
-      // Commit Memory and changed Experience in ONE transaction, after both
-      // model replies validate and the selected ancestral context still matches.
-      await DB.putAll(entries);
+      // A new Experience version commits only after validated reflection;
+      // Memory is already safely stored as a separate class of evidence.
+      if (record) await DB.put("reflections", record);
       if (S.chatId === chatId) {
-        S.memories = (S.memories || []).concat(newOnes);
         if (record) S.reflections = (S.reflections || []).concat([record]);
         if (ctx.svc.prism) ctx.svc.prism.refresh();
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
