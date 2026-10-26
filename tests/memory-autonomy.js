@@ -637,6 +637,60 @@ function integrationPlanRejectsWrongOwnershipAndBranch() {
   console.log("PASS: integration verifies all ten source batches and selects branch-visible summary");
 }
 
+async function recoveredLateIntegrationDoesNotEraseRecentExperience() {
+  const h = harness();
+  let integrationAttempts = 0, currentCalls = 0, resumedInput;
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (data.sources) {
+      const src = data.sources.at(-1);
+      return { text: JSON.stringify({ memories: [{
+        messageId: src.messageId, quote: src.text,
+        event: "Новое эпизодическое воспоминание " + src.messageId, kind: "observed"
+      }] }) };
+    }
+    if (data.batches) {
+      integrationAttempts++;
+      if (integrationAttempts === 1) return { text: "not valid JSON" };
+      return { text: JSON.stringify({ change: "changed",
+        perspective: "Долгосрочный общий опыт принят после поздней Reflection." }) };
+    }
+    if (Object.hasOwn(data, "previousExperience")) {
+      currentCalls++;
+      if (currentCalls === 102) resumedInput = data;
+      return { text: currentCalls === 102 ? JSON.stringify({
+        change: "changed", perspective: "Долгосрочный опыт включён вместе с последними событиями."
+      }) : changed };
+    }
+    return { text: JSON.stringify({ change: "changed",
+      perspective: "В отдельном блоке возникло новое субъективное ощущение." }) };
+  };
+  for (let i = 1; i <= 102; i++) {
+    const p = h.path.at(-1);
+    const msg = message("late-" + i, "Произошло отдельное наблюдаемое событие номер " + i + ".", p?.id);
+    h.path.push(msg);
+    await h.memory.observe(msg, h.model);
+    if (i === 100)
+      assert.equal([...h.storage.reflections.values()].filter(r=>r.kind==="integrated").length,0,
+        "invalid integration must not commit");
+    if (i === 101) {
+      assert.equal([...h.storage.reflections.values()].filter(r=>r.kind==="integrated").length,1,
+        "retry succeeded at 101st new Memory");
+      assert.notEqual(h.memory.experience().kind,"integrated",
+        "integration anchored at 100 must not erase a newer 101st current Experience");
+    }
+  }
+  assert.equal(integrationAttempts,2);
+  assert.equal(resumedInput.recentIntegrated,
+    "Долгосрочный общий опыт принят после поздней Reflection.",
+    "next current Reflection receives recovered integration as optional bounded context");
+  assert.equal(h.memory.experience().perspective,
+    "Долгосрочный опыт включён вместе с последними событиями.");
+  const records=[...h.storage.reflections.values()].filter(r=>r.kind==="integrated");
+  assert.equal(records.length,1,"recovery must not create duplicate summaries");
+  console.log("PASS: delayed integration is incorporated without overwriting newer current Experience");
+}
+
 function extractionSelectionContract() {
   const M = PRP.memoryCycle;
   assert.match(M.EXTRACT_SYSTEM, /memories: \[\]/, "empty extraction must be the explicit default for routine messages");
@@ -698,6 +752,7 @@ async function run() {
   await batchFailureDoesNotRollbackCurrentReflection();
   await experienceIntegrationOverTwoHundredMemories();
   integrationPlanRejectsWrongOwnershipAndBranch();
+  await recoveredLateIntegrationDoesNotEraseRecentExperience();
   await pathAndLegacyAreIndependent();
   extractionSelectionContract();
   backupJournalValidation();
