@@ -8412,15 +8412,16 @@ async function autoMemoryTests() {
     assert.strictEqual((h.store.memories||new Map()).size,1);
     assert.strictEqual((h.store.reflections||new Map()).size,0);
   });
-  await ta("AUTO-M4: invalid reflection, quote fabrication and overflow write NOTHING",async()=>{
+  await ta("AUTO-M4: invalid reflection preserves verified Memory; fabricated Memory and overflow fail closed",async()=>{
     const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
     const msg=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(msg,msg.id);
     let c=0;fbLLM=async()=>({text:++c===1?extract(msg.id,baseText,"Аля дала обещание"):"not-json"});
     assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"invalid-reflection");
-    assert.strictEqual((h.store.memories||new Map()).size,0);
+    assert.strictEqual((h.store.memories||new Map()).size,1,"Memory persists independently of Reflection");
+    assert.strictEqual((h.store.reflections||new Map()).size,0);
     c=0;fbLLM=async()=>({text:++c===1?extract(msg.id,"Вымышленная цитата","Ложное воспоминание"):JSON.stringify({change:"unchanged",perspective:""})});
     assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"invalid-extract");
-    assert.strictEqual((h.store.memories||new Map()).size,0);
+    assert.strictEqual((h.store.memories||new Map()).size,1,"fabrication never adds a new Memory");
     h.ctx.contextTokens=()=>400;c=0;
     assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"overflow-extract");
     assert.strictEqual(c,0);
