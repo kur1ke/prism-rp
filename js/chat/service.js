@@ -116,6 +116,8 @@
     async function deleteChat(c) {
       const ms = await DB.byIndex("messages", "chatId", c.id);
       await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
+      await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
+      await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
       await DB.delMany("messages", ms.map((m) => m.id));
       await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
       await DB.del("worldOverlays", c.id);
@@ -221,7 +223,7 @@
        (сообщения, картинки, опыт, наложение мира, среда переписки): иначе чужие сообщения попали бы в местный чат
        или режим переключился бы молча. При замене локальных чатов не остаётся — конфликтов нет.
        opts: { replace, existingChats: [{ id, mode }] } → { data, rejected, issues } */
-    const CHAT_BOUND = [["messages", "chatId"], ["images", "chatId"], ["experience", "chatId"], ["worldOverlays", "chatId"], ["messengerEnvironments", "chatId"]];
+    const CHAT_BOUND = [["messages", "chatId"], ["images", "chatId"], ["experience", "chatId"], ["memories", "chatId"], ["reflections", "chatId"], ["worldOverlays", "chatId"], ["messengerEnvironments", "chatId"]];
     function checkBackupChats(data, opts) {
       const o = opts || {};
       if (!data || o.replace !== false || !Array.isArray(data.chats)) return { data, rejected: 0, issues: [] };
