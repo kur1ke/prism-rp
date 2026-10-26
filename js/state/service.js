@@ -111,9 +111,20 @@
       const prior = Array.isArray(path) ? path : [];
       const state = snapshot(prior);
       const actor = role === "user" ? "user" : "char";
+      const previous = {};
+      // State already derived from this exact branch. Use it only to decide
+      // whether a completed action supersedes a previous activity/location,
+      // never to invent an unobserved destination or promote Memory to fact.
+      for (const field of ["location", "activity"]) {
+        const datum = TRACK.fieldOf(state, actor, field);
+        if (datum) previous[field] = { value: datum.value, certainty: datum.certainty };
+      }
       return {
+        previous,
         recent: prior.slice(-5).map((m) => ({
           messageId: m.id, swipeIdx: m.swipeIdx || 0, role: m.role,
+          ...(TR.activeSwipe(m).messengerAt && TR.activeSwipe(m).messengerAt.at
+            ? { at: String(TR.activeSwipe(m).messengerAt.at) } : {}),
           text: String(TR.activeSwipe(m).text || "").slice(0, 500),
           ...(m.role === "assistant" && Array.isArray(TR.activeSwipe(m).draws) &&
             TR.activeSwipe(m).draws.length && TR.activeSwipe(m).draws[TR.activeSwipe(m).draws.length - 1].prompt

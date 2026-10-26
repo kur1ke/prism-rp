@@ -24,6 +24,10 @@ jobs:
         run: node tests/run.js
       - name: Check StateTracker photographed outfit continuity
         run: node tests/state-photo-continuity.js
+      - name: Check Messenger temporal freshness and completed activities
+        run: node tests/state-temporal-freshness.js
+      - name: Check Messenger return gap chronology
+        run: node tests/messenger-return-gap.js
       - name: Check automatic Memory concurrency and deletion
         run: node tests/memory-autonomy.js
       - name: Check test loader and isolated database

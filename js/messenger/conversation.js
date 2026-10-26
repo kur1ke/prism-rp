@@ -21,6 +21,7 @@
   const KINDS = ["promise", "plan"];
   const STATUSES = ["open", "done", "cancelled"];
   const QUIET_MS = 12 * 3600 * 1000; // после стольких часов без ответа переписка считается затихшей
+  const RETURN_GAP_MS = 60 * 60 * 1000; // long absence before a user returns
 
   const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
   const str = (v) => (v == null ? "" : String(v));
@@ -86,6 +87,27 @@
     const warnings = [];
     if (last && lastAt == null) warnings.push({ level: "warning", code: "time-unknown", message: "У последнего сообщения нет времени переписки (старое сообщение или ответ прерван) — сколько прошло, неизвестно." });
     if (elapsedMs != null && elapsedMs < 0) warnings.push({ level: "warning", code: "time-before-last", message: "Текущее время переписки раньше последнего сообщения." });
+    // After a new user message, lastMessageAt points to this new message and
+    // elapsedSinceLastMessage becomes ~0. Recover the actual preceding gap
+    // from stamps on the active selected path, without inventing activities.
+    let returnGap = null;
+    if (last && last.role === "user") {
+      let firstUser = p.length - 1;
+      while (firstUser > 0 && p[firstUser - 1].role === "user") firstUser--;
+      const before = p[firstUser - 1];
+      if (before && before.role === "assistant") {
+        const prev = swipeOf(before), returned = swipeOf(p[firstUser]);
+        const fromMs = MT.toMs(prev.messengerAt && prev.messengerAt.at);
+        const toMs = MT.toMs(returned.messengerAt && returned.messengerAt.at);
+        if (fromMs != null && toMs != null && toMs - fromMs >= RETURN_GAP_MS &&
+            (now == null || now >= toMs)) {
+          returnGap = { from: MT.toIso(fromMs), to: MT.toIso(toMs),
+            elapsedMs: toMs - fromMs, elapsedWords: MT.elapsedWords(toMs - fromMs),
+            fromMessageId: before.id, fromSwipeIdx: before.swipeIdx || 0,
+            returnMessageId: p[firstUser].id, returnSwipeIdx: p[firstUser].swipeIdx || 0 };
+        }
+      }
+    }
 
     let state, open, reason;
     if (!last) { state = "empty"; open = false; reason = "переписка ещё не начата"; }
@@ -103,6 +125,7 @@
       lastMessageAt: lastAt != null ? MT.toIso(lastAt) : null,
       elapsedMs: elapsedMs != null && elapsedMs >= 0 ? elapsedMs : null,
       elapsedSinceLastMessage: elapsedMs != null && elapsedMs >= 0 ? MT.elapsedWords(elapsedMs) : null,
+      returnGap,
       promises: mk.markers.filter((m) => m.kind === "promise"),
       plans: mk.markers.filter((m) => m.kind === "plan"),
       markerRows: mk.rows,
@@ -110,6 +133,6 @@
     };
   }
 
-  PRP.messengerConversation = { KINDS, STATUSES, QUIET_MS, makeMarkerEvent, validateMarkerEvent, resolveMarkers, derive };
+  PRP.messengerConversation = { KINDS, STATUSES, QUIET_MS, RETURN_GAP_MS, makeMarkerEvent, validateMarkerEvent, resolveMarkers, derive };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.messengerConversation;
 })(typeof window !== "undefined" ? window : globalThis);

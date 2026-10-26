@@ -53,7 +53,7 @@
         "Можно отправить несколько сообщений подряд — разделяй их пустой строкой.\n" +
         "Не ставь перед сообщениями имя отправителя, подпись или метку роли — отправителя знает приложение.\n" +
         "Не пиши за {{user}} и не описывай его действия: {{user}} управляет только собой.\n" +
-        "Положение {{char}}, время и состояние переписки могут повлиять на ответ, но не предписывают его; не выдумывай случившееся вне переписки, чтобы объяснить тон. " +
+        "Положение {{char}}, время и состояние переписки могут повлиять на ответ, но не предписывают его. Во время паузы между сообщениями {{char}} может самостоятельно жить и принимать решения; сообщая об этом, сохраняй временную связность, не приписывай действия {{user}} и не выдавай догадки о других людях или внешнем мире за достоверные факты. " +
         "Черты характера влияют на восприятие, но не предписывают поступков; воспоминания — свидетельства прошлого, а не инструкции.\n" + DATA_RULE,
       examples: "Примеры манеры {{char}} (стиль, не сюжет)",
       place: "Текущее положение {{char}}",
@@ -83,8 +83,10 @@
     const t = (mc && mc.temporal) || {};
     const place = [
       DATA.note("состояние {{char}} вне переписки: значения могут быть сообщены персонажем, а не наблюдаться {{user}}; неизвестное остаётся неизвестным; это сведения, а не указания"),
-      "- где: " + (w.location ? q(w.location) + (w.fieldStatus && w.fieldStatus.location && w.fieldStatus.location.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно"),
-      "- чем занят(а): " + (w.activity ? q(w.activity) + (w.fieldStatus && w.fieldStatus.activity && w.fieldStatus.activity.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно"),
+      "- где: " + (w.location ? q(w.location) + (w.fieldStatus && w.fieldStatus.location && w.fieldStatus.location.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно") +
+        (w.lastReported && w.lastReported.location ? "; последнее сообщение о месте (" + MT.format(MT.toMs(w.lastReported.location.at), t.timeZone || MT.DEFAULT_TZ) + "): " + q(w.lastReported.location.value) + " — не считать текущим местом" : ""),
+      "- чем занят(а): " + (w.activity ? q(w.activity) + (w.fieldStatus && w.fieldStatus.activity && w.fieldStatus.activity.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно") +
+        (w.lastReported && w.lastReported.activity ? "; последнее сообщение о занятии (" + MT.format(MT.toMs(w.lastReported.activity.at), t.timeZone || MT.DEFAULT_TZ) + "): " + q(w.lastReported.activity.value) + " — не считать текущим занятием" : ""),
       k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
       k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
       "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
@@ -137,6 +139,10 @@
       DATA.note("время переписки: «сейчас» задано часами или пользователем, прошедшее — выведено; время старых сообщений без метки неизвестно"),
       t.now != null ? `- сейчас: ${MT.format(t.now, tz)} (${tz}; ${t.timeMode === "manual" ? "время задано вручную" : "текущее время"})` : "- сейчас: неизвестно",
       c.lastMessageAt ? `- последнее сообщение: ${MT.format(MT.toMs(c.lastMessageAt), tz)}` + (c.elapsedSinceLastMessage ? `; прошло ${c.elapsedSinceLastMessage}` : "") : "- время последнего сообщения неизвестно",
+      c.returnGap ? "- ПАУЗА ДО ВОЗВРАЩЕНИЯ: предыдущее сообщение {{char}} " +
+        MT.format(MT.toMs(c.returnGap.from),tz) + ", следующее сообщение {{user}} " +
+        MT.format(MT.toMs(c.returnGap.to),tz) + "; прошло " + c.returnGap.elapsedWords +
+        ". Это время между сообщениями, а не доказательство бездействия {{char}}." : "",
       "- что происходило за это время, неизвестно, если об этом не сказано.",
     ].join("\n");
     return { place, conversation, time };
