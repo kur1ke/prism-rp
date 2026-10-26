@@ -322,6 +322,67 @@ async function extractionBudgetYieldsPriorMemoryFirst() {
   console.log("PASS: extraction overflow is explicit and does not mutate state");
 }
 
+async function reflectionDistinguishesSpeakerAndSubject() {
+  const h = harness();
+  const student = message("student", "Я учусь на гуманитарном факультете.");
+  const wedding = message("wedding", "Я планирую скромную свадьбу со своей девушкой.", "student");
+  wedding.role = "user"; // Character spoke about their studies; user spoke about their wedding.
+  h.path.push(student, wedding);
+  let reflectionPayload, extractionPayload;
+  modelReply = async (_, messages) => {
+    const payload = JSON.parse(messages[1].content);
+    if (payload.sources) {
+      extractionPayload = payload;
+      return { text: JSON.stringify({ memories: payload.sources.map((row) => ({
+        messageId: row.messageId,
+        quote: row.text,
+        event: row.role === "character"
+          ? "Персонаж сообщил, что учится на гуманитарном факультете."
+          : "Пользователь сообщил, что планирует свадьбу со своей девушкой.",
+        kind: "reported"
+      })) }) };
+    }
+    reflectionPayload = payload;
+    return { text: changed };
+  };
+  assert.equal((await h.memory.observe(wedding, h.model)).status, "reflected");
+  assert.deepEqual(extractionPayload.sources.map((x) => x.role), ["character", "user"],
+    "extractor must see real speaker roles, not one combined narrator");
+  assert.ok(reflectionPayload, "Reflection must run after new Memory");
+  const studies = reflectionPayload.memories.find((m) => /гуманитарном/.test(m.quote));
+  const weddingMemory = reflectionPayload.memories.find((m) => /свадьбу/.test(m.quote));
+  assert.equal(studies.speaker, "character", "character's first-person biography cannot be tagged as user's");
+  assert.equal(weddingMemory.speaker, "user", "user's first-person biography belongs to user");
+  assert.match(PRP.memoryCycle.REFLECT_SYSTEM, /не приписывай собеседнику биографию/i);
+  assert.match(PRP.memoryCycle.EXTRACT_SYSTEM, /SOURCE\.role=character/);
+  assert.equal(h.storage.memories.size, 2, "Speaker metadata must not suppress independent memories");
+  assert.equal(h.storage.reflections.size, 1, "Reflection retains existing persistence lifecycle");
+  for (const row of h.storage.memories.values())
+    assert.equal(Object.hasOwn(row, "speaker"), false, "Speaker is reconstructed; stored Memory schema unchanged");
+  console.log("PASS: Reflection distinguishes character's studies from user's wedding");
+}
+function legacyMemorySpeakerDerivedFromActivePath() {
+  const M = PRP.memoryCycle;
+  const student = message("old-character", "Я учусь на гуманитарном факультете.");
+  const wedding = message("old-user", "Я женюсь.", "old-character");
+  wedding.role = "user";
+  const active = M.pathSnapshot([student, wedding]);
+  const legacy = [{ id: "m-old", event: "Персонаж учится на гуманитарном факультете.",
+    kind: "reported", quote: "Я учусь на гуманитарном факультете.",
+    source: { messageId: active[0].id, swipeIdx: active[0].swipeIdx,
+      textHash: active[0].textHash, prefixHash: active[0].prefixHash } }];
+  assert.equal(M.weighted(M.recent(legacy, active, M.LIMIT), active)[0].speaker, "character",
+    "old stored Memory gains speaker without a migration");
+  assert.equal(M.weighted(legacy, [])[0].speaker, "unknown",
+    "missing authoritative speaker cannot be guessed from event text");
+  const alternative = { ...student, swipeIdx: 1, swipes: student.swipes.concat([
+    { text: "Я работаю врачом.", sceneOps: [] }
+  ]) };
+  assert.equal(M.recent(legacy, M.pathSnapshot([alternative, wedding]), M.LIMIT).length, 0,
+    "alternate ancestor swipe must not reveal old Memory to Reflection");
+  console.log("PASS: legacy Memory speaker is inferred from active path, never model-supplied text");
+}
+
 function extractionSelectionContract() {
   const M = PRP.memoryCycle;
   assert.match(M.EXTRACT_SYSTEM, /memories: \[\]/, "empty extraction must be the explicit default for routine messages");
@@ -376,6 +437,8 @@ async function run() {
   await repeatedMentionDoesNotBecomeSecondMemory();
   await distinctSimilarEventsRemainSeparate();
   await extractionBudgetYieldsPriorMemoryFirst();
+  await reflectionDistinguishesSpeakerAndSubject();
+  legacyMemorySpeakerDerivedFromActivePath();
   await pathAndLegacyAreIndependent();
   extractionSelectionContract();
   backupJournalValidation();
