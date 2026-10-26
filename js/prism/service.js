@@ -72,7 +72,9 @@
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
       const history = historyWithDraws(path, allowDraw);
       const recent = history.slice(-4).map((h) => h.text).join("\n");
-      const ex = EX.rank(S.experience, {
+      // The previous manually authored Experience is retained in storage only.
+      // New runtime requests must not blend it with autonomous reflective Experience.
+      const ex = ctx.svc.memory ? { ranked: [], debug: [], visibleCount: 0 } : EX.rank(S.experience, {
         chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(here.present),
         text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
       });
