@@ -24,6 +24,8 @@ jobs:
         run: node tests/run.js
       - name: Check StateTracker photographed outfit continuity
         run: node tests/state-photo-continuity.js
+      - name: Check automatic Memory concurrency and deletion
+        run: node tests/memory-autonomy.js
       - name: Check test loader and isolated database
         run: node tests/test-mirror.js
       - name: Build Perchance and web bundles

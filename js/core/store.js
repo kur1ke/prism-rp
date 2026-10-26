@@ -15,8 +15,8 @@
   const PRP = (root.PRP = root.PRP || {});
   // Тестовый загрузчик выбирает отдельную IndexedDB до подключения приложения.
   const DB_NAME = root.__PRP_TEST_MIRROR === true ? "prism-rp-testing" : "prism-rp";
-  const DB_VERSION = 6;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments"];
+  const DB_VERSION = 7;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments", "memories", "reflections"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
   const OPEN_TIMEOUT_MS = 7000;
   let dbPromise = null;
@@ -62,6 +62,9 @@
         if (!db.objectStoreNames.contains("worldOverlays")) db.createObjectStore("worldOverlays", { keyPath: "chatId" });
         // v6: среда переписки (FOUNDATION-C), одна запись на чат-переписку. Только добавление коллекции.
         if (!db.objectStoreNames.contains("messengerEnvironments")) db.createObjectStore("messengerEnvironments", { keyPath: "chatId" });
+        // v7: Memory (episodic evidence) and Experience (reflective interpretations) are separate stores.
+        if (!db.objectStoreNames.contains("memories")) db.createObjectStore("memories", { keyPath: "id" }).createIndex("chatId", "chatId");
+        if (!db.objectStoreNames.contains("reflections")) db.createObjectStore("reflections", { keyPath: "id" }).createIndex("chatId", "chatId");
       };
       req.onsuccess = () => {
         const db = req.result;
@@ -144,7 +147,7 @@
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 6, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 7, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
