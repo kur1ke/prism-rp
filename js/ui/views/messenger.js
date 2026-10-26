@@ -72,7 +72,10 @@
         <div class="mt"><span class="tag">${e.scope === "chat" ? "вся переписка" : "ветка"}</span>${ev.effectiveAt ? `<span class="tag">${esc(MT.format(MT.toMs(ev.effectiveAt), tz))}</span>` : ""}<span class="tag">${e.active ? "действует" : esc(e.reason || "не действует")}</span></div></li>`;
     }).join("");
     const rows = (items) => items.filter(([,value]) => value != null && value !== "" && value !== "unknown").map(([label,value]) => `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join("");
+    const last = w.lastReported || {};
     const position = rows([["Где", w.location], ["Чем занят(а)", w.activity],
+      ["Последнее сообщение о месте", last.location ? last.location.value + " (" + MT.format(MT.toMs(last.location.at), tz) + ")" : null],
+      ["Последнее сообщение о занятии", last.activity ? last.activity.value + " (" + MT.format(MT.toMs(last.activity.at), tz) + ")" : null],
       ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")],
       ["Доступность", w.availability && w.availability !== "unknown" ? availWord(w.availability) : ""]]);
     const appearance = rows([["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]]);
