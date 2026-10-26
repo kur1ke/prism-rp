@@ -99,6 +99,7 @@
     // identity so the recorder and Debug view keep using the same log.
     PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
     S.chatId = chatId;
+    S.memoryStatus = "";
     S.lastSelectedChatId = chatId;
     S.cardId = c.cardId;
     S.view = "chat";
