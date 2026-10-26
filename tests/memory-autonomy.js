@@ -127,9 +127,36 @@ async function deletionDuringReflectionWrite() {
   assert.equal(h.storage.reflections.size, 0, "late Experience write must be compensated");
   console.log("PASS: retired chat compensates a late Reflection write");
 }
+async function sameIdRestoreKeepsOldWorkInvalid() {
+  const h = harness(), first = message("a", QUOTE1);
+  h.path.push(first);
+  h.S.chats = [{ id: "ch", cardId: "owner", mode: "rp" }];
+  let release, extracts = 0;
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (!data.sources) return { text: unchanged };
+    extracts++;
+    if (extracts === 1) return new Promise((resolve) => {
+      release = () => resolve({ text: extraction("a", QUOTE1) });
+    });
+    return { text: extraction("a", QUOTE1) };
+  };
+  const oldTask = h.memory.observe(first, h.model);
+  assert.equal(typeof release, "function");
+  h.memory.retireChat("ch");
+  // An import recreated the chat with the same ID and triggered the normal load.
+  await h.memory.load("ch");
+  const newTask = h.memory.observe(first, h.model);
+  assert.equal((await newTask).status, "remembered-unchanged");
+  release();
+  assert.equal((await oldTask).status, "stale");
+  assert.equal(h.storage.memories.size, 1, "retired model call must not write into restored chat");
+  console.log("PASS: same-ID restore revives the chat but not its obsolete requests");
+}
 async function run() {
   await fifo();
   await deletionDuringMemoryWrite();
   await deletionDuringReflectionWrite();
+  await sameIdRestoreKeepsOldWorkInvalid();
 }
 run().catch((e) => { console.error(e); process.exitCode = 1; });
