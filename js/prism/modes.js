@@ -88,6 +88,13 @@
       k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
       k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
       "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
+      // Unverified authored DRAW is just a bounded historical description.
+      // It must remain data and cannot assert physical undressing or override
+      // the canonical tracker. Optional under the messenger-list budget.
+      k.lists && w.latestAuthoredShot &&
+        !(w.latestPhotoWear && (w.latestPhotoWear.items || []).length)
+        ? "- последний авторский [draw:] в переписке (описание изображения, не подтверждённая трекером смена одежды): " +
+          q(w.latestAuthoredShot.text) : "",
       // A later verified author selfie is more recent visual evidence than
       // the complete origin outfit. It shows some garments, not necessarily
       // the full inventory: do not present old clothing as a NEW photo, and
@@ -103,6 +110,10 @@
               (w.visualWear || []).map(q).join(", ") +
               "; часть могла остаться вне кадра, но прежний комплект нельзя выдавать за описание последнего фото"
           : "")
+        : w.latestAuthoredShot && w.wearComplete === true
+          ? "- ранее установленный полный комплект (после последнего авторского [draw:] изменения одежды не подтверждены): " +
+            ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
+            "; фото само по себе не подтверждает снятие вещей"
         : w.wearComplete === true
           ? "- ПОЛНЫЙ перечень надетой сейчас одежды: " +
             ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
