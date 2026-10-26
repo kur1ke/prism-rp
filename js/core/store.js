@@ -15,8 +15,8 @@
   const PRP = (root.PRP = root.PRP || {});
   // Тестовый загрузчик выбирает отдельную IndexedDB до подключения приложения.
   const DB_NAME = root.__PRP_TEST_MIRROR === true ? "prism-rp-testing" : "prism-rp";
-  const DB_VERSION = 7;
-  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments", "memories", "reflections"];
+  const DB_VERSION = 8;
+  const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments", "memories", "reflections", "memorySources"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
   const OPEN_TIMEOUT_MS = 7000;
   let dbPromise = null;
@@ -65,6 +65,14 @@
         // v7: Memory (episodic evidence) and Experience (reflective interpretations) are separate stores.
         if (!db.objectStoreNames.contains("memories")) db.createObjectStore("memories", { keyPath: "id" }).createIndex("chatId", "chatId");
         if (!db.objectStoreNames.contains("reflections")) db.createObjectStore("reflections", { keyPath: "id" }).createIndex("chatId", "chatId");
+        // v8: durable source receipts, including sources yielding zero Memory.
+        // Unique sourceKey prevents two extractions of one branch/swipe source
+        // from committing independently, even across simultaneous browser tabs.
+        if (!db.objectStoreNames.contains("memorySources")) {
+          const receipts = db.createObjectStore("memorySources", { keyPath: "id" });
+          receipts.createIndex("chatId", "chatId");
+          receipts.createIndex("sourceKey", "sourceKey", { unique: true });
+        }
       };
       req.onsuccess = () => {
         const db = req.result;
@@ -147,7 +155,7 @@
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 7, exportedAt: new Date().toISOString() };
+      const out = { app: "prism-rp", version: 8, exportedAt: new Date().toISOString() };
       for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
       return out;
     },
