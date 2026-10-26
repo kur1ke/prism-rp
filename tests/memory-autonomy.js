@@ -168,11 +168,13 @@ async function oneSourceOnlyAcrossTurnsAndReload() {
     attempts.push(data.sources.map((x) => x.messageId));
     const id = data.sources.at(-1).messageId;
     const quote = data.sources.at(-1).text;
-    return { text: JSON.stringify({ memories: [
-      { messageId: id, quote, event: "Персонажи пережили одну встречу с несколькими деталями", kind: "reported" },
+    const first = { messageId: id, quote,
+      event: "Персонажи пережили одну встречу с несколькими деталями", kind: "reported" };
+    return { text: JSON.stringify({ memories: id === "a" ? [
+      first,
       { messageId: id, quote: "поговорили", event: "Они говорили о своих переживаниях", kind: "reported" },
       { messageId: id, quote: "подарили цветы", event: "Они обменялись цветами", kind: "reported" }
-    ] }) };
+    ] : [first] }) };
   };
   const first = await h.memory.observe(old, h.model);
   assert.equal(first.status, "remembered-unchanged");
