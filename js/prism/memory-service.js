@@ -26,7 +26,11 @@
     function fits(system, user, maxOutput) {
       return ctx.contextTokens() >= maxOutput + 220 + footprint(system) + footprint(user);
     }
-    function recordStatus(code) { S.memoryStatus = code; return { status: code }; }
+    function recordStatus(code) {
+      S.memoryStatus = code;
+      if (S.drawerOpen && S.tab === "memory" && ctx.ui && ctx.ui.renderDrawer) ctx.ui.renderDrawer();
+      return { status: code };
+    }
     async function cycle(sourceMsg, prov) {
       const initialChat = ctx.chat();
       if (!initialChat || sourceMsg.chatId !== initialChat.id) return recordStatus("stale");
