@@ -12,8 +12,13 @@
   var raw = "https://raw.githubusercontent.com/kur1ke/prism-rp/";
   var suffix = "/dist/web/prism-app.js";
   // Last verified testing distribution commit. Immutable CDN ref for API outages.
-  // Bump deliberately after each validated testing publication if this fallback must be updated.
-  var safeRevision = "9355480089a1dd2d25b25be528b5bf93bc3a847b";
+  // Must not point to a bundle with an older IndexedDB schema than the test
+  // database: otherwise an API outage can launch an obsolete app and produce
+  // IndexedDB VersionError. Keep this version aligned with js/core/store.js;
+  // tests/test-mirror.js enforces the declared schema contract.
+  // Published testing commit c92f1c6 includes build 13aff84c (IndexedDB v8).
+  var safeRevision = "c92f1c685a237c989047f327f9cedac1d9f750e2";
+  var safeDbVersion = 8;
   var badge = document.getElementById("prism-testing-badge");
   var boot = document.getElementById("prism-boot");
   function status(t) { if (badge) badge.textContent = "PRISM TEST · " + t; }
@@ -40,7 +45,7 @@
           var builtFrom = window.PRISM_RP_BUILD_SHA || "";
           if (warning) {
             var marker = /^[a-f0-9]{40}$/.test(builtFrom) ? " · сборка " + builtFrom.slice(0, 7) : " · SHA сборки отсутствует";
-            status("testing · закреплено " + ref.slice(0, 7) + marker + " · API недоступен");
+            status("testing · закреплено " + ref.slice(0, 7) + marker + " · DB v" + safeDbVersion + " · API недоступен");
           } else {
             status((index ? "резерв · " : "") + ref.slice(0, 7));
           }
