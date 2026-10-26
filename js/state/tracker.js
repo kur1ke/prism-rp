@@ -424,8 +424,15 @@
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i], sw = m && TR.activeSwipe(m);
       const events = sw && Array.isArray(sw.stateEvents) ? sw.stateEvents : [];
+      if (sw && (sw.stateCorrections || []).some(e => e && e.actor === "char" && e.field === "wear"))
+        return null;
       const wear = events.filter(e => e && e.actor === "char" && e.field === "wear" && e.certainty !== "intent");
-      if (!wear.length) continue;
+      if (!wear.length) {
+        // A newer authored photograph without verified wear observations
+        // provides no grounds to keep calling an older photo the latest.
+        if (m.role === "assistant" && Array.isArray(sw.draws) && sw.draws.length) return null;
+        continue;
+      }
       // Any later text/correction changes the outfit; older photo cannot
       // silently override it. Nor can an unverified source status be used.
       if ((sw.stateCorrections || []).some(e => e && e.actor === "char" && e.field === "wear") ||
