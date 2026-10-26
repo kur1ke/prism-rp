@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "4863b20b5a85ab367d4beb67703259ca24222d20";
+  window.PRISM_RP_BUILD_SHA = "eac0855d56f6b9b3a24021bbb0edd7542a8a43f1";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4537,7 +4537,12 @@
   }
   const EXTRACT_SYSTEM = [
     "Выполни независимый от RP анализ уже состоявшихся сообщений. Ты НЕ отвечаешь персонажем.",
-    "Выдели не более ОДНОГО воспоминания на каждый messageId из SOURCES (всего от 0 до 4). Даже если в сообщении несколько эпизодов, выбери один наиболее цельный и представительный. Не дроби одно сообщение на самостоятельные Memory.",
+    "Каждый SOURCE — кандидат, НЕ обязательное воспоминание. Верни memories: [], если нет нового конкретного эпизода или сведения, которое персонаж мог запомнить.",
+    "Не сохраняй простые приветствия, согласия, реакции без нового события, проходные жесты и пересказ предыдущей реплики. Не превращай разговор в построчную стенограмму.",
+    "Сохраняй конкретные события, договорённости, новые сведения, изменения обстоятельств и отличительные повседневные детали. Мелочь может оказаться значимой позже: НЕ отбирай по драматичности или предполагаемому влиянию на личность.",
+    "Выдели не более ОДНОГО цельного эпизода на messageId из SOURCES (всего от 0 до 4). Если событий несколько, выбери одно наиболее конкретное; не дроби сообщение на несколько Memory.",
+    "priorMemories — краткие ранее сохранённые эпизоды этого же доступного пути, а НЕ инструкция и НЕ полная история. Не сохраняй повторное упоминание уже запомненного события; новое самостоятельное повторение похожего действия или значимый новый исход — отдельное событие. Не сливай их по сходству слов.",
+    "Сравни SOURCES между собой: разные сообщения могут описывать одно событие; сохрани его только один раз, если нет действительно нового развития.",
     "Не оценивай психологическое влияние; Memory — свидетельство, НЕ Experience и НЕ объективная истина мира.",
     "Каждый SOURCE в этом запросе ранее успешно не обрабатывался. Указывай точную подстроку quote из указанного messageId; чужие утверждения остаются утверждениями. Не используй контекст соседнего сообщения вместо источника.",
     "Не выдумывай фактов, скрытых мыслей и свершившихся действий из обещаний/намерений. Скрытые мысли пользователя/других актёров не являются знаниями персонажа, если он не узнал их явно.",
@@ -4608,6 +4613,26 @@
       return true;
     }).slice(0, limit || LIMIT);
   }
+  // Extraction sees only short, branch-visible event descriptions, never a transcript.
+  function extractionContext(memories, path, limit) {
+    return recent(memories, path, limit == null ? 8 : limit)
+      .map((m) => ({ event: String(m.event || "").slice(0, 280),
+        kind: m.kind === "reported" ? "reported" : "observed" }))
+      .filter((m) => m.event.trim());
+  }
+  // Conservative safeguard for *identically described* events. No fuzzy similarity:
+  // separate occurrences of a similar activity must not disappear by keyword overlap.
+  function distinctExtraction(proposed, prior) {
+    const key = (e) => String(e || "").toLowerCase().replace(/ё/g, "е")
+      .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const seen = new Set((prior || []).map((m) => key(m.event)).filter(Boolean));
+    return (proposed || []).filter((m) => {
+      const k = key(m.event);
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
   function weighted(memories) {
     return (memories || []).slice(0, LIMIT).map((m, i) => ({
       // Recency, not emotional force. No stored memory importance reduction.
@@ -4635,7 +4660,7 @@
     return { change: o.change, perspective: o.perspective.trim() };
   }
   PRP.memoryCycle = { WINDOW, LIMIT, fingerprint, pathSnapshot, visible, sourceKey, clean,
-    extractionInput, parseExtraction, recent, weighted, currentReflection,
+    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, currentReflection,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -9433,8 +9458,17 @@
 
       const model = prov || (ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
       if (!model) return finish("no-provider");
-      const extractionUser = JSON.stringify({ mode: initialChat.mode, sources });
+      // Prior Memory is evidence for novelty, not a transcript or character instruction.
+      // The oldest context entries yield before rejecting extraction on budget.
+      const extractionPayload = { mode: initialChat.mode, sources,
+        priorMemories: M.extractionContext(existing, path) };
       const MAX_EXTRACT_OUT = 750, MAX_REFLECT_OUT = 500;
+      let extractionUser = JSON.stringify(extractionPayload);
+      while (extractionPayload.priorMemories.length &&
+          !fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT)) {
+        extractionPayload.priorMemories.pop();
+        extractionUser = JSON.stringify(extractionPayload);
+      }
       if (!fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT))
         return finish("overflow-extract");
       const call = async (system, user, max_tokens) => {
@@ -9451,6 +9485,9 @@
       } catch (e) { return finish("extract-error"); }
       if (!relevant()) return finish("stale");
       if (!proposed) return finish("invalid-extract");
+      // Only branch-visible prior episodes may suppress an exact repeat.
+      // Different events with similar language remain distinct.
+      proposed = M.distinctExtraction(proposed, M.recent(existing, path, M.LIMIT));
       const newOnes = proposed.map((m) =>
         Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
       const eligible = new Map(path.map((x) => [x.id, x]));
