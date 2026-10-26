@@ -8,7 +8,9 @@
 
   function create(ctx) {
     const { S, DB } = ctx;
-    let pending = null;
+    // Per-chat concurrency gate: a slow cycle in another chat may not
+    // suppress the new chat's automatic Memory/Experience processing.
+    const pendingByChat = new Map();
     async function load(chatId) {
       const [memories, reflections] = await Promise.all([
         DB.byIndex("memories", "chatId", chatId),
@@ -85,7 +87,9 @@
       const cd = ctx.card() || {};
       // Exactly the same Core interpretation as normal Prism assembly. Do not
       // let reflection construct a second, divergent character baseline.
-      const canonical = PRP.cardContext.core(cd, (x) => x);
+      const macroNames = { char: cd.name || "Персонаж",
+        user: ctx.persona && ctx.persona() && ctx.persona().name || "Пользователь" };
+      const canonical = PRP.cardContext.core(cd, (x) => U.macros(x, macroNames));
       const core = { name: cd.name, source: canonical.source,
         identity: canonical.identity, personality: canonical.personality,
         traits: canonical.traits, voice: canonical.voice, durableContext: canonical.durableContext };
@@ -122,10 +126,13 @@
     // Overlap is intentionally suppressed; a future turn may re-scan the last
     // four messages. No independent background task or continuous simulation.
     function observe(msg, prov) {
-      if (pending) return Promise.resolve({ status: "busy" });
-      const task = cycle(msg, prov).catch((e) => recordStatus("error"));
-      pending = task;
-      task.finally(() => { if (pending === task) pending = null; });
+      const chatId = msg && msg.chatId;
+      if (!chatId) return Promise.resolve({ status: "no-source" });
+      if (pendingByChat.has(chatId)) return Promise.resolve({ status: "busy" });
+      const task = cycle(msg, prov).catch((e) =>
+        S.chatId === chatId ? recordStatus("error") : { status: "error" });
+      pendingByChat.set(chatId, task);
+      task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
       return task;
     }
     return { load, visibleMemories, experience, observe };
