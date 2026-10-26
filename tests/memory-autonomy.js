@@ -19,6 +19,7 @@ const PRP = (globalThis.PRP = {
 });
 require("../js/prism/memory-cycle.js");
 require("../js/prism/memory-service.js");
+require("../js/core/backup.js");
 
 const QUOTE1 = "Сегодня мы встретились в парке.";
 const QUOTE2 = "Мы вместе обсуждали план на завтра.";
@@ -225,6 +226,26 @@ async function pathAndLegacyAreIndependent() {
   assert.notEqual(M.sourceKey("ch","owner",old.source),M.sourceKey("ch","owner",alt));
   console.log("PASS: legacy duplicate projection and alternate swipe provenance");
 }
+function backupJournalValidation() {
+  const M = PRP.memoryCycle, snap = M.pathSnapshot([message("evt", QUOTE1)])[0];
+  const row = { id: "r", chatId: "ch", owner: "owner",
+    source: { messageId: snap.id, swipeIdx: snap.swipeIdx,
+      textHash: snap.textHash, prefixHash: snap.prefixHash }, result: "empty" };
+  row.sourceKey = M.sourceKey("ch", "owner", row.source);
+  const data = { cards: [{ id: "owner" }, { id: "other" }],
+    chats: [{ id: "ch", cardId: "owner" }], memorySources: [row] };
+  const B = PRP.backup;
+  assert.equal(B.check(data, { replace: true }).data.memorySources.length, 1);
+  const foreign = { ...row, owner: "other", id: "foreign",
+    sourceKey: M.sourceKey("ch", "other", row.source) };
+  const bad = B.check({ ...data, memorySources: [foreign] }, { replace: true });
+  assert.equal(bad.data.memorySources.length, 0, "foreign owner must not inject a processed marker");
+  const forged = { ...row, id: "forged", sourceKey: "invented" };
+  assert.equal(B.check({ ...data, memorySources: [forged] }, { replace: true }).data.memorySources.length, 0);
+  const repeated = { ...row, id: "dupe" };
+  assert.equal(B.check({ ...data, memorySources: [row, repeated] }, { replace: true }).data.memorySources.length, 0);
+  console.log("PASS: backup refuses forged, cross-owner and repeated source receipts");
+}
 async function run() {
   await fifo();
   await deletionDuringMemoryWrite();
@@ -233,5 +254,6 @@ async function run() {
   await oneSourceOnlyAcrossTurnsAndReload();
   await noMemoryStillMarksSource();
   await pathAndLegacyAreIndependent();
+  backupJournalValidation();
 }
 run().catch((e) => { console.error(e); process.exitCode = 1; });
