@@ -8567,7 +8567,7 @@ async function autoMemoryTests() {
     },{replace:true});
     assert.strictEqual(result.data.memories.length,0);
     assert.strictEqual(result.data.reflections.length,0);
-    assert.ok(result.issues.some(x=>x.code==="autobiography-wrong-owner"));
+    assert.ok(result.issues.some(x=>x.code==="memory-owner-mismatch"));
   });
   await ta("AUTO-M7: in-flight ancestor mutation cannot persist stale model output",async()=>{
     const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
