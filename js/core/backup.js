@@ -19,7 +19,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
 
-  const ID_STORES = ["cards", "chats", "messages", "experience", "images", "assist", "worldPacks", "worldLenses"];
+  const ID_STORES = ["cards", "chats", "messages", "experience", "images", "assist", "worldPacks", "worldLenses", "memories", "reflections"];
   const isObj = (v) => v != null && typeof v === "object" && !Array.isArray(v);
   const sid = (v) => (v == null ? "" : String(v));
 
@@ -76,6 +76,8 @@
     };
     byChat("messages", "message-orphan-chat", "Сообщение");
     byChat("images", "image-orphan-chat", "Картинка");
+    byChat("memories", "memory-orphan-chat", "Воспоминание");
+    byChat("reflections", "reflection-orphan-chat", "Осмысление");
     if (Array.isArray(out.experience)) out.experience = out.experience.filter((r) => {
       if (!cards.has(sid(r.owner))) { reject("experience", r.id, "experience-orphan-card", "Запись опыта относится к персонажу, которого нет."); return false; }
       if (r.chatId != null && r.chatId !== "" && !chats.has(sid(r.chatId))) { reject("experience", r.id, "experience-orphan-chat", "Запись опыта относится к чату, которого нет."); return false; }
