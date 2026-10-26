@@ -415,6 +415,20 @@
     return { ok: true, path: derived };
   }
 
+  // Last authored DRAW is history, not a garment fact. An Observer with
+  // zero accepted events cannot be worked around by inventing wear.remove.
+  function latestAuthoredShot(path) {
+    const messages = Array.isArray(path) ? path : [];
+    for (let i = messages.length - 1; i >= Math.max(0, messages.length - 8); i--) {
+      const m = messages[i], sw = m && TR.activeSwipe(m);
+      const draws = m && m.role === "assistant" && sw && Array.isArray(sw.draws) ? sw.draws : [];
+      const last = draws.length ? draws[draws.length - 1] : null;
+      if (last && typeof last.prompt === "string" && last.prompt.trim())
+        return { text: last.prompt.trim().slice(0, 440), messageId: m.id, swipeIdx: m.swipeIdx || 0 };
+    }
+    return null;
+  }
+
   // Read-only last photographed clothes. This is a bounded VIEW of already
   // validated, active-swipe author DRAW events, never a new wardrobe or proof
   // that other garments were removed. A later wear change supersedes this
@@ -498,6 +512,6 @@
     view.intentions = char.intentions.slice();
     return view;
   }
-  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestPhotoWear, fieldOf, forCharacter, forUser };
+  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);
