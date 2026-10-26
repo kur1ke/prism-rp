@@ -25,8 +25,8 @@ const status = (field, value, evidence) => ({
 });
 const stateMsg = msg("a", earlier, [
   status("location", "почти дома", "почти дома"),
-  status("activity", "поход за продуктами", "после покупок")
-], "Я почти дома после покупок.");
+  status("activity", "поход за продуктами", "в походе за продуктами")
+], "Я почти дома, всё ещё в походе за продуктами.");
 // This fixture uses already canonical source facts; validation runs on every fold.
 function projected(path) {
   const st = T.fold({mode: "messenger", path});
