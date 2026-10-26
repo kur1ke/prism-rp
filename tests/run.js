@@ -8495,6 +8495,80 @@ async function autoMemoryTests() {
     assert.ok(!allText(rendered.messages).includes("LEGACY_MANUAL_NEVER_INJECT"));
     assert.strictEqual(rendered.report.experienceKept,0);
   });
+  await ta("AUTO-M10: recovered Memory and Experience survive service reload",async()=>{
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
+    const msg=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(msg,msg.id);
+    let step=0;fbLLM=async()=>({text:++step===1?extract(msg.id,baseText,"Аля пообещала прийти"):
+      reflect("Аля испытывает одновременно надежду и осторожность к обещаниям.")});
+    assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"reflected");
+    h.S.memories=[];h.S.reflections=[];
+    await h.ctx.svc.memory.load(h.S.chatId);
+    assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,1);
+    assert.ok(h.ctx.svc.memory.experience().perspective.includes("осторожность"));
+  });
+  await ta("AUTO-M11: another chat may reflect while old chat request is pending, status stays scoped",async()=>{
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
+    const m1=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(m1,m1.id);
+    let unblock;
+    let calls=0;
+    fbLLM=async(_,messages)=>{
+      calls++;
+      const data=messages[1].content;
+      if (data.includes('"sources":') && data.includes(m1.id))
+        return new Promise((resolve)=>{unblock=()=>resolve({text:extract(m1.id,baseText,"Аля дала обещание")});});
+      if (data.includes('"sources":')) {
+        const m=h.chat.path()[0];
+        return {text:extract(m.id,"Я рассказала тебе о своём дне.","Аля рассказала собеседнику о своём дне")};
+      }
+      return {text:reflect("Аля почувствовала, что разговор стал для неё уютным и доверительным.")};
+    };
+    const oldTask=h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"});
+    assert.strictEqual(typeof unblock,"function");
+    await h.chat.createChat("messenger","c1");
+    const freshId=h.S.chatId;
+    await h.ctx.svc.memory.load(freshId);
+    const m2=h.chat.newMsg("assistant",null,"Я рассказала тебе о своём дне.");
+    await h.chat.commitMessage(m2,m2.id);
+    const newResult=await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"});
+    assert.strictEqual(newResult.status,"reflected");
+    assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,1);
+    const status=h.S.memoryStatus;
+    unblock();
+    assert.strictEqual((await oldTask).status,"stale");
+    assert.strictEqual(h.S.memoryStatus,status,"old chat must not overwrite new chat display");
+    assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,1);
+    assert.strictEqual((h.store.memories||new Map()).size,1,"stale chat never commits");
+    assert.strictEqual(calls,3,"new chat makes both model calls even while old extraction is pending");
+  });
+  await ta("AUTO-M12: Reflection sees the same Card Core macros as runtime Prism",async()=>{
+    const h=fbHarness({name:"Аля",description:"{{char}} ценит честность и помнит слова {{user}}.",personality:"Внимательна."},{autoMemory:true});
+    await h.chat.createChat("rp","c1");
+    const msg=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(msg,msg.id);
+    let reflectionData="";
+    fbLLM=async(_,messages)=>{
+      if(messages[1].content.includes('"sources":'))
+        return {text:extract(msg.id,baseText,"Аля пообещала прийти")};
+      reflectionData=messages[1].content;
+      return {text:JSON.stringify({change:"unchanged",perspective:""})};
+    };
+    assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"remembered-unchanged");
+    assert.ok(reflectionData.includes("Аля ценит честность"));
+    assert.ok(reflectionData.includes("Пользователь"));
+    assert.ok(!reflectionData.includes("{{char}}"));
+    assert.ok(!reflectionData.includes("{{user}}"));
+  });
+  await ta("AUTO-M13: imported automatic memories must match the chat owner",async()=>{
+    const B=globalThis.PRP.backup;
+    const result=B.check({
+      cards:[{id:"ca"},{id:"cb"}],
+      chats:[{id:"ch",cardId:"ca"}],
+      memories:[{id:"mem1",chatId:"ch",owner:"cb"}],
+      reflections:[{id:"ref1",chatId:"ch",owner:"cb"}]
+    },{replace:true});
+    assert.strictEqual(result.data.memories.length,0);
+    assert.strictEqual(result.data.reflections.length,0);
+    assert.ok(result.issues.some(x=>x.code==="autobiography-wrong-owner"));
+  });
   await ta("AUTO-M7: in-flight ancestor mutation cannot persist stale model output",async()=>{
     const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
     const first=h.chat.newMsg("user",null,"Я здесь с самого утра");
