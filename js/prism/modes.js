@@ -88,12 +88,27 @@
       k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
       k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
       "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
-      w.wearComplete === true
-        ? "- ПОЛНЫЙ перечень надетой сейчас одежды: " +
-          ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
-          "; никаких других надетых вещей, в том числе скрытых слоёв и белья, нет"
-        : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
-          (w.visualWear || []).map(q).join(", ") : "",
+      // A later verified author selfie is more recent visual evidence than
+      // the complete origin outfit. It shows some garments, not necessarily
+      // the full inventory: do not present old clothing as a NEW photo, and
+      // do not fabricate a removal from an unseen region of the frame.
+      w.latestPhotoWear && (w.latestPhotoWear.items || []).length
+        ? "- на последнем подтверждённом снимке самого персонажа явно видны: " +
+          w.latestPhotoWear.items.map(q).join(", ") +
+          " (это видимые вещи, а не доказательство полного комплекта)"
+        : "",
+      w.latestPhotoWear && (w.latestPhotoWear.items || []).length
+        ? ((w.visualWear || []).length
+          ? "- ранее установленные вещи, включая стартовый комплект: " +
+              (w.visualWear || []).map(q).join(", ") +
+              "; часть могла остаться вне кадра, но прежний комплект нельзя выдавать за описание последнего фото"
+          : "")
+        : w.wearComplete === true
+          ? "- ПОЛНЫЙ перечень надетой сейчас одежды: " +
+            ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
+            "; никаких других надетых вещей, в том числе скрытых слоёв и белья, нет"
+          : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
+            (w.visualWear || []).map(q).join(", ") : "",
       w.visualPose ? "- установленная поза: " + q(w.visualPose) : "",
       w.visualHair ? "- установленная причёска: " + q(w.visualHair) : "",
     ].filter(Boolean).join("\n");
