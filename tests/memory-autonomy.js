@@ -28,7 +28,7 @@ const changed = JSON.stringify({
 });
 const unchanged = JSON.stringify({ change: "unchanged", perspective: "" });
 const extraction = (messageId, quote) => JSON.stringify({
-  memories: [{ messageId, quote, event: "Собеседники обменялись словами во время разговора", kind: "reported" }]
+  memories: [{ messageId, quote, event: "Собеседники обсудили: " + quote, kind: "reported" }]
 });
 function message(id, text, parentId) {
   return { id, chatId: "ch", role: "assistant", parentId: parentId || null,
@@ -169,7 +169,8 @@ async function oneSourceOnlyAcrossTurnsAndReload() {
     const id = data.sources.at(-1).messageId;
     const quote = data.sources.at(-1).text;
     const first = { messageId: id, quote,
-      event: "Персонажи пережили одну встречу с несколькими деталями", kind: "reported" };
+      event: id === "a" ? "Персонажи пережили одну встречу с несколькими деталями" :
+        "Собеседники обсудили планы на следующий день", kind: "reported" };
     return { text: JSON.stringify({ memories: id === "a" ? [
       first,
       { messageId: id, quote: "поговорили", event: "Они говорили о своих переживаниях", kind: "reported" },
@@ -228,6 +229,81 @@ async function pathAndLegacyAreIndependent() {
   assert.notEqual(M.sourceKey("ch","owner",old.source),M.sourceKey("ch","owner",alt));
   console.log("PASS: legacy duplicate projection and alternate swipe provenance");
 }
+
+async function repeatedMentionDoesNotBecomeSecondMemory() {
+  const h = harness();
+  const a = message("a", "Утром мы вместе купили двух плюшевых медведей.");
+  const b = message("b", "Помнишь двух медведей, которых мы купили утром?", "a");
+  h.path.push(a);
+  const evidence = [], reflectionCalls = [];
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (!data.sources) { reflectionCalls.push(data); return { text: unchanged }; }
+    evidence.push(data);
+    const src = data.sources.at(-1);
+    return { text: JSON.stringify({ memories: [{
+      messageId: src.messageId, quote: src.text,
+      event: "Утром вместе купили двух плюшевых медведей.", kind: "observed"
+    }] }) };
+  };
+  assert.equal((await h.memory.observe(a, h.model)).status, "remembered-unchanged");
+  h.path.push(b);
+  assert.equal((await h.memory.observe(b, h.model)).status, "no-new-memory");
+  assert.equal(h.storage.memories.size, 1, "an identically described event cannot be stored twice");
+  assert.equal(h.storage.memorySources.size, 2, "a rejected repeated mention is still processed");
+  assert.equal([...h.storage.memorySources.values()].find((r) => r.source.messageId === "b").result, "empty");
+  assert.equal(evidence[0].priorMemories.length, 0);
+  assert.deepEqual(evidence[1].priorMemories, [{
+    event: "Утром вместе купили двух плюшевых медведей.", kind: "observed"
+  }], "only the event, not the quote or earlier conversation, enters the novelty context");
+  assert.equal(reflectionCalls.length, 1, "repetition without Memory does not invoke Reflection");
+  console.log("PASS: repeated mention is skipped with durable receipt and no redundant Reflection");
+}
+async function distinctSimilarEventsRemainSeparate() {
+  const h = harness();
+  const a = message("a", "В понедельник мы гуляли в парке.");
+  const b = message("b", "Во вторник мы снова гуляли в парке.", "a");
+  h.path.push(a);
+  modelReply = async (_, messages) => {
+    const data = JSON.parse(messages[1].content);
+    if (!data.sources) return { text: unchanged };
+    const src = data.sources.at(-1);
+    return { text: JSON.stringify({ memories: [{
+      messageId: src.messageId, quote: src.text,
+      event: src.messageId === "a" ? "В понедельник вместе гуляли в парке." :
+        "Во вторник вместе снова гуляли в парке.", kind: "observed"
+    }] }) };
+  };
+  assert.equal((await h.memory.observe(a, h.model)).status, "remembered-unchanged");
+  h.path.push(b);
+  assert.equal((await h.memory.observe(b, h.model)).status, "remembered-unchanged");
+  assert.equal(h.storage.memories.size, 2, "independent repetitions must remain separate episodes");
+  console.log("PASS: two similar but separate events retain their own Memory");
+}
+function extractionSelectionContract() {
+  const M = PRP.memoryCycle;
+  assert.match(M.EXTRACT_SYSTEM, /memories: \[\]/, "empty extraction must be the explicit default for routine messages");
+  assert.match(M.EXTRACT_SYSTEM, /повседневные детали/, "small lived moments must stay eligible");
+  const a = message("root", "Мы пришли на встречу в парк.");
+  const b = message("later", "Мы купили игрушку и вернулись.", "root");
+  const original = M.pathSnapshot([a, b]);
+  const old = [{ id: "mem-old", event: "Вместе купили игрушку.", quote: "Мы купили игрушку",
+    kind: "observed", source: { messageId: original[1].id,
+      swipeIdx: original[1].swipeIdx, textHash: original[1].textHash,
+      prefixHash: original[1].prefixHash } }];
+  assert.deepEqual(M.extractionContext(old, original), [{
+    event: "Вместе купили игрушку.", kind: "observed"
+  }]);
+  const alternativeRoot = { ...a, swipeIdx: 1,
+    swipes: a.swipes.concat([{ text: "Мы пошли в кино.", sceneOps: [] }]) };
+  assert.deepEqual(M.extractionContext(old, M.pathSnapshot([alternativeRoot, b])), [],
+    "ancestor swipe change must hide old extraction context");
+  assert.equal(M.distinctExtraction([
+    { event: "Вместе купили игрушку!" }, { event: "Во вторник снова купили игрушку." }
+  ], old).length, 1, "exact repeats are omitted but a new occasion survives");
+  console.log("PASS: selective Memory contract, branch-safe context and conservative deduplication");
+}
+
 function backupJournalValidation() {
   const M = PRP.memoryCycle, snap = M.pathSnapshot([message("evt", QUOTE1)])[0];
   const row = { id: "r", chatId: "ch", owner: "owner",
@@ -255,7 +331,10 @@ async function run() {
   await sameIdRestoreKeepsOldWorkInvalid();
   await oneSourceOnlyAcrossTurnsAndReload();
   await noMemoryStillMarksSource();
+  await repeatedMentionDoesNotBecomeSecondMemory();
+  await distinctSimilarEventsRemainSeparate();
   await pathAndLegacyAreIndependent();
+  extractionSelectionContract();
   backupJournalValidation();
 }
 run().catch((e) => { console.error(e); process.exitCode = 1; });
