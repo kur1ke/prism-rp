@@ -2039,7 +2039,7 @@ function fbHarness(card, opts) {
   ctx.svc.cards = PRP.cardService.create(ctx);
   ctx.svc.worldChat = PRP.worldOverlayService.create(ctx);
   ctx.svc.exp = PRP.experienceService.create(ctx);
-  ctx.svc.memory = PRP.memoryService.create(ctx);
+  if (o.autoMemory) ctx.svc.memory = PRP.memoryService.create(ctx);
   // Подставные часы для живого времени переписки (тесты не зависят от настоящего времени).
   let clockMs = o.clock != null ? o.clock : Date.UTC(2026, 9, 17, 0, 0);
   ctx.clock = () => clockMs;
@@ -8380,7 +8380,7 @@ async function autoMemoryTests() {
     assert.ok(M.REFLECT_SYSTEM.includes("unchanged"));
   });
   await ta("AUTO-M2: model extracts then reflects, commits both stores without user input", async()=>{
-    const h=fbHarness(card);
+    const h=fbHarness(card,{autoMemory:true});
     await h.chat.createChat("rp","c1");const msg=h.chat.newMsg("assistant",null,baseText);
     await h.chat.commitMessage(msg,msg.id);
     const orig=JSON.stringify(h.ctx.card());const req=[];
@@ -8404,7 +8404,7 @@ async function autoMemoryTests() {
     assert.strictEqual(allText(rp.messages).includes(baseText),true);
   });
   await ta("AUTO-M3: unchanged reflection persists Memory but no invented Experience",async()=>{
-    const h=fbHarness(card);await h.chat.createChat("messenger","c1");
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("messenger","c1");
     const msg=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(msg,msg.id);
     let n=0;fbLLM=async(_,msgs)=>({text:++n===1?extract(msg.id,baseText,"В переписке дано обещание"):JSON.stringify({change:"unchanged",perspective:""})});
     assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"remembered-unchanged");
@@ -8412,7 +8412,7 @@ async function autoMemoryTests() {
     assert.strictEqual((h.store.reflections||new Map()).size,0);
   });
   await ta("AUTO-M4: invalid reflection, quote fabrication and overflow write NOTHING",async()=>{
-    const h=fbHarness(card);await h.chat.createChat("rp","c1");
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
     const msg=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(msg,msg.id);
     let c=0;fbLLM=async()=>({text:++c===1?extract(msg.id,baseText,"Аля дала обещание"):"not-json"});
     assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"invalid-reflection");
@@ -8425,7 +8425,7 @@ async function autoMemoryTests() {
     assert.strictEqual(c,0);
   });
   await ta("AUTO-M5: edit/swipe ancestor hides reflections and memories, return restores",async()=>{
-    const h=fbHarness(card);await h.chat.createChat("rp","c1");
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
     const ancestor=h.chat.newMsg("user",null,"Ты мне доверяешь?");
     await h.chat.commitMessage(ancestor,ancestor.id);
     const msg=h.chat.newMsg("assistant",ancestor.id,baseText);await h.chat.commitMessage(msg,msg.id);
@@ -8444,7 +8444,7 @@ async function autoMemoryTests() {
     assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,0);
   });
   await ta("AUTO-M6: next reflection includes earlier Experience separately from Core",async()=>{
-    const h=fbHarness(card);await h.chat.createChat("rp","c1");
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
     const first=h.chat.newMsg("assistant",null,baseText);await h.chat.commitMessage(first,first.id);
     let count=0;fbLLM=async(_,msgs)=>({text:++count===1?extract(first.id,baseText,"Обещала прийти"):
       reflect("Аля надеется на тёплую встречу, хотя волнуется.")});
@@ -8464,7 +8464,7 @@ async function autoMemoryTests() {
     assert.strictEqual((h.store.reflections||new Map()).size,1,"unchanged does not create spurious state");
   });
   await ta("AUTO-M7: in-flight ancestor mutation cannot persist stale model output",async()=>{
-    const h=fbHarness(card);await h.chat.createChat("rp","c1");
+    const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
     const first=h.chat.newMsg("user",null,"Я здесь с самого утра");
     await h.chat.commitMessage(first,first.id);
     const msg=h.chat.newMsg("assistant",first.id,baseText);await h.chat.commitMessage(msg,msg.id);
