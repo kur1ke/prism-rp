@@ -658,6 +658,9 @@ async function recoveredLateIntegrationDoesNotEraseRecentExperience() {
     if (Object.hasOwn(data, "previousExperience")) {
       currentCalls++;
       if (currentCalls === 102) resumedInput = data;
+      if (currentCalls === 101) return { text: JSON.stringify({
+        change: "changed", perspective: "Воспоминания о недавней встрече оказались особенно свежими."
+      }) };
       return { text: currentCalls === 102 ? JSON.stringify({
         change: "changed", perspective: "Долгосрочный опыт включён вместе с последними событиями."
       }) : changed };
