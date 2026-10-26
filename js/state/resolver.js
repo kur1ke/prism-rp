@@ -7,7 +7,14 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const TRACK = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
+  const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
+  const MT = PRP.messengerTime || (typeof require !== "undefined" ? require("../messenger/time.js") : null);
   const clone = (v) => JSON.parse(JSON.stringify(v));
+  // Freshness affects the *presentation* of remote reports, not the canon.
+  // A past report cannot be offered as guaranteed current just because no
+  // subsequent event overwrote it. Neither a new location nor activity is
+  // invented from elapsed wall-clock time.
+  const REPORT_STALE_MS = 2 * 60 * 60 * 1000;
 
   const WORLD_FIELDS = Object.freeze([
     "location", "activity", "visualWear", "visualPose", "visualHair",
@@ -40,6 +47,31 @@
     // from the initial outfit to avoid presenting the origin as a new photo.
     out.latestPhotoWear = tracked.latestPhotoWear ? clone(tracked.latestPhotoWear) : null;
     out.latestAuthoredShot = tracked.latestAuthoredShot ? clone(tracked.latestAuthoredShot) : null;
+    return out;
+  }
+
+  function messengerFreshness(base, path, now) {
+    if (!base) return base;
+    const out = clone(base);
+    const timeline = Array.isArray(path) ? path : [];
+    if (!Number.isFinite(now)) return out;
+    for (const field of ["location", "activity"]) {
+      const status = out.fieldStatus && out.fieldStatus[field];
+      const source = status && status.source;
+      if (!out[field] || !status || status.certainty !== "reported" ||
+          !source || !source.messageId) continue;
+      const msg = timeline.find((m) => m && m.id === source.messageId);
+      if (!msg || (msg.swipeIdx || 0) !== (source.swipeIdx || 0)) continue;
+      const sw = TR.activeSwipe(msg);
+      const at = MT.toMs(sw && sw.messengerAt && sw.messengerAt.at);
+      if (at == null || now < at || now - at < REPORT_STALE_MS) continue;
+      // The exact quote still exists in canonical path state; only Messenger
+      // status / prompt is downgraded to "last known". This is NOT a clear
+      // event and must not affect Scene, Memory, swipes, or stored history.
+      out.lastReported = out.lastReported || {};
+      out.lastReported[field] = { value: out[field], at: MT.toIso(at), ageMs: now - at };
+      out[field] = null;
+    }
     return out;
   }
 
@@ -88,6 +120,6 @@
       wearFacts: wearFacts(input.tracked),
     };
   }
-  PRP.stateResolver = { world, scene, wearFacts, resolve };
+  PRP.stateResolver = { world, messengerFreshness, REPORT_STALE_MS, scene, wearFacts, resolve };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateResolver;
 })(typeof window !== "undefined" ? window : globalThis);
