@@ -78,6 +78,18 @@
     byChat("images", "image-orphan-chat", "Картинка");
     byChat("memories", "memory-orphan-chat", "Воспоминание");
     byChat("reflections", "reflection-orphan-chat", "Осмысление");
+    // Ownership must match the actual chat's character, not just a plausible chatId.
+    const chatOwners = new Map((out.chats || []).map((c) => [sid(c.id), sid(c.cardId)]));
+    for (const st of ["memories", "reflections"]) if (Array.isArray(out[st])) {
+      out[st] = out[st].filter((r) => {
+        const expected = chatOwners.get(sid(r.chatId));
+        // For additive restores an existing chat ID may be known but not in this backup.
+        if (expected && expected === sid(r.owner)) return true;
+        if (!expected && !replace && chats.has(sid(r.chatId)) && cards.has(sid(r.owner))) return true;
+        reject(st, r.id, "memory-owner-mismatch", "Память или опыт привязаны к чужому персонажу.");
+        return false;
+      });
+    }
     if (Array.isArray(out.experience)) out.experience = out.experience.filter((r) => {
       if (!cards.has(sid(r.owner))) { reject("experience", r.id, "experience-orphan-card", "Запись опыта относится к персонажу, которого нет."); return false; }
       if (r.chatId != null && r.chatId !== "" && !chats.has(sid(r.chatId))) { reject("experience", r.id, "experience-orphan-chat", "Запись опыта относится к чату, которого нет."); return false; }
