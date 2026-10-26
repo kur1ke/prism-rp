@@ -5,7 +5,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
-  const WINDOW = 4, LIMIT = 10, MAX_NEW = 3;
+  const WINDOW = 4, LIMIT = 10, MAX_NEW = 4;
   function fingerprint(input) {
     const s = String(input || "");
     let a = 2166136261, b = 5381;
@@ -30,6 +30,12 @@
       m.swipeIdx === source.swipeIdx && m.prefixHash === source.prefixHash &&
       (!source.textHash || m.textHash === source.textHash)));
   }
+  // One exact source is one chat + character owner + selected swipe +
+  // ancestor path fingerprint. An alternate swipe is an independent source.
+  function sourceKey(chatId, owner, source) {
+    return JSON.stringify([chatId, owner, source.messageId, source.swipeIdx,
+      source.textHash, source.prefixHash]);
+  }
   function clean(text) {
     return String(text || "").replace(/\[(?:scene|draw|image):[^\]\n]*\]/gi, "")
       .replace(/<image\b[^>]*>[\s\S]*?<\/image>/gi, "").trim();
@@ -42,9 +48,9 @@
   }
   const EXTRACT_SYSTEM = [
     "Выполни независимый от RP анализ уже состоявшихся сообщений. Ты НЕ отвечаешь персонажем.",
-    "Выдели от 0 до 3 потенциальных воспоминаний: крупные события ИЛИ мелкие наблюдения, реплики, жесты, разговоры.",
+    "Выдели не более ОДНОГО воспоминания на каждый messageId из SOURCES (всего от 0 до 4). Даже если в сообщении несколько эпизодов, выбери один наиболее цельный и представительный. Не дроби одно сообщение на самостоятельные Memory.",
     "Не оценивай психологическое влияние; Memory — свидетельство, НЕ Experience и НЕ объективная истина мира.",
-    "Указывай точную подстроку quote из указанного messageId; чужие утверждения остаются утверждениями.",
+    "Каждый SOURCE в этом запросе ранее успешно не обрабатывался. Указывай точную подстроку quote из указанного messageId; чужие утверждения остаются утверждениями. Не используй контекст соседнего сообщения вместо источника.",
     "Не выдумывай фактов, скрытых мыслей и свершившихся действий из обещаний/намерений. Скрытые мысли пользователя/других актёров не являются знаниями персонажа, если он не узнал их явно.",
     "Ответ ТОЛЬКО JSON: {\"memories\":[{\"messageId\":\"...\",\"quote\":\"...\",\"event\":\"...\",\"kind\":\"observed\"}]}",
     "kind: observed (явное событие в сцене) или reported (сообщённое, в том числе в Messenger).",
@@ -85,7 +91,9 @@
       const quote = item.quote.trim(), event = item.event.trim();
       if (quote.length < 5 || quote.length > 500 || !row.text.includes(quote) ||
           event.length < 6 || event.length > 280) return null;
-      const key = item.messageId + "|" + quote;
+      // One canonical episode per selected-path message, regardless of how
+      // many different quotes the model returns for that same source.
+      const key = item.messageId;
       if (seen.has(key)) continue;
       seen.add(key);
       // A Messenger message can report circumstances but is not direct observation of a shared scene.
@@ -97,10 +105,19 @@
   }
   function recent(memories, path, limit) {
     const positions = new Map((path || []).map((x, i) => [x.id, i]));
-    return (memories || []).filter((m) => visible(m.source, path))
+    const ranked = (memories || []).filter((m) => visible(m.source, path))
       .sort((a,b) => (positions.get(b.source.messageId) - positions.get(a.source.messageId)) ||
-        ((b.createdAt || 0) - (a.createdAt || 0)))
-      .slice(0, limit || LIMIT);
+        ((a.createdAt || 0) - (b.createdAt || 0)));
+    // Old v7 records can contain several quotes from one source. Keep the
+    // earliest original Memory as a read-only projection; never delete data.
+    const seen = new Set();
+    return ranked.filter((m) => {
+      const source = m.source || {};
+      const key = JSON.stringify([source.messageId, source.swipeIdx, source.prefixHash]);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, limit || LIMIT);
   }
   function weighted(memories) {
     return (memories || []).slice(0, LIMIT).map((m, i) => ({
@@ -128,7 +145,7 @@
         (o.change === "unchanged" && o.perspective.trim())) return null;
     return { change: o.change, perspective: o.perspective.trim() };
   }
-  PRP.memoryCycle = { WINDOW, LIMIT, fingerprint, pathSnapshot, visible, clean,
+  PRP.memoryCycle = { WINDOW, LIMIT, fingerprint, pathSnapshot, visible, sourceKey, clean,
     extractionInput, parseExtraction, recent, weighted, currentReflection,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
