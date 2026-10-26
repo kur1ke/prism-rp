@@ -11,6 +11,10 @@
     // Per-chat concurrency gate: a slow cycle in another chat may not
     // suppress the new chat's automatic Memory/Experience processing.
     const pendingByChat = new Map();
+    // A deleted chat cannot receive late model results, including writes that
+    // were already waiting for IndexedDB when deletion started.
+    const retiredChats = new Set();
+    function retireChat(chatId) { if (chatId) retiredChats.add(chatId); }
     async function load(chatId) {
       const [memories, reflections] = await Promise.all([
         DB.byIndex("memories", "chatId", chatId),
@@ -37,6 +41,7 @@
       const initialChat = ctx.chat();
       if (!initialChat || sourceMsg.chatId !== initialChat.id) return { status: "stale" };
       const chatId = initialChat.id, owner = initialChat.cardId;
+      if (retiredChats.has(chatId)) return { status: "stale" };
       const finish = (code) => S.chatId === chatId ? recordStatus(code) : { status: code };
       const path = M.pathSnapshot(ctx.svc.chat.path());
       const anchor = path.find((x) => x.id === sourceMsg.id);
@@ -58,7 +63,7 @@
         return PRP.openai.splitThink(response.text || "").text;
       };
       const relevant = () => {
-        if (!ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
+        if (retiredChats.has(chatId) || !ctx.chat() || S.chatId !== chatId || ctx.chat().cardId !== owner) return false;
         return M.visible({messageId:anchor.id,swipeIdx:anchor.swipeIdx,
           textHash:anchor.textHash,prefixHash:anchor.prefixHash}, M.pathSnapshot(ctx.svc.chat.path()));
       };
@@ -79,6 +84,11 @@
       // immediately; failure of later reflection must never erase an episode.
       if (!relevant()) return finish("stale");
       await DB.putAll(newOnes.map((m) => ["memories", m]));
+      if (retiredChats.has(chatId)) {
+        await DB.delMany("memories", newOnes.map((m) => m.id));
+        return finish("stale");
+      }
+      if (!relevant()) return finish("stale");
       if (S.chatId === chatId) {
         S.memories = (S.memories || []).concat(newOnes);
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
@@ -103,6 +113,7 @@
         reflectionUser = JSON.stringify(payload);
       }
       if (!payload.memories.length) return finish("overflow-reflection");
+      const includedMemoryIds = candidates.slice(0, payload.memories.length).map((m) => m.id);
       let result;
       try { result = M.parseReflection(await call(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)); }
       catch (_) { return finish("reflect-error"); }
@@ -111,12 +122,18 @@
       const record = result.change === "changed" && (!prior || result.perspective !== prior.perspective) ? {
         id: U.uid("ref"), schema: 1, chatId, owner,
         anchor: { messageId: anchor.id, swipeIdx: anchor.swipeIdx, textHash: anchor.textHash, prefixHash: anchor.prefixHash },
-        perspective: result.perspective, memoryIds: candidates.map((x) => x.id),
+        perspective: result.perspective, memoryIds: includedMemoryIds,
         createdAt: Date.now()
       } : null;
       // A new Experience version commits only after validated reflection;
       // Memory is already safely stored as a separate class of evidence.
-      if (record) await DB.put("reflections", record);
+      if (record) {
+        await DB.put("reflections", record);
+        if (retiredChats.has(chatId)) {
+          await DB.del("reflections", record.id);
+          return finish("stale");
+        }
+      }
       if (S.chatId === chatId) {
         if (record) S.reflections = (S.reflections || []).concat([record]);
         if (ctx.svc.prism) ctx.svc.prism.refresh();
@@ -124,19 +141,21 @@
       }
       return finish(record ? "reflected" : "remembered-unchanged");
     }
-    // Overlap is intentionally suppressed; a future turn may re-scan the last
-    // four messages. No independent background task or continuous simulation.
+    // Preserve every committed reply: same-chat cycles run in FIFO order,
+    // while different chats remain independent. No continuous/background loop.
     function observe(msg, prov) {
       const chatId = msg && msg.chatId;
       if (!chatId) return Promise.resolve({ status: "no-source" });
-      if (pendingByChat.has(chatId)) return Promise.resolve({ status: "busy" });
-      const task = cycle(msg, prov).catch((e) =>
+      if (retiredChats.has(chatId)) return Promise.resolve({ status: "stale" });
+      const preceding = pendingByChat.get(chatId);
+      const run = () => cycle(msg, prov).catch(() =>
         S.chatId === chatId ? recordStatus("error") : { status: "error" });
+      const task = preceding ? preceding.then(run, run) : run();
       pendingByChat.set(chatId, task);
       task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
       return task;
     }
-    return { load, visibleMemories, experience, observe };
+    return { load, visibleMemories, experience, observe, retireChat };
   }
   PRP.memoryService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
