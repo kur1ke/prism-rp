@@ -59,6 +59,7 @@
       if (ctx.svc.state) {
         const tracked = ctx.svc.state.context(path, { now: at, legacyWorld: w.world });
         w.world = SR.world(w.world, tracked);
+        w.world = SR.messengerFreshness(w.world, path, at);
       }
       const conv = CONV.derive(path, { now: at, record: env });
       const open = conv.promises.concat(conv.plans).filter((m) => m.status === "open").sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -204,6 +205,7 @@
       if (ctx.svc.state) {
         const tracked = ctx.svc.state.context(path, { now: t, legacyWorld: w.world });
         w.world = SR.world(w.world, tracked);
+        w.world = SR.messengerFreshness(w.world, path, t);
       }
       const conv = CONV.derive(path, { now: t, record: env });
       const last = path[path.length - 1];
