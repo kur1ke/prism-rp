@@ -35,20 +35,6 @@
       ui.renderHead();
     }
 
-    // Форма записи опыта → черновик (S.expDraft).
-    function collectExp() {
-      const d = S.expDraft;
-      if (!d || !$("#x-event")) return d;
-      d.event = $("#x-event").value;
-      d.interpretation = $("#x-interp").value;
-      d.consequences = $("#x-cons").value;
-      d.status = $("#x-status").value;
-      const aboutUser = $("#x-about-user").checked;
-      d.about = (d.about || []).filter((a) => a !== "user");
-      if (aboutUser) d.about.unshift("user");
-      return d;
-    }
-
     // Форма «Мир чата» → черновик действия (S.worldEdit). Область — только явный выбор пользователя.
     const csv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
     function collectWorld() {
@@ -73,7 +59,7 @@
     const actions = {
       drawer: () => { S.drawerOpen = !S.drawerOpen; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       "drawer-close": () => { S.drawerOpen = false; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
-      tab: (t) => { collectExp(); collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
+      tab: (t) => { collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
       "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
       "debug-copy": async () => {
@@ -111,37 +97,6 @@
         c.sceneInit = value; await svc.chat.putChat(c);
         svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); ui.toast("Начальная сцена сохранена.");
       },
-      // Опыт
-      "to-exp": (t) => {
-        S.expDraft = svc.exp.draftFromMessage(t.dataset.id);
-        S.tab = "memory";
-        S.drawerOpen = true;
-        ui.renderDrawer();
-        ui.renderFeed();
-        setTimeout(() => { const e = $("#x-event"); if (e) e.focus(); }, 280);
-      },
-      "exp-new": () => { S.expDraft = svc.exp.blankDraft(); ui.renderDrawer(); },
-      "exp-edit": (t) => { S.expDraft = U.clone(svc.exp.find(t.dataset.id)); ui.renderDrawer(); },
-      "exp-cancel": () => { S.expDraft = null; ui.renderDrawer(); },
-      "exp-save": async () => {
-        const err = await svc.exp.save(collectExp());
-        if (err) { ui.toast(err, true); return; }
-        S.expDraft = null;
-        svc.prism.refresh();
-        ui.renderDrawer();
-        ui.toast("Событие сохранено в опыт.");
-      },
-      "exp-del": async () => {
-        if (!confirm("Удалить это событие из опыта?")) return;
-        await svc.exp.remove(S.expDraft.id);
-        S.expDraft = null; svc.prism.refresh(); ui.renderDrawer();
-      },
-      "exp-assign": async (t) => {
-        if (!svc.exp.find(t.dataset.id) || !confirm("Привязать эту запись к текущему чату? Она станет частью этого мира и будет видна во всех его ветках.")) return;
-        await svc.exp.assign(t.dataset.id);
-        svc.prism.refresh(); ui.renderDrawer();
-        ui.toast("Запись привязана к этому чату.");
-      },
       // Мир чата: только явные действия; ничего не извлекается из текста ответов.
       "wc-new": () => worldDraft("assert"),
       "wc-override": (t) => worldDraft("override", t.dataset.id),
@@ -163,9 +118,6 @@
         ui.renderDrawer();
         ui.toast("Таймлайн и вариант чата сохранены.");
       },
-      "x-val": (t) => { collectExp().valence = +t.dataset.v; ui.renderDrawer(); },
-      "x-weight": (t) => { collectExp().weight = +t.dataset.v; ui.renderDrawer(); },
-      "x-domain-del": (t) => { const d = collectExp(); d.domains = d.domains.filter((x) => x !== t.dataset.v); ui.renderDrawer(); },
     };
 
     function change(t) {
@@ -181,7 +133,6 @@
         if (!v) return true;
         if (t.dataset.scAdd) applySceneOps([op(t.dataset.scAdd, "add", v)]);
         else if (t.id === "sc-enter-new") applySceneOps([op(null, "enter", v)]);
-        else if (t.id === "x-domain-add") { const d = collectExp(); v.split(",").map((s) => s.trim()).filter(Boolean).forEach((x) => { if (!d.domains.includes(x)) d.domains.push(x); }); ui.renderDrawer(); setTimeout(() => { const n = $("#x-domain-add"); if (n) n.focus(); }, 0); }
         return true;
       }
       if (e.key === "Enter" && t.tagName === "INPUT" && (t.dataset.scTop || t.dataset.scField)) { t.blur(); return true; }

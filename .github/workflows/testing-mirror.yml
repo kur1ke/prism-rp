@@ -22,6 +22,8 @@ jobs:
           node-version: '22'
       - name: Run regression tests
         run: node tests/run.js
+      - name: Check automatic Memory concurrency and deletion
+        run: node tests/memory-autonomy.js
       - name: Check test loader and isolated database
         run: node tests/test-mirror.js
       - name: Build Perchance and web bundles

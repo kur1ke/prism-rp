@@ -22,7 +22,7 @@
      Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111), legacyExperience. */
   const S = {
     settings: null, cards: [], chats: [],
-    view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [],
+    view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [], memories: [], reflections: [], memoryStatus: "",
     gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null, expDraft: null,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
@@ -58,6 +58,7 @@
   ctx.ui = PRP.shell.create(ctx);
   ctx.svc.chat = PRP.chatService.create(ctx);
   ctx.svc.exp = PRP.experienceService.create(ctx);
+  ctx.svc.memory = PRP.memoryService.create(ctx);
   ctx.svc.prism = PRP.prismService.create(ctx);
   ctx.svc.images = PRP.imageService.create(ctx);
   ctx.svc.state = PRP.stateService.create(ctx);
@@ -98,11 +99,13 @@
     // identity so the recorder and Debug view keep using the same log.
     PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
     S.chatId = chatId;
+    S.memoryStatus = "";
     S.lastSelectedChatId = chatId;
     S.cardId = c.cardId;
     S.view = "chat";
     S.messages = await svc.chat.loadMessages(chatId);
     S.experience = await svc.exp.loadForCard(c.cardId);
+    await svc.memory.load(chatId);
     await svc.worldChat.load(chatId);
     await svc.messenger.load(chatId);
     await svc.images.loadForChat(chatId);
