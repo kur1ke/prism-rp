@@ -114,6 +114,9 @@
     }
     // Удалить чат целиком: сообщения, картинки, опыт, наложение мира и среду переписки этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
+      // Retire synchronously, before the first IndexedDB await. In-flight
+      // Memory/Reflection writes then compensate instead of resurrecting data.
+      if (ctx.svc.memory) ctx.svc.memory.retireChat(c.id);
       const ms = await DB.byIndex("messages", "chatId", c.id);
       await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
       await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
