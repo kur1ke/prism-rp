@@ -66,7 +66,7 @@
         names: { char: cd.name, user: ctx.persona().name },
       });
       const st = messenger ? chat().sceneState(path) : projected.scene;
-      if (messenger) messenger.world = projected.world;
+      if (messenger) messenger.world = SR.messengerFreshness(projected.world, path, messenger.temporal.now);
       // В RP здесь видимое общее пространство; в переписке — заявленные персонажем обстоятельства,
       // используемые для поиска мира без утверждения, что пользователь их наблюдал.
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
