@@ -16,7 +16,7 @@
         DB.byIndex("memories", "chatId", chatId),
         DB.byIndex("reflections", "chatId", chatId)
       ]);
-      if (S.chatId === chatId) { S.memories = memories; S.reflections = reflections; }
+      if (S.chatId === chatId) { S.memories = memories; S.reflections = reflections; S.memoryStatus = ""; }
     }
     function visibleMemories(path) { const c = ctx.chat(); return c ? M.recent((S.memories || []).filter(x => x.chatId === c.id && x.owner === c.cardId), M.pathSnapshot(path || ctx.svc.chat.path()), Infinity) : []; }
     function experience(path) {
