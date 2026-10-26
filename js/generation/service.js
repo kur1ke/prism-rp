@@ -59,6 +59,10 @@
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : prov;
       const analysed = st && msg && text.trim() ? st.track(msg, observerProvider) : Promise.resolve(null);
       return analysed.then((res) => {
+        // Independent non-blocking Memory → Reflection cycle after a committed answer.
+        // No manual interaction, no writes on failed/stale generation.
+        if (ctx.svc.memory && !(res && res.skipped === "stale-branch"))
+          ctx.svc.memory.observe(msg, observerProvider).catch(() => {});
         if (!draw) return null;
         const c = ctx.chat();
         const same = c && c.id === msg.chatId && (msg.swipeIdx || 0) === swIdx && msg.swipes[swIdx] === sw &&

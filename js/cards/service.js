@@ -80,12 +80,17 @@
 
     // Удалить персонажа вместе со всеми его чатами (с их сообщениями, картинками и наложением мира) и опытом.
     async function remove(cd) {
-      for (const c of S.chats.filter((x) => x.cardId === cd.id)) {
+      const ownedChats = S.chats.filter((x) => x.cardId === cd.id);
+      // A card delete retires *all* child chats before any async deletion.
+      if (ctx.svc.memory) ownedChats.forEach((c) => ctx.svc.memory.retireChat(c.id));
+      for (const c of ownedChats) {
         const ms = await DB.byIndex("messages", "chatId", c.id);
         await DB.delMany("messages", ms.map((m) => m.id));
         await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
         await DB.del("worldOverlays", c.id); // наложение мира принадлежит чату и уходит вместе с ним
         await DB.del("messengerEnvironments", c.id); // как и среда переписки
+        await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
+        await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
         await DB.del("chats", c.id);
       }
       const xs = await DB.byIndex("experience", "owner", cd.id);

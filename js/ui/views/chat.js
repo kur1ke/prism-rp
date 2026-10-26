@@ -76,7 +76,6 @@
         <button class="tool" data-act="continue" data-id="${msg.id}">${icon("cont")}Продолжить</button>` : ""}
       ${msg.role === "assistant" ? `<button class="tool" data-act="draw" data-id="${msg.id}" title="Нарисовать этот момент">${icon("brush")}Нарисовать</button>` : ""}
       <button class="tool" data-act="edit" data-id="${msg.id}">${icon("edit")}Править</button>
-      <button class="tool" data-act="to-exp" data-id="${msg.id}" title="Сохранить событие в опыт персонажа">${icon("memory")}В опыт</button>
       <button class="tool" data-act="delete" data-id="${msg.id}" title="Удалить с этого места">${icon("trash")}</button></div>`;
   }
 

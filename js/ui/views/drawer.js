@@ -10,7 +10,7 @@
   function drawer(m) {
     // У сцены — «Сцена», у переписки — «Среда» (сцены RP в переписке нет). Мир, опыт и Prism — у обоих режимов.
     const ms = m.chat && m.chat.mode === "messenger";
-    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Опыт", "memory"], ["world", "Мир", "globe"]];
+    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Память", "memory"], ["world", "Мир", "globe"]];
     const tab = m.tab === "prism" ? (ms ? "env" : "scene") : ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
     m = Object.assign({}, m, { tab });
     let body = "";
@@ -76,47 +76,18 @@
   }
 
   function memoryTab(m) {
-    const d = m.expDraft;
-    const ev = m.expView || { visible: [], hiddenInChat: 0, legacy: [] };
-    const list = ev.visible.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    const scopeTag = (r) => (PRP.experience.scopeOf(r) === "branch" ? `<span class="tag" title="Видна только в этой ветке чата">ветка</span>` : `<span class="tag" title="Видна во всех ветках этого чата">весь чат</span>`);
-    const valColor = (v) => (v > 0 ? "var(--ok)" : v < 0 ? "var(--danger)" : "var(--line)");
-    const valWord = { "-3": "тяжело", "-2": "плохо", "-1": "неприятно", "0": "нейтрально", "1": "приятно", "2": "хорошо", "3": "очень важно" };
-    if (d) {
-      return `<div class="block"><div class="block-title">${d.id ? "Запись опыта" : "Новая запись опыта"}</div>
-        ${d.source && d.source.sceneTime ? `<p class="hint">Время сцены: ${esc(d.source.sceneTime)}${d.source.messageIds && d.source.messageIds.length ? ", из сообщения" : ""}</p>` : ""}
-        <div class="field"><label>Что произошло</label><textarea id="x-event" placeholder="Факт, без оценок: «Кира соврал Химэ, что был на работе»">${esc(d.event)}</textarea></div>
-        <div class="field"><label>Как ${esc(m.card.name)} это поняла тогда</label><textarea id="x-interp" placeholder="Может быть ошибочным: «Решила, что он её не уважает»">${esc(d.interpretation)}</textarea></div>
-        <div class="field"><label>Последствия</label><textarea id="x-cons" placeholder="Обещания, долги, раны: «Обещала больше не спрашивать»">${esc(d.consequences)}</textarea></div>
-        <div class="field"><label>Насколько это было хорошо или плохо</label>
-          <div class="pick" role="group">${[-3, -2, -1, 0, 1, 2, 3].map((v) => `<button data-act="x-val" data-v="${v}" class="${+d.valence === v ? "on" : ""}" title="${valWord[v]}">${v > 0 ? "+" + v : v}</button>`).join("")}</div>
-          <span class="help" id="x-val-word">${valWord[d.valence]}</span></div>
-        <div class="field"><label>Насколько важно</label>
-          <div class="pick" role="group">${[1, 2, 3].map((v) => `<button data-act="x-weight" data-v="${v}" class="${+d.weight === v ? "on" : ""}">${["мелочь", "заметно", "важно"][v - 1]}</button>`).join("")}</div></div>
-        <div class="field"><label>Темы — по ним опыт вспоминается к месту</label>
-          <div class="chips" id="x-domains">${(d.domains || []).map((t) => `<span class="chip"><span>${esc(t)}</span><button data-act="x-domain-del" data-v="${esc(t)}">${icon("x")}</button></span>`).join("")}
-          <input class="chip-add" id="x-domain-add" placeholder="+ деньги, доверие…"></div></div>
-        <label class="check"><input type="checkbox" id="x-about-user" ${(d.about || []).includes("user") ? "checked" : ""}><span>Это про ${esc(m.persona.name)}</span></label>
-        <div class="field"><label>Статус</label><select id="x-status">${[["active", "действует"], ["superseded", "пересмотрено — персонаж понял иначе"], ["archived", "в архиве"]].map(([v, l]) => `<option value="${v}" ${d.status === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="row"><button class="btn btn-primary btn-sm" data-act="exp-save">Сохранить</button><button class="btn btn-sm btn-ghost" data-act="exp-cancel">Отмена</button>
-          ${d.id ? `<span style="flex:1"></span><button class="btn btn-danger btn-sm" data-act="exp-del">Удалить</button>` : ""}</div></div>`;
-    }
-    return `<div class="block"><div class="block-title">Опыт ${esc(m.card.name)} <small>${list.length}</small></div>
-      <p class="hint">Пережитое в этом чате — в этом мире. Другие чаты с ${esc(m.card.name)} его не видят. Событие из сообщения видно только в своей ветке; добавленное вручную — во всех ветках чата.${ev.hiddenInChat ? ` В других ветках этого чата ещё ${ev.hiddenInChat} ${R.plural(ev.hiddenInChat, "запись", "записи", "записей")}.` : ""}</p>
-      <button class="btn btn-sm" data-act="exp-new">${icon("plus")}Добавить событие</button></div>
-      ${list.map((r) => `<div class="memo ${r.status !== "active" ? "off" : ""}" data-act="exp-edit" data-id="${r.id}" role="button" tabindex="0">
-        <span class="memo-bar" style="background:${valColor(r.valence)}"></span>
-        <div class="ev">${esc(r.event || "Без описания")}</div>
-        ${r.interpretation ? `<div class="in">${esc(r.interpretation)}</div>` : ""}
-        <div class="mt"><span class="tag ${r.valence > 0 ? "pos" : r.valence < 0 ? "neg" : ""}">${valWord[r.valence]}</span>
-          ${(r.domains || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}
-          ${r.status === "superseded" ? `<span class="tag">пересмотрено</span>` : ""}${r.source && r.source.sceneTime ? `<span class="tag">${esc(r.source.sceneTime)}</span>` : ""}${scopeTag(r)}</div>
-      </div>`).join("") || `<p class="empty-note">Пока пусто. Нажмите «В опыт» под важным сообщением.</p>`}
-      ${ev.legacy.length ? `<div class="block legacy-block"><div class="block-title">Без привязки к чату <small>${ev.legacy.length}</small></div>
-        <p class="hint">Старые записи, для которых нельзя точно сказать, в каком чате они случились. В контекст они не попадают. Привяжите к этому чату те, что относятся к нему.</p>
-        ${ev.legacy.map((r) => `<div class="memo off"><span class="memo-bar" style="background:${valColor(r.valence)}"></span>
-          <div class="ev">${esc(r.event || "Без описания")}</div>${r.interpretation ? `<div class="in">${esc(r.interpretation)}</div>` : ""}
-          <div class="mt"><span class="tag">не привязана</span><span style="flex:1"></span><button class="btn btn-sm" data-act="exp-assign" data-id="${r.id}">Привязать к этому чату</button></div></div>`).join("")}</div>` : ""}`;
+    const memories = m.observedMemories || [], experience = m.currentExperience;
+    return `<div class="block"><div class="block-title">Memory · воспоминания <small>${memories.length}</small></div>
+      <p class="hint">Извлекаются автоматически из активной истории. Сведения из чужой ветки или другого чата здесь не появятся. Записи не меняют факты мира и не являются инструкциями.</p>
+      ${memories.slice(0, 10).map((r) => `<div class="memo">
+        <div class="ev">${esc(r.event)}</div>
+        <p class="hint">Источник: «${esc(r.quote)}»</p>
+        <div class="mt"><span class="tag">${r.kind === "observed" ? "наблюдение" : "сообщено"}</span></div></div>`).join("") || '<p class="empty-note">Пока нет автоматически извлечённых воспоминаний.</p>'}</div>
+      <div class="block"><div class="block-title">Experience · субъективный опыт</div>
+        <p class="hint">Формируется моделью из Core, предыдущего Experience и последних воспоминаний. Может сохраняться без изменений, содержать сомнения и пересматриваться. Не является частью Core.</p>
+        ${experience ? `<p>${esc(experience.perspective)}</p>` : '<p class="empty-note">Персонаж пока не сформировал отдельного опыта.</p>'}
+        <p class="hint">Последний цикл: ${esc(m.memoryStatus || "не проводился")}</p>
+      </div>`;
   }
 
   /* ── Мир чата ─────────────────────────────────────────────────────────
@@ -192,7 +163,7 @@
       ${c.candidates.length ? `<table><thead><tr><th>Кусок</th><th>почему</th><th>итог</th></tr></thead><tbody>
       ${c.candidates.map((x) => `<tr class="${x.state === "selected" ? "sel" : ""}"><td>${esc(x.id)}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${CHUNK_STATE[x.state]}</td></tr>`).join("")}</tbody></table>` : ""}</details>`;
   }
-  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
+  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт (legacy)", "#ff9ec7"], ["reflection", "Experience", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const p = m.lastPrism;
     if (!p) return `<p class="hint">Здесь видно, что получает модель: указания отдельно, а карточку, опыт, сцену и мир — как данные с пометками.</p>

@@ -72,7 +72,9 @@
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
       const history = historyWithDraws(path, allowDraw);
       const recent = history.slice(-4).map((h) => h.text).join("\n");
-      const ex = EX.rank(S.experience, {
+      // The previous manually authored Experience is retained in storage only.
+      // New runtime requests must not blend it with autonomous reflective Experience.
+      const ex = ctx.svc.memory ? { ranked: [], debug: [], visibleCount: 0 } : EX.rank(S.experience, {
         chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(here.present),
         text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
       });
@@ -80,7 +82,9 @@
       const wearFacts = projected.wearFacts;
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
-        sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked, worldFacts: wctx.facts, history, extraPost,
+        sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked,
+        reflection: ctx.svc.memory ? ctx.svc.memory.experience(path) : null,
+        worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
