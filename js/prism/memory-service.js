@@ -16,10 +16,11 @@
       ]);
       if (S.chatId === chatId) { S.memories = memories; S.reflections = reflections; }
     }
-    function visibleMemories(path) { return M.recent(S.memories, M.pathSnapshot(path || ctx.svc.chat.path()), Infinity); }
+    function visibleMemories(path) { const c = ctx.chat(); return c ? M.recent((S.memories || []).filter(x => x.chatId === c.id && x.owner === c.cardId), M.pathSnapshot(path || ctx.svc.chat.path()), Infinity) : []; }
     function experience(path) {
       const p = M.pathSnapshot(path || ctx.svc.chat.path());
-      return M.currentReflection(S.reflections, p);
+      const c = ctx.chat();
+      return c ? M.currentReflection((S.reflections || []).filter(x => x.chatId === c.id && x.owner === c.cardId), p) : null;
     }
     function footprint(text) { return U.estimateTokens(text); }
     function fits(system, user, maxOutput) {
@@ -61,7 +62,7 @@
       } catch (e) { return recordStatus("extract-error"); }
       if (!relevant()) return recordStatus("stale");
       if (!proposed) return recordStatus("invalid-extract");
-      const existing = (S.memories || []).filter((m) => m.chatId === chatId);
+      const existing = (S.memories || []).filter((m) => m.chatId === chatId && m.owner === owner);
       const newOnes = proposed.filter((m) => !existing.some((x) =>
         x.source.messageId === m.source.messageId &&
         x.source.prefixHash === m.source.prefixHash && x.quote === m.quote))
@@ -90,7 +91,7 @@
       catch (_) { return recordStatus("reflect-error"); }
       if (!relevant()) return recordStatus("stale");
       if (!result) return recordStatus("invalid-reflection");
-      const record = result.change === "changed" ? {
+      const record = result.change === "changed" && (!prior || result.perspective !== prior.perspective) ? {
         id: U.uid("ref"), schema: 1, chatId, owner,
         anchor: { messageId: anchor.id, swipeIdx: anchor.swipeIdx, textHash: anchor.textHash, prefixHash: anchor.prefixHash },
         perspective: result.perspective, memoryIds: candidates.map((x) => x.id),
