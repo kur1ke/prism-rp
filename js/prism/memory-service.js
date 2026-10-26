@@ -230,20 +230,16 @@
               perspective: batch.perspective, change: batch.change,
               createdAt: Date.now()
             };
-            try { await DB.put("reflections", checkpoint); }
+            let committed = false;
+            try { await DB.put("reflections", checkpoint); committed = true; }
             catch (_) { /* Retry on the next Memory; no partial current rollback. */ }
             if (obsolete(chatId, revision)) {
-              await DB.del("reflections", checkpoint.id).catch(() => {});
+              if (committed) await DB.del("reflections", checkpoint.id).catch(() => {});
               return finish("stale");
             }
-            if (relevant() && S.chatId === chatId) {
-              // Read the successful write back rather than assuming a failed
-              // checkpoint was persisted.
-              const stored = await DB.byIndex("reflections", "chatId", chatId).catch(() => []);
-              if (stored.some((x) => x.id === checkpoint.id)) {
-                S.reflections = (S.reflections || []).filter((x) => x.id !== checkpoint.id).concat([checkpoint]);
-                if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
-              }
+            if (committed && relevant() && S.chatId === chatId) {
+              S.reflections = (S.reflections || []).filter((x) => x.id !== checkpoint.id).concat([checkpoint]);
+              if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
             }
           }
         }
