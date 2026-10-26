@@ -99,12 +99,12 @@
       // the complete origin outfit. It shows some garments, not necessarily
       // the full inventory: do not present old clothing as a NEW photo, and
       // do not fabricate a removal from an unseen region of the frame.
-      w.latestPhotoWear && (w.latestPhotoWear.items || []).length
+      k.lists && w.latestPhotoWear && (w.latestPhotoWear.items || []).length
         ? "- на последнем подтверждённом снимке самого персонажа явно видны: " +
           w.latestPhotoWear.items.map(q).join(", ") +
           " (это видимые вещи, а не доказательство полного комплекта)"
         : "",
-      w.latestPhotoWear && (w.latestPhotoWear.items || []).length
+      k.lists && w.latestPhotoWear && (w.latestPhotoWear.items || []).length
         ? ((w.visualWear || []).length
           ? "- ранее установленные вещи, включая стартовый комплект: " +
               (w.visualWear || []).map(q).join(", ") +
