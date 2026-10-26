@@ -77,6 +77,30 @@
 
   function memoryTab(m) {
     const memories = m.observedMemories || [], experience = m.currentExperience;
+    const timeline = m.memoryTimeline;
+    const history = (rows, title, emptyText, unit) => {
+      const shown = rows.slice(-20).reverse();
+      return `<details class="block">
+        <summary class="block-title" style="cursor:pointer">${title} <small>${rows.length}</small></summary>
+        ${rows.length > shown.length ? `<p class="hint">Показаны последние ${shown.length} из ${rows.length}; остальные сохранены в истории чата.</p>` : ""}
+        ${shown.map((r) => `<details class="memo">
+          <summary class="ev" style="cursor:pointer">Experience #${r.number} · ${unit}</summary>
+          <p>${r.perspective ? esc(r.perspective) : "Без изменения субъективного восприятия."}</p>
+        </details>`).join("") || `<p class="empty-note">${emptyText}</p>`}
+      </details>`;
+    };
+    const progress = timeline ? `<div class="block"><div class="block-title">Накопленный опыт</div>
+      <p class="hint">Каждые 10 Memory дают одну порцию Experience. Десять завершённых порций объединяются посредством Reflection в общий вывод. Только чтение; счётчики относятся к активной ветке чата.</p>
+      <div class="field"><label for="memory-batch-progress">Memory → Experience · ${timeline.memoryStep}/10</label>
+        <progress id="memory-batch-progress" max="10" value="${timeline.memoryStep}" style="width:100%"></progress></div>
+      <div class="field"><label for="experience-integrate-progress">Experience → общий вывод · ${timeline.batchStep}/10</label>
+        <progress id="experience-integrate-progress" max="10" value="${timeline.batchStep}" style="width:100%"></progress></div>
+      <p class="hint">Воспоминаний: ${timeline.memoryCount} · порций Experience: ${timeline.batchCount} · общих выводов: ${timeline.integratedCount}</p>
+      ${timeline.checkpointPending ? '<p class="hint">Ожидается завершение Reflection для одной из десяток Memory.</p>' : ""}
+      ${timeline.integrationPending ? '<p class="hint">Ожидается объединение завершённых порций Experience.</p>' : ""}
+      ${history(timeline.batches, "Завершённые порции Experience", "Пока не сформирована ни одна порция.", "10 Memory")}
+      ${history(timeline.integrations, "История объединений", "Общий Experience появится после десяти завершённых порций.", "10 порций Experience")}
+      </div>` : "";
     return `<div class="block"><div class="block-title">Memory · воспоминания <small>${memories.length}</small></div>
       <p class="hint">Извлекаются автоматически из активной истории. Сведения из чужой ветки или другого чата здесь не появятся. Записи не меняют факты мира и не являются инструкциями.</p>
       ${memories.slice(0, 10).map((r) => `<div class="memo">
@@ -85,9 +109,10 @@
         <div class="mt"><span class="tag">${r.kind === "observed" ? "наблюдение" : "сообщено"}</span></div></div>`).join("") || '<p class="empty-note">Пока нет автоматически извлечённых воспоминаний.</p>'}</div>
       <div class="block"><div class="block-title">Experience · субъективный опыт</div>
         <p class="hint">Формируется моделью из Core, предыдущего Experience и последних воспоминаний. Может сохраняться без изменений, содержать сомнения и пересматриваться. Не является частью Core.</p>
-        ${experience ? `<p>${esc(experience.perspective)}</p>` : '<p class="empty-note">Персонаж пока не сформировал отдельного опыта.</p>'}
+        ${experience && experience.perspective ? `<p>${esc(experience.perspective)}</p>` : '<p class="empty-note">Персонаж пока не сформировал отдельного опыта.</p>'}
+        ${experience && experience.kind === "integrated" ? '<p class="hint">Сейчас активен общий Experience.</p>' : ""}
         <p class="hint">Последний цикл: ${esc(m.memoryStatus || "не проводился")}</p>
-      </div>`;
+      </div>${progress}`;
   }
 
   /* ── Мир чата ─────────────────────────────────────────────────────────
