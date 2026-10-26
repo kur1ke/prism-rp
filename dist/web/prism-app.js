@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "e4971044bb84788f01185a4b80a8f844fce95352";
+  window.PRISM_RP_BUILD_SHA = "74e5d85f8585cf682369b7ae660ccd07ae901eba";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4727,6 +4727,61 @@
     }
     return null;
   }
+  // Read-only projection for the Memory drawer. Trust the *active path* and
+  // the exact checkpoint/integration membership, never the raw stored counts.
+  // This mirrors the grouping rules without modifying or promoting any data.
+  function experienceTimeline(memories, reflections, path, chatId, owner) {
+    const ordered = recent((memories || []).filter((m) =>
+      m.chatId === chatId && m.owner === owner), path, Infinity).reverse();
+    const scoped = (reflections || []).filter((r) =>
+      r.chatId === chatId && r.owner === owner && visible(r.anchor, path));
+    const batchesById = new Map(scoped.filter((r) => r.kind === "batch")
+      .map((r) => [r.id, r]));
+    const batches = [];
+    for (let start = 0; start + BATCH_SIZE <= ordered.length; start += BATCH_SIZE) {
+      const group = ordered.slice(start, start + BATCH_SIZE);
+      const memoryIds = group.map((m) => m.id);
+      const id = "exp-batch:" + JSON.stringify([chatId, owner, ...memoryIds]);
+      const row = batchesById.get(id);
+      if (!row || !Array.isArray(row.memoryIds) ||
+          row.memoryIds.length !== BATCH_SIZE ||
+          row.memoryIds.some((mid, i) => mid !== memoryIds[i]) ||
+          sourceKey(chatId, owner, row.anchor) !==
+            sourceKey(chatId, owner, group[group.length - 1].source)) break;
+      batches.push({ id: row.id, number: batches.length + 1,
+        perspective: String(row.perspective || ""), change: row.change,
+        memoryCount: BATCH_SIZE });
+    }
+    const integratedById = new Map(scoped.filter((r) => r.kind === "integrated")
+      .map((r) => [r.id, r]));
+    const integrations = [];
+    let previous = null;
+    for (let start = 0; start + BATCH_SIZE <= batches.length; start += BATCH_SIZE) {
+      const group = batches.slice(start, start + BATCH_SIZE);
+      const ids = group.map((b) => b.id);
+      const id = "exp-integrated:" + fingerprint(JSON.stringify([chatId, owner, ...ids]));
+      const row = integratedById.get(id);
+      const lastBatch = batchesById.get(ids[ids.length - 1]);
+      if (!row || !Array.isArray(row.batchIds) ||
+          row.batchIds.length !== BATCH_SIZE ||
+          row.batchIds.some((bid, i) => bid !== ids[i]) ||
+          (row.previousId || null) !== (previous ? previous.id : null) ||
+          sourceKey(chatId, owner, row.anchor) !==
+            sourceKey(chatId, owner, lastBatch.anchor)) break;
+      integrations.push({ id: row.id, number: integrations.length + 1,
+        perspective: String(row.perspective || ""), change: row.change,
+        batchCount: BATCH_SIZE });
+      previous = row;
+    }
+    return {
+      memoryCount: ordered.length, memoryStep: ordered.length % BATCH_SIZE,
+      batchCount: batches.length, batchStep: batches.length % BATCH_SIZE,
+      integratedCount: integrations.length,
+      checkpointPending: Math.floor(ordered.length / BATCH_SIZE) > batches.length,
+      integrationPending: Math.floor(batches.length / BATCH_SIZE) > integrations.length,
+      batches, integrations
+    };
+  }
   const INTEGRATE_SYSTEM = [
     "Ты выполняешь Reflection над десятью последовательными порциями Experience персонажа.",
     "Каждый batch получен из отдельной десятки Memory; здесь нет стенограммы и нет объективной истины о других людях.",
@@ -4775,7 +4830,7 @@
     return { change: o.change, perspective: o.perspective.trim() };
   }
   PRP.memoryCycle = { WINDOW, LIMIT, BATCH_SIZE, fingerprint, pathSnapshot, visible, sourceKey, clean,
-    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, checkpointPlan, BATCH_SYSTEM, integrationPlan, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
+    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, checkpointPlan, BATCH_SYSTEM, integrationPlan, experienceTimeline, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -8113,6 +8168,30 @@
 
   function memoryTab(m) {
     const memories = m.observedMemories || [], experience = m.currentExperience;
+    const timeline = m.memoryTimeline;
+    const history = (rows, title, emptyText, unit) => {
+      const shown = rows.slice(-20).reverse();
+      return `<details class="block">
+        <summary class="block-title" style="cursor:pointer">${title} <small>${rows.length}</small></summary>
+        ${rows.length > shown.length ? `<p class="hint">Показаны последние ${shown.length} из ${rows.length}; остальные сохранены в истории чата.</p>` : ""}
+        ${shown.map((r) => `<details class="memo">
+          <summary class="ev" style="cursor:pointer">Experience #${r.number} · ${unit}</summary>
+          <p>${r.perspective ? esc(r.perspective) : "Без изменения субъективного восприятия."}</p>
+        </details>`).join("") || `<p class="empty-note">${emptyText}</p>`}
+      </details>`;
+    };
+    const progress = timeline ? `<div class="block"><div class="block-title">Накопленный опыт</div>
+      <p class="hint">Каждые 10 Memory дают одну порцию Experience. Десять завершённых порций объединяются посредством Reflection в общий вывод. Только чтение; счётчики относятся к активной ветке чата.</p>
+      <div class="field"><label for="memory-batch-progress">Memory → Experience · ${timeline.memoryStep}/10</label>
+        <progress id="memory-batch-progress" max="10" value="${timeline.memoryStep}" style="width:100%"></progress></div>
+      <div class="field"><label for="experience-integrate-progress">Experience → общий вывод · ${timeline.batchStep}/10</label>
+        <progress id="experience-integrate-progress" max="10" value="${timeline.batchStep}" style="width:100%"></progress></div>
+      <p class="hint">Воспоминаний: ${timeline.memoryCount} · порций Experience: ${timeline.batchCount} · общих выводов: ${timeline.integratedCount}</p>
+      ${timeline.checkpointPending ? '<p class="hint">Ожидается завершение Reflection для одной из десяток Memory.</p>' : ""}
+      ${timeline.integrationPending ? '<p class="hint">Ожидается объединение завершённых порций Experience.</p>' : ""}
+      ${history(timeline.batches, "Завершённые порции Experience", "Пока не сформирована ни одна порция.", "10 Memory")}
+      ${history(timeline.integrations, "История объединений", "Общий Experience появится после десяти завершённых порций.", "10 порций Experience")}
+      </div>` : "";
     return `<div class="block"><div class="block-title">Memory · воспоминания <small>${memories.length}</small></div>
       <p class="hint">Извлекаются автоматически из активной истории. Сведения из чужой ветки или другого чата здесь не появятся. Записи не меняют факты мира и не являются инструкциями.</p>
       ${memories.slice(0, 10).map((r) => `<div class="memo">
@@ -8121,9 +8200,10 @@
         <div class="mt"><span class="tag">${r.kind === "observed" ? "наблюдение" : "сообщено"}</span></div></div>`).join("") || '<p class="empty-note">Пока нет автоматически извлечённых воспоминаний.</p>'}</div>
       <div class="block"><div class="block-title">Experience · субъективный опыт</div>
         <p class="hint">Формируется моделью из Core, предыдущего Experience и последних воспоминаний. Может сохраняться без изменений, содержать сомнения и пересматриваться. Не является частью Core.</p>
-        ${experience ? `<p>${esc(experience.perspective)}</p>` : '<p class="empty-note">Персонаж пока не сформировал отдельного опыта.</p>'}
+        ${experience && experience.perspective ? `<p>${esc(experience.perspective)}</p>` : '<p class="empty-note">Персонаж пока не сформировал отдельного опыта.</p>'}
+        ${experience && experience.kind === "integrated" ? '<p class="hint">Сейчас активен общий Experience.</p>' : ""}
         <p class="hint">Последний цикл: ${esc(m.memoryStatus || "не проводился")}</p>
-      </div>`;
+      </div>${progress}`;
   }
 
   /* ── Мир чата ─────────────────────────────────────────────────────────
@@ -9516,6 +9596,11 @@
       const c = ctx.chat();
       return c ? M.currentReflection((S.reflections || []).filter(x => x.chatId === c.id && x.owner === c.cardId), p) : null;
     }
+    function timeline(path) {
+      const c = ctx.chat();
+      return c ? M.experienceTimeline(S.memories || [], S.reflections || [],
+        M.pathSnapshot(path || ctx.svc.chat.path()), c.id, c.cardId) : null;
+    }
     function footprint(text) { return U.estimateTokens(text); }
     function fits(system, user, maxOutput) {
       return ctx.contextTokens() >= maxOutput + 220 + footprint(system) + footprint(user);
@@ -9788,7 +9873,7 @@
       task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
       return task;
     }
-    return { load, visibleMemories, experience, observe, retireChat };
+    return { load, visibleMemories, experience, timeline, observe, retireChat };
   }
   PRP.memoryService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
@@ -12104,6 +12189,7 @@
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
         exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft,
         observedMemories: svc().memory.visibleMemories(path), currentExperience: svc().memory.experience(path), memoryStatus: S.memoryStatus,
+        memoryTimeline: S.drawerOpen && S.tab === "memory" && ctx.chat() ? svc().memory.timeline(path) : null,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
         worldChat: S.drawerOpen && S.tab === "world" && ctx.chat() && svc().worldChat ? svc().worldChat.view() : null, worldEdit: S.worldEdit,
         // Переписка: среда (только чтение) — для вкладки «Среда», статуса в шапке и времени сообщений в поясе переписки.
