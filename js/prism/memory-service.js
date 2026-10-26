@@ -58,7 +58,7 @@
       if (!relevant()) return recordStatus("stale");
       let proposed;
       try {
-        proposed = M.parseExtraction(await call(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT), sources, path);
+        proposed = M.parseExtraction(await call(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT), sources, path, initialChat.mode);
       } catch (e) { return recordStatus("extract-error"); }
       if (!relevant()) return recordStatus("stale");
       if (!proposed) return recordStatus("invalid-extract");
