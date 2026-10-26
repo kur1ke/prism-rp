@@ -35,19 +35,20 @@
     }
     async function cycle(sourceMsg, prov) {
       const initialChat = ctx.chat();
-      if (!initialChat || sourceMsg.chatId !== initialChat.id) return recordStatus("stale");
+      if (!initialChat || sourceMsg.chatId !== initialChat.id) return { status: "stale" };
       const chatId = initialChat.id, owner = initialChat.cardId;
+      const finish = (code) => S.chatId === chatId ? recordStatus(code) : { status: code };
       const path = M.pathSnapshot(ctx.svc.chat.path());
       const anchor = path.find((x) => x.id === sourceMsg.id);
-      if (!anchor || !anchor.text.trim()) return recordStatus("empty");
+      if (!anchor || !anchor.text.trim()) return finish("empty");
       const model = prov || (ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
-      if (!model) return recordStatus("no-provider");
+      if (!model) return finish("no-provider");
       const sources = M.extractionInput(path.slice(0, path.indexOf(anchor) + 1));
-      if (!sources.length) return recordStatus("empty");
+      if (!sources.length) return finish("empty");
       const extractionUser = JSON.stringify({ mode: initialChat.mode, sources });
       const MAX_EXTRACT_OUT = 600, MAX_REFLECT_OUT = 500;
       if (!fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT))
-        return recordStatus("overflow-extract");
+        return finish("overflow-extract");
       const call = async (system, user, max_tokens) => {
         const response = await LLM.chat(model, [
           { role: "system", content: system },
@@ -61,22 +62,22 @@
         return M.visible({messageId:anchor.id,swipeIdx:anchor.swipeIdx,
           textHash:anchor.textHash,prefixHash:anchor.prefixHash}, M.pathSnapshot(ctx.svc.chat.path()));
       };
-      if (!relevant()) return recordStatus("stale");
+      if (!relevant()) return finish("stale");
       let proposed;
       try {
         proposed = M.parseExtraction(await call(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT), sources, path, initialChat.mode);
-      } catch (e) { return recordStatus("extract-error"); }
-      if (!relevant()) return recordStatus("stale");
-      if (!proposed) return recordStatus("invalid-extract");
+      } catch (e) { return finish("extract-error"); }
+      if (!relevant()) return finish("stale");
+      if (!proposed) return finish("invalid-extract");
       const existing = (S.memories || []).filter((m) => m.chatId === chatId && m.owner === owner);
       const newOnes = proposed.filter((m) => !existing.some((x) =>
         x.source.messageId === m.source.messageId &&
         x.source.prefixHash === m.source.prefixHash && x.quote === m.quote))
         .map((m) => Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
-      if (!newOnes.length) return recordStatus("no-new-memory");
+      if (!newOnes.length) return finish("no-new-memory");
       // Memory is independent of Experience. Its valid evidence is committed
       // immediately; failure of later reflection must never erase an episode.
-      if (!relevant()) return recordStatus("stale");
+      if (!relevant()) return finish("stale");
       await DB.putAll(newOnes.map((m) => ["memories", m]));
       if (S.chatId === chatId) {
         S.memories = (S.memories || []).concat(newOnes);
@@ -101,12 +102,12 @@
         payload.memories.pop();
         reflectionUser = JSON.stringify(payload);
       }
-      if (!payload.memories.length) return recordStatus("overflow-reflection");
+      if (!payload.memories.length) return finish("overflow-reflection");
       let result;
       try { result = M.parseReflection(await call(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)); }
-      catch (_) { return recordStatus("reflect-error"); }
-      if (!relevant()) return recordStatus("stale");
-      if (!result) return recordStatus("invalid-reflection");
+      catch (_) { return finish("reflect-error"); }
+      if (!relevant()) return finish("stale");
+      if (!result) return finish("invalid-reflection");
       const record = result.change === "changed" && (!prior || result.perspective !== prior.perspective) ? {
         id: U.uid("ref"), schema: 1, chatId, owner,
         anchor: { messageId: anchor.id, swipeIdx: anchor.swipeIdx, textHash: anchor.textHash, prefixHash: anchor.prefixHash },
@@ -121,7 +122,7 @@
         if (ctx.svc.prism) ctx.svc.prism.refresh();
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
       }
-      return recordStatus(record ? "reflected" : "remembered-unchanged");
+      return finish(record ? "reflected" : "remembered-unchanged");
     }
     // Overlap is intentionally suppressed; a future turn may re-scan the last
     // four messages. No independent background task or continuous simulation.
