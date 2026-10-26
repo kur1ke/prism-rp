@@ -562,6 +562,18 @@ async function experienceIntegrationOverTwoHundredMemories() {
     h.path.push(msg);
     const outcome = await h.memory.observe(msg, h.model);
     assert.ok(["reflected", "remembered-unchanged"].includes(outcome.status), "cycle " + i);
+    if ([9, 10, 11, 99, 100, 101, 200, 201].includes(i)) {
+      const view = h.memory.timeline();
+      assert.equal(view.memoryCount, i, "visible Memory count in timeline");
+      assert.equal(view.memoryStep, i % 10, "Memory progress after " + i);
+      assert.equal(view.batchCount, Math.floor(i / 10), "batch checkpoints after " + i);
+      assert.equal(view.batchStep, Math.floor(i / 10) % 10);
+      assert.equal(view.integratedCount, Math.floor(i / 100), "overall conclusions after " + i);
+      assert.equal(view.batches.length, view.batchCount);
+      assert.equal(view.integrations.length, view.integratedCount);
+      assert.equal(view.checkpointPending, false);
+      assert.equal(view.integrationPending, false);
+    }
     if (i === 100 || i === 200) {
       const current = h.memory.experience();
       assert.equal(current.kind, "integrated", "integrated summary must be the single active Experience at a wave boundary");
@@ -590,6 +602,7 @@ async function experienceIntegrationOverTwoHundredMemories() {
     [...h.storage.reflections.values()], PRP.memoryCycle.pathSnapshot(h.path),"ch","owner");
   assert.equal(plan,null,"reload must not repeat an already completed integration");
   assert.notEqual(h.memory.experience().kind,"batch","batch records never enter normal Prism");
+  assert.equal(h.memory.timeline().integratedCount, 2, "reloaded timeline preserves completed integrations");
   console.log("PASS: 200 Memory -> 20 disjoint batches -> 2 cumulative integrations with one active Experience");
 }
 function integrationPlanRejectsWrongOwnershipAndBranch() {
@@ -694,6 +707,86 @@ async function recoveredLateIntegrationDoesNotEraseRecentExperience() {
   console.log("PASS: delayed integration is incorporated without overwriting newer current Experience");
 }
 
+function experienceTimelineReadOnlyAndBranchBound() {
+  const M=PRP.memoryCycle,path=[],mem=[];
+  for(let i=0;i<100;i++) {
+    const node=message("ui-"+i,"Произошёл эпизод для просмотра "+i+".",path.at(-1)?.id);
+    path.push(node);
+  }
+  const snap=M.pathSnapshot(path);
+  for(let i=0;i<100;i++) {
+    const row=snap[i];
+    mem.push({id:"ui-m"+i,chatId:"ch",owner:"owner",event:"Эпизод "+i,
+      source:{messageId:row.id,swipeIdx:row.swipeIdx,textHash:row.textHash,
+        prefixHash:row.prefixHash}});
+  }
+  const batches=[];
+  for(let i=0;i<10;i++) {
+    const ids=mem.slice(i*10,i*10+10).map(x=>x.id);
+    batches.push({id:"exp-batch:"+JSON.stringify(["ch","owner",...ids]),
+      kind:"batch",chatId:"ch",owner:"owner",memoryIds:ids,
+      anchor:mem[i*10+9].source,change:i===4?"unchanged":"changed",
+      perspective:i===4?"":"Субъективный опыт #"+(i+1)});
+  }
+  const before=M.experienceTimeline(mem,batches,snap,"ch","owner");
+  assert.equal(before.memoryCount,100);
+  assert.equal(before.memoryStep,0);
+  assert.equal(before.batchCount,10);
+  assert.equal(before.batchStep,0);
+  assert.equal(before.integratedCount,0);
+  assert.equal(before.integrationPending,true,"ten completed batches await integration");
+  assert.equal(before.batches[4].perspective,"","unchanged checkpoint shown, not omitted");
+  const integrationPlan=M.integrationPlan(mem,batches,snap,"ch","owner");
+  const integrated={kind:"integrated",chatId:"ch",owner:"owner",
+    id:integrationPlan.id,batchIds:integrationPlan.batchIds,
+    previousId:null,anchor:integrationPlan.anchor,
+    change:"changed",perspective:"Общее субъективное восприятие персонажа"};
+  const after=M.experienceTimeline(mem,batches.concat([integrated]),snap,"ch","owner");
+  assert.equal(after.integratedCount,1);
+  assert.equal(after.integrationPending,false);
+  assert.equal(after.integrations[0].perspective,integrated.perspective);
+  assert.deepEqual(after, M.experienceTimeline(mem,batches.concat([integrated]),snap,"ch","owner"),
+    "projection must be deterministic without storage mutations");
+  const swapped=path.map((node,i)=>i===5?{...node,swipeIdx:1,
+    swipes:node.swipes.concat([{text:"В другой ветке произошло новое событие.",sceneOps:[]}])}:node);
+  const sibling=M.experienceTimeline(mem,batches.concat([integrated]),
+    M.pathSnapshot(swapped),"ch","owner");
+  assert.equal(sibling.memoryCount,5);
+  assert.equal(sibling.batchCount,0);
+  assert.equal(sibling.integratedCount,0);
+  assert.equal(M.experienceTimeline(mem,batches.concat([integrated]),snap,"another","owner").memoryCount,0,
+    "other chat can see neither memories nor stored experiences");
+  assert.equal(M.experienceTimeline(mem,batches.concat([integrated]),snap,"ch","another").batchCount,0,
+    "other character cannot read the history");
+  const invalidBatch={...batches[0],memoryIds:["forged",...batches[0].memoryIds.slice(1)]};
+  assert.equal(M.experienceTimeline(mem,[invalidBatch,...batches.slice(1),integrated],snap,"ch","owner").batchCount,0,
+    "invalid checkpoint must not create false progress");
+  const invalidIntegration={...integrated,batchIds:["forged",...integrated.batchIds.slice(1)]};
+  assert.equal(M.experienceTimeline(mem,batches.concat([invalidIntegration]),snap,"ch","owner").integratedCount,0,
+    "invalid integration must not be presented as completed");
+
+  PRP.render={esc:s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;"),icon:()=>""};
+  PRP.viewKit={SAMPLER_PRESETS:[],THEMES:[],WEATHER:[],loraRows:[]};
+  require("../js/ui/views/drawer.js");
+  const hostile='<img src=x onerror="alert(1)">';
+  const ui = PRP.views.drawer({
+    chat:{mode:"rp"},tab:"memory",observedMemories:[],currentExperience:{kind:"integrated",
+      perspective:"Общий опыт"},memoryStatus:"reflected",
+    memoryTimeline:{...after,batches:[{...after.batches[0],perspective:hostile}],
+      integrations:[{...after.integrations[0],perspective:hostile}]}
+  });
+  assert.match(ui,/Memory → Experience · 0\/10/);
+  assert.match(ui,/Experience → общий вывод · 0\/10/);
+  assert.match(ui,/История объединений/);
+  assert.match(ui,/Завершённые порции Experience/);
+  assert.match(ui,/Сейчас активен общий Experience/);
+  assert.ok(ui.includes("&lt;img"),"model-generated perspective is escaped in read-only UI");
+  assert.ok(!ui.includes(hostile),"stored HTML must not run as markup");
+  assert.ok(!ui.includes('data-act="experience-save"'),"no user authoring controls");
+  console.log("PASS: read-only Experience timeline is branch-scoped, accurate, escaped and renderer-safe");
+}
+
 function extractionSelectionContract() {
   const M = PRP.memoryCycle;
   assert.match(M.EXTRACT_SYSTEM, /memories: \[\]/, "empty extraction must be the explicit default for routine messages");
@@ -756,6 +849,7 @@ async function run() {
   await experienceIntegrationOverTwoHundredMemories();
   integrationPlanRejectsWrongOwnershipAndBranch();
   await recoveredLateIntegrationDoesNotEraseRecentExperience();
+  experienceTimelineReadOnlyAndBranchBound();
   await pathAndLegacyAreIndependent();
   extractionSelectionContract();
   backupJournalValidation();
