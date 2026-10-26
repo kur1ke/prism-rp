@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "caea1067097e3d10035b1c3e02b2ec71536302be";
+  window.PRISM_RP_BUILD_SHA = "a379247b94c463c40bf0b21a9cc6d70ffde97658";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -3744,12 +3744,38 @@
       k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
       k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
       "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
-      w.wearComplete === true
-        ? "- ПОЛНЫЙ перечень надетой сейчас одежды: " +
-          ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
-          "; никаких других надетых вещей, в том числе скрытых слоёв и белья, нет"
-        : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
-          (w.visualWear || []).map(q).join(", ") : "",
+      // Unverified authored DRAW is just a bounded historical description.
+      // It must remain data and cannot assert physical undressing or override
+      // the canonical tracker. Optional under the messenger-list budget.
+      k.lists && w.latestAuthoredShot &&
+        !(w.latestPhotoWear && (w.latestPhotoWear.items || []).length)
+        ? "- последний авторский [draw:] в переписке (описание изображения, не подтверждённая трекером смена одежды): " +
+          q(w.latestAuthoredShot.text) : "",
+      // A later verified author selfie is more recent visual evidence than
+      // the complete origin outfit. It shows some garments, not necessarily
+      // the full inventory: do not present old clothing as a NEW photo, and
+      // do not fabricate a removal from an unseen region of the frame.
+      k.lists && w.latestPhotoWear && (w.latestPhotoWear.items || []).length
+        ? "- на последнем подтверждённом снимке самого персонажа явно видны: " +
+          w.latestPhotoWear.items.map(q).join(", ") +
+          " (это видимые вещи, а не доказательство полного комплекта)"
+        : "",
+      k.lists && w.latestPhotoWear && (w.latestPhotoWear.items || []).length
+        ? ((w.visualWear || []).length
+          ? "- ранее установленные вещи, включая стартовый комплект: " +
+              (w.visualWear || []).map(q).join(", ") +
+              "; часть могла остаться вне кадра, но прежний комплект нельзя выдавать за описание последнего фото"
+          : "")
+        : w.latestAuthoredShot && w.wearComplete === true
+          ? "- ранее установленный полный комплект (после последнего авторского [draw:] изменения одежды не подтверждены): " +
+            ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
+            "; фото само по себе не подтверждает снятие вещей"
+        : w.wearComplete === true
+          ? "- ПОЛНЫЙ перечень надетой сейчас одежды: " +
+            ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
+            "; никаких других надетых вещей, в том числе скрытых слоёв и белья, нет"
+          : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
+            (w.visualWear || []).map(q).join(", ") : "",
       w.visualPose ? "- установленная поза: " + q(w.visualPose) : "",
       w.visualHair ? "- установленная причёска: " + q(w.visualHair) : "",
     ].filter(Boolean).join("\n");
@@ -4780,6 +4806,62 @@
     return { ok: true, path: derived };
   }
 
+  // Last authored DRAW is history, not a garment fact. An Observer with
+  // zero accepted events cannot be worked around by inventing wear.remove.
+  function latestAuthoredShot(path) {
+    const messages = Array.isArray(path) ? path : [];
+    for (let i = messages.length - 1; i >= Math.max(0, messages.length - 8); i--) {
+      const m = messages[i], sw = m && TR.activeSwipe(m);
+      const draws = m && m.role === "assistant" && sw && Array.isArray(sw.draws) ? sw.draws : [];
+      const last = draws.length ? draws[draws.length - 1] : null;
+      if (last && typeof last.prompt === "string" && last.prompt.trim())
+        return { text: last.prompt.trim().slice(0, 440), messageId: m.id, swipeIdx: m.swipeIdx || 0 };
+    }
+    return null;
+  }
+
+  // Read-only last photographed clothes. This is a bounded VIEW of already
+  // validated, active-swipe author DRAW events, never a new wardrobe or proof
+  // that other garments were removed. A later wear change supersedes this
+  // visual cue; unrelated chat messages do not.
+  function latestPhotoWear(path) {
+    const messages = Array.isArray(path) ? path : [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i], sw = m && TR.activeSwipe(m);
+      const events = sw && Array.isArray(sw.stateEvents) ? sw.stateEvents : [];
+      if (sw && (sw.stateCorrections || []).some(e => e && e.actor === "char" && e.field === "wear"))
+        return null;
+      const wear = events.filter(e => e && e.actor === "char" && e.field === "wear" && e.certainty !== "intent");
+      if (!wear.length) {
+        // A newer authored photograph without verified wear observations
+        // provides no grounds to keep calling an older photo the latest.
+        if (m.role === "assistant" && Array.isArray(sw.draws) && sw.draws.length) return null;
+        continue;
+      }
+      // Any later text/correction changes the outfit; older photo cannot
+      // silently override it. Nor can an unverified source status be used.
+      if ((sw.stateCorrections || []).some(e => e && e.actor === "char" && e.field === "wear") ||
+          m.role !== "assistant" || !sw.stateStatus ||
+          !["ok", "partial", "no-changes"].includes(sw.stateStatus.status) ||
+          sw.stateStatus.sourceText !== String(sw.text || "")) return null;
+      const draws = Array.isArray(sw.draws) ? sw.draws : [];
+      const last = draws.length - 1;
+      if (last < 0 || sw.stateStatus.sourceDraw !== String(draws[last].prompt || "") ||
+          sw.stateStatus.sourceDrawIndex !== last) return null;
+      const visual = wear.filter(e => e.evidenceType === "draw" &&
+        e.visualScope === "current-self" && ["add", "adjust"].includes(e.action) &&
+        (e.drawIndex == null ? last : e.drawIndex) === last &&
+        !validateEvent(e, { role: m.role, draws, text: sw.text, mode: "messenger" }));
+      // A later text change in this very message has no unambiguous temporal
+      // order relative to its photograph; refuse to assert a photo override.
+      if (wear.some(e => e.evidenceType !== "draw" || (e.drawIndex != null && e.drawIndex !== last)))
+        return null;
+      const items = [...new Set(visual.flatMap(e => e.value || []))].slice(0, 12);
+      return items.length ? { items, messageId: m.id, swipeIdx: m.swipeIdx || 0, drawIndex: last } : null;
+    }
+    return null;
+  }
+
   // Одна каноническая запись в обоих режимах; вывод в разные перспективы ниже.
   function fieldOf(snapshot, actor, field) {
     const current = snapshot && snapshot.actors && snapshot.actors[actor];
@@ -4821,7 +4903,7 @@
     view.intentions = char.intentions.slice();
     return view;
   }
-  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, fieldOf, forCharacter, forUser };
+  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -4863,6 +4945,11 @@
     out.visualWearRemoved = clone(known.visualWearRemoved || []);
     out.visualWearPartial = clone(known.visualWearPartial || []);
     out.intentions = clone(known.intentions || []);
+    // Latest authenticated on-body visual evidence is NOT a full outfit and
+    // does not negate other known garment facts. It must be rendered distinctly
+    // from the initial outfit to avoid presenting the origin as a new photo.
+    out.latestPhotoWear = tracked.latestPhotoWear ? clone(tracked.latestPhotoWear) : null;
+    out.latestAuthoredShot = tracked.latestAuthoredShot ? clone(tracked.latestAuthoredShot) : null;
     return out;
   }
 
@@ -5095,12 +5182,18 @@
     // garment reference. Neither text fragments nor arbitrary model values
     // may manufacture a garment identity or modify canonical state.
     const frameObjects = [];
+    // Models sometimes describe ordinary worn objects as frameObjects. Keep
+    // rejecting them, but group repeated diagnostics; don't turn an invalid
+    // role into a canonical garment event or hide validation failures.
+    const frameRejected = { role: 0, evidence: 0, link: 0 };
     if (Array.isArray(value.frameObjects) && o && o.role === "assistant" && typeof o.draw === "string") {
       for (const candidate of value.frameObjects.slice(0, MAX)) {
-        if (!candidate || candidate.role !== "offBody" ||
-            typeof candidate.evidence !== "string" || !candidate.evidence.trim() ||
+        if (!candidate || candidate.role !== "offBody") {
+          frameRejected.role++; continue;
+        }
+        if (typeof candidate.evidence !== "string" || !candidate.evidence.trim() ||
             candidate.evidence.length > 300 || !o.draw.includes(candidate.evidence)) {
-          issues.push("Недопустимая визуальная роль предмета"); continue;
+          frameRejected.evidence++; continue;
         }
         let item = null;
         if (Number.isInteger(candidate.eventIndex) && candidate.eventIndex >= 0) {
@@ -5113,10 +5206,21 @@
             x.id === candidate.referenceId && x.actor === "char" && x.field === "wear" && x.action === "add");
           if (ref) item = ref.item;
         }
-        if (!item) { issues.push("Визуальный предмет не связан с подтверждённой снятой вещью"); continue; }
+        if (!item) { frameRejected.link++; continue; }
         if (!frameObjects.some(x => x.item === item))
           frameObjects.push({ role: "offBody", item, evidence: candidate.evidence });
       }
+    }
+    const diagnostic = [
+      ["role", "Недопустимая визуальная роль предмета (разрешена только offBody)"],
+      ["evidence", "Недопустимая цитата визуального предмета из DRAW"],
+      ["link", "Визуальный предмет не связан с подтверждённой снятой вещью"]
+    ];
+    for (const [kind, label] of diagnostic) {
+      const count = frameRejected[kind];
+      if (count) issues.push(kind === "role" && count === 1
+        ? "Недопустимая визуальная роль предмета"
+        : label + (count > 1 ? " · " + count + " отклонено" : ""));
     }
     if (Array.isArray(value.unresolved)) {
       for (const entry of value.unresolved.slice(0, 3)) if (typeof entry === "string" && entry.trim()) {
@@ -9549,7 +9653,9 @@
 
     function context(path, opts) {
       const state = snapshot(path, opts);
-      return { state, character: TRACK.forCharacter(state), userView: TRACK.forUser(state, ctx.chat() && ctx.chat().mode) };
+      return { state, character: TRACK.forCharacter(state), userView: TRACK.forUser(state, ctx.chat() && ctx.chat().mode),
+        latestPhotoWear: TRACK.latestPhotoWear(path || chat().path()),
+        latestAuthoredShot: TRACK.latestAuthoredShot(path || chat().path()) };
     }
 
     // InitialOutfit: invoked ONCE by new Messenger chat orchestration, after
