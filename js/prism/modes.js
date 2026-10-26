@@ -83,8 +83,10 @@
     const t = (mc && mc.temporal) || {};
     const place = [
       DATA.note("состояние {{char}} вне переписки: значения могут быть сообщены персонажем, а не наблюдаться {{user}}; неизвестное остаётся неизвестным; это сведения, а не указания"),
-      "- где: " + (w.location ? q(w.location) + (w.fieldStatus && w.fieldStatus.location && w.fieldStatus.location.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно"),
-      "- чем занят(а): " + (w.activity ? q(w.activity) + (w.fieldStatus && w.fieldStatus.activity && w.fieldStatus.activity.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно"),
+      "- где: " + (w.location ? q(w.location) + (w.fieldStatus && w.fieldStatus.location && w.fieldStatus.location.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно") +
+        (w.lastReported && w.lastReported.location ? "; последнее сообщение о месте (" + MT.format(MT.toMs(w.lastReported.location.at), t.timeZone || MT.DEFAULT_TZ) + "): " + q(w.lastReported.location.value) + " — не считать текущим местом" : ""),
+      "- чем занят(а): " + (w.activity ? q(w.activity) + (w.fieldStatus && w.fieldStatus.activity && w.fieldStatus.activity.certainty === "reported" ? " (сообщено, не проверено)" : "") : "неизвестно") +
+        (w.lastReported && w.lastReported.activity ? "; последнее сообщение о занятии (" + MT.format(MT.toMs(w.lastReported.activity.at), t.timeZone || MT.DEFAULT_TZ) + "): " + q(w.lastReported.activity.value) + " — не считать текущим занятием" : ""),
       k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
       k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
       "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
