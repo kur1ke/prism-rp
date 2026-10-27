@@ -69,7 +69,7 @@
     const o = input || {}, actors = o.actors || {};
     const plan = o.visualPlan || null;
     const owner = !!actors.owner, user = !!actors.user;
-    const wear = owner && plan && plan.actor === "char" ? plan.wear : null;
+    const wear = owner ? (o.wearState || (plan && plan.actor === "char" && plan.wear) || null) : null;
     const format = ["tags", "hybrid", "description"].includes(o.format) ? o.format : "tags";
     return freeze({
       version: 1,
