@@ -100,6 +100,20 @@
       for (const item of event.value) {
         const existing = canonicalWearItem(item, previous);
         const name = existing ? existing.item : item;
+        // A generic "юбку" cannot mean an arbitrary one of several known
+        // skirts. Nor may removing an unknown-colored skirt create a phantom
+        // second skirt while another skirt is in the closed known outfit.
+        // A genuinely new explicit "add" can still introduce a new garment.
+        if (!existing) {
+          const stems = garmentStems(item);
+          const sameType = stems.length && previous.filter((x) =>
+            garmentStems(x.item).includes(stems[stems.length - 1]));
+          const subsetMatches = previous.filter((x) => stems.length &&
+            stems.every((word) => garmentStems(x.item).includes(word)));
+          if (subsetMatches.length > 1 ||
+              (wear.complete && event.action !== "add" && sameType && sameType.length))
+            continue;
+        }
         const order = orderOf(name);
         // One garment, one current state. Repeated reports of the same
         // intermediate position do not create a new transition or erase its
