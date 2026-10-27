@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "53ab73c4b179e17028b93ab345b26057a13e21d6";
+  window.PRISM_RP_BUILD_SHA = "2f92cf098acaff611b079f2e2af7ec831a376b4b";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -3816,6 +3816,10 @@
       k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
       k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
       "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
+      // This is what was known BEFORE writing the next reply, not an
+      // instruction that the character cannot change their clothing.
+      (w.wearComplete || (w.visualWear || []).length || (w.visualWearRemoved || []).length)
+        ? "- одежда — установленное состояние НА НАЧАЛО ответа, не постоянный наряд и не запрет действий. {{char}} может самостоятельно снять, надеть, поправить или заменить вещи; описанное совершённое действие меняет последующее состояние. Без такого события не придумывай перемен." : "",
       // Unverified authored DRAW is just a bounded historical description.
       // It must remain data and cannot assert physical undressing or override
       // the canonical tracker. Optional under the messenger-list budget.
@@ -3845,7 +3849,7 @@
         : w.wearComplete === true
           ? "- ПОЛНЫЙ перечень надетой сейчас одежды: " +
             ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
-            "; никаких других надетых вещей, в том числе скрытых слоёв и белья, нет"
+            "; других надетых вещей, включая скрытые слои и бельё, до следующего совершённого изменения нет"
           : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
             (w.visualWear || []).map(q).join(", ") : "",
       w.visualPose ? "- установленная поза: " + q(w.visualPose) : "",
@@ -4866,6 +4870,31 @@
   const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
 
+  // Explicitly named clothing can be shortened or declined in Russian across
+  // turns ("светло-бежевая юбка-плиссе" → "бежевую юбку"). Match only if
+  // every lexical stem in the new report is present in exactly ONE item of
+  // this actor's active-path wardrobe. This is NOT fuzzy semantic inference.
+  // Without a unique match, retain the existing explicit-event semantics.
+  function garmentStems(value) {
+    return (str(value).toLowerCase().replace(/ё/g, "е")
+      .match(/[\p{L}\p{N}]+/gu) || []).map((word) => {
+      const stem = word.length > 3 ? word.replace(
+        /(?:ого|его|ому|ему|ыми|ими|ая|яя|ое|ее|ые|ие|ый|ий|ую|юю|ых|их|ым|им|ой|ей|ом|ем|а|я|у|ю|ы|и|е)$/u, "") : word;
+      return stem.length >= 3 ? stem : word;
+    }).filter((word) => word.length >= 3);
+  }
+  function canonicalWearItem(item, previous) {
+    const exact = previous.find((x) => sameGarment(x.item, item));
+    if (exact) return exact;
+    const stems = garmentStems(item);
+    if (!stems.length) return null;
+    const matches = previous.filter((x) => {
+      const known = garmentStems(x.item);
+      return stems.every((word) => known.includes(word));
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   function wearDatum(actor) {
     const wear = actor && actor.wearState;
     if (!wear || !wear.known) return null;
@@ -4911,21 +4940,36 @@
     } else {
       if (event.action === "add" || event.action === "adjust") wear.known = true;
       for (const item of event.value) {
-        const order = orderOf(item);
-        const existing = previous.find((x) => sameGarment(x.item, item));
+        const existing = canonicalWearItem(item, previous);
+        const name = existing ? existing.item : item;
+        // A generic "юбку" cannot mean an arbitrary one of several known
+        // skirts. Nor may removing an unknown-colored skirt create a phantom
+        // second skirt while another skirt is in the closed known outfit.
+        // A genuinely new explicit "add" can still introduce a new garment.
+        if (!existing) {
+          const stems = garmentStems(item);
+          const sameType = stems.length && previous.filter((x) =>
+            garmentStems(x.item).includes(stems[stems.length - 1]));
+          const subsetMatches = previous.filter((x) => stems.length &&
+            stems.every((word) => garmentStems(x.item).includes(word)));
+          if (subsetMatches.length > 1 ||
+              (wear.complete && event.action !== "add" && sameType && sameType.length))
+            continue;
+        }
+        const order = orderOf(name);
         // One garment, one current state. Repeated reports of the same
         // intermediate position do not create a new transition or erase its
         // original provenance. An ordinary "adjusted" remark is not a new
         // placement; Observer must supply a grounded position to use adjust.
-        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) continue;
+        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, name))) continue;
         if (event.action === "adjust" && wear.partiallyWorn.some((x) =>
-          sameGarment(x.item, item) && x.placement === event.placement)) continue;
-        drop(item);
+          sameGarment(x.item, name) && x.placement === event.placement)) continue;
+        drop(name);
         const target = event.action === "remove" ? "removed" :
           event.action === "adjust" ? "partiallyWorn" : "worn";
-        // Preserve the established item label across abbreviated, but
-        // exactly matching, reports; no fuzzy garment identity guessing.
-        wear[target].push(fact(existing ? existing.item : item, order,
+        // Canonical identity survives grounded, uniquely matching abbreviated
+        // reports; no new inventory is manufactured from a changed adjective.
+        wear[target].push(fact(name, order,
           event.action === "adjust" ? event.placement : ""));
       }
     }
@@ -5517,6 +5561,9 @@
       "Составное сообщение дели на отдельные утверждения: 'лежу в свитере и воюю с конфигами' даёт pose, wear и activity. Не требуй обязательного слова 'я', если глагол явно в первом лице говорящего.",
       "Для wear/nearby/ongoing поле value ВСЕГДА массив строк, например: \"value\": [\"огромный свитер\", \"тёплые носочки\"]. Для location/activity/pose/hair/availability — одна строка.",
       "Для одежды wear: set — ТОЛЬКО явно полный комплект; add — явно надетая СЕЙЧАС вещь ('в свитере', 'на мне свитер'), даже если момент надевания не назван; remove — только явно снятая вещь. Не додумывай остальную одежду.",
+      "REFERENCES показывают одежду на НАЧАЛО текущей реплики: action=remove/adjust у надетых вещей, action=add у уже снятых. Это не вечный запрет на изменение. Новое завершённое действие говорящего может обновить или отменить ПРЕДЫДУЩЕЕ состояние; не повторяй исходный комплект поверх нового события.",
+      "Если говорящий снимает, возвращает или приспускает известную вещь и называет её сокращённо или в другом падеже, предпочитай однозначный referenceId нужного action. Например «сняла юбку» может относиться к ранее установленной «бежевой юбке-плиссе». Не подбирай ссылку, когда подходят несколько предметов; верни unresolved.",
+      "Переодевание — последовательность изменений: по явно названным снятым вещам wear.remove, по надетым wear.add; wear.set только если полностью установлен итоговый комплект. Не требуй повторного подтверждения снятой вещи в следующих сообщениях и не возвращай её без нового надевания.",
       "wear.adjust — только когда уже надетая вещь явно смещена, приспущена или поправлена, но НЕ снята полностью. Укажи placement — точную подстроку evidence о новом положении (например, 'с плеч'). Один предмет, один event. Если положение или совершение действия неясно — unresolved, не придумывай.",
       "Для wear.add используй однозначный referenceId с action=add из REFERENCES, когда персонаж возвращает ранее снятую вещь, включая местоимение 'её'. Не придумывай имя предмета. Если ссылка неоднозначна — unresolved.",
       "Для wear.adjust, если вещь уже есть в REFERENCES, выбирай однозначный referenceId с action=adjust и опускай value, даже если в тексте другое русское окончание ('футболку' / 'футболка'). Приложение восстановит исходное точное имя и проверит источник. Не подставляй от себя близкие по смыслу названия. Для нового явно названного предмета допустим value=[...], только если его нет среди известных ссылок.",
