@@ -245,7 +245,7 @@
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
         // The original shot, not a translation, decides whether the mirror
-        // contains a single subject. One reflection never creates a second actor.
+        // contains a single subject. The mirror cue never creates an extra actor.
         const mirrorSingle = VP.singleMirror(shot, resolvedActors);
         const promptPlan = VP.prompt({ visualPlan, actors: resolvedActors, shot,
           otherActorPresent: shotScope.otherActorPresent, wearState: visualPlan.wear,
