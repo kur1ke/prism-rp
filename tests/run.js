@@ -6893,6 +6893,8 @@ async function unifiedTracker() {
       const state=T.fold({mode:"messenger",path});
       assert.deepStrictEqual(state.actors.char.wearState.worn.map(x=>x.item),
         ["красная юбка","синяя юбка"],"unknown/ambiguous garment cannot remove either original item");
+      assert.deepStrictEqual(state.actors.char.wearState.removed,[],
+        "an unresolved skirt must NOT create a fictitious second garment");
     }
     console.log("PASS: garment alias reconciliation fails closed on ambiguity and conflicting color");
   });
