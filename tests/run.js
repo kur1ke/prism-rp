@@ -4559,7 +4559,7 @@ async function foundationH() {
       try{
         globalThis.PRP.llm.simple=async (_,instruction)=>{
           calls++;
-          assert.ok(instruction.includes("SINGLE-PERSON MIRROR PHOTO:"),instruction.slice(-850));
+          assert.ok(instruction.includes("SINGLE-PERSON MIRROR SELFIE:"),instruction.slice(-850));
           assert.ok(instruction.includes("SCENE:\n"+shot));
           return wrong?"Two women stand before a mirror, one taking a selfie.":
             "One woman takes a mirror selfie wearing a white t-shirt.";
