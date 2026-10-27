@@ -650,7 +650,9 @@
       opts.format === "description" ? "60 words or fewer." : "50 tags or fewer.",
     ];
     let txt = base + "\nRULES:\n" + rules.map((r, i) => `${i + 1}. ${r}`).join("\n");
-    if (opts.frame) {
+    // The typed SUBJECT plan already carries this actor scope; never duplicate
+    // the same owner/user frame contract in the translation request.
+    if (opts.frame && !planOrder) {
       const f = opts.frame;
       txt += "\nFRAME IDENTITY (do not invent extra copies or people):\n" +
         "Card owner is " + (f.owner ? "visible" : "NOT visible") + "; user is " + (f.user ? "visible" : "NOT visible") +
