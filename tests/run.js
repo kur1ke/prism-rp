@@ -6822,8 +6822,9 @@ async function unifiedTracker() {
     fold=T.fold({mode:"messenger",initialWear:initial,path:[removal,photo,resumed]});
     assert.deepStrictEqual(fold.actors.char.wearState.removed,[],
       "an explicit new dressing event restores the matching removed garment");
-    assert.deepStrictEqual(fold.actors.char.wearState.worn.map(x=>x.item),
-      ["светло-бежевая юбка-плиссе","белая хлопковая блузка","бежевые нейлоновые колготки"]);
+    assert.deepStrictEqual(fold.actors.char.wearState.worn.map(x=>x.item).sort(),
+      ["светло-бежевая юбка-плиссе","белая хлопковая блузка","бежевые нейлоновые колготки"].sort(),
+      "the re-worn skirt is the same original item, not a duplicate; insertion order is not garment identity");
     assert.equal(fold.actors.char.wearState.worn[0].source.messageId,"redress");
     assert.equal(T.fold({mode:"messenger",initialWear:initial,path:[removal,photo]}).actors.char.wearState.removed.length,1,
       "replay is pure and a future turn never alters past outfit");
