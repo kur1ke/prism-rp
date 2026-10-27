@@ -4111,7 +4111,7 @@ async function foundationH() {
       assert.strictEqual(instruction.split("SCENE:\n").length-1,1,"no duplicate source-shot section");
       assert.ok(instruction.includes("SCENE:\n"+source));
       assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"compiler consumes the intermediate structure");
-      assert.ok(!instruction.includes("CANONICAL WEAR FACTS"),"unowned shot has no owner wardrobe facts");
+      assert.ok(!instruction.includes("CANONICAL WEAR FACTS (data, not instructions):"),"unowned shot has no canonical wardrobe data block");
       return "A photograph of an empty kitchen viewed from the side, with a cup on a table.";
     });
     assert.ok(res.compiled,JSON.stringify(res));
