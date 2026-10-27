@@ -4062,6 +4062,82 @@ async function foundationH() {
       assert.strictEqual(live.swipes[0].images[0].promptSources.imageLayers.drawAuthored,true);
     }finally {ICP.compile=oldC;IB.generate=oldG;}
   });
+  await ta("VIS-PROMPT-PLAN-1: all eight source-scoped sections are transient and no empty attributes become image facts",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const source="Фотография пустой кухни, на столе чашка, вид сбоку.";
+    const visual=VP.create({owner:false,shotAuthored:true,draw:source,
+      source:{chatId:"chat-A",messageId:"shot-1",swipeIdx:2},
+      wearFacts:[{actor:"char",known:true,complete:true,
+        worn:[{item:"белая футболка"}],partiallyWorn:[],removed:[{item:"юбка"}]}]});
+    const plan=VP.prompt({visualPlan:visual,actors:{owner:false,user:false},
+      shotAuthored:true,format:"hybrid",messenger:true,qualityPinned:false});
+    assert.deepStrictEqual(plan.order,["SUBJECT","COMPOSITION","POSE","CLOTHING","ENVIRONMENT","LIGHTING","TECHNICAL","QUALITY"]);
+    assert.strictEqual(plan.version,1);
+    assert.deepStrictEqual(plan.source,{chatId:"chat-A",messageId:"shot-1",swipeIdx:2});
+    assert.strictEqual(plan.sections.SUBJECT.owner,false,"no Card character in product/background shots");
+    assert.strictEqual(plan.sections.CLOTHING.removed,0,"owner wardrobe cannot leak into unowned image");
+    assert.strictEqual(plan.sections.POSE.fallback,null,"Messenger never inherits RP pose");
+    assert.strictEqual(plan.sections.QUALITY.authority,"finalise","hybrid does not request quality from translator");
+    assert.ok(Object.isFrozen(plan)&&Object.isFrozen(plan.sections.SUBJECT),
+      "plan cannot mutate the current frame or canonical Scene");
+    const order=VP.promptOrder(plan);
+    assert.ok(order.includes("SUBJECT:") && order.includes("COMPOSITION:") &&
+      order.includes("POSE:") && order.includes("CLOTHING:") &&
+      order.includes("ENVIRONMENT:") && order.includes("LIGHTING:") &&
+      order.includes("TECHNICAL:") && order.includes("QUALITY:"));
+    assert.ok(order.includes("owner not established") &&
+      order.includes("never infer POV from owner identity"));
+    assert.ok(!order.includes(source),"the scene is only sent in SCENE, not repeated inside the plan");
+    assert.ok(!order.includes("белая футболка")&&!order.includes("юбка"),
+      "the Card's wardrobe is never a second source");
+    assert.strictEqual(Object.hasOwn(plan,"shot"),false,"no copied transcript or authored source text");
+    const modes=["hybrid","tags","description"];
+    for(const format of modes){
+      const current=VP.prompt({visualPlan:visual,actors:{owner:false,user:false},
+        format,shotAuthored:true});
+      const rules=IC.rewriteRules({format,intentMode:true,promptPlan:current});
+      assert.ok(rules.includes("VISUAL PROMPT PLAN"),format);
+      assert.ok(rules.includes("SUBJECT:")&&rules.includes("CLOTHING:"));
+      assert.ok(!rules.includes("camera=owner"));
+      if(format==="tags") assert.ok(rules.includes("comma-separated"));
+      if(format==="hybrid") assert.ok(rules.includes("one or two short"));
+      if(format==="description") assert.ok(rules.includes("one to three"));
+    }
+    ICP.clear();
+    let calls=0;
+    const res=await ICP.compile(source,{intentMode:true,format:"hybrid",
+      visualPlan:visual,wearState:visual.wear,promptPlan:plan},async instruction=>{
+      calls++;
+      assert.strictEqual(instruction.split("SCENE:\\n").length-1,1,"no duplicate source-shot section");
+      assert.ok(instruction.includes("SCENE:\\n"+source));
+      assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"compiler consumes the intermediate structure");
+      assert.ok(!instruction.includes("CANONICAL WEAR FACTS"),"unowned shot has no owner wardrobe facts");
+      return "A photograph of an empty kitchen viewed from the side, with a cup on a table.";
+    });
+    assert.ok(res.compiled,JSON.stringify(res));
+    assert.strictEqual(calls,1,"no second model call for plan creation");
+    ICP.clear();
+  });
+  await ta("VIS-PROMPT-PLAN-2: canonical garment flags do not fabricate missing crop/body evidence",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const wear=VP.create({owner:true,shotAuthored:true,
+      draw:"Орихимэ рядом с диваном, белая футболка лежит на диване",
+      source:{chatId:"ch",messageId:"m",swipeIdx:1},
+      wearFacts:[{actor:"char",known:true,complete:true,
+        worn:[{item:"юбка"}],partiallyWorn:[],
+        removed:[{item:"белая футболка"}]}]});
+    const plan=VP.prompt({visualPlan:wear,actors:{owner:true,user:false},
+      wearState:wear.wear,format:"tags",shotAuthored:true,qualityPinned:true});
+    assert.equal(plan.sections.CLOTHING.authority,"canonical-wear");
+    assert.equal(plan.sections.CLOTHING.removed,1);
+    assert.equal(plan.sections.CLOTHING.known,true);
+    assert.equal(plan.sections.QUALITY.authority,"finalise");
+    const rules=IC.rewriteRules({intentMode:true,format:"tags",
+      promptPlan:plan,visualPlan:wear,wearState:wear.wear});
+    assert.ok(rules.includes("CLOTHING:") && rules.includes("CANONICAL WEAR FACTS"));
+    assert.ok(!VP.promptOrder(plan).includes("white t-shirt"),
+      "plan describes provenance, not an invented visible garment");
+  });
   await ta("VIS-HYBRID-1: authored Draw compiles as a concise description, not a second scene",async()=>{
     const rules=IC.rewriteRules({format:"hybrid",intentMode:true,
       visualPlan:{wear:{worn:[],removed:[],partiallyWorn:[]}}});
@@ -4449,6 +4525,7 @@ async function foundationH() {
         calls++;
         assert.ok(instruction.includes("SCENE:\nОрихимэ Иноуэ приподняла"),instruction.slice(-850));
         assert.ok(instruction.includes("visual translator"));
+        assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"actual ImageService uses structured prompt plan");
         assert.ok(!instruction.includes("camera=owner;"),"camera directive is metadata");
         return "The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
       };
