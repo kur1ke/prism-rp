@@ -99,7 +99,7 @@
     return [
       "VISUAL PROMPT PLAN — order of meaning only; output NO section headings or empty placeholders:",
       "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
-        ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". Keep each person's traits distinct.",
+        ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". No extra or duplicate people; keep each person's traits distinct.",
       "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity.",
       "POSE: preserve the main depicted ACTION first, then source-backed body orientation, head, hands, limbs and weight; omit absent details.",
       "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
