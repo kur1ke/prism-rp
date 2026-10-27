@@ -3362,7 +3362,8 @@ async function foundationH() {
       assert.deepStrictEqual(wear.removed,[]);
       const prism=h.prism.build([]);
       assert.ok(allText(prism.messages).includes("ПОЛНЫЙ перечень надетой сейчас одежды"));
-      assert.ok(allText(prism.messages).includes("никаких других надетых вещей"),allText(prism.messages));
+      assert.ok(allText(prism.messages).includes("других надетых вещей"),allText(prism.messages));
+      assert.ok(allText(prism.messages).includes("может самостоятельно снять, надеть, поправить или заменить вещи"),"outfit cannot become an action lock");
       assert.deepStrictEqual((await h.ctx.DB.get("chats",id)).initialWear,h.ctx.chat().initialWear);
       const again=await h.ctx.svc.state.initializeOutfit(provider,{timeZone:"UTC",timeMode:"live"});
       assert.strictEqual(again.status,"skipped");
@@ -6799,6 +6800,62 @@ async function unifiedTracker() {
       {mode:"rp",role:"assistant",text:"Спустила её",references:[]});
     assert.deepStrictEqual(unresolved.events,[]);
     assert.ok(unresolved.issues.some(x=>x.startsWith("Неоднозначная ссылка:")));
+  });
+  await ta("WEAR-LIVE-1: abbreviated Russian names update current outfit instead of leaving ghost layers", async () => {
+    const T=globalThis.PRP.stateTracker, I=globalThis.PRP.stateInterpreter;
+    const initial={schema:1,kind:"initial-outfit",event:{actor:"char",field:"wear",action:"set",
+      value:["светло-бежевая юбка-плиссе","белая хлопковая блузка","бежевые нейлоновые колготки"],
+      certainty:"reported",evidence:""}};
+    const msg=(id,prev,text,action,value)=>({id,parentId:prev,role:"assistant",swipeIdx:0,
+      swipes:[{text,sceneOps:[],stateCorrections:[],
+        stateEvents:[{actor:"char",field:"wear",action,value,certainty:"reported",evidence:text}]}]});
+    const removal=msg("undress",null,"Я сняла бежевую юбку.","remove",["бежевую юбку"]);
+    const photo=msg("continuation","undress","Теперь на мне белая хлопковая блузка.","add",["белая хлопковая блузка"]);
+    let fold=T.fold({mode:"messenger",initialWear:initial,path:[removal,photo]});
+    assert.deepStrictEqual(fold.actors.char.wearState.worn.map(x=>x.item),
+      ["белая хлопковая блузка","бежевые нейлоновые колготки"],
+      "abbreviated skirt removal must not leave original skirt canonically worn");
+    assert.deepStrictEqual(fold.actors.char.wearState.removed.map(x=>x.item),["светло-бежевая юбка-плиссе"]);
+    assert.strictEqual(fold.actors.char.wearState.removed[0].source.messageId,"undress");
+    assert.deepStrictEqual(fold.diagnostics,[],"valid spoken garment change must replay without a manual correction");
+    const resumed=msg("redress","continuation","Я надела юбку.","add",["юбку"]);
+    fold=T.fold({mode:"messenger",initialWear:initial,path:[removal,photo,resumed]});
+    assert.deepStrictEqual(fold.actors.char.wearState.removed,[],
+      "an explicit new dressing event restores the matching removed garment");
+    assert.deepStrictEqual(fold.actors.char.wearState.worn.map(x=>x.item),
+      ["светло-бежевая юбка-плиссе","белая хлопковая блузка","бежевые нейлоновые колготки"]);
+    assert.equal(fold.actors.char.wearState.worn[0].source.messageId,"redress");
+    assert.equal(T.fold({mode:"messenger",initialWear:initial,path:[removal,photo]}).actors.char.wearState.removed.length,1,
+      "replay is pure and a future turn never alters past outfit");
+    assert.deepStrictEqual(T.fold({mode:"messenger",initialWear:initial,path:[{
+      ...removal,swipeIdx:1,swipes:[removal.swipes[0],{text:"Я оставила юбку на себе.",
+        stateEvents:[],stateCorrections:[],sceneOps:[]}]
+    }]}).actors.char.wearState.removed,[],
+      "sibling swipe does not inherit the original garment removal");
+    const prompt=I.instruction({mode:"messenger",role:"assistant",text:"Я сняла бежевую юбку",
+      references:[{id:"wear:char:0",actor:"char",field:"wear",action:"remove",
+        item:"светло-бежевая юбка-плиссе",source:{kind:"initial-outfit"}}]});
+    assert.ok(prompt.includes("на НАЧАЛО текущей реплики")&&prompt.includes("не вечный запрет"));
+    console.log("PASS: garment lifecycle responds to new evidence without permanent initial-outfit lock");
+  });
+  await ta("WEAR-LIVE-2: never guess a matching garment if multiple names or qualifiers conflict", async () => {
+    const T=globalThis.PRP.stateTracker;
+    const first={id:"start",role:"assistant",swipeIdx:0,swipes:[{text:"На мне красная юбка и синяя юбка.",
+      sceneOps:[],stateEvents:[{actor:"char",field:"wear",action:"set",
+        value:["красная юбка","синяя юбка"],certainty:"reported",
+        evidence:"На мне красная юбка и синяя юбка."}]}]};
+    const second={id:"take",role:"assistant",swipeIdx:0,swipes:[{text:"Я сняла юбку.",
+      sceneOps:[],stateEvents:[{actor:"char",field:"wear",action:"remove",
+        value:["юбку"],certainty:"reported",evidence:"Я сняла юбку."}]}]};
+    const third={id:"wrong",role:"assistant",swipeIdx:0,swipes:[{text:"Я сняла зелёную юбку.",
+      sceneOps:[],stateEvents:[{actor:"char",field:"wear",action:"remove",
+        value:["зелёную юбку"],certainty:"reported",evidence:"Я сняла зелёную юбку."}]}]};
+    for(const path of [[first,second],[first,third]]){
+      const state=T.fold({mode:"messenger",path});
+      assert.deepStrictEqual(state.actors.char.wearState.worn.map(x=>x.item),
+        ["красная юбка","синяя юбка"],"unknown/ambiguous garment cannot remove either original item");
+    }
+    console.log("PASS: garment alias reconciliation fails closed on ambiguity and conflicting color");
   });
   await ta("VIS-REF-2F: observer commits grounded adjustment on selected swipe with source provenance", async () => {
     const h=fbHarness({name:"Орихимэ",description:"Персонаж."});
