@@ -69,7 +69,7 @@
     if (!mirrorPhoto) return false;
     const explicitPair = /\b(?:[2-9]\s*(?:girls?|boys?|people|persons?|women|men)|(?:two|three|several|multiple)\s+(?:girls?|boys?|people|persons?|women|men)|(?:another|second|other)\s+(?:girl|boy|person|woman|man)|(?:with|alongside)\s+(?:a\s+)?(?:friend|partner|companion|boyfriend|girlfriend))\b|(?:дв[аоеу]|тр[иое])\s+(?:девуш(?:ки|ек)|парн(?:я|ей)|человек(?:а)?|люд(?:ей|ьми))|(?:с\s+(?:подругой|другом|девушкой|парнем|партн[её]ром)|вдво[её]м|вместе\s+с\s+подруг)/iu.test(src);
     const scope = actors || {};
-    return !explicitPair && !scope.user && !scope.otherActorPresent &&
+    return !explicitPair && !scope.empty && !scope.user && !scope.otherActorPresent &&
       !/\b(?:[2-9](?:girls?|boys?)|1girl\s*,\s*1boy|1boy\s*,\s*1girl)\b/i.test(src);
   }
 
