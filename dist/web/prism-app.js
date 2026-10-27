@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "2f92cf098acaff611b079f2e2af7ec831a376b4b";
+  window.PRISM_RP_BUILD_SHA = "3b973ed0414ef2808c55d7eafaceebf2a5270444";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6563,7 +6563,7 @@
     if (opts.intentMode && opts.format === "hybrid") {
       const rules = [
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
-        "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
+        "Write one or two short, fluent English visual sentences when sufficient. A third sentence is allowed to preserve source-backed camera, pose, garment and accessory details (100 words and 600 characters at most). Never use tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
         "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name clothing visible in SCENE without omission.",
         planOrder || "Order the concise prompt by source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last. Preserve medium, viewpoint, framing, and all depicted facts regardless of their original order. Never invent absent subjects, hand assignments, or object placement to fill an ordering slot.",
         "Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS. Do not invent body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If the source says only 'lace underwear', do not specify a bra or panties.",
@@ -7072,7 +7072,9 @@
   function validateHybrid(text) {
     const s = String(text || "").trim();
     const words = s.match(/[\p{L}\p{N}]+/gu) || [];
-    if (s.length < 8 || s.length > 600 || words.length > 65 ||
+    // Rich but bounded shot descriptions can legitimately need ~75 words for
+    // pose + clothing + accessories. Keep the hard 600-char cap and block tags.
+    if (s.length < 8 || s.length > 600 || words.length > 100 ||
         /[\u0400-\u052f]/u.test(s) ||
         /(?:<lora:|camera\s*=|\x60\x60\x60)/i.test(s) ||
         /^[\[{]/.test(s) || /^(?:prompt|tags)\s*:/i.test(s) ||
@@ -7106,7 +7108,7 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v18-mirror-framing" : "v14-mirror-framing",
+    const key = [hybrid ? "v19-hybrid-description-bounds" : "v14-mirror-framing",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
@@ -7131,7 +7133,7 @@
       "REMOVED means absent FROM THE BODY, not necessarily absent from the image: an explicitly depicted removed garment held in hands or lying nearby remains a visible off-body object.",
       "Do not add a garment as a visible object unless SCENE explicitly depicts it there. Never translate a completed removal into lifting a shirt.",
       ...(hybrid ? [
-        "For hybrid output, the JSON prompt field must contain only one or two concise English visual sentences (no Danbooru list).",
+        "For hybrid output, the JSON prompt field must contain a compact English visual description (one to three sentences, up to 100 words / 600 characters), never a Danbooru list. Preserve actual pose, clothing and framing details.",
         'Each offBody.tag must be an EXACT comma-separated segment of the English positive, not a new visual item.',
       ] : []),
       ...(o.visualPlan && o.visualPlan.shotAuthored ? [
@@ -10772,10 +10774,16 @@
       }
     }
 
-    async function simpleWithLimit(provider, instruction) {
+    const OBSERVER_DEFAULT_MS = 40000;
+    // Opening-chat outfit discovery keeps its original 20s bound; the
+    // post-reply Observer can have more time without blocking the chat turn.
+    function observerLimit(defaultMs) {
+      return Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || defaultMs));
+    }
+    async function simpleWithLimit(provider, instruction, defaultMs) {
       // Служебный запрос не может бесконечно блокировать обычную переписку.
       // Таймаут не создаёт факты и не применяет запоздалый ответ.
-      const maxMs = Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || 20000));
+      const maxMs = observerLimit(defaultMs || 20000);
       let timer;
       try {
         return await Promise.race([
@@ -10793,7 +10801,7 @@
       if (provider) {
         try {
           const instruction = INT.instruction(options);
-          const raw = await simpleWithLimit(provider, instruction);
+          const raw = await simpleWithLimit(provider, instruction, OBSERVER_DEFAULT_MS);
           result = INT.parse(raw, options);
         } catch (e) {
           result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
@@ -11021,7 +11029,7 @@
     /* Дождаться всех разборов чата (и тех, что добавятся за время ожидания). Ограничено: каждый разбор
        сам ограничен таймаутом наблюдателя; settle добавляет общий предел и сообщает, если он истёк. */
     async function settle(chatId, maxMs) {
-      const limit = Math.max(500, Number(maxMs) || (Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || 20000)) + 5000));
+      const limit = Math.max(500, Number(maxMs) || (observerLimit(OBSERVER_DEFAULT_MS) + 5000));
       const t0 = now();
       let timer;
       const deadline = new Promise((r) => { timer = setTimeout(() => r("timeout"), limit); });
