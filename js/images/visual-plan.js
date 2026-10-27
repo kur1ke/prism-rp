@@ -101,13 +101,14 @@
       "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
         ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". Keep each person's traits distinct.",
       "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity.",
-      "POSE: preserve depicted body orientation, head, hands, limbs and action; omit absent details.",
+      "POSE: preserve the main depicted ACTION first, then source-backed body orientation, head, hands, limbs and weight; omit absent details.",
       "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
       "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
       "LIGHTING: preserve source-backed light and shadows only; invent no lighting setup.",
       "TECHNICAL: backend owns optical settings; do not invent camera lenses, rendering parameters or LoRA.",
       "QUALITY: " + (s.QUALITY.authority === "finalise" ? "added or pinned by finalise; do not duplicate quality tags." : "keep only source quality or the minimal requested default tags; no filler.") + " No unsolicited style or anatomy tags.",
-      "For " + s.TECHNICAL.format + " output, render the SAME evidence as the requested final prose/tags, without this structure."
+      "For " + s.TECHNICAL.format + " output, render the SAME evidence as requested prose/tags, without headings. " +
+        (s.TECHNICAL.format === "tags" ? "Use subject-count tags only for explicitly depicted people; solo only for exactly one person." : "")
     ].join("\n");
   }
   PRP.visualPlan = { create, prompt, promptOrder };
