@@ -901,6 +901,37 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.prompt.split("masterpiece").length - 1, 1);
   assert.strictEqual(f.negative, "lowres, short hair");
 });
+
+t("VIS-MIRROR-1: source mirror photo has exactly one subject and one reflection",()=>{
+  const VP=globalThis.PRP.visualPlan;
+  for(const shot of ["1girl, orihime_inoue, mirror selfie, white t-shirt",
+    "Орихимэ делает селфи перед зеркалом в белой футболке",
+    "Photo of Orihime in the mirror, wearing a white skirt"]) {
+    assert.strictEqual(VP.singleMirror(shot,{owner:true,user:false}),true,shot);
+    const plan=VP.prompt({shot,actors:{owner:true,user:false},format:"hybrid",shotAuthored:true});
+    assert.strictEqual(plan.sections.COMPOSITION.singleMirror,true);
+    assert.ok(VP.promptOrder(plan).includes("ONE subject, not two characters"));
+  }
+  for(const shot of ["2girls, Orihime and a friend, mirror selfie",
+    "Орихимэ делает селфи перед зеркалом с подругой",
+    "a mirror hanging on the wall behind a sofa","1girl, standing by a mirror, portrait"])
+    assert.strictEqual(VP.singleMirror(shot,{owner:true,user:false}),false,shot);
+  assert.strictEqual(VP.singleMirror("mirror selfie",{owner:true,user:true}),false);
+  assert.strictEqual(VP.singleMirror("mirror selfie",{otherActorPresent:true}),false);
+  assert.strictEqual(VP.singleMirror("mirror selfie",{empty:true}),false);
+  const card={name:"Орихимэ",image:{trigger:"orihime_inoue"}};
+  const composed=IC.compose({draw:"1girl, Орихимэ, mirror selfie",card,
+    scene:{chars:{}},persona:{},shotAuthored:true});
+  const f=IC.finalise({composed,compiled:"1girl, mirror selfie, white t-shirt",card,
+    backend:"a1111",settings:{promptMode:"off",negative:"lowres"},mirrorSingle:true});
+  assert.ok(f.prompt.includes("solo")&&f.prompt.includes("single reflection"),f.prompt);
+  assert.ok(f.negative.includes("duplicate person")&&f.negative.includes("extra body"),f.negative);
+  assert.ok(f.negative.includes("lowres"));
+  const together=IC.finalise({composed,compiled:"2girls, mirror selfie, smiling",card,
+    backend:"a1111",settings:{promptMode:"off"},mirrorSingle:false});
+  assert.ok(!together.negative.includes("duplicate person"));
+  assert.ok(!together.prompt.includes("solo"));
+});
 t("VIS-CAMERA-1: natural selfie names the character without camera metadata", () => {
   const card={name:"Лилит (Лили)",image:{trigger:"lilithx",
     look:"base: adult gothic catgirl, long burgundy hair, black cat ears, pale skin",
@@ -4502,6 +4533,50 @@ async function foundationH() {
       }
       assert.ok(!/Начни с pov|pov hands|FIRST-PERSON VIEW/.test(prompt),
         "saved Persona POV cannot create model instructions");
+    }
+  });
+
+  await ta("VIS-MIRROR-2: lone mirror selfie cannot pass a fabricated second subject to backend",async()=>{
+    for(const wrong of [false,true]){
+      const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
+      await h.chat.createChat("messenger","c1");
+      h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+      const msg=h.chat.newMsg("assistant",null,"Вот фотография");
+      const shot="Орихимэ делает селфи перед зеркалом в белой футболке";
+      msg.swipes[0].draws=[{prompt:shot,ratio:"1:1"}];
+      await h.chat.commitMessage(msg,msg.id);
+      h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
+        {enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"hybrid",
+          format:"tags",translate:false,promptMode:"off"});
+      h.S.drawing=new Set();h.S.imgUrls={};
+      h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+      const oldModel=globalThis.PRP.llm.simple,oldBackend=IB.generate;
+      let calls=0,backends=0,body;
+      try{
+        globalThis.PRP.llm.simple=async (_,instruction)=>{
+          calls++;
+          assert.ok(instruction.includes("SINGLE-PERSON MIRROR PHOTO:"),instruction.slice(-850));
+          assert.ok(instruction.includes("SCENE:\n"+shot));
+          return wrong?"Two women stand before a mirror, one taking a selfie.":
+            "One woman takes a mirror selfie wearing a white t-shirt.";
+        };
+        IB.generate=async (_,o)=>{backends++;body=o;return {
+          dataUrl:"data:image/png;base64,AA==",seed:12,info:{width:768,height:768}}};
+        const live=h.S.messages.find(x=>x.id===msg.id);
+        await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
+        const image=live.swipes[0].images[0];
+        assert.strictEqual(calls,1,"no additional translator call");
+        if(wrong){
+          assert.strictEqual(backends,0,"do not send two-person prompt");
+          assert.strictEqual(image.status,"error",JSON.stringify(image));
+          assert.ok(image.error.includes("второго"),image.error);
+        }else{
+          assert.strictEqual(backends,1);
+          assert.ok(body.prompt.includes("single subject reflected in the mirror"),body.prompt);
+          assert.ok(body.negative.includes("duplicate person")&&body.negative.includes("2girls"),body.negative);
+          assert.strictEqual(image.status,"done");
+        }
+      }finally{globalThis.PRP.llm.simple=oldModel;IB.generate=oldBackend;}
     }
   });
   await ta("VIS-HYBRID-6: ImageService sends minimal authored camera sentence with original mode provenance",async()=>{
