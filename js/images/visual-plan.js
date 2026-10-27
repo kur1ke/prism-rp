@@ -87,7 +87,7 @@
         ENVIRONMENT: { authority: "source-shot", messenger: !!o.messenger },
         LIGHTING: { authority: "source-shot" },
         TECHNICAL: { format, authority: "backend" },
-        QUALITY: { authority: "finalise", pinned: !!o.qualityPinned }
+        QUALITY: { authority: format === "hybrid" || o.qualityPinned ? "finalise" : "translator", pinned: !!o.qualityPinned }
       }
     });
   }
@@ -105,7 +105,8 @@
       "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
       "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
       "LIGHTING: preserve source-backed light and shadows only; invent no lighting setup.",
-      "TECHNICAL and QUALITY: reserved for the image backend and finalise; do not invent optics, quality fillers, LoRA or style tags.",
+      "TECHNICAL: backend owns optical settings; do not invent camera lenses, rendering parameters or LoRA.",
+      "QUALITY: " + (s.QUALITY.authority === "finalise" ? "added or pinned by finalise; do not duplicate quality tags." : "keep only source quality or the minimal requested default tags; no filler.") + " No unsolicited style or anatomy tags.",
       "For " + s.TECHNICAL.format + " output, render the SAME evidence as the requested final prose/tags, without this structure."
     ].join("\n");
   }
