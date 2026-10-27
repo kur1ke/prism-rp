@@ -6838,6 +6838,45 @@ async function unifiedTracker() {
     assert.ok(prompt.includes("на НАЧАЛО текущей реплики")&&prompt.includes("не вечный запрет"));
     console.log("PASS: garment lifecycle responds to new evidence without permanent initial-outfit lock");
   });
+  await ta("WEAR-LIVE-3: Observer commits a later outfit transition and next Prism no longer lists the old skirt", async()=>{
+    const h=fbHarness({name:"Орихимэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const initial=h.chat.newMsg("assistant",null,
+      "Я в светло-бежевой юбке-плиссе, белой блузке и бежевых колготках.");
+    initial.swipes[0].stateEvents=[Evt("char","wear","set",
+      ["светло-бежевая юбка-плиссе","белая блузка","бежевые колготки"],
+      "reported",initial.swipes[0].text)];
+    await h.chat.commitMessage(initial,initial.id);
+    const remove=h.chat.newMsg("assistant",initial.id,"Я сняла бежевую юбку.");
+    await h.chat.commitMessage(remove,remove.id);
+    const old=globalThis.PRP.llm;
+    let prompt;
+    try {
+      globalThis.PRP.llm={simple:async (_provider,instruction)=>{
+        prompt=instruction;
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
+          value:["бежевую юбку"],certainty:"reported",evidence:"Я сняла бежевую юбку."}]});
+      }};
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"});
+      assert.equal(result.status,"ok",JSON.stringify(result));
+      assert.ok(prompt.includes("светло-бежевая юбка-плиссе"),"Observer gets active-branch garment reference");
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),
+        ["белая блузка","бежевые колготки"]);
+      const built=h.prism.build(h.chat.path());
+      const combined=allText(built.messages);
+      assert.ok(combined.includes("ПОЛНЫЙ перечень надетой сейчас одежды"));
+      assert.ok(combined.includes("белая блузка")&&combined.includes("бежевые колготки"),combined);
+      assert.ok(!combined.includes("ПОЛНЫЙ перечень надетой сейчас одежды: светло-бежевая юбка"),
+        "new Prism must not reassert the original skirt as worn");
+      assert.ok(combined.includes("сообщённые снятые вещи"),"known garment removal remains evidence");
+      assert.ok(combined.includes("светло-бежевая юбка-плиссе"),"previous named item is preserved in removed bucket");
+      const snapshot=h.ctx.svc.state.snapshot();
+      assert.deepStrictEqual(snapshot.actors.char.wearState.removed.map(x=>x.item),
+        ["светло-бежевая юбка-плиссе"]);
+    } finally {globalThis.PRP.llm=old;}
+    console.log("PASS: Observer and next Prism honor a clothing transition without resetting origin");
+  });
   await ta("WEAR-LIVE-2: never guess a matching garment if multiple names or qualifiers conflict", async () => {
     const T=globalThis.PRP.stateTracker;
     const first={id:"start",role:"assistant",swipeIdx:0,swipes:[{text:"На мне красная юбка и синяя юбка.",
