@@ -4108,8 +4108,8 @@ async function foundationH() {
     const res=await ICP.compile(source,{intentMode:true,format:"hybrid",
       visualPlan:visual,wearState:visual.wear,promptPlan:plan},async instruction=>{
       calls++;
-      assert.strictEqual(instruction.split("SCENE:\\n").length-1,1,"no duplicate source-shot section");
-      assert.ok(instruction.includes("SCENE:\\n"+source));
+      assert.strictEqual(instruction.split("SCENE:\n").length-1,1,"no duplicate source-shot section");
+      assert.ok(instruction.includes("SCENE:\n"+source));
       assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"compiler consumes the intermediate structure");
       assert.ok(!instruction.includes("CANONICAL WEAR FACTS"),"unowned shot has no owner wardrobe facts");
       return "A photograph of an empty kitchen viewed from the side, with a cup on a table.";
