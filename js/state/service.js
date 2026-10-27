@@ -157,10 +157,16 @@
       }
     }
 
-    async function simpleWithLimit(provider, instruction) {
+    const OBSERVER_DEFAULT_MS = 40000;
+    // Opening-chat outfit discovery keeps its original 20s bound; the
+    // post-reply Observer can have more time without blocking the chat turn.
+    function observerLimit(defaultMs) {
+      return Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || defaultMs));
+    }
+    async function simpleWithLimit(provider, instruction, defaultMs) {
       // Служебный запрос не может бесконечно блокировать обычную переписку.
       // Таймаут не создаёт факты и не применяет запоздалый ответ.
-      const maxMs = Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || 20000));
+      const maxMs = observerLimit(defaultMs || 20000);
       let timer;
       try {
         return await Promise.race([
@@ -178,7 +184,7 @@
       if (provider) {
         try {
           const instruction = INT.instruction(options);
-          const raw = await simpleWithLimit(provider, instruction);
+          const raw = await simpleWithLimit(provider, instruction, OBSERVER_DEFAULT_MS);
           result = INT.parse(raw, options);
         } catch (e) {
           result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
@@ -406,7 +412,7 @@
     /* Дождаться всех разборов чата (и тех, что добавятся за время ожидания). Ограничено: каждый разбор
        сам ограничен таймаутом наблюдателя; settle добавляет общий предел и сообщает, если он истёк. */
     async function settle(chatId, maxMs) {
-      const limit = Math.max(500, Number(maxMs) || (Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || 20000)) + 5000));
+      const limit = Math.max(500, Number(maxMs) || (observerLimit(OBSERVER_DEFAULT_MS) + 5000));
       const t0 = now();
       let timer;
       const deadline = new Promise((r) => { timer = setTimeout(() => r("timeout"), limit); });

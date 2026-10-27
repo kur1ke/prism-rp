@@ -134,7 +134,9 @@
   function validateHybrid(text) {
     const s = String(text || "").trim();
     const words = s.match(/[\p{L}\p{N}]+/gu) || [];
-    if (s.length < 8 || s.length > 600 || words.length > 65 ||
+    // Rich but bounded shot descriptions can legitimately need ~75 words for
+    // pose + clothing + accessories. Keep the hard 600-char cap and block tags.
+    if (s.length < 8 || s.length > 600 || words.length > 100 ||
         /[\u0400-\u052f]/u.test(s) ||
         /(?:<lora:|camera\s*=|\x60\x60\x60)/i.test(s) ||
         /^[\[{]/.test(s) || /^(?:prompt|tags)\s*:/i.test(s) ||
@@ -168,7 +170,7 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v18-mirror-framing" : "v14-mirror-framing",
+    const key = [hybrid ? "v19-hybrid-description-bounds" : "v14-mirror-framing",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
@@ -193,7 +195,7 @@
       "REMOVED means absent FROM THE BODY, not necessarily absent from the image: an explicitly depicted removed garment held in hands or lying nearby remains a visible off-body object.",
       "Do not add a garment as a visible object unless SCENE explicitly depicts it there. Never translate a completed removal into lifting a shirt.",
       ...(hybrid ? [
-        "For hybrid output, the JSON prompt field must contain only one or two concise English visual sentences (no Danbooru list).",
+        "For hybrid output, the JSON prompt field must contain a compact English visual description (one to three sentences, up to 100 words / 600 characters), never a Danbooru list. Preserve actual pose, clothing and framing details.",
         'Each offBody.tag must be an EXACT comma-separated segment of the English positive, not a new visual item.',
       ] : []),
       ...(o.visualPlan && o.visualPlan.shotAuthored ? [
