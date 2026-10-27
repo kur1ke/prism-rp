@@ -116,7 +116,7 @@
       "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
         ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". No extra or duplicate people; keep each person's traits distinct.",
       "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity." +
-        (s.COMPOSITION.singleMirror ? " SINGLE-PERSON MIRROR SELFIE: treat mirror selfie as a photographic framing cue only. Depict exactly ONE person in the image. Do NOT construct a separate mirror reflection, mirror surface or second body to explain the camera setup. Preserve source-described objects; do not add another subject." : ""),
+        (s.COMPOSITION.singleMirror ? " SINGLE-PERSON MIRROR SELFIE: treat mirror selfie as a photographic framing cue, not physical optics. OUTPUT ONE NORMAL SELFIE/PORTRAIT with the person ONCE. Never mention mirror, reflection, reflected, mirrored glass or mirror-frame objects in output. When the source says the person looks into the mirror, express that gaze as looking toward the camera. Preserve body orientation, gestures, expression, clothing, revealed garments, room and visible non-mirror objects. Do not add or duplicate people." : ""),
       "POSE: preserve the main depicted ACTION first, then source-backed body orientation, head, hands, limbs and weight; omit absent details.",
       "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
       "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
