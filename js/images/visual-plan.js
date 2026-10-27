@@ -68,8 +68,9 @@
     const mirrorPhoto = /\b(?:mirror[\s_-]*(?:selfie|portrait|photo)|(?:selfie|portrait|photo(?:graph)?)[^.!?]{0,65}\b(?:in|at|before|by)\s+(?:(?:the|a)\s+)?mirror|(?:mirror|reflection)[^.!?]{0,65}\bselfie)\b|(?:селфи|фото|снимок|портрет)[^.!?]{0,65}(?:в|перед|у)\s+зеркал|(?:зеркальн(?:ое|ый|ая)\s+(?:селфи|фото|снимок))/iu.test(src);
     if (!mirrorPhoto) return false;
     const explicitPair = /\b(?:[2-9]\s*(?:girls?|boys?|people|persons?|women|men)|(?:two|three|several|multiple)\s+(?:girls?|boys?|people|persons?|women|men)|(?:another|second|other)\s+(?:girl|boy|person|woman|man)|(?:with|alongside)\s+(?:a\s+)?(?:friend|partner|companion|boyfriend|girlfriend))\b|(?:дв[аоеу]|тр[иое])\s+(?:девуш(?:ки|ек)|парн(?:я|ей)|человек(?:а)?|люд(?:ей|ьми))|(?:с\s+(?:подругой|другом|девушкой|парнем|партн[её]ром)|вдво[её]м|вместе\s+с\s+подруг)/iu.test(src);
+    const namedCompanion = /\b(?:with|alongside|and)\s+(?:[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?|[a-z]{2,}_[a-z]{2,})\b|(?:^|[\s,])(?:с|и)\s+\p{Lu}\p{L}{2,}/u.test(src);
     const scope = actors || {};
-    return !explicitPair && !scope.empty && !scope.user && !scope.otherActorPresent &&
+    return !explicitPair && !namedCompanion && !scope.empty && !scope.user && !scope.otherActorPresent &&
       !/\b(?:[2-9](?:girls?|boys?)|1girl\s*,\s*1boy|1boy\s*,\s*1girl)\b/i.test(src);
   }
 
