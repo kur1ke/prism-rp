@@ -458,6 +458,31 @@
 
   /* o: { compiled, composed, card, settings (images), persona, backend }
      backend: "a1111" — LoRA-токены в промпт; иначе LoRA не поддерживаются. */
+  // Executable mirror-shot prompt guard. Translator instructions alone cannot
+  // stop diffusion models from drawing both the person and a mirror copy.
+  // Translate the *optical staging* into a conventional one-person portrait;
+  // keep the person's action, orientation, expression, outfit and background.
+  // Only called for original source shots verified as SINGLE-person mirror photos.
+  function flattenMirrorShot(text) {
+    return String(text || "")
+      .replace(/\b(?:looking|gazing|staring|glancing)[_-](?:at|into|toward)[_-](?:a[_-]|the[_-])?(?:mirror|reflection)\b/gi,
+        "looking_at_viewer")
+      // A gaze towards a reflection is a gaze direction, not a second body.
+      .replace(/\b(looking|look(?:s)?|glancing|glance(?:s)?|gazing|gaze(?:s)?|staring|stare(?:s)?)\s+(?:in|into|at|towards?|upon)\s+(?:(?:her|his|their|own|a|the)\s+)?(?:own\s+)?(?:mirror|reflection)\b/gi,
+        (_, gaze) => gaze + " toward the camera")
+      .replace(/\b(?:mirror[\s_-]*(?:selfie|portrait|photo(?:graph)?)|(?:reflected|reflection)[\s_-]*(?:selfie|portrait|photo))\b/gi, "selfie")
+      .replace(/\b(?:taking|shooting)\s+(?:a\s+)?selfie\s+(?:in|before|at)\s+(?:a|the)?\s*mirror\b/gi, "taking a selfie")
+      .replace(/\b(?:in front of|before|facing|next to|beside|by|at|into|in|inside|towards?|looking at)\s+(?:(?:an?|the|her|his|their)\s+)?(?:full[- ]length\s+|large\s+|wall\s+)?mirror\b/gi, "")
+      .replace(/\b(?:as seen|shown|visible|pictured|appearing)\s+(?:in|on)\s+(?:(?:a|the)\s+)?(?:mirror|reflection)\b/gi, "")
+      .replace(/\breflected\s+(?:in|on|by)\s+(?:a|the)?\s*mirror\b/gi, "")
+      .replace(/\b(?:a|the)\s+reflection\s+of\b/gi, "portrait of")
+      // Never send an unrecognized physical reflection trigger to diffusion.
+      // This is a last-resort lexical cleanup, not an invitation to add facts.
+      .replace(/\b(?:mirrors?|reflections?|reflected)\b/gi, "")
+      .replace(/\s+,/g, ",").replace(/,\s*,+/g, ", ")
+      .replace(/\s{2,}/g, " ").replace(/\s+([.!?])/g, "$1").trim();
+  }
+
   function finalise(o) {
     const s = o.settings || {}, im = (o.card && o.card.image) || {}, c = o.composed || {};
     const pinned = s.promptMode !== "off" && String(s.fixedPrompt || "").trim();
@@ -496,6 +521,7 @@
     const hybridQuality = o.hybrid && !pinned ? "masterpiece, best quality" : "";
     const body = [trigger, keep, advanced, scene, hybridQuality, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
+    if (o.mirrorSingle) p = flattenMirrorShot(p);
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     // Mirror-selfie composition shows one person; do not request an optical reflection.
     // These tags are only shot-local, never a permanent Card/Scene instruction.
@@ -674,7 +700,7 @@
   PRP.imgCompose = {
     words, wordFormMatch, mentions, parseMap, resolveWardrobe, resolveAppearance,
     splitTags, bareTag, normalizeTags, stripQuality, subjectCount, dropContradictorySolo, dedupe,
-    wardrobeConflicts, ownerPresent, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, loraTokens, sizeFor, perchanceResolution, openaiSize,
+    wardrobeConflicts, ownerPresent, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, flattenMirrorShot, loraTokens, sizeFor, perchanceResolution, openaiSize,
     parseDraws, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompose;

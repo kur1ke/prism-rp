@@ -902,6 +902,37 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.negative, "lowres, short hair");
 });
 
+t("VIS-MIRROR-3: actual user photo becomes one portrait without optical mirror geometry",()=>{
+  const translated="Orihime Inoue stands in a three-quarter view, glancing into a mirror with a bashful, playful expression while lightly biting her lip. Wearing a short-sleeved white cotton blouse and a flower hair clip, she lifts the edge of her beige pleated skirt to reveal white lace underwear and beige nylon tights.";
+  const out=IC.flattenMirrorShot(translated);
+  assert.ok(out.includes("stands in a three-quarter view"),out);
+  assert.ok(out.includes("glancing toward the camera with a bashful, playful expression"),out);
+  for(const detail of ["biting her lip","white cotton blouse","flower hair clip",
+    "beige pleated skirt","white lace underwear","beige nylon tights"])
+    assert.ok(out.includes(detail),"source detail lost: "+detail+"\n"+out);
+  assert.ok(!/\b(?:mirrors?|reflections?|reflected)\b/i.test(out),out);
+  assert.equal(IC.flattenMirrorShot(out),out,"normalization should be idempotent");
+  const card={name:"Орихимэ",image:{trigger:"orihime_inoue",loras:[{name:"ori",weight:0.8}]}};
+  const composed=IC.compose({draw:"Фотография в зеркало. Орихимэ в белой блузке, поднимает юбку",
+    card,scene:{chars:{}},persona:{},shotAuthored:true});
+  const settings={promptMode:"append",fixedPrompt:"masterpiece, best quality",negative:"lowres"};
+  const f=IC.finalise({composed,compiled:translated,card,settings,backend:"a1111",
+    hybrid:true,mirrorSingle:true});
+  assert.ok(f.prompt.includes("glancing toward the camera"),f.prompt);
+  assert.ok(!/\b(?:mirrors?|reflections?|reflected)\b/i.test(f.prompt),f.prompt);
+  assert.ok(f.prompt.includes("one person only"),f.prompt);
+  assert.ok(f.prompt.includes("ori"),"Card identity is still present");
+  assert.ok(f.prompt.includes("<lora:ori:0.8>"),f.prompt);
+  assert.ok(f.negative.includes("duplicate person")&&f.negative.includes("lowres"),f.negative);
+  const scenePair="Orihime and a friend stand in front of a mirror, both smiling.";
+  const paired=IC.finalise({composed,compiled:scenePair,card,settings,backend:"a1111",
+    hybrid:true,mirrorSingle:false});
+  assert.ok(paired.prompt.includes("in front of a mirror"),"explicit multi-person shot must not be flattened");
+  assert.ok(!paired.negative.includes("duplicate person"),"no solo constraint for a pair");
+  assert.equal(IC.flattenMirrorShot("1girl, mirror selfie, looking_at_mirror"),
+    "1girl, selfie, looking_at_viewer", "underscore mirror gaze must become camera gaze");
+  console.log("PASS: real mirror prompt preserves gaze, clothes, Card and single-person composition");
+});
 t("VIS-MIRROR-1: mirror selfie uses one subject without requiring a literal reflection",()=>{
   const VP=globalThis.PRP.visualPlan;
   for(const shot of ["1girl, orihime_inoue, mirror selfie, white t-shirt",
@@ -910,8 +941,9 @@ t("VIS-MIRROR-1: mirror selfie uses one subject without requiring a literal refl
     assert.strictEqual(VP.singleMirror(shot,{owner:true,user:false}),true,shot);
     const plan=VP.prompt({shot,actors:{owner:true,user:false},format:"hybrid",shotAuthored:true});
     assert.strictEqual(plan.sections.COMPOSITION.singleMirror,true);
-    assert.ok(VP.promptOrder(plan).includes("photographic framing cue only"));
-    assert.ok(VP.promptOrder(plan).includes("Do NOT construct a separate mirror reflection"));
+    assert.ok(VP.promptOrder(plan).includes("photographic framing cue"));
+    assert.ok(VP.promptOrder(plan).includes("Never mention mirror, reflection"));
+    assert.ok(VP.promptOrder(plan).includes("looking toward the camera"));
   }
   for(const shot of ["2girls, Orihime and a friend, mirror selfie",
     "Орихимэ делает селфи перед зеркалом с подругой",
@@ -4562,7 +4594,7 @@ async function foundationH() {
           assert.ok(instruction.includes("SINGLE-PERSON MIRROR SELFIE:"),instruction.slice(-850));
           assert.ok(instruction.includes("SCENE:\n"+shot));
           return wrong?"Two women stand before a mirror, one taking a selfie.":
-            "One woman takes a mirror selfie wearing a white t-shirt.";
+            "One woman stands in three-quarter view, glancing into a mirror with a playful expression, wearing a white t-shirt.";
         };
         IB.generate=async (_,o)=>{backends++;body=o;return {
           dataUrl:"data:image/png;base64,AA==",seed:12,info:{width:768,height:768}}};
@@ -4578,6 +4610,8 @@ async function foundationH() {
           assert.strictEqual(image.status,"done",JSON.stringify(image));
           assert.strictEqual(backends,1,"a valid lone mirror shot must reach backend: "+JSON.stringify(image));
           assert.ok(body.prompt.includes("one person only"),body.prompt);
+          assert.ok(!/\b(?:mirror|reflection|reflected)\b/i.test(body.prompt),body.prompt);
+          assert.ok(body.prompt.includes("glancing toward the camera"),body.prompt);
           assert.ok(!body.prompt.includes("single reflection")&&!body.prompt.includes("subject reflected"),
             "image backend must not receive physical-reflection instructions");
           assert.ok(body.negative.includes("duplicate person")&&body.negative.includes("2girls"),body.negative);
