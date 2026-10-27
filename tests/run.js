@@ -930,7 +930,7 @@ t("VIS-MIRROR-3: actual user photo becomes one portrait without optical mirror g
   assert.ok(paired.prompt.includes("in front of a mirror"),"explicit multi-person shot must not be flattened");
   assert.ok(!paired.negative.includes("duplicate person"),"no solo constraint for a pair");
   assert.equal(IC.flattenMirrorShot("1girl, mirror selfie, looking_at_mirror"),
-    "1girl, selfie, looking_at_mirror", "underscore tags need a dedicated safe mapping");
+    "1girl, selfie, looking_at_viewer", "underscore mirror gaze must become camera gaze");
   console.log("PASS: real mirror prompt preserves gaze, clothes, Card and single-person composition");
 });
 t("VIS-MIRROR-1: mirror selfie uses one subject without requiring a literal reflection",()=>{
