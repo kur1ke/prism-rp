@@ -497,6 +497,10 @@
     const body = [trigger, keep, advanced, scene, hybridQuality, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
+    // Mirror-selfie composition shows one person; do not request an optical reflection.
+    // These tags are only shot-local, never a permanent Card/Scene instruction.
+    if (o.mirrorSingle) p += o.hybrid || s.format === "description"
+      ? ", one person only" : ", solo";
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
 
     // A backend negative is global to every depicted person. For a multi-
@@ -504,7 +508,10 @@
     // the positive scene compiler, not globally forbid the other person's outfit.
     const scopedNegative = present && !c.userPresent && subjectCount(prompt) <= 1
       ? o.wearNegative : "";
-    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative);
+    const mirrorNegative = o.mirrorSingle
+      ? "duplicate person, extra person, second person, twins, multiple people, duplicate body, extra body, 2girls, 2boys"
+      : "";
+    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative, mirrorNegative);
     return { prompt, negative };
   }
 
