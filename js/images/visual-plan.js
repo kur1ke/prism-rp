@@ -60,6 +60,55 @@
     return freeze(result);
   }
 
-  PRP.visualPlan = { create };
+  // Visual Prompt Plan: an in-memory, source-scoped compilation contract.
+  // Sections describe WHAT can contribute, not invented missing image details.
+  // The authored shot itself stays in SCENE exactly once (ImageCompile).
+  const ORDER = Object.freeze(["SUBJECT", "COMPOSITION", "POSE", "CLOTHING",
+    "ENVIRONMENT", "LIGHTING", "TECHNICAL", "QUALITY"]);
+  function prompt(input) {
+    const o = input || {}, actors = o.actors || {};
+    const plan = o.visualPlan || null;
+    const owner = !!actors.owner, user = !!actors.user;
+    const wear = owner && plan && plan.actor === "char" ? plan.wear : null;
+    const format = ["tags", "hybrid", "description"].includes(o.format) ? o.format : "tags";
+    return freeze({
+      version: 1,
+      source: plan && plan.source ? clone(plan.source) : null,
+      order: ORDER.slice(),
+      sections: {
+        SUBJECT: { owner, user, otherActor: !!o.otherActorPresent, authority: "source-frame" },
+        COMPOSITION: { authority: "source-shot", shotAuthored: !!o.shotAuthored },
+        POSE: { authority: "source-shot", fallback: !o.shotAuthored && !o.messenger ? "rp-scene" : null },
+        CLOTHING: { authority: wear ? "canonical-wear" : "source-shot",
+          known: !!(wear && wear.known), complete: !!(wear && wear.complete),
+          removed: wear ? wear.removed.length : 0,
+          partial: wear ? wear.partiallyWorn.length : 0,
+          offBody: plan ? plan.offBodyVisible.length : 0 },
+        ENVIRONMENT: { authority: "source-shot", messenger: !!o.messenger },
+        LIGHTING: { authority: "source-shot" },
+        TECHNICAL: { format, authority: "backend" },
+        QUALITY: { authority: "finalise", pinned: !!o.qualityPinned }
+      }
+    });
+  }
+  // A compact field order replaces (rather than repeats) the legacy generic
+  // ORDER line in the translator instructions. No image source text is copied.
+  function promptOrder(plan) {
+    if (!plan || plan.version !== 1 || !plan.sections) return "";
+    const s = plan.sections;
+    return [
+      "VISUAL PROMPT PLAN — order of meaning only; output NO section headings or empty placeholders:",
+      "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
+        ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". Keep each person's traits distinct.",
+      "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity.",
+      "POSE: preserve depicted body orientation, head, hands, limbs and action; omit absent details.",
+      "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
+      "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
+      "LIGHTING: preserve source-backed light and shadows only; invent no lighting setup.",
+      "TECHNICAL and QUALITY: reserved for the image backend and finalise; do not invent optics, quality fillers, LoRA or style tags.",
+      "For " + s.TECHNICAL.format + " output, render the SAME evidence as the requested final prose/tags, without this structure."
+    ].join("\n");
+  }
+  PRP.visualPlan = { create, prompt, promptOrder };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.visualPlan;
 })(typeof window !== "undefined" ? window : globalThis);
