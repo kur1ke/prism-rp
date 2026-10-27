@@ -244,7 +244,10 @@
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
-        const promptPlan = VP.prompt({ visualPlan, actors: resolvedActors,
+        // The original shot, not a translation, decides whether the mirror
+        // contains a single subject. One reflection never creates a second actor.
+        const mirrorSingle = VP.singleMirror(shot, resolvedActors);
+        const promptPlan = VP.prompt({ visualPlan, actors: resolvedActors, shot,
           otherActorPresent: shotScope.otherActorPresent, wearState: visualPlan.wear,
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: hybrid ? "hybrid" : cfg.format,
@@ -294,7 +297,7 @@
         });
         const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
-        const finalPromptPlan = VP.prompt({ visualPlan, actors: composed.subjects,
+        const finalPromptPlan = VP.prompt({ visualPlan, actors: composed.subjects, shot,
           otherActorPresent: subjectScope.otherActorPresent, wearState: canonicalWear,
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: cfg.format, qualityPinned: ST.qualityPinned(S.settings) });
@@ -319,10 +322,17 @@
             ((!visualPlan.shotAuthored && !comp.negative) || !Array.isArray(comp.wearItems)))
           throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
-          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative, hybrid });
+          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative, hybrid,
+          mirrorSingle });
         // The compiler is not the last positive-tag source: Card, LoRA
         // rules and fixedPrompt can reintroduce a removed garment. Audit the
         // actual executable strings immediately before the backend.
+        // A translator or manually pinned prompt can still introduce "2girls"
+        // after the source decided on one mirror subject. Fail before backend
+        // rather than submitting mutually contradictory positive/negative.
+        if (mirrorSingle && (IC.subjectCount(fin.prompt) > 1 ||
+            /\b(?:another|second)\s+(?:person|girl|boy|woman|man)\b|\b(?:two|three)\s+(?:women|men|people|persons)\b/i.test(fin.prompt)))
+          throw new Error("Зеркальное фото описывает одного человека, но итоговый prompt добавил второго.");
         const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
         if (finalAudit.issues.length)
           throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
