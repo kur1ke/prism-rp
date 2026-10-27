@@ -941,8 +941,9 @@ t("VIS-MIRROR-1: mirror selfie uses one subject without requiring a literal refl
     assert.strictEqual(VP.singleMirror(shot,{owner:true,user:false}),true,shot);
     const plan=VP.prompt({shot,actors:{owner:true,user:false},format:"hybrid",shotAuthored:true});
     assert.strictEqual(plan.sections.COMPOSITION.singleMirror,true);
-    assert.ok(VP.promptOrder(plan).includes("photographic framing cue only"));
-    assert.ok(VP.promptOrder(plan).includes("Do NOT construct a separate mirror reflection"));
+    assert.ok(VP.promptOrder(plan).includes("photographic framing cue"));
+    assert.ok(VP.promptOrder(plan).includes("Never mention mirror, reflection"));
+    assert.ok(VP.promptOrder(plan).includes("looking toward the camera"));
   }
   for(const shot of ["2girls, Orihime and a friend, mirror selfie",
     "Орихимэ делает селфи перед зеркалом с подругой",
