@@ -168,7 +168,7 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v17-visual-prompt-plan" : "v13-visual-prompt-plan",
+    const key = [hybrid ? "v18-mirror-framing" : "v14-mirror-framing",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
@@ -176,7 +176,9 @@
       hybrid ? (establishedLayers ? "known-owner-layers" : "no-known-owner-layers") : "",
       o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
       o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only",
-      o.promptPlan ? "visual-plan-v" + o.promptPlan.version : "legacy", s].join("\u0001");
+      o.promptPlan ? "visual-plan-v" + o.promptPlan.version : "legacy",
+      o.promptPlan && o.promptPlan.sections && o.promptPlan.sections.COMPOSITION &&
+        o.promptPlan.sections.COMPOSITION.singleMirror ? "single-mirror-flatten" : "other-photo", s].join("\u0001");
     if (mem.has(key)) {
       const cached = mem.get(key);
       return typeof cached === "string" ? { text: cached, compiled: true, cached: true } : { ...cached, cached: true };
