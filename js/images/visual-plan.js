@@ -61,7 +61,7 @@
   }
 
 
-  // A mirror selfie is one human subject reflected once, not two humans.
+  // 'Mirror selfie' is a composition cue, NOT a request to render a physical reflection.
   // This is source-shot metadata; a translator cannot create this mode.
   function singleMirror(shot, actors) {
     const src = String(shot || "");
@@ -116,7 +116,7 @@
       "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
         ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". No extra or duplicate people; keep each person's traits distinct.",
       "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity." +
-        (s.COMPOSITION.singleMirror ? " SINGLE-PERSON MIRROR PHOTO: the photographed person and their reflection are ONE subject, not two characters. Depict one person in the mirror, with no outside duplicate or second person beside the mirror." : ""),
+        (s.COMPOSITION.singleMirror ? " SINGLE-PERSON MIRROR SELFIE: treat mirror selfie as a photographic framing cue only. Depict exactly ONE person in the image. Do NOT construct a separate mirror reflection, mirror surface or second body to explain the camera setup. Preserve source-described objects; do not add another subject." : ""),
       "POSE: preserve the main depicted ACTION first, then source-backed body orientation, head, hands, limbs and weight; omit absent details.",
       "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
       "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
