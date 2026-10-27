@@ -244,11 +244,16 @@
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
+        const promptPlan = VP.prompt({ visualPlan, actors: resolvedActors,
+          otherActorPresent: shotScope.otherActorPresent, wearState: visualPlan.wear,
+          shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
+          format: hybrid ? "hybrid" : cfg.format,
+          qualityPinned: ST.qualityPinned(S.settings) });
         const firstPass = intent ? await ICP.compile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
             qualityPinned: ST.qualityPinned(S.settings),
             wearState: visualPlan.wear, visualPlan, subjectScope: shotScope,
-            debug: !!S.settings.developerMode }, generateText) : null;
+            promptPlan, debug: !!S.settings.developerMode }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled)) {
           // Surface the compiler's actual failure; the previous generic text
           // hid whether the model timed out, returned tags, JSON or bad wear.
@@ -289,12 +294,16 @@
         });
         const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
+        const finalPromptPlan = VP.prompt({ visualPlan, actors: composed.subjects,
+          otherActorPresent: subjectScope.otherActorPresent, wearState: canonicalWear,
+          shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
+          format: cfg.format, qualityPinned: ST.qualityPinned(S.settings) });
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate,
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             frame: composed.subjects, stateContext,
             wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
-            subjectScope }, generateText);
+            promptPlan: finalPromptPlan, subjectScope }, generateText);
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.

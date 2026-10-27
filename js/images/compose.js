@@ -603,6 +603,7 @@
   /* Правила перевода сцены в промпт (для compile.js). */
   function rewriteRules(o) {
     const opts = o || {};
+    const planOrder = opts.promptPlan && PRP.visualPlan && PRP.visualPlan.promptOrder(opts.promptPlan);
     // VIS-HYBRID: translate the authored camera composition, not the entire
     // wardrobe history. The application separately injects identity/LoRA and
     // audits source-bound physical garment facts after final assembly.
@@ -611,7 +612,7 @@
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
         "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name clothing visible in SCENE without omission.",
-        "Order the concise prompt by source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last. Preserve medium, viewpoint, framing, and all depicted facts regardless of their original order. Never invent absent subjects, hand assignments, or object placement to fill an ordering slot.",
+        planOrder || "Order the concise prompt by source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last. Preserve medium, viewpoint, framing, and all depicted facts regardless of their original order. Never invent absent subjects, hand assignments, or object placement to fill an ordering slot.",
         "Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS. Do not invent body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If the source says only 'lace underwear', do not specify a bra or panties.",
         "Unknown visibility does not mean a garment is absent. Preserve established clothing layers and degree of dress until source-backed events change them. When needed for clothing consistency, name a known hidden layer as worn underneath, never as exposed or visibly displayed. Do not list the entire outfit.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
@@ -632,10 +633,10 @@
     const base = opts.format === "description"
       ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). " +
         (structured ? "Write one to three English sentences in the prompt field of the required JSON output." : "Output ONLY one to three English sentences, no lists, no quotes, no markdown.") +
-        "\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
+        (planOrder ? "\n" + planOrder : "\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera.")
       : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). " +
         (structured ? "Write one line of English comma-separated danbooru tags in the prompt field of the required JSON output." : "Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.") +
-        "\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
+        (planOrder ? "\n" + planOrder : "\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.");
     const rules = [
       ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
       ...(opts.visualPlan && opts.visualPlan.wear ? ["CANONICAL WEAR FACTS are the validated END-OF-TURN state for THIS source message, not the previous outfit. Do not re-infer clothing transitions from translation; translate only the visible RESULT of the authored shot.", "Clothing named because it was REMOVED is not a positive on-body garment tag. An explicitly shown removed object may appear off-body; omission alone never invents a visible object. Other worn garments need not be visible in a crop."] : []),
@@ -649,7 +650,9 @@
       opts.format === "description" ? "60 words or fewer." : "50 tags or fewer.",
     ];
     let txt = base + "\nRULES:\n" + rules.map((r, i) => `${i + 1}. ${r}`).join("\n");
-    if (opts.frame) {
+    // The typed SUBJECT plan already carries this actor scope; never duplicate
+    // the same owner/user frame contract in the translation request.
+    if (opts.frame && !planOrder) {
       const f = opts.frame;
       txt += "\nFRAME IDENTITY (do not invent extra copies or people):\n" +
         "Card owner is " + (f.owner ? "visible" : "NOT visible") + "; user is " + (f.user ? "visible" : "NOT visible") +
