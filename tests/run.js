@@ -902,7 +902,7 @@ t("finalise: LoRA и триггер персонажа, закреплённый
   assert.strictEqual(f.negative, "lowres, short hair");
 });
 
-t("VIS-MIRROR-1: source mirror photo has exactly one subject and one reflection",()=>{
+t("VIS-MIRROR-1: mirror selfie uses one subject without requiring a literal reflection",()=>{
   const VP=globalThis.PRP.visualPlan;
   for(const shot of ["1girl, orihime_inoue, mirror selfie, white t-shirt",
     "Орихимэ делает селфи перед зеркалом в белой футболке",
