@@ -4575,7 +4575,8 @@ async function foundationH() {
           assert.strictEqual(image.status,"error",JSON.stringify(image));
           assert.ok(image.error.includes("второго"),image.error);
         }else{
-          assert.strictEqual(backends,1);
+          assert.strictEqual(image.status,"done",JSON.stringify(image));
+          assert.strictEqual(backends,1,"a valid lone mirror shot must reach backend: "+JSON.stringify(image));
           assert.ok(body.prompt.includes("one person only"),body.prompt);
           assert.ok(!body.prompt.includes("single reflection")&&!body.prompt.includes("subject reflected"),
             "image backend must not receive physical-reflection instructions");
