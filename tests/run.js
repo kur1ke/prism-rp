@@ -6825,7 +6825,8 @@ async function unifiedTracker() {
     assert.deepStrictEqual(fold.actors.char.wearState.worn.map(x=>x.item).sort(),
       ["светло-бежевая юбка-плиссе","белая хлопковая блузка","бежевые нейлоновые колготки"].sort(),
       "the re-worn skirt is the same original item, not a duplicate; insertion order is not garment identity");
-    assert.equal(fold.actors.char.wearState.worn[0].source.messageId,"redress");
+    assert.equal(fold.actors.char.wearState.worn.find(x=>x.item==="светло-бежевая юбка-плиссе").source.messageId,
+      "redress","the re-worn garment has current-turn provenance");
     assert.equal(T.fold({mode:"messenger",initialWear:initial,path:[removal,photo]}).actors.char.wearState.removed.length,1,
       "replay is pure and a future turn never alters past outfit");
     assert.deepStrictEqual(T.fold({mode:"messenger",initialWear:initial,path:[{
