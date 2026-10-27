@@ -910,7 +910,8 @@ t("VIS-MIRROR-1: source mirror photo has exactly one subject and one reflection"
     assert.strictEqual(VP.singleMirror(shot,{owner:true,user:false}),true,shot);
     const plan=VP.prompt({shot,actors:{owner:true,user:false},format:"hybrid",shotAuthored:true});
     assert.strictEqual(plan.sections.COMPOSITION.singleMirror,true);
-    assert.ok(VP.promptOrder(plan).includes("ONE subject, not two characters"));
+    assert.ok(VP.promptOrder(plan).includes("photographic framing cue only"));
+    assert.ok(VP.promptOrder(plan).includes("Do NOT construct a separate mirror reflection"));
   }
   for(const shot of ["2girls, Orihime and a friend, mirror selfie",
     "Орихимэ делает селфи перед зеркалом с подругой",
@@ -924,7 +925,9 @@ t("VIS-MIRROR-1: source mirror photo has exactly one subject and one reflection"
     scene:{chars:{}},persona:{},shotAuthored:true});
   const f=IC.finalise({composed,compiled:"1girl, mirror selfie, white t-shirt",card,
     backend:"a1111",settings:{promptMode:"off",negative:"lowres"},mirrorSingle:true});
-  assert.ok(f.prompt.includes("solo")&&f.prompt.includes("single reflection"),f.prompt);
+  assert.ok(f.prompt.includes("solo"),f.prompt);
+  assert.ok(!f.prompt.includes("single reflection")&&!f.prompt.includes("reflected"),
+    "mirror selfie must not request a physical reflected subject");
   assert.ok(f.negative.includes("duplicate person")&&f.negative.includes("extra body"),f.negative);
   assert.ok(f.negative.includes("lowres"));
   const together=IC.finalise({composed,compiled:"2girls, mirror selfie, smiling",card,
@@ -4573,7 +4576,9 @@ async function foundationH() {
           assert.ok(image.error.includes("второго"),image.error);
         }else{
           assert.strictEqual(backends,1);
-          assert.ok(body.prompt.includes("single subject reflected in the mirror"),body.prompt);
+          assert.ok(body.prompt.includes("one person only"),body.prompt);
+          assert.ok(!body.prompt.includes("single reflection")&&!body.prompt.includes("subject reflected"),
+            "image backend must not receive physical-reflection instructions");
           assert.ok(body.negative.includes("duplicate person")&&body.negative.includes("2girls"),body.negative);
           assert.strictEqual(image.status,"done");
         }
