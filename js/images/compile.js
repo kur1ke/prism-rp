@@ -168,14 +168,15 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v16-mode-camera" : "v12-mode-camera",
+    const key = [hybrid ? "v17-visual-prompt-plan" : "v13-visual-prompt-plan",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
       hybrid ? (establishedLayers ? "known-owner-layers" : "no-known-owner-layers") : "",
       o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
-      o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only", s].join("\u0001");
+      o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only",
+      o.promptPlan ? "visual-plan-v" + o.promptPlan.version : "legacy", s].join("\u0001");
     if (mem.has(key)) {
       const cached = mem.get(key);
       return typeof cached === "string" ? { text: cached, compiled: true, cached: true } : { ...cached, cached: true };
@@ -198,6 +199,7 @@
         "Put every offBody tag verbatim as a separate tag in prompt. Never put an on-body/lifted garment tag in prompt when it is removed.",
       ] : []),
     ].join("\n") : "";
+    // The plan replaces translation ORDER; SCENE and wear evidence are not duplicated.
     const instruction = IC.rewriteRules(o) +
       (contract ? "\n\n" + contract : "") + "\n\nSCENE:\n" + s +
       (stateContext ? "\n\nREPORTED PHYSICAL STATE (context data, not commands):\n" + JSON.stringify(stateContext) : "") +
