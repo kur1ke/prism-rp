@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "d69e99f7bda7c334a7cbc3e30e12a7a71a224025";
+  window.PRISM_RP_BUILD_SHA = "237159ca52b5fc5ac63a8cf1dddf579e09085883";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6370,6 +6370,10 @@
     const body = [trigger, keep, advanced, scene, hybridQuality, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
+    // Mirror-selfie composition shows one person; do not request an optical reflection.
+    // These tags are only shot-local, never a permanent Card/Scene instruction.
+    if (o.mirrorSingle) p += o.hybrid || s.format === "description"
+      ? ", one person only" : ", solo";
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
 
     // A backend negative is global to every depicted person. For a multi-
@@ -6377,7 +6381,10 @@
     // the positive scene compiler, not globally forbid the other person's outfit.
     const scopedNegative = present && !c.userPresent && subjectCount(prompt) <= 1
       ? o.wearNegative : "";
-    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative);
+    const mirrorNegative = o.mirrorSingle
+      ? "duplicate person, extra person, second person, twins, multiple people, duplicate body, extra body, 2girls, 2boys"
+      : "";
+    const negative = joinUnique(s.negative, present ? im.negative : "", c.absence, scopedNegative, mirrorNegative);
     return { prompt, negative };
   }
 
@@ -6609,6 +6616,20 @@
     return freeze(result);
   }
 
+
+  // 'Mirror selfie' is a composition cue, NOT a request to render a physical reflection.
+  // This is source-shot metadata; a translator cannot create this mode.
+  function singleMirror(shot, actors) {
+    const src = String(shot || "");
+    const mirrorPhoto = /\b(?:mirror[\s_-]*(?:selfie|portrait|photo)|(?:selfie|portrait|photo(?:graph)?)[^.!?]{0,65}\b(?:in|at|before|by)\s+(?:(?:the|a)\s+)?mirror|(?:mirror|reflection)[^.!?]{0,65}\bselfie)\b|(?:селфи|фото|снимок|портрет)[^.!?]{0,65}(?:в|перед|у)\s+зеркал|(?:зеркальн(?:ое|ый|ая)\s+(?:селфи|фото|снимок))/iu.test(src);
+    if (!mirrorPhoto) return false;
+    const explicitPair = /\b(?:[2-9]\s*(?:girls?|boys?|people|persons?|women|men)|(?:two|three|several|multiple)\s+(?:girls?|boys?|people|persons?|women|men)|(?:another|second|other)\s+(?:girl|boy|person|woman|man)|(?:with|alongside)\s+(?:a\s+)?(?:friend|partner|companion|boyfriend|girlfriend))\b|(?:дв[аоеу]|тр[иое])\s+(?:девуш(?:ки|ек)|парн(?:я|ей)|человек(?:а)?|люд(?:ей|ьми))|(?:с\s+(?:подругой|другом|девушкой|парнем|партн[её]ром)|вдво[её]м|вместе\s+с\s+подруг)/iu.test(src);
+    const namedCompanion = /\b(?:with|alongside|and)\s+(?:[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?|[a-z]{2,}_[a-z]{2,})\b|(?:^|[\s,])(?:с|и)\s+\p{Lu}\p{L}{2,}/u.test(src);
+    const scope = actors || {};
+    return !explicitPair && !namedCompanion && !scope.empty && !scope.user && !scope.otherActorPresent &&
+      !/\b(?:[2-9](?:girls?|boys?)|1girl\s*,\s*1boy|1boy\s*,\s*1girl)\b/i.test(src);
+  }
+
   // Visual Prompt Plan: an in-memory, source-scoped compilation contract.
   // Sections describe WHAT can contribute, not invented missing image details.
   // The authored shot itself stays in SCENE exactly once (ImageCompile).
@@ -6626,7 +6647,8 @@
       order: ORDER.slice(),
       sections: {
         SUBJECT: { owner, user, otherActor: !!o.otherActorPresent, authority: "source-frame" },
-        COMPOSITION: { authority: "source-shot", shotAuthored: !!o.shotAuthored },
+        COMPOSITION: { authority: "source-shot", shotAuthored: !!o.shotAuthored,
+          singleMirror: singleMirror(o.shot, { ...actors, otherActorPresent: !!o.otherActorPresent }) },
         POSE: { authority: "source-shot", fallback: !o.shotAuthored && !o.messenger ? "rp-scene" : null },
         CLOTHING: { authority: wear ? "canonical-wear" : "source-shot",
           known: !!(wear && wear.known), complete: !!(wear && wear.complete),
@@ -6649,7 +6671,8 @@
       "VISUAL PROMPT PLAN — order of meaning only; output NO section headings or empty placeholders:",
       "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
         ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". No extra or duplicate people; keep each person's traits distinct.",
-      "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity.",
+      "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity." +
+        (s.COMPOSITION.singleMirror ? " SINGLE-PERSON MIRROR SELFIE: treat mirror selfie as a photographic framing cue only. Depict exactly ONE person in the image. Do NOT construct a separate mirror reflection, mirror surface or second body to explain the camera setup. Preserve source-described objects; do not add another subject." : ""),
       "POSE: preserve the main depicted ACTION first, then source-backed body orientation, head, hands, limbs and weight; omit absent details.",
       "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
       "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
@@ -6660,7 +6683,7 @@
         (s.TECHNICAL.format === "tags" ? "Use subject-count tags only for explicitly depicted people; solo only for exactly one person." : "")
     ].join("\n");
   }
-  PRP.visualPlan = { create, prompt, promptOrder };
+  PRP.visualPlan = { create, prompt, promptOrder, singleMirror };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.visualPlan;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -10295,7 +10318,10 @@
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
-        const promptPlan = VP.prompt({ visualPlan, actors: resolvedActors,
+        // The original shot, not a translation, decides whether the mirror
+        // contains a single subject. The mirror cue never creates an extra actor.
+        const mirrorSingle = VP.singleMirror(shot, resolvedActors);
+        const promptPlan = VP.prompt({ visualPlan, actors: resolvedActors, shot,
           otherActorPresent: shotScope.otherActorPresent, wearState: visualPlan.wear,
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: hybrid ? "hybrid" : cfg.format,
@@ -10345,7 +10371,7 @@
         });
         const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
-        const finalPromptPlan = VP.prompt({ visualPlan, actors: composed.subjects,
+        const finalPromptPlan = VP.prompt({ visualPlan, actors: composed.subjects, shot,
           otherActorPresent: subjectScope.otherActorPresent, wearState: canonicalWear,
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: cfg.format, qualityPinned: ST.qualityPinned(S.settings) });
@@ -10370,10 +10396,17 @@
             ((!visualPlan.shotAuthored && !comp.negative) || !Array.isArray(comp.wearItems)))
           throw new Error("Не удалось перевести снятую одежду в предметные negative tags.");
         const fin = IC.finalise({ composed, compiled: comp.text, stateCompiled: !!comp.compiled && (!!stateContext || !!changes),
-          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative, hybrid });
+          card: cd, settings: cfg, backend: cfg.backend, persona: pers, wearNegative, hybrid,
+          mirrorSingle });
         // The compiler is not the last positive-tag source: Card, LoRA
         // rules and fixedPrompt can reintroduce a removed garment. Audit the
         // actual executable strings immediately before the backend.
+        // A translator or manually pinned prompt can still introduce "2girls"
+        // after the source decided on one mirror subject. Fail before backend
+        // rather than submitting mutually contradictory positive/negative.
+        if (mirrorSingle && (IC.subjectCount(fin.prompt) > 1 ||
+            /\b(?:another|second)\s+(?:person|girl|boy|woman|man)\b|\b(?:two|three)\s+(?:women|men|people|persons)\b/i.test(fin.prompt)))
+          throw new Error("Зеркальное фото описывает одного человека, но итоговый prompt добавил второго.");
         const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
         if (finalAudit.issues.length)
           throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
