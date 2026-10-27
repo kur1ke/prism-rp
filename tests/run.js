@@ -4415,6 +4415,29 @@ async function foundationH() {
     assert.strictEqual(calls,1,"no extra translator call");
     ICP.clear();
   });
+  await ta("VIS-HYBRID-PROSE-03: real 73-word selfie with pose and garments is valid",async()=>{
+    const scene="Фотография Орихимэ в полный рост: она приподнимает бежевую юбку, на ней блузка, колготки, туфли и заколка.";
+    const reply="Full body selfie of Orihime Inoue looking toward the camera with a shy expression and light blush. She stands with a slight arch in her lower back, one arm behind her head and the other lifting the edge of her light-beige pleated skirt to reveal white lace underwear and the top of beige nylon tights. She wears a white short-sleeved cotton blouse, light-pink ballet flats, and a flower hair clip.";
+    assert.strictEqual((reply.match(/[\p{L}\p{N}]+/gu)||[]).length,73,"actual output regression");
+    assert.strictEqual(reply.length,397,"the failure was the 65-word limit, not 600 characters");
+    ICP.clear(); let calls=0;
+    const opts={format:"hybrid",intentMode:true,debug:true};
+    const result=await ICP.compile(scene,opts,async instruction=>{
+      calls++;
+      assert.ok(instruction.includes("100 words and 600 characters at most"));
+      return reply;
+    });
+    assert.strictEqual(result.compiled,true,JSON.stringify(result));
+    assert.strictEqual(result.text,reply,"do not trim source-backed camera, pose or clothing");
+    assert.strictEqual(calls,1,"do not introduce another LLM request");
+    assert.strictEqual(result.translationPreview,undefined,"success is not saved as an error preview");
+    assert.strictEqual((await ICP.compile(scene,opts,async()=>{throw Error("unexpected call");})).cached,true);
+    ICP.clear();
+    const tooLong=await ICP.compile(scene,opts,async()=>reply+" Detail.".repeat(50));
+    assert.strictEqual(tooLong.compiled,false,"unbounded output still fails closed");
+    assert.ok(tooLong.error.includes("Гибридный"));
+    ICP.clear();
+  });
   await ta("VIS-HYBRID-PROSE-02: tag lists still fail, including trailing period",async()=>{
     const scene="Орихимэ делает фото.";
     const tags=[
@@ -7378,6 +7401,37 @@ async function unifiedTracker() {
       assert.ok(!sent.prompt.includes("school uniform"), sent.prompt);
       assert.deepStrictEqual(live.swipes[0].images[0].promptSources.actorState.visualWear.certainty, "reported");
     } finally { globalThis.PRP.llm = old; IB.generate = oldGen; }
+  });
+  await ta("UT11-TIMEOUT-1: Observer gets 40s while initial outfit still gets 20s",async()=>{
+    const old=globalThis.PRP.llm, originalTimeout=global.setTimeout;
+    const delays=[];
+    global.setTimeout=(fn,ms,...args)=>{delays.push(ms);return originalTimeout(fn,ms,...args);};
+    globalThis.PRP.llm={simple:async()=>JSON.stringify({events:[]})};
+    try {
+      const h=fbHarness({name:"Орихимэ Иноуэ",description:"Девушка."});
+      await h.chat.createChat("messenger","c1");
+      h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+      const m=h.chat.newMsg("assistant",null,"Я поменяла одежду.");
+      await h.chat.commitMessage(m,m.id);
+      const live=h.chat.path()[0];
+      const r=await h.ctx.svc.state.track(live,{id:"mock"});
+      assert.ok(["ok","partial","no-changes"].includes(r.status),JSON.stringify(r));
+      assert.ok(delays.includes(40000),"new Observer default must be 40 seconds: "+delays);
+      assert.ok(!delays.includes(20000),"Observer must not use legacy 20s deadline: "+delays);
+    }finally{
+      global.setTimeout=originalTimeout;
+      globalThis.PRP.llm=old;
+    }
+    const initial=fbHarness({name:"Орихимэ Иноуэ",description:"Девушка."});
+    await initial.chat.createChat("messenger","c1");
+    initial.ctx.svc.state=globalThis.PRP.stateService.create(initial.ctx);
+    const save=globalThis.PRP.llm.simple, ms=[],original=global.setTimeout;
+    global.setTimeout=(fn,delay,...args)=>{ms.push(delay);return original(fn,delay,...args);};
+    globalThis.PRP.llm.simple=async()=>JSON.stringify({wear:{worn:["белая блузка"]}});
+    try {
+      assert.equal((await initial.ctx.svc.state.initializeOutfit({id:"mock"},{timeZone:"UTC"})).status,"ok");
+      assert.ok(ms.includes(20000),"initial outfit must keep fast 20s bound: "+ms);
+    }finally{global.setTimeout=original;globalThis.PRP.llm.simple=save;}
   });
   await ta("UT11-8: timed-out interpreter does not block conversation or invent facts", async () => {
     const h = fbHarness({ name: "Орихимэ Иноуэ", description: "Девушка." });
