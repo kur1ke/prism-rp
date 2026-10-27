@@ -65,7 +65,7 @@
   // This is source-shot metadata; a translator cannot create this mode.
   function singleMirror(shot, actors) {
     const src = String(shot || "");
-    const mirrorPhoto = /\b(?:mirror[\s_-]*(?:selfie|portrait|photo)|(?:selfie|portrait|photo(?:graph)?)[\s_-]*(?:in|at|before|by)[\s_-]*(?:the[\s_-]*|a[\s_-]*)?mirror)\b|(?:селфи|фото|снимок|портрет)[^.!?]{0,65}(?:в|перед|у)\s+зеркал|(?:зеркальн(?:ое|ый|ая)\s+(?:селфи|фото|снимок))/iu.test(src);
+    const mirrorPhoto = /\b(?:mirror[\s_-]*(?:selfie|portrait|photo)|(?:selfie|portrait|photo(?:graph)?)[^.!?]{0,65}\b(?:in|at|before|by)\s+(?:(?:the|a)\s+)?mirror|(?:mirror|reflection)[^.!?]{0,65}\bselfie)\b|(?:селфи|фото|снимок|портрет)[^.!?]{0,65}(?:в|перед|у)\s+зеркал|(?:зеркальн(?:ое|ый|ая)\s+(?:селфи|фото|снимок))/iu.test(src);
     if (!mirrorPhoto) return false;
     const explicitPair = /\b(?:[2-9]\s*(?:girls?|boys?|people|persons?|women|men)|(?:two|three|several|multiple)\s+(?:girls?|boys?|people|persons?|women|men)|(?:another|second|other)\s+(?:girl|boy|person|woman|man)|(?:with|alongside)\s+(?:a\s+)?(?:friend|partner|companion|boyfriend|girlfriend))\b|(?:дв[аоеу]|тр[иое])\s+(?:девуш(?:ки|ек)|парн(?:я|ей)|человек(?:а)?|люд(?:ей|ьми))|(?:с\s+(?:подругой|другом|девушкой|парнем|партн[её]ром)|вдво[её]м|вместе\s+с\s+подруг)/iu.test(src);
     const scope = actors || {};
