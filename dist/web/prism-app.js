@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "237159ca52b5fc5ac63a8cf1dddf579e09085883";
+  window.PRISM_RP_BUILD_SHA = "53ab73c4b179e17028b93ab345b26057a13e21d6";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6331,6 +6331,31 @@
 
   /* o: { compiled, composed, card, settings (images), persona, backend }
      backend: "a1111" — LoRA-токены в промпт; иначе LoRA не поддерживаются. */
+  // Executable mirror-shot prompt guard. Translator instructions alone cannot
+  // stop diffusion models from drawing both the person and a mirror copy.
+  // Translate the *optical staging* into a conventional one-person portrait;
+  // keep the person's action, orientation, expression, outfit and background.
+  // Only called for original source shots verified as SINGLE-person mirror photos.
+  function flattenMirrorShot(text) {
+    return String(text || "")
+      .replace(/\b(?:looking|gazing|staring|glancing)[_-](?:at|into|toward)[_-](?:a[_-]|the[_-])?(?:mirror|reflection)\b/gi,
+        "looking_at_viewer")
+      // A gaze towards a reflection is a gaze direction, not a second body.
+      .replace(/\b(looking|look(?:s)?|glancing|glance(?:s)?|gazing|gaze(?:s)?|staring|stare(?:s)?)\s+(?:in|into|at|towards?|upon)\s+(?:(?:her|his|their|own|a|the)\s+)?(?:own\s+)?(?:mirror|reflection)\b/gi,
+        (_, gaze) => gaze + " toward the camera")
+      .replace(/\b(?:mirror[\s_-]*(?:selfie|portrait|photo(?:graph)?)|(?:reflected|reflection)[\s_-]*(?:selfie|portrait|photo))\b/gi, "selfie")
+      .replace(/\b(?:taking|shooting)\s+(?:a\s+)?selfie\s+(?:in|before|at)\s+(?:a|the)?\s*mirror\b/gi, "taking a selfie")
+      .replace(/\b(?:in front of|before|facing|next to|beside|by|at|into|in|inside|towards?|looking at)\s+(?:(?:an?|the|her|his|their)\s+)?(?:full[- ]length\s+|large\s+|wall\s+)?mirror\b/gi, "")
+      .replace(/\b(?:as seen|shown|visible|pictured|appearing)\s+(?:in|on)\s+(?:(?:a|the)\s+)?(?:mirror|reflection)\b/gi, "")
+      .replace(/\breflected\s+(?:in|on|by)\s+(?:a|the)?\s*mirror\b/gi, "")
+      .replace(/\b(?:a|the)\s+reflection\s+of\b/gi, "portrait of")
+      // Never send an unrecognized physical reflection trigger to diffusion.
+      // This is a last-resort lexical cleanup, not an invitation to add facts.
+      .replace(/\b(?:mirrors?|reflections?|reflected)\b/gi, "")
+      .replace(/\s+,/g, ",").replace(/,\s*,+/g, ", ")
+      .replace(/\s{2,}/g, " ").replace(/\s+([.!?])/g, "$1").trim();
+  }
+
   function finalise(o) {
     const s = o.settings || {}, im = (o.card && o.card.image) || {}, c = o.composed || {};
     const pinned = s.promptMode !== "off" && String(s.fixedPrompt || "").trim();
@@ -6369,6 +6394,7 @@
     const hybridQuality = o.hybrid && !pinned ? "masterpiece, best quality" : "";
     const body = [trigger, keep, advanced, scene, hybridQuality, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
+    if (o.mirrorSingle) p = flattenMirrorShot(p);
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
     // Mirror-selfie composition shows one person; do not request an optical reflection.
     // These tags are only shot-local, never a permanent Card/Scene instruction.
@@ -6547,7 +6573,7 @@
   PRP.imgCompose = {
     words, wordFormMatch, mentions, parseMap, resolveWardrobe, resolveAppearance,
     splitTags, bareTag, normalizeTags, stripQuality, subjectCount, dropContradictorySolo, dedupe,
-    wardrobeConflicts, ownerPresent, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, loraTokens, sizeFor, perchanceResolution, openaiSize,
+    wardrobeConflicts, ownerPresent, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, flattenMirrorShot, loraTokens, sizeFor, perchanceResolution, openaiSize,
     parseDraws, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompose;
@@ -6672,7 +6698,7 @@
       "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
         ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". No extra or duplicate people; keep each person's traits distinct.",
       "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity." +
-        (s.COMPOSITION.singleMirror ? " SINGLE-PERSON MIRROR SELFIE: treat mirror selfie as a photographic framing cue only. Depict exactly ONE person in the image. Do NOT construct a separate mirror reflection, mirror surface or second body to explain the camera setup. Preserve source-described objects; do not add another subject." : ""),
+        (s.COMPOSITION.singleMirror ? " SINGLE-PERSON MIRROR SELFIE: treat mirror selfie as a photographic framing cue, not physical optics. OUTPUT ONE NORMAL SELFIE/PORTRAIT with the person ONCE. Never mention mirror, reflection, reflected, mirrored glass or mirror-frame objects in output. When the source says the person looks into the mirror, express that gaze as looking toward the camera. Preserve body orientation, gestures, expression, clothing, revealed garments, room and visible non-mirror objects. Do not add or duplicate people." : ""),
       "POSE: preserve the main depicted ACTION first, then source-backed body orientation, head, hands, limbs and weight; omit absent details.",
       "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
       "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
@@ -7033,7 +7059,7 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v17-visual-prompt-plan" : "v13-visual-prompt-plan",
+    const key = [hybrid ? "v18-mirror-framing" : "v14-mirror-framing",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
@@ -7041,7 +7067,9 @@
       hybrid ? (establishedLayers ? "known-owner-layers" : "no-known-owner-layers") : "",
       o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
       o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only",
-      o.promptPlan ? "visual-plan-v" + o.promptPlan.version : "legacy", s].join("\u0001");
+      o.promptPlan ? "visual-plan-v" + o.promptPlan.version : "legacy",
+      o.promptPlan && o.promptPlan.sections && o.promptPlan.sections.COMPOSITION &&
+        o.promptPlan.sections.COMPOSITION.singleMirror ? "single-mirror-flatten" : "other-photo", s].join("\u0001");
     if (mem.has(key)) {
       const cached = mem.get(key);
       return typeof cached === "string" ? { text: cached, compiled: true, cached: true } : { ...cached, cached: true };
