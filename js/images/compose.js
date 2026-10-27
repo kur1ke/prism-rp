@@ -497,10 +497,10 @@
     const body = [trigger, keep, advanced, scene, hybridQuality, loras, style, c.tail].filter(Boolean).join(", ");
     let p = combine(body, s.fixedPrompt, s.promptMode || "append");
     if (s.promptMode === "replace" && loras && !p.includes("<lora:")) p += ", " + loras;
-    // Explicit single-subject mirror photographs need one visible reflection.
+    // Mirror-selfie composition shows one person; do not request an optical reflection.
     // These tags are only shot-local, never a permanent Card/Scene instruction.
     if (o.mirrorSingle) p += o.hybrid || s.format === "description"
-      ? ", single subject reflected in the mirror" : ", solo, single reflection";
+      ? ", one person only" : ", solo";
     const prompt = dropContradictorySolo(normalizeTags(dedupe(p, [trigger, im.styleTrigger].filter(Boolean).join(", "))));
 
     // A backend negative is global to every depicted person. For a multi-
