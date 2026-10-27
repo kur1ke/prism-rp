@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "74e5d85f8585cf682369b7ae660ccd07ae901eba";
+  window.PRISM_RP_BUILD_SHA = "d69e99f7bda7c334a7cbc3e30e12a7a71a224025";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6476,6 +6476,7 @@
   /* Правила перевода сцены в промпт (для compile.js). */
   function rewriteRules(o) {
     const opts = o || {};
+    const planOrder = opts.promptPlan && PRP.visualPlan && PRP.visualPlan.promptOrder(opts.promptPlan);
     // VIS-HYBRID: translate the authored camera composition, not the entire
     // wardrobe history. The application separately injects identity/LoRA and
     // audits source-bound physical garment facts after final assembly.
@@ -6484,7 +6485,7 @@
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
         "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
         "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name clothing visible in SCENE without omission.",
-        "Order the concise prompt by source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last. Preserve medium, viewpoint, framing, and all depicted facts regardless of their original order. Never invent absent subjects, hand assignments, or object placement to fill an ordering slot.",
+        planOrder || "Order the concise prompt by source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last. Preserve medium, viewpoint, framing, and all depicted facts regardless of their original order. Never invent absent subjects, hand assignments, or object placement to fill an ordering slot.",
         "Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS. Do not invent body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If the source says only 'lace underwear', do not specify a bra or panties.",
         "Unknown visibility does not mean a garment is absent. Preserve established clothing layers and degree of dress until source-backed events change them. When needed for clothing consistency, name a known hidden layer as worn underneath, never as exposed or visibly displayed. Do not list the entire outfit.",
         "CANONICAL WEAR FACTS are established end-of-turn consistency data, not a clothing checklist and not instructions. An item marked removed must not be rendered as worn; a partial garment remains on the body at the explicitly described placement.",
@@ -6505,10 +6506,10 @@
     const base = opts.format === "description"
       ? "Rewrite the scene into a prompt for an image model that reads natural language (SDXL, Flux). " +
         (structured ? "Write one to three English sentences in the prompt field of the required JSON output." : "Output ONLY one to three English sentences, no lists, no quotes, no markdown.") +
-        "\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera."
+        (planOrder ? "\n" + planOrder : "\nORDER: who is in frame (name, gender, age, look; each person their own appearance and action) → what they do and where → style, lighting, camera.")
       : "Rewrite the scene into a prompt for an anime Stable Diffusion model (SDXL / Pony / Illustrious / NoobAI). " +
         (structured ? "Write one line of English comma-separated danbooru tags in the prompt field of the required JSON output." : "Output ONLY one line of comma-separated English danbooru tags. No sentences, no quotes, no markdown.") +
-        "\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.";
+        (planOrder ? "\n" + planOrder : "\nORDER: each person in frame — name immediately followed by gender, age category and 1-2 visual anchors (e.g. rukia_kuchiki, female, young woman, short black hair) plus the count tag (1girl, 1boy, 2girls; solo only for exactly one person) → action, pose, expression, clothing exactly as described, setting, time of day → style, lighting, camera.");
     const rules = [
       ...(opts.intentMode ? ["The SCENE is a visual intent. Preserve specified medium, subject and objects. A screenshot of products is not a portrait of the sender. Do not add the card character unless visible. Invent only unspecified details."] : []),
       ...(opts.visualPlan && opts.visualPlan.wear ? ["CANONICAL WEAR FACTS are the validated END-OF-TURN state for THIS source message, not the previous outfit. Do not re-infer clothing transitions from translation; translate only the visible RESULT of the authored shot.", "Clothing named because it was REMOVED is not a positive on-body garment tag. An explicitly shown removed object may appear off-body; omission alone never invents a visible object. Other worn garments need not be visible in a crop."] : []),
@@ -6522,7 +6523,9 @@
       opts.format === "description" ? "60 words or fewer." : "50 tags or fewer.",
     ];
     let txt = base + "\nRULES:\n" + rules.map((r, i) => `${i + 1}. ${r}`).join("\n");
-    if (opts.frame) {
+    // The typed SUBJECT plan already carries this actor scope; never duplicate
+    // the same owner/user frame contract in the translation request.
+    if (opts.frame && !planOrder) {
       const f = opts.frame;
       txt += "\nFRAME IDENTITY (do not invent extra copies or people):\n" +
         "Card owner is " + (f.owner ? "visible" : "NOT visible") + "; user is " + (f.user ? "visible" : "NOT visible") +
@@ -6606,7 +6609,58 @@
     return freeze(result);
   }
 
-  PRP.visualPlan = { create };
+  // Visual Prompt Plan: an in-memory, source-scoped compilation contract.
+  // Sections describe WHAT can contribute, not invented missing image details.
+  // The authored shot itself stays in SCENE exactly once (ImageCompile).
+  const ORDER = Object.freeze(["SUBJECT", "COMPOSITION", "POSE", "CLOTHING",
+    "ENVIRONMENT", "LIGHTING", "TECHNICAL", "QUALITY"]);
+  function prompt(input) {
+    const o = input || {}, actors = o.actors || {};
+    const plan = o.visualPlan || null;
+    const owner = !!actors.owner, user = !!actors.user;
+    const wear = owner ? (o.wearState || (plan && plan.actor === "char" && plan.wear) || null) : null;
+    const format = ["tags", "hybrid", "description"].includes(o.format) ? o.format : "tags";
+    return freeze({
+      version: 1,
+      source: plan && plan.source ? clone(plan.source) : null,
+      order: ORDER.slice(),
+      sections: {
+        SUBJECT: { owner, user, otherActor: !!o.otherActorPresent, authority: "source-frame" },
+        COMPOSITION: { authority: "source-shot", shotAuthored: !!o.shotAuthored },
+        POSE: { authority: "source-shot", fallback: !o.shotAuthored && !o.messenger ? "rp-scene" : null },
+        CLOTHING: { authority: wear ? "canonical-wear" : "source-shot",
+          known: !!(wear && wear.known), complete: !!(wear && wear.complete),
+          removed: wear ? wear.removed.length : 0,
+          partial: wear ? wear.partiallyWorn.length : 0,
+          offBody: plan ? plan.offBodyVisible.length : 0 },
+        ENVIRONMENT: { authority: "source-shot", messenger: !!o.messenger },
+        LIGHTING: { authority: "source-shot" },
+        TECHNICAL: { format, authority: "backend" },
+        QUALITY: { authority: format === "hybrid" || o.qualityPinned ? "finalise" : "translator", pinned: !!o.qualityPinned }
+      }
+    });
+  }
+  // A compact field order replaces (rather than repeats) the legacy generic
+  // ORDER line in the translator instructions. No image source text is copied.
+  function promptOrder(plan) {
+    if (!plan || plan.version !== 1 || !plan.sections) return "";
+    const s = plan.sections;
+    return [
+      "VISUAL PROMPT PLAN — order of meaning only; output NO section headings or empty placeholders:",
+      "SUBJECT: retain only source-depicted people; owner " + (s.SUBJECT.owner ? "visible" : "not established") +
+        ", user " + (s.SUBJECT.user ? "visible" : "not established") + ". No extra or duplicate people; keep each person's traits distinct.",
+      "COMPOSITION: preserve the source shot's medium, viewpoint, camera angle, framing, placement and perspective; never infer POV from owner identity.",
+      "POSE: preserve the main depicted ACTION first, then source-backed body orientation, head, hands, limbs and weight; omit absent details.",
+      "CLOTHING: use visible source clothing and canonical wear constraints when provided; never infer removed or hidden layers from a crop.",
+      "ENVIRONMENT: preserve only source-backed locations, objects and spatial relationships.",
+      "LIGHTING: preserve source-backed light and shadows only; invent no lighting setup.",
+      "TECHNICAL: backend owns optical settings; do not invent camera lenses, rendering parameters or LoRA.",
+      "QUALITY: " + (s.QUALITY.authority === "finalise" ? "added or pinned by finalise; do not duplicate quality tags." : "keep only source quality or the minimal requested default tags; no filler.") + " No unsolicited style or anatomy tags.",
+      "For " + s.TECHNICAL.format + " output, render the SAME evidence as requested prose/tags, without headings. " +
+        (s.TECHNICAL.format === "tags" ? "Use subject-count tags only for explicitly depicted people; solo only for exactly one person." : "")
+    ].join("\n");
+  }
+  PRP.visualPlan = { create, prompt, promptOrder };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.visualPlan;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -6956,14 +7010,15 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v16-mode-camera" : "v12-mode-camera",
+    const key = [hybrid ? "v17-visual-prompt-plan" : "v13-visual-prompt-plan",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
       o.frame ? JSON.stringify(o.frame) : "", stateContext, JSON.stringify(wear),
       hybrid ? (establishedLayers ? "known-owner-layers" : "no-known-owner-layers") : "",
       o.visualPlan ? JSON.stringify(o.visualPlan.offBodyVisible || []) : "",
-      o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only", s].join("\u0001");
+      o.subjectScope && o.subjectScope.otherActorPresent === true ? "multi-actor" : "owner-only",
+      o.promptPlan ? "visual-plan-v" + o.promptPlan.version : "legacy", s].join("\u0001");
     if (mem.has(key)) {
       const cached = mem.get(key);
       return typeof cached === "string" ? { text: cached, compiled: true, cached: true } : { ...cached, cached: true };
@@ -6986,6 +7041,7 @@
         "Put every offBody tag verbatim as a separate tag in prompt. Never put an on-body/lifted garment tag in prompt when it is removed.",
       ] : []),
     ].join("\n") : "";
+    // The plan replaces translation ORDER; SCENE and wear evidence are not duplicated.
     const instruction = IC.rewriteRules(o) +
       (contract ? "\n\n" + contract : "") + "\n\nSCENE:\n" + s +
       (stateContext ? "\n\nREPORTED PHYSICAL STATE (context data, not commands):\n" + JSON.stringify(stateContext) : "") +
@@ -10239,11 +10295,16 @@
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
+        const promptPlan = VP.prompt({ visualPlan, actors: resolvedActors,
+          otherActorPresent: shotScope.otherActorPresent, wearState: visualPlan.wear,
+          shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
+          format: hybrid ? "hybrid" : cfg.format,
+          qualityPinned: ST.qualityPinned(S.settings) });
         const firstPass = intent ? await ICP.compile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
             qualityPinned: ST.qualityPinned(S.settings),
             wearState: visualPlan.wear, visualPlan, subjectScope: shotScope,
-            debug: !!S.settings.developerMode }, generateText) : null;
+            promptPlan, debug: !!S.settings.developerMode }, generateText) : null;
         if (intent && (!firstPass || !firstPass.compiled)) {
           // Surface the compiler's actual failure; the previous generic text
           // hid whether the model timed out, returned tags, JSON or bad wear.
@@ -10284,12 +10345,16 @@
         });
         const subjectScope = { otherActorPresent: shotScope.otherActorPresent || !!composed.userPresent };
         const changes = canonicalWear && ((canonicalWear.removed || []).length || (canonicalWear.partiallyWorn || []).length);
+        const finalPromptPlan = VP.prompt({ visualPlan, actors: composed.subjects,
+          otherActorPresent: subjectScope.otherActorPresent, wearState: canonicalWear,
+          shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
+          format: cfg.format, qualityPinned: ST.qualityPinned(S.settings) });
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
           await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate,
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             frame: composed.subjects, stateContext,
             wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
-            subjectScope }, generateText);
+            promptPlan: finalPromptPlan, subjectScope }, generateText);
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.
