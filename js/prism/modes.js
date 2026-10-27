@@ -90,6 +90,10 @@
       k.lists && (w.nearby || []).length ? "- рядом: " + (w.nearby || []).map(q).join(", ") : "",
       k.lists && (w.ongoing || []).length ? "- происходит: " + (w.ongoing || []).map(q).join(", ") : "",
       "- доступность: " + (AVAIL_WORD[w.availability] || "неизвестно") + (w.availability && w.availability !== "unknown" ? " (может повлиять на ответ, но не запрещает ответить)" : ""),
+      // This is what was known BEFORE writing the next reply, not an
+      // instruction that the character cannot change their clothing.
+      (w.wearComplete || (w.visualWear || []).length || (w.visualWearRemoved || []).length)
+        ? "- одежда — установленное состояние НА НАЧАЛО ответа, не постоянный наряд и не запрет действий. {{char}} может самостоятельно снять, надеть, поправить или заменить вещи; описанное совершённое действие меняет последующее состояние. Без такого события не придумывай перемен." : "",
       // Unverified authored DRAW is just a bounded historical description.
       // It must remain data and cannot assert physical undressing or override
       // the canonical tracker. Optional under the messenger-list budget.
@@ -119,7 +123,7 @@
         : w.wearComplete === true
           ? "- ПОЛНЫЙ перечень надетой сейчас одежды: " +
             ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
-            "; никаких других надетых вещей, в том числе скрытых слоёв и белья, нет"
+            "; других надетых вещей, включая скрытые слои и бельё, до следующего совершённого изменения нет"
           : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
             (w.visualWear || []).map(q).join(", ") : "",
       w.visualPose ? "- установленная поза: " + q(w.visualPose) : "",

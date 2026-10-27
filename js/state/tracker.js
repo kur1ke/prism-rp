@@ -28,6 +28,31 @@
   const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
 
+  // Explicitly named clothing can be shortened or declined in Russian across
+  // turns ("светло-бежевая юбка-плиссе" → "бежевую юбку"). Match only if
+  // every lexical stem in the new report is present in exactly ONE item of
+  // this actor's active-path wardrobe. This is NOT fuzzy semantic inference.
+  // Without a unique match, retain the existing explicit-event semantics.
+  function garmentStems(value) {
+    return (str(value).toLowerCase().replace(/ё/g, "е")
+      .match(/[\p{L}\p{N}]+/gu) || []).map((word) => {
+      const stem = word.length > 3 ? word.replace(
+        /(?:ого|его|ому|ему|ыми|ими|ая|яя|ое|ее|ые|ие|ый|ий|ую|юю|ых|их|ым|им|ой|ей|ом|ем|а|я|у|ю|ы|и|е)$/u, "") : word;
+      return stem.length >= 3 ? stem : word;
+    }).filter((word) => word.length >= 3);
+  }
+  function canonicalWearItem(item, previous) {
+    const exact = previous.find((x) => sameGarment(x.item, item));
+    if (exact) return exact;
+    const stems = garmentStems(item);
+    if (!stems.length) return null;
+    const matches = previous.filter((x) => {
+      const known = garmentStems(x.item);
+      return stems.every((word) => known.includes(word));
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   function wearDatum(actor) {
     const wear = actor && actor.wearState;
     if (!wear || !wear.known) return null;
@@ -73,21 +98,36 @@
     } else {
       if (event.action === "add" || event.action === "adjust") wear.known = true;
       for (const item of event.value) {
-        const order = orderOf(item);
-        const existing = previous.find((x) => sameGarment(x.item, item));
+        const existing = canonicalWearItem(item, previous);
+        const name = existing ? existing.item : item;
+        // A generic "юбку" cannot mean an arbitrary one of several known
+        // skirts. Nor may removing an unknown-colored skirt create a phantom
+        // second skirt while another skirt is in the closed known outfit.
+        // A genuinely new explicit "add" can still introduce a new garment.
+        if (!existing) {
+          const stems = garmentStems(item);
+          const sameType = stems.length && previous.filter((x) =>
+            garmentStems(x.item).includes(stems[stems.length - 1]));
+          const subsetMatches = previous.filter((x) => stems.length &&
+            stems.every((word) => garmentStems(x.item).includes(word)));
+          if (subsetMatches.length > 1 ||
+              (wear.complete && event.action !== "add" && sameType && sameType.length))
+            continue;
+        }
+        const order = orderOf(name);
         // One garment, one current state. Repeated reports of the same
         // intermediate position do not create a new transition or erase its
         // original provenance. An ordinary "adjusted" remark is not a new
         // placement; Observer must supply a grounded position to use adjust.
-        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, item))) continue;
+        if (event.action === "add" && wear.worn.some((x) => sameGarment(x.item, name))) continue;
         if (event.action === "adjust" && wear.partiallyWorn.some((x) =>
-          sameGarment(x.item, item) && x.placement === event.placement)) continue;
-        drop(item);
+          sameGarment(x.item, name) && x.placement === event.placement)) continue;
+        drop(name);
         const target = event.action === "remove" ? "removed" :
           event.action === "adjust" ? "partiallyWorn" : "worn";
-        // Preserve the established item label across abbreviated, but
-        // exactly matching, reports; no fuzzy garment identity guessing.
-        wear[target].push(fact(existing ? existing.item : item, order,
+        // Canonical identity survives grounded, uniquely matching abbreviated
+        // reports; no new inventory is manufactured from a changed adjective.
+        wear[target].push(fact(name, order,
           event.action === "adjust" ? event.placement : ""));
       }
     }
