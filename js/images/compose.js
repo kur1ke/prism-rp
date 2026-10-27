@@ -643,7 +643,7 @@
     if (opts.intentMode && opts.format === "hybrid") {
       const rules = [
         "You are a faithful visual translator, NOT a scene writer or a second Observer.",
-        "Write only one or two short, fluent English visual sentences (max 55 words), not tags, explanations, markdown or instructions. When a later CANONICAL OUTPUT CONTRACT requests JSON, put those sentences ONLY in its prompt field; otherwise output only the sentences.",
+        "Write one or two short, fluent English visual sentences when sufficient. A third sentence is allowed to preserve source-backed camera, pose, garment and accessory details (100 words and 600 characters at most). Never use tags, explanations, markdown or instructions. If a later CANONICAL OUTPUT CONTRACT requests JSON, put the description ONLY in its prompt field; otherwise output only the description.",
         "Translate the visible image described in SCENE. Preserve its participants, viewpoint, actions, visible objects and framing. Name clothing visible in SCENE without omission.",
         planOrder || "Order the concise prompt by source-depicted subjects and MAIN ACTION first, then source-backed pose and hand/object interactions, clothing, environment and camera/framing, and source-provided lighting last. Preserve medium, viewpoint, framing, and all depicted facts regardless of their original order. Never invent absent subjects, hand assignments, or object placement to fill an ordering slot.",
         "Do not invent garments or underwear types absent from both SCENE and CANONICAL WEAR FACTS. Do not invent body exposure, actions, poses, setting, lighting, people or objects missing from SCENE. If the source says only 'lace underwear', do not specify a bra or panties.",
