@@ -465,6 +465,8 @@
   // Only called for original source shots verified as SINGLE-person mirror photos.
   function flattenMirrorShot(text) {
     return String(text || "")
+      .replace(/\b(?:looking|gazing|staring|glancing)[_-](?:at|into|toward)[_-](?:a[_-]|the[_-])?(?:mirror|reflection)\b/gi,
+        "looking_at_viewer")
       // A gaze towards a reflection is a gaze direction, not a second body.
       .replace(/\b(looking|look(?:s)?|glancing|glance(?:s)?|gazing|gaze(?:s)?|staring|stare(?:s)?)\s+(?:in|into|at|towards?|upon)\s+(?:(?:her|his|their|own|a|the)\s+)?(?:own\s+)?(?:mirror|reflection)\b/gi,
         (_, gaze) => gaze + " toward the camera")
