@@ -4538,6 +4538,7 @@ async function foundationH() {
 
   await ta("VIS-MIRROR-2: lone mirror selfie cannot pass a fabricated second subject to backend",async()=>{
     for(const wrong of [false,true]){
+      ICP.clear(); // Both responses must be compiled, never replayed from the previous case.
       const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
       await h.chat.createChat("messenger","c1");
       h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
