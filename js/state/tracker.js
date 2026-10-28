@@ -23,7 +23,7 @@
   // "known" distinguishes no positive evidence from an established empty list;
   // "complete" means a full outfit was explicitly established, not guessed.
   // fields.wear below is ONLY a compatibility projection, never an input.
-  const emptyWear = () => ({ known: false, complete: false, worn: [], removed: [], partiallyWorn: [], last: null });
+  const emptyWear = () => ({ known: false, complete: false, worn: [], removed: [], partiallyWorn: [], invalidated: false, last: null });
   const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: emptyWear(), intentions: [], notes: [] });
   const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
@@ -86,7 +86,18 @@
       item, order, certainty: event.certainty, source: clone(source),
       ...(placement ? { placement } : {}),
     });
-    if (event.action === "set" || event.action === "clear") {
+    if (event.action === "invalidate") {
+      // The author explicitly superseded the old outfit without describing
+      // the new one. Unknown is neither "still worn" nor "removed".
+      // History is replayable from source events; no second inventory is stored.
+      wear.known = false;
+      wear.complete = false;
+      wear.invalidated = true;
+      wear.worn = [];
+      wear.removed = [];
+      wear.partiallyWorn = [];
+    } else if (event.action === "set" || event.action === "clear") {
+      wear.invalidated = false;
       wear.known = true;
       wear.complete = true;
       wear.worn = event.action === "set"
@@ -96,7 +107,10 @@
       wear.removed = [];
       wear.partiallyWorn = [];
     } else {
-      if (event.action === "add" || event.action === "adjust") wear.known = true;
+      if (event.action === "add" || event.action === "adjust") {
+        wear.known = true;
+        wear.invalidated = false;
+      }
       for (const item of event.value) {
         const existing = canonicalWearItem(item, previous);
         const name = existing ? existing.item : item;
@@ -161,7 +175,8 @@
     if (!ALLOWED_ACTORS.has(e.actor)) return "неизвестный участник";
     if (!FIELDS.includes(e.field)) return "неизвестное поле";
     if (!CERTAINTY.has(e.certainty)) return "неизвестный статус";
-    if (!["set", "clear", "add", "remove", "adjust"].includes(e.action)) return "неизвестное действие";
+    if (!["set", "clear", "add", "remove", "adjust", "invalidate"].includes(e.action)) return "неизвестное действие";
+    if (e.action === "invalidate" && (e.field !== "wear" || e.certainty === "intent")) return "отмена актуальности допустима только для подтверждённого переодевания";
     if (["add", "remove", "adjust"].includes(e.action) && e.field !== "wear") return "дополнение допустимо только для одежды";
     if (e.action === "adjust" && (typeof e.placement !== "string" || !e.placement.trim() ||
         e.placement.length > 160 || !str(e.evidence).includes(e.placement))) return "положение одежды не подтверждается цитатой";
@@ -180,10 +195,18 @@
     // replay must prove the exact quoted fragment is still in its source shot.
     const drawn = e.evidenceType === "draw";
     if (e.evidenceType != null && !drawn) return "неизвестный источник цитаты";
-    // A photo proves only depicted items. Even a full-body frame cannot
-    // establish all potentially hidden clothes or clear the entire outfit.
-    if (drawn && !["add", "remove", "adjust"].includes(e.action))
-      return "draw не подтверждает полный комплект или очистку гардероба";
+    // A frame alone is not an exhaustive outfit. A current authored DRAW may
+    // explicitly assert the complete outfit (including what is NOT worn).
+    // Require an exact source-local claim rather than a model's bare boolean:
+    // "full body", cropped shots and merely unseen garments never suffice.
+    if (drawn && !["set", "clear", "add", "remove", "adjust", "invalidate"].includes(e.action))
+      return "недопустимое действие из draw";
+    if (drawn && e.action === "set" &&
+        !/(?:на\s+не[йм]\s+только|из\s+одежды\s+(?:на\s+не[йм]\s+)?только|одет[а-яё]*\s+только\s+в|wear(?:s|ing)?\s+only|only\s+wearing|nothing\s+else\s+(?:on|worn))/iu.test(str(e.evidence)))
+      return "draw не содержит однозначного полного перечня одежды";
+    if (drawn && e.action === "clear" &&
+        !/(?:совсем\s+без\s+одежды|полностью\s+обнаж|без\s+единой\s+вещи|ничего\s+не\s+надето|completely\s+naked|fully\s+nude|wearing\s+nothing)/iu.test(str(e.evidence)))
+      return "draw не подтверждает отсутствие всей одежды";
     if (drawn && e.visualScope !== "current-self")
       return "draw не подтверждён как актуальное изображение самого персонажа";
     // A continued swipe may contain several shots. An explicitly indexed
@@ -258,7 +281,7 @@
     if (error) return { error };
     return { event: {
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
-      value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
+      value: ["clear", "invalidate"].includes(e.action) ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
         ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}),
@@ -274,7 +297,7 @@
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
-    const value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
+    const value = ["clear", "invalidate"].includes(e.action) ? (LIST.has(e.field) ? [] : null) : e.value;
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
       ...(source && source.kind ? { kind: source.kind } : {}),
@@ -498,15 +521,16 @@
       if (last < 0 || sw.stateStatus.sourceDraw !== String(draws[last].prompt || "") ||
           sw.stateStatus.sourceDrawIndex !== last) return null;
       const visual = wear.filter(e => e.evidenceType === "draw" &&
-        e.visualScope === "current-self" && ["add", "adjust"].includes(e.action) &&
+        e.visualScope === "current-self" && ["set", "add", "adjust"].includes(e.action) &&
         (e.drawIndex == null ? last : e.drawIndex) === last &&
         !validateEvent(e, { role: m.role, draws, text: sw.text, mode: "messenger" }));
       // A later text change in this very message has no unambiguous temporal
       // order relative to its photograph; refuse to assert a photo override.
       if (wear.some(e => e.evidenceType !== "draw" || (e.drawIndex != null && e.drawIndex !== last)))
         return null;
+      const complete = visual.some(e => e.action === "set");
       const items = [...new Set(visual.flatMap(e => e.value || []))].slice(0, 12);
-      return items.length ? { items, messageId: m.id, swipeIdx: m.swipeIdx || 0, drawIndex: last } : null;
+      return items.length ? { items, complete, messageId: m.id, swipeIdx: m.swipeIdx || 0, drawIndex: last } : null;
     }
     return null;
   }
