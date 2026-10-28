@@ -37,6 +37,7 @@ require(J("cards/import.js"));
 require(J("providers/openai.js"));
 require(J("chat/tree.js"));
 require(J("prism/memory-cycle.js"));
+require(J("state/wear-observation.js"));
 require(J("state/tracker.js"));
 require(J("state/resolver.js"));
 require(J("state/interpreter.js"));
