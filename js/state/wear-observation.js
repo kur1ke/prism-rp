@@ -22,10 +22,16 @@
   function match(mention,refs) {
     const observed=stems(mention);
     if(!observed.length)return {reason:"empty-mention"};
+    // The observed noun is at the end of the noun phrase, whereas the
+    // canonical item may have qualifiers after it (e.g. "блузка с рукавом").
+    // A bare adjective is not a garment identity.
+    const rawWords=tokens(mention);
+    if(/(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им)$/iu.test(rawWords[rawWords.length-1]||""))
+      return {reason:"missing-garment-noun"};
     const eligible=(refs||[]).filter(ref=>{
       if(!ref||typeof ref.item!=="string")return false;
       const known=stems(ref.item);
-      if(!known.length||!contains(observed,known[known.length-1]))return false;
+      if(!known.length||!contains(known,observed[observed.length-1]))return false;
       return observed.every(word=>contains(known,word));
     });
     return eligible.length===1?{reference:eligible[0]}:
@@ -40,10 +46,10 @@
     const spans=[...raw.matchAll(/[\p{L}\p{N}]+/gu)].map(m=>({
       text:m[0],stem:stem(m[0]),start:m.index,end:m.index+m[0].length
     }));
-    const head=words[words.length-1];
     const matches=[];
     for(let i=0;i<spans.length;i++){
-      if(!similar(spans[i].stem,head))continue;
+      if(!contains(words,spans[i].stem))continue;
+      if(/(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им)$/iu.test(spans[i].text))continue;
       let first=i;
       while(first>0&&i-first<5&&contains(words,spans[first-1].stem))first--;
       // The immediately preceding descriptive word cannot silently conflict
