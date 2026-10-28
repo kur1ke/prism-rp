@@ -271,7 +271,12 @@
             reason: String(resolved.reason || "unknown").slice(0,60),
             ...(Array.isArray(resolved.candidates) ? {candidates:resolved.candidates
               .slice(0,6).filter(ref=>ref&&typeof ref.id==="string"&&typeof ref.item==="string")
-              .map(ref=>({id:ref.id.slice(0,48),item:ref.item.slice(0,160)}))} : {}),
+              .map(ref=>({id:ref.id.slice(0,48),item:ref.item.slice(0,160),
+                ...(ref.origin ? {origin:{
+                  kind:String(ref.origin.kind||"").slice(0,32),
+                  messageId:String(ref.origin.messageId||"").slice(0,64),
+                  swipeIdx:Number.isInteger(ref.origin.swipeIdx)?ref.origin.swipeIdx:0,
+                }} : {})}))} : {}),
           });
         }
         continue;
