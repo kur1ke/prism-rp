@@ -333,7 +333,7 @@
         if (mirrorSingle && (IC.subjectCount(fin.prompt) > 1 ||
             /\b(?:another|second)\s+(?:person|girl|boy|woman|man)\b|\b(?:two|three)\s+(?:women|men|people|persons)\b/i.test(fin.prompt)))
           throw new Error("Зеркальное фото описывает одного человека, но итоговый prompt добавил второго.");
-        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
+        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope, { hybrid });
         if (finalAudit.issues.length)
           throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
