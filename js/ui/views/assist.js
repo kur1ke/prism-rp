@@ -18,6 +18,7 @@
       <div class="head-who"><div class="head-name">Ассистент</div><span class="head-scene">${esc(a.messages.length ? a.title : "Разговор с моделью вне игры")}</span></div>
       <div class="head-tools">
         <button class="pill" data-act="assist-ctx" title="Что ассистент видит: карточку персонажа и выдержку из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
+        <button class="pill" data-act="vision-test" title="Проверить распознавание изображений через Perchance">Тест Vision</button>
         <button class="icon-btn" data-act="assist-list" title="Все разговоры">${icon("clock")}</button>
         <button class="icon-btn" data-act="assist-new" title="Новый разговор">${icon("plus")}</button>
         ${a.messages.length ? `<button class="icon-btn" data-act="assist-del" title="Удалить разговор">${icon("trash")}</button>` : ""}
@@ -54,7 +55,7 @@
         <span class="spacer"></span>
         ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>` : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
       </div></div></div>`;
-    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div>${composer}</section>`;
+    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div><div id="vision-test-status" role="status" aria-live="polite" style="display:none; white-space:pre-wrap; padding:12px; max-height:240px; overflow:auto; border-top:1px solid var(--border, #7775);"></div>${composer}</section>`;
   }
 
   function assistCtxPop(m) {
