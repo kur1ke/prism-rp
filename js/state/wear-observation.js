@@ -61,6 +61,29 @@
     }
     return matches.length===1?matches[0]:null;
   }
+  // Resolve model's *semantic* garment label to a literal noun phrase in
+  // the selected app-owned fragment. The model never has to copy declension
+  // or adjectives verbatim. We still reject conflicting model attributes.
+  function sourcePhrase(evidence,named){
+    const raw=str(evidence),words=stems(named),terms=tokens(named);
+    if(!words.length||!terms.length)return null;
+    const noun=words[words.length-1];
+    const spans=[...raw.matchAll(/[\\p{L}\\p{N}]+/gu)].map(m=>({
+      text:m[0],start:m.index,end:m.index+m[0].length,stem:stem(m[0])
+    }));
+    const found=[];
+    for(let i=0;i<spans.length;i++){
+      if(!similar(spans[i].stem,noun))continue;
+      let a=i;
+      while(a>0&&i-a<5&&(
+        contains(words,spans[a-1].stem) ||
+        /(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им|ом|ем)$/iu.test(spans[a-1].text)
+      ))a--;
+      const phrase=raw.slice(spans[a].start,spans[i].end);
+      if(match(named,[{item:phrase}]).reference)found.push(phrase);
+    }
+    return found.length===1?found[0]:null;
+  }
   function resolve(candidate,options) {
     const e=candidate||{},o=options||{};
     if(e.field!=="wear"||!["remove","adjust","add"].includes(e.action)||
@@ -73,6 +96,26 @@
     if(list.length!==1)return {event:e,skipped:true};
     const named=str(list[0]),refs=(Array.isArray(o.references)?o.references:[])
       .filter(x=>x&&x.actor===e.actor&&x.field==="wear"&&x.action===e.action);
+    if(e.sourceSpan){
+      // Indexed evidence is already the exact substring of the current
+      // authored source. Derive short literal mentions from it, not the
+      // untrusted model's optional itemMention or grammatical phrasing.
+      const found=refs.map(ref=>({ref,mention:phrase(evidence,ref)}))
+        .filter(x=>x.mention&&(named===x.ref.item||
+          match(named,[x.ref]).reference));
+      if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment"};
+      if(found.length===1){
+        const valid=match(found[0].mention,refs);
+        if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason};
+        return {event:{...e,value:[found[0].ref.item],reference:found[0].ref,
+          itemMention:found[0].mention},resolved:true};
+      }
+      if(e.action==="add"){
+        const literal=sourcePhrase(evidence,named);
+        if(literal)return {event:{...e,value:[literal]},resolved:true};
+      }
+      return {unresolved:"Названный предмет не подтверждён выбранным исходным фрагментом"};
+    }
     if(!refs.length){
       const plain={...e};delete plain.itemMention;
       return {event:plain,skipped:true};
