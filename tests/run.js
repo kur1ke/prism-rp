@@ -53,6 +53,7 @@ require(J("core/perf.js"));
 require(J("ui/render.js"));
 require(J("ui/views/kit.js"));
 require(J("ui/views/drawer.js"));
+require("./wear-observation-resolver.js");
 require("./state-observation-continuity.js");
 const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG, cardModel: CM, cardFormats: CF, cardImport: IMP, cardValidate: VAL } = globalThis.PRP;
 // Импорт карточки из объекта → черновик (для тестов, где важен только результат).
