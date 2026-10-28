@@ -61,7 +61,28 @@
   const wordExists = (str, word) => !!word && (String(str || "").match(/[a-z][a-z0-9]*/g) || []).includes(word);
   const sameTag = (a, b) => IC.bareTag(a).replace(/[_-]/g, " ").toLowerCase() ===
     IC.bareTag(b).replace(/[_-]/g, " ").toLowerCase();
-  function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags, subjectScope) {
+
+  // Hybrid positive is prose, not a comma-separated Danbooru tag list.
+  // Accept only a verbatim garment name in one unambiguously off-body clause,
+  // with the role already signed by the current source-derived VisualPlan.
+  // An on-body use or duplicate noun anywhere in the clause fails closed.
+  const proseWords = value => (String(value || "").toLowerCase().replace(/[_-]/g, " ")
+    .match(/[a-z][a-z0-9]*/g) || []);
+  const proseClauses = value => String(value || "").replace(/<lora:[^>]*>/gi, "")
+    .split(/[.!?;\n]+/).map(x => x.trim()).filter(Boolean);
+  function proseOffBodyClause(clause, tag, noun) {
+    const words=proseWords(clause), name=proseWords(tag);
+    if (!name.length || !noun || words.filter(x => x === noun).length !== 1) return false;
+    if (!(" " + words.join(" ") + " ").includes(" " + name.join(" ") + " ")) return false;
+    // A blouse "lying on her chest" or "worn while on a bed" is not off-body.
+    if (/\b(?:wears?|wearing|worn|lifting|lifted|pulling|pulled|putting|dressed|donned|donning)\b|\boff shoulders\b/i.test(clause))
+      return false;
+    return /\b(?:lies|lie|lying|lay|laid|rests?|resting|placed|folded|draped|hangs?|hanging|hung|holds?|holding|held|carries|carrying|carried)\b/i.test(clause) &&
+      /\b(?:bed|table|floor|chair|couch|sofa|desk|shelf|hanger|rack|ground|hands?|arms?|wardrobe)\b/i.test(clause) &&
+      !/\b(?:her|his|their)\s+(?:chest|torso|shoulders|body)\b/i.test(clause);
+  }
+
+  function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags, subjectScope, options) {
     const plan = visualPlan && visualPlan.wear ? visualPlan : null;
     if (!plan || plan.actor !== "char") return { validated: false, scope: "not-owner", issues: [] };
     const removed = Array.isArray(plan.wear.removed) ? plan.wear.removed : [];
@@ -74,6 +95,9 @@
       issues.push("Не все снятые вещи привязаны к исходному предмету и английскому тегу");
     const objects = Array.isArray(plan.offBodyVisible) ? plan.offBodyVisible : [];
     const shown = Array.isArray(offBodyTags) ? offBodyTags : [];
+    const hybrid = !!(options && options.hybrid);
+    const clauses = hybrid ? proseClauses(prompt) : [];
+    const authorizedClauses = new Map();
     if (objects.length !== shown.length || objects.some((x, i) => {
       const found = shown[i];
       const idx = removed.findIndex((r) => r.item === x.item);
@@ -81,10 +105,15 @@
       // An indexed claim about a visible removed object cannot rename it
       // into another object or disguise a newly worn/lifted garment.
       const bodyAction = /\b(?:wearing|worn|lifting|putting on|pulled up|off shoulders)\b/i;
-      return idx < 0 || !found || found.index !== idx || typeof found.tag !== "string" ||
-        !wordExists(IC.bareTag(found.tag).toLowerCase().replace(/[_-]/g, " "), noun) ||
-        bodyAction.test(found.tag) ||
-        !tagParts(prompt).some((p) => sameTag(p.raw, found.tag));
+      if (idx < 0 || !found || found.index !== idx || typeof found.tag !== "string" ||
+          !wordExists(IC.bareTag(found.tag).toLowerCase().replace(/[_-]/g, " "), noun) ||
+          bodyAction.test(found.tag)) return true;
+      if (!hybrid) return !tagParts(prompt).some((p) => sameTag(p.raw, found.tag));
+      const matches = clauses.map((clause, n) => proseOffBodyClause(clause, found.tag, noun) ? n : -1)
+        .filter(n => n !== -1);
+      if (matches.length !== 1) return true;
+      authorizedClauses.set(idx, matches[0]);
+      return false;
     })) issues.push("Видимые снятые вещи не связаны с точными positive-тегами");
     if (issues.length) return { validated: false, scope: "invalid-mapping", issues };
     // The actual shot may name a second participant without any explicit
@@ -97,10 +126,18 @@
     for (let i = 0; i < mapped.length; i++) {
       const noun = garmentHead(mapped[i].tag);
       const allowed = shown.filter((x) => x.index === i).map((x) => x.tag);
-      for (const p of positives) {
-        if (wordExists(p.norm, noun) && !allowed.some((x) => sameTag(x, p.raw))) {
+      if (hybrid) {
+        // Re-evaluate the FULL executable positive after Card/LoRA/fixedPrompt.
+        // Only the one source-backed off-body clause may contain this garment.
+        if (clauses.some((clause, n) =>
+          proseWords(clause).includes(noun) && authorizedClauses.get(i) !== n))
           issues.push("Снятая вещь присутствует в positive вне подтверждённой off-body роли: " + mapped[i].tag);
-          break;
+      } else {
+        for (const p of positives) {
+          if (wordExists(p.norm, noun) && !allowed.some((x) => sameTag(x, p.raw))) {
+            issues.push("Снятая вещь присутствует в positive вне подтверждённой off-body роли: " + mapped[i].tag);
+            break;
+          }
         }
       }
       if (allowed.length && negatives.some((n) => wordExists(n.norm, noun)))
@@ -180,7 +217,7 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v19-hybrid-description-bounds" : "v14-mirror-framing",
+    const key = [hybrid ? "v20-hybrid-offbody-prose" : "v14-mirror-framing",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
@@ -206,11 +243,11 @@
       "Do not add a garment as a visible object unless SCENE explicitly depicts it there. Never translate a completed removal into lifting a shirt.",
       ...(hybrid ? [
         "For hybrid output, the JSON prompt field must contain a compact English visual description (one to three sentences, up to 100 words / 600 characters), never a Danbooru list. Preserve actual pose, clothing and framing details.",
-        'Each offBody.tag must be an EXACT comma-separated segment of the English positive, not a new visual item.',
+        'Each offBody.tag must be the exact English garment noun phrase appearing verbatim in a sentence that explicitly depicts that item off the body (for example, a blouse lying on a bed). Do not depict that garment as worn or lifted.',
       ] : []),
       ...(o.visualPlan && o.visualPlan.shotAuthored ? [
         'Also return "offBody":[{"index":0,"tag":"exact English positive tag"}] for EACH VERIFIED VISIBLE OFF-BODY OBJECT. Use the removed garment index. Otherwise return "offBody":[]; never invent an object.',
-        "Put every offBody tag verbatim as a separate tag in prompt. Never put an on-body/lifted garment tag in prompt when it is removed.",
+        hybrid ? "Put every offBody garment phrase verbatim in a clear off-body sentence in prompt. A removed garment must not appear as worn, lifted or duplicated." : "Put every offBody tag verbatim as a separate tag in prompt. Never put an on-body/lifted garment tag in prompt when it is removed.",
       ] : []),
     ].join("\n") : "";
     // The plan replaces translation ORDER; SCENE and wear evidence are not duplicated.
@@ -258,7 +295,7 @@
           }
         }
         const wearItems = absent.map((x) => ({ index: x.index, item: wear.removed[x.index].item, tag: x.tag.trim() }));
-        const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags, o.subjectScope);
+        const semantic = auditFinal(prompt, "", o.visualPlan, wearItems, offBodyTags, o.subjectScope, { hybrid });
         if (semantic.issues.length)
           return failure(semantic.issues.join("; ").slice(0, 240));
         result = {
