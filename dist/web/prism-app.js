@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "074a2f56e66398bc0148eaffc6327391db7b2ab3";
+  window.PRISM_RP_BUILD_SHA = "f0024cbcf0970eb070605e06fadbb8ec8f1b6e4f";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4966,18 +4966,34 @@
     return eligible.length===1?{reference:eligible[0]}:
       {reason:eligible.length?"ambiguous-garment":"unknown-garment"};
   }
+  // A canonical garment can contain additional nouns after a preposition
+  // ("блузка с коротким рукавом"). Anchor an abbreviated quote to the
+  // garment's leading noun, never to a shared adjective ("белом белье").
+  // This is a lexical guard, not a per-character clothing dictionary.
+  function garmentHead(item) {
+    const lead=str(item).split(/\s+(?:с|со|без|из|для|на|в|под)\s+/iu)[0];
+    const words=tokens(lead), qualifier=/(?:ая|яя|ое|ее|ые|ие|ый|ий|ой|ей|ую|юю|ых|их|ым|им)$/iu;
+    const russian=/[а-яё]/iu.test(lead);
+    // Skip compound-colour prefixes such as "светло-розовая"; keep the
+    // first nominal token in "юбка-плиссе", not its trailing descriptor.
+    const noun=russian?words.find((word,i)=>word.length>=3&&!qualifier.test(word)&&
+      !(i+1<words.length&&qualifier.test(words[i+1]))):
+      words.slice().reverse().find(word=>word.length>=3);
+    return noun?stem(noun):null;
+  }
   // Transitional compatibility for Observer models that return the known
   // full name instead of a short literal quote. Derive only the contiguous
   // noun phrase immediately supported by the evidence. Explicit itemMention
   // is preferred; no free-form fuzzy guessing of arbitrary nouns.
   function phrase(evidence,ref) {
-    const words=stems(ref.item),raw=str(evidence);
+    const words=stems(ref.item),raw=str(evidence),head=garmentHead(ref.item);
+    if(!head)return null;
     const spans=[...raw.matchAll(/[\p{L}\p{N}]+/gu)].map(m=>({
       text:m[0],stem:stem(m[0]),start:m.index,end:m.index+m[0].length
     }));
     const matches=[];
     for(let i=0;i<spans.length;i++){
-      if(!contains(words,spans[i].stem))continue;
+      if(!similar(head,spans[i].stem))continue;
       if(/(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им)$/iu.test(spans[i].text))continue;
       let first=i;
       while(first>0&&i-first<5&&contains(words,spans[first-1].stem))first--;
