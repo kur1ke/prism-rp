@@ -219,6 +219,8 @@ assert.equal(changed.rejectedObservations[0].reason,"ambiguous-reference");
 assert.deepEqual(changed.rejectedObservations[0].candidates.map(x=>x.item),
   [cottonShirt,linenShirt]);
 assert.ok(changed.rejectedObservations[0].candidates.every(x=>x.id.endsWith(":adjust")));
+assert.ok(changed.rejectedObservations[0].candidates.every(x=>
+  x.origin.kind==="initial-outfit"),"diagnostics retain the origin of the same active-path references");
 assert.ok(changed.issues[1].includes("pose") &&
   changed.issues[1].includes("DRAW") && changed.issues[1].includes("wear"));
 assert.ok(changed.issues[2].includes("hair") &&
