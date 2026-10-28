@@ -40,6 +40,7 @@ require(J("prism/memory-cycle.js"));
 require(J("state/tracker.js"));
 require(J("state/resolver.js"));
 require(J("state/interpreter.js"));
+require(J("state/wear-inquiry.js"));
 require(J("state/service.js"));
 require(J("images/compose.js"));
 require(J("images/visual-plan.js"));
@@ -49,6 +50,7 @@ require(J("assist/assist.js"));
 require(J("core/settings.js"));
 require(J("core/perf.js"));
 require(J("ui/render.js"));
+require("./state-observation-continuity.js");
 const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG, cardModel: CM, cardFormats: CF, cardImport: IMP, cardValidate: VAL } = globalThis.PRP;
 // Импорт карточки из объекта → черновик (для тестов, где важен только результат).
 const normalize = (json) => { const r = IMP.fromObject(json, "json", "t.json"); if (!r.ok) throw new Error(r.issues.map((x) => x.message).join("; ")); return r.draft; };
@@ -3653,8 +3655,7 @@ async function foundationH() {
       {...valid,visualScope:"old-photo"},
       {...valid,action:"set"},
       {...valid,action:"clear",value:null},
-      {...valid,actor:"user"},
-      {...valid,certainty:"established"}
+      {...valid,actor:"user"}
     ];
     for(const event of rejected){
       const p=INT.parse(JSON.stringify({events:[event]}),options);
@@ -3662,6 +3663,12 @@ async function foundationH() {
     }
     const good=INT.parse(JSON.stringify({events:[valid]}),options);
     assert.strictEqual(good.events.length,1,JSON.stringify(good));
+    // Model certainty is downcast; persisted forged 'established' remains
+    // invalid under the strict Tracker replay contract.
+    const downgraded=INT.parse(JSON.stringify({events:[{...valid,certainty:"established"}]}),options);
+    assert.strictEqual(downgraded.events.length,1);
+    assert.strictEqual(downgraded.events[0].certainty,"reported");
+    assert.ok(TRACK.normalize({...valid,certainty:"established"},options).error);
     const m={id:"photo",role:"assistant",swipeIdx:0,swipes:[{text:"Лови!",draws:[{prompt:current}],stateEvents:good.events},
       {text:"Прошлое",draws:[{prompt:"an old stock image of jeans"}],stateEvents:[]}]};
     const make=(idx)=>TRACK.fold({mode:"messenger",charName:"Орихимэ",path:[{...m,swipeIdx:idx}]});
@@ -4011,7 +4018,8 @@ async function foundationH() {
     assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"edited-photo-evidence",
       "moving an earlier quote to a crop must fail exact source validation");
     obj.swipes[0].stateEvents[0].evidence="close up";
-    assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"target-photo-not-observed");
+    assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"edited-photo-evidence",
+      "a cited phrase without the asserted garment is not valid evidence");
     obj.swipes[0].stateEvents[0].drawIndex=0;
     obj.swipes[0].stateEvents[0].evidenceType="text";
     assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"unsequenced-state-event");
@@ -6902,6 +6910,207 @@ async function unifiedTracker() {
     } finally {globalThis.PRP.llm=old;}
     console.log("PASS: Observer and next Prism honor a clothing transition without resetting origin");
   });
+  await ta("STATE-CONTINUITY-1: authored DRAW alone updates Observer, swipe and next Prism",async()=>{
+    const h=fbHarness({name:"Орихимэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",
+      event:{actor:"char",field:"wear",action:"set",value:["бежевая юбка","белая блузка"],
+        certainty:"reported",evidence:""}};
+    const current="Селфи перед зеркалом. На ней только белая блузка и белые трусики.";
+    const reply=h.chat.newMsg("assistant",null,"Смотри! ♡");
+    reply.swipes[0].draws=[{prompt:current}];
+    await h.chat.commitMessage(reply,reply.id);
+    const previous=globalThis.PRP.llm;
+    let instruction;
+    try{
+      globalThis.PRP.llm={simple:async(_provider,prompt)=>{
+        instruction=prompt;
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"set",
+          value:["белая блузка","белые трусики"],certainty:"reported",
+          evidence:"На ней только белая блузка и белые трусики.",
+          evidenceType:"draw",visualScope:"current-self"}],frameObjects:[],unresolved:[]});
+      }};
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.ok(instruction.includes("ТЕКУЩИЙ АВТОРСКИЙ DRAW"));
+      const seen=h.chat.path().at(-1).swipes[0].stateEvents;
+      assert.strictEqual(seen.length,1);
+      assert.strictEqual(seen[0].evidenceType,"draw");
+      assert.strictEqual(seen[0].action,"set");
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),
+        ["белая блузка","белые трусики"]);
+      const prism=h.prism.build(h.chat.path());
+      const body=allText(prism.messages);
+      assert.ok(body.includes("полный текущий комплект по авторскому DRAW"),body);
+      assert.ok(!body.includes("ПОЛНЫЙ перечень надетой сейчас одежды: бежевая юбка"),
+        "next Prism must not reconstruct original outfit");
+      assert.ok(!body.includes("ранее установленный полный комплект: бежевая юбка"),
+        "historical outfit must not be reasserted as today's outfit");
+    }finally{globalThis.PRP.llm=previous;}
+    console.log("PASS: complete self-authored DRAW updates persistent selected swipe and next Prism");
+  });
+  await ta("WEAR-INQUIRY-1: RP answers only unresolved hidden garment facts for its authored DRAW",async()=>{
+    const h=fbHarness({name:"Орихимэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const initial=["бежевая юбка","белая блузка","бежевые колготки","розовые балетки"];
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{
+      actor:"char",field:"wear",action:"set",value:initial,certainty:"reported",evidence:""}};
+    const photo="Селфи Орихимэ в зеркале в красном вечернем платье и чёрных туфлях.";
+    const response=h.chat.newMsg("assistant",null,"Ну как тебе? ♡");
+    response.swipes[0].draws=[{prompt:photo}];
+    await h.chat.commitMessage(response,response.id);
+    const old=globalThis.PRP.llm;
+    const calls=[];
+    const visual={actor:"char",field:"wear",action:"add",
+      value:["красном вечернем платье","чёрных туфлях"],certainty:"reported",
+      evidence:"красном вечернем платье и чёрных туфлях",
+      evidenceType:"draw",visualScope:"current-self"};
+    globalThis.PRP.llm={...old,simple:async(provider,instruction)=>{
+      calls.push({provider,instruction});
+      if(instruction.startsWith("Ты — наблюдатель"))
+        return JSON.stringify({events:[visual],frameObjects:[],unresolved:[]});
+      assert.ok(instruction.includes("Техническое уточнение"));
+      assert.ok(instruction.includes("бежевые колготки"));
+      return JSON.stringify({changed:"yes",previous:initial.map(item=>({
+        item,status:"not_worn"
+      })),hidden:[
+        {slot:"underwear_bottom",status:"worn",items:["белые хлопковые трусики"]},
+        {slot:"hosiery",status:"not_worn",items:[]},
+        {slot:"socks",status:"unknown",items:[]}
+      ]});
+    }};
+    try {
+      const observed=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"processing-provider"});
+      assert.equal(observed.status,"ok",JSON.stringify(observed));
+      assert.equal(calls.length,2,"single addressed clarification, not a loop");
+      assert.equal(calls[1].provider.id,"mock","clarification is sent to RP provider, not processing provider");
+      const w=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.equal(w.complete,false,"hidden unknown categories prevent full outfit claims");
+      assert.deepStrictEqual(w.worn.map(x=>x.item).sort(),
+        ["красном вечернем платье","чёрных туфлях","белые хлопковые трусики"].sort());
+      assert.equal(w.worn.some(x=>initial.includes(x.item)),false);
+      assert.equal(w.removed.length,0,"superseded garments must not be manufactured as removal events");
+      const sw=h.chat.path().at(-1).swipes[0];
+      assert.equal(sw.wearInquiries.length,1);
+      assert.ok(sw.stateEvents.some(e=>e.evidenceType==="wear-inquiry"&&e.action==="invalidate"));
+      const stored=(await h.ctx.DB.get("messages",response.id)).swipes[0];
+      assert.equal(stored.wearInquiries[0].sourceDraw,photo);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),
+        globalThis.PRP.stateTracker.fold({mode:"messenger",initialWear:h.ctx.chat().initialWear,
+          path:h.chat.path()}).actors.char.wearState.worn.map(x=>x.item));
+      assert.ok(globalThis.PRP.stateTracker.normalize(
+        {...sw.stateEvents.find(e=>e.evidenceType==="wear-inquiry"&&e.action==="add"),drawIndex:7},
+        {role:"assistant",mode:"messenger",text:sw.text,draws:sw.draws,
+          wearInquiries:sw.wearInquiries}).error,
+        "changing source draw index invalidates hidden facts");
+      const alternate=structuredClone(h.chat.path().at(-1));
+      alternate.swipes.push({text:"Не показываю наряд",sceneOps:[],stateEvents:[],draws:[]});
+      alternate.swipeIdx=1;
+      const other=globalThis.PRP.stateTracker.fold({mode:"messenger",
+        initialWear:h.ctx.chat().initialWear,path:[alternate]});
+      assert.deepStrictEqual(other.actors.char.wearState.worn.map(x=>x.item),initial,
+        "sibling swipe cannot inherit hidden clothing");
+      const prism=allText(h.prism.build(h.chat.path()).messages);
+      assert.ok(prism.includes("красном вечернем платье"),"next Prism sees chosen current outfit");
+      assert.ok(!prism.includes("ПОЛНЫЙ перечень надетой сейчас одежды: бежевая юбка"));
+    }finally {globalThis.PRP.llm=old;}
+  });
+  await ta("WEAR-INQUIRY-3: continued swipe keeps hidden facts and reads new photo against prior shot",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{actor:"char",
+      field:"wear",action:"set",value:["бежевая юбка"],certainty:"reported",evidence:""}};
+    const m=h.chat.newMsg("assistant",null,"Смотри!");
+    m.swipes[0].draws=[{prompt:"На Орихимэ красное платье"}];
+    await h.chat.commitMessage(m,m.id);
+    const old=globalThis.PRP.llm;
+    let observed=0,inquired=0;
+    globalThis.PRP.llm={...old,simple:async(_provider,instruction)=>{
+      if(instruction.startsWith("Ты — наблюдатель")){
+        observed++;
+        const isSecond=instruction.includes("чёрная куртка");
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"add",
+          value:[isSecond?"чёрная куртка":"красное платье"],
+          evidence:isSecond?"чёрная куртка":"красное платье",
+          certainty:"reported",evidenceType:"draw",visualScope:"current-self"}]});
+      }
+      inquired++;
+      const second=instruction.includes("чёрная куртка");
+      return JSON.stringify({changed:second?"no":"yes",
+        previous:(second?["красное платье","белое бельё"]:["бежевая юбка"])
+          .map(item=>({item,status:second?"worn":"not_worn"})),
+        hidden:second?[]:[{slot:"underwear_bottom",status:"worn",items:["белое бельё"]}]});
+    }};
+    try {
+      assert.equal((await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"})).status,"ok");
+      const sw=h.chat.path()[0].swipes[0];
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item).sort(),
+        ["красное платье","белое бельё"].sort());
+      sw.text+=" Потом ещё один снимок.";
+      sw.draws.push({prompt:"Орихимэ, красное платье, чёрная куртка"});
+      assert.equal((await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"})).status,"ok");
+      assert.equal(observed,2);assert.equal(inquired,2);
+      assert.equal(sw.wearInquiries.length,2);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item).sort(),
+        ["красное платье","белое бельё","чёрная куртка"].sort());
+      const previous=globalThis.PRP.stateTracker.historicalDrawPath(h.chat.path(),0);
+      assert.equal(previous.ok,true,previous.reason);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot(previous.path).actors.char.wearState.worn.map(x=>x.item).sort(),
+        ["красное платье","белое бельё"].sort(),
+        "second shot cannot rewrite first shot's hidden garments");
+    }finally{globalThis.PRP.llm=old;}
+  });
+  await ta("WEAR-INQUIRY-4: generation processes a DRAW-only Messenger reply",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    h.ctx.env.perchanceImages=()=>true;
+    h.S.settings.images.autoDraw=false;
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const u=h.chat.newMsg("user",null,"Покажи фото");
+    await h.chat.commitMessage(u,u.id);
+    const before=globalThis.PRP.llm.simple,oldLLM=fbLLM;
+    const draw="Селфи Орихимэ в белом платье";
+    fbLLM=async()=>({text:"[draw: "+draw+"]",reasoning:""});
+    globalThis.PRP.llm.simple=async(_p,ins)=>{
+      if(ins.startsWith("Ты — наблюдатель"))
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"add",
+          value:["белом платье"],evidence:"белом платье",
+          certainty:"reported",evidenceType:"draw",visualScope:"current-self"}]});
+      return JSON.stringify({changed:"unknown",previous:[],hidden:[]});
+    };
+    try{
+      const generated=await h.gen.generate(null,"new");
+      assert.ok(generated && generated.msgId,"DRAW-only message must be committed");
+      await generated.post;
+      const out=h.chat.path().at(-1),sw=out.swipes[out.swipeIdx||0];
+      assert.equal(sw.text,"");
+      assert.equal(sw.draws.length,1);
+      assert.deepStrictEqual(sw.stateEvents.filter(e=>e.field==="wear").flatMap(e=>e.value||[]),["белом платье"]);
+      assert.equal(sw.stateStatus.status,"ok");
+      assert.ok(sw.messengerAt,"photo-only reply gets proper Messenger time");
+    }finally{globalThis.PRP.llm.simple=before;fbLLM=oldLLM;}
+  });
+  await ta("WEAR-INQUIRY-2: partial existing outfit and invalid model reply never invent clothes",async()=>{
+    const W=globalThis.PRP.wearInquiry;
+    const previous={known:true,worn:[{item:"белая блузка"}]};
+    const crop={mode:"messenger",role:"assistant",draw:"На фото воротник белой блузки",
+      previous,events:[{actor:"char",field:"wear",action:"add",evidenceType:"draw",
+        value:["белая блузка"]}]};
+    assert.equal(W.needed(crop),false);
+    assert.equal(W.needed({...crop,events:[{...crop.events[0],value:["красное платье"]}]}),true);
+    const ctx={previous,draw:"Селфи в красном платье",drawIndex:0,text:"Смотри!"};
+    assert.ok(W.parse(JSON.stringify({changed:"yes",previous:[],hidden:[]}),ctx).error,
+      "incomplete previous-item audit cannot authorize replacement");
+    assert.ok(W.parse(JSON.stringify({changed:"yes",
+      previous:[{item:"чужая вещь",status:"not_worn"}],hidden:[]}),ctx).error);
+    assert.ok(W.parse(JSON.stringify({changed:"yes",
+      previous:[{item:"белая блузка",status:"not_worn"}],
+      hidden:[{slot:"underwear_bottom",status:"worn",items:[]}]
+    }),ctx).error,"cannot assert worn without naming what is worn");
+  });
   await ta("WEAR-LIVE-2: never guess a matching garment if multiple names or qualifiers conflict", async () => {
     const T=globalThis.PRP.stateTracker;
     const first={id:"start",role:"assistant",swipeIdx:0,swipes:[{text:"На мне красная юбка и синяя юбка.",
@@ -7095,7 +7304,11 @@ async function unifiedTracker() {
     const state = STATE.fold({ mode: "messenger", path: [m] });
     assert.strictEqual(STATE.forCharacter(state).location, null);
     assert.ok(state.diagnostics.length);
-    assert.strictEqual(INTR.parse(JSON.stringify({ events: [m.swipes[0].stateEvents[0]] }), { mode: "messenger", role: "assistant", text: m.swipes[0].text }).events.length, 0);
+    const repaired=INTR.parse(JSON.stringify({ events: [m.swipes[0].stateEvents[0]] }),
+      { mode: "messenger", role: "assistant", text: m.swipes[0].text });
+    assert.strictEqual(repaired.events.length,1);
+    assert.strictEqual(repaired.events[0].certainty,"reported",
+      "model boundary may downcast certainty, but Tracker still rejects raw established");
   });
   await ta("UT-6: недоказанные значения и инструкции в тексте не применяются", async () => {
     const r = INTR.parse('{"events":[{"actor":"char","field":"hair","action":"set","certainty":"reported","value":"розовые","evidence":"вымышленное подтверждение"}]}',

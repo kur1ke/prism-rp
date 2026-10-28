@@ -5,7 +5,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, TRACK = PRP.stateTracker, INT = PRP.stateInterpreter;
+  const TR = PRP.tree, TRACK = PRP.stateTracker, INT = PRP.stateInterpreter, WI = PRP.wearInquiry;
   const MAX_TEXT = 4500;
   function create(ctx) {
     const { S } = ctx;
@@ -192,6 +192,29 @@
       }
       return result;
     }
+    // A narrow second call to the RP provider is warranted only when an
+    // authored DRAW reports new clothing, while formerly known clothing may
+    // conflict or have hidden layers. Failure leaves the Observer events as-is.
+    async function inquireWear(o) {
+      if (!WI || !WI.needed(o) || !PRP.llm || typeof PRP.llm.simple !== "function")
+        return { skipped: "not-needed" };
+      const roleProvider = typeof ctx.provider === "function" ? ctx.provider() : null;
+      if (!roleProvider) return { skipped: "no-rp-provider" };
+      const instruction = WI.instruction(o);
+      const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
+        ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
+      if (tokens + 450 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
+        return { skipped: "budget" };
+      let timer;
+      try {
+        const raw = await Promise.race([
+          PRP.llm.simple(roleProvider, instruction, { maxTokens: 450 }),
+          new Promise((_,reject) => { timer=setTimeout(() => reject(new Error("timeout")), 10000); })
+        ]);
+        return WI.parse(raw, o);
+      } catch(e) { return { error: String(e && e.message || e).slice(0,100) }; }
+      finally { clearTimeout(timer); }
+    }
     function prepareUser(text, provider) {
       const c = ctx.chat(), source = String(text || "");
       if (!c || !source.trim() || !INT.mayChangeState(source)) return null;
@@ -233,6 +256,7 @@
       const latestIndex = draws.length - 1;
       const priorStatus = sw.stateStatus;
       const archivedDrawEvents = [];
+      const archivedWearInquiries = [];
       let previousIndex = -1;
       if (latestIndex > 0 && priorStatus &&
           ["ok", "partial", "no-changes"].includes(priorStatus.status) &&
@@ -246,14 +270,27 @@
           : candidates.length === 1 ? candidates[0] : -1;
         if (previousIndex >= 0 && previousIndex < latestIndex &&
             draws[previousIndex] && String(draws[previousIndex].prompt || "") === priorStatus.sourceDraw) {
+          for (const note of Array.isArray(sw.wearInquiries) ? sw.wearInquiries : []) {
+            const d = note && draws[note.drawIndex];
+            if (note && note.schema === 1 && Number.isInteger(note.drawIndex) &&
+                note.drawIndex <= previousIndex && d &&
+                note.sourceDraw === String(d.prompt || "") &&
+                typeof note.sourceText === "string" &&
+                sourceText.startsWith(note.sourceText)) archivedWearInquiries.push(note);
+          }
           for (const event of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
-            if (!event || event.evidenceType !== "draw" || event.certainty === "intent") continue;
+            if (!event || event.certainty === "intent") continue;
             const drawIndex = event.drawIndex == null ? previousIndex : event.drawIndex;
             const exactDraw = draws[drawIndex];
             if (!Number.isInteger(drawIndex) || drawIndex < 0 || drawIndex > previousIndex ||
-                !exactDraw || typeof exactDraw.prompt !== "string" ||
-                !event.evidence || !exactDraw.prompt.includes(event.evidence)) continue;
-            archivedDrawEvents.push({ ...event, drawIndex });
+                !exactDraw || typeof exactDraw.prompt !== "string") continue;
+            if (event.evidenceType === "draw" && event.evidence &&
+                exactDraw.prompt.includes(event.evidence))
+              archivedDrawEvents.push({ ...event, drawIndex });
+            else if (event.evidenceType === "wear-inquiry" &&
+                !TRACK.normalize(event, { role: msg.role, mode: c.mode,
+                  text: sourceText, draws, wearInquiries: archivedWearInquiries }).error)
+              archivedDrawEvents.push({ ...event, drawIndex });
           }
         }
       }
@@ -263,6 +300,7 @@
       // exact previously verified photo events; do not pull future text or
       // later Scene directives back into that earlier moment.
       const contextual = observationContext(initialPath.slice(0, index), msg.role);
+      let priorDrawState = null;
       if (previousIndex >= 0 && archivedDrawEvents.length) {
         const priorMessage = {
           id: msg.id, chatId: msg.chatId, parentId: msg.parentId,
@@ -272,9 +310,11 @@
             draws: draws.slice(0, previousIndex + 1),
             sceneOps: [], stateCorrections: [],
             stateEvents: archivedDrawEvents.slice(-32),
+            wearInquiries: archivedWearInquiries,
           }],
         };
         const localState = snapshot(initialPath.slice(0, index).concat([priorMessage]));
+        priorDrawState = localState;
         contextual.references = TRACK.references(localState, "char", ["remove", "adjust", "add"]);
       }
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
@@ -306,8 +346,34 @@
       // Grounded fallback intentionally reads only text. Image descriptions
       // are interpreted by the SAME Observer and independently verified
       // against their exact draw evidence on every StateTracker fold.
-      const events = result.events.map((e) => e.evidenceType === "draw" && latestIndex > 0
+      const currentEvents = result.events.map((e) => e.evidenceType === "draw" && latestIndex > 0
         ? { ...e, drawIndex: latestIndex } : e);
+      const events = currentEvents.slice();
+      let wearInquiries = archivedWearInquiries.slice();
+      // Separate hidden self-report only after a positive, verified current
+      // DRAW garment change. No report is created by a mere crop/portrait.
+      if (sourceDraw && sourceDraw.length <= 1600 &&
+          msg.role === "assistant" && result.valid && wearInquiries.length < 8) {
+        const previousWear = (priorDrawState ||
+          snapshot(initialPath.slice(0,index))).actors.char.wearState;
+        const probe = await inquireWear({
+          mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
+          drawIndex: latestIndex, text: sourceText.slice(0,400),
+          sourceText, character: (ctx.card()||{}).name,
+          previous: previousWear,
+          visible: currentEvents.filter(e => e.field === "wear" &&
+            e.evidenceType === "draw" && e.action === "add")
+            .flatMap(e => e.value || []).slice(0,12),
+          events: currentEvents,
+        });
+        if (probe.answer) {
+          wearInquiries.push(probe.answer);
+          const newEvents = WI.events(probe.answer).filter(e =>
+            !TRACK.normalize(e, { role: msg.role, mode: c.mode,
+              text: sourceText, draws, wearInquiries }).error);
+          events.push(...newEvents);
+        } else if (probe.error) result.issues.push("Уточнение одежды: " + probe.error);
+      }
       // Prior snapshots are evidence, not an unbounded event log. Bound the
       // archival slice, report truncation and never override a fresh event.
       const MAX_ARCHIVED_DRAW_EVENTS = 32;
@@ -327,10 +393,14 @@
       // report independently grounded compatible text facts; don't guess.
       const visualChange = result.events.some((e) => e.actor === "char" &&
         e.field === "wear" && e.evidenceType === "draw" &&
-        (e.action === "remove" || e.action === "adjust"));
+        ["set", "clear", "remove", "adjust", "invalidate"].includes(e.action));
+      // An authoritative current outfit replacement must not be followed by a
+      // lexical fallback that re-adds garments from the pre-replacement text.
+      const outfitReplaced = result.events.some((e) => e.field === "wear" &&
+        e.certainty !== "intent" && ["set", "clear", "invalidate"].includes(e.action));
       for (const e of fallback) {
         if (events.length >= INT.MAX) break;
-        if (visualChange && e.field === "wear") continue;
+        if ((visualChange || outfitReplaced) && e.field === "wear") continue;
         const sameField = events.filter((x) => x.actor === e.actor && x.field === e.field && x.certainty !== "intent");
         if (e.field === "wear" && e.action === "add" && Array.isArray(e.value)) {
           // A model may return one garment (or an invalid second garment).
@@ -347,9 +417,12 @@
       // canonical store. Preserve relative ordering within each evidence kind.
       // Text is processed first as before; visual events follow the exact
       // photo order so the newest explicit observation wins only on its item.
-      const drawOrder = (event) => event.evidenceType === "draw"
+      const drawOrder = (event) => ["draw","wear-inquiry"].includes(event.evidenceType)
         ? (event.drawIndex == null ? latestIndex : event.drawIndex) : -1;
-      events.sort((a, b) => drawOrder(a) - drawOrder(b));
+      const phase = (event) => event.evidenceType === "wear-inquiry" &&
+        event.action === "invalidate" ? -1 :
+        event.evidenceType === "wear-inquiry" ? 1 : 0;
+      events.sort((a, b) => drawOrder(a) - drawOrder(b) || phase(a) - phase(b));
       if (!ctx.chat() || ctx.chat().id !== chatId || (msg.swipeIdx || 0) !== swipeIdx ||
           String(TR.activeSwipe(msg).text || "") !== sourceText ||
           pathFingerprint(chat().path()) !== originalKey) {
@@ -366,9 +439,11 @@
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
       const next = JSON.parse(JSON.stringify(msg));
       next.swipes[swipeIdx].stateEvents = events;
+      next.swipes[swipeIdx].wearInquiries = wearInquiries;
       next.swipes[swipeIdx].stateStatus = stateStatus;
       await ctx.DB.put("messages", next);
       sw.stateEvents = events;
+      sw.wearInquiries = wearInquiries;
       sw.stateStatus = stateStatus;
       updateUi();
       return { events, issues, status };
@@ -412,7 +487,7 @@
     /* Дождаться всех разборов чата (и тех, что добавятся за время ожидания). Ограничено: каждый разбор
        сам ограничен таймаутом наблюдателя; settle добавляет общий предел и сообщает, если он истёк. */
     async function settle(chatId, maxMs) {
-      const limit = Math.max(500, Number(maxMs) || (observerLimit(OBSERVER_DEFAULT_MS) + 5000));
+      const limit = Math.max(500, Number(maxMs) || (observerLimit(OBSERVER_DEFAULT_MS) + 15000));
       const t0 = now();
       let timer;
       const deadline = new Promise((r) => { timer = setTimeout(() => r("timeout"), limit); });

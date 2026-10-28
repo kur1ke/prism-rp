@@ -23,7 +23,7 @@
   // "known" distinguishes no positive evidence from an established empty list;
   // "complete" means a full outfit was explicitly established, not guessed.
   // fields.wear below is ONLY a compatibility projection, never an input.
-  const emptyWear = () => ({ known: false, complete: false, worn: [], removed: [], partiallyWorn: [], last: null });
+  const emptyWear = () => ({ known: false, complete: false, worn: [], removed: [], partiallyWorn: [], invalidated: false, last: null });
   const emptyActor = (name) => ({ name: str(name), fields: {}, wearState: emptyWear(), intentions: [], notes: [] });
   const garmentKey = (value) => str(value).toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const sameGarment = (a, b) => garmentKey(a) === garmentKey(b);
@@ -86,7 +86,18 @@
       item, order, certainty: event.certainty, source: clone(source),
       ...(placement ? { placement } : {}),
     });
-    if (event.action === "set" || event.action === "clear") {
+    if (event.action === "invalidate") {
+      // The author explicitly superseded the old outfit without describing
+      // the new one. Unknown is neither "still worn" nor "removed".
+      // History is replayable from source events; no second inventory is stored.
+      wear.known = false;
+      wear.complete = false;
+      wear.invalidated = true;
+      wear.worn = [];
+      wear.removed = [];
+      wear.partiallyWorn = [];
+    } else if (event.action === "set" || event.action === "clear") {
+      wear.invalidated = false;
       wear.known = true;
       wear.complete = true;
       wear.worn = event.action === "set"
@@ -96,7 +107,10 @@
       wear.removed = [];
       wear.partiallyWorn = [];
     } else {
-      if (event.action === "add" || event.action === "adjust") wear.known = true;
+      if (event.action === "add" || event.action === "adjust") {
+        wear.known = true;
+        wear.invalidated = false;
+      }
       for (const item of event.value) {
         const existing = canonicalWearItem(item, previous);
         const name = existing ? existing.item : item;
@@ -161,7 +175,8 @@
     if (!ALLOWED_ACTORS.has(e.actor)) return "неизвестный участник";
     if (!FIELDS.includes(e.field)) return "неизвестное поле";
     if (!CERTAINTY.has(e.certainty)) return "неизвестный статус";
-    if (!["set", "clear", "add", "remove", "adjust"].includes(e.action)) return "неизвестное действие";
+    if (!["set", "clear", "add", "remove", "adjust", "invalidate"].includes(e.action)) return "неизвестное действие";
+    if (e.action === "invalidate" && (e.field !== "wear" || e.certainty === "intent")) return "отмена актуальности допустима только для подтверждённого переодевания";
     if (["add", "remove", "adjust"].includes(e.action) && e.field !== "wear") return "дополнение допустимо только для одежды";
     if (e.action === "adjust" && (typeof e.placement !== "string" || !e.placement.trim() ||
         e.placement.length > 160 || !str(e.evidence).includes(e.placement))) return "положение одежды не подтверждается цитатой";
@@ -179,11 +194,54 @@
     // ONE swipe. A draw never becomes a hidden instruction or a separate store:
     // replay must prove the exact quoted fragment is still in its source shot.
     const drawn = e.evidenceType === "draw";
-    if (e.evidenceType != null && !drawn) return "неизвестный источник цитаты";
-    // A photo proves only depicted items. Even a full-body frame cannot
-    // establish all potentially hidden clothes or clear the entire outfit.
-    if (drawn && !["add", "remove", "adjust"].includes(e.action))
-      return "draw не подтверждает полный комплект или очистку гардероба";
+    const inquiry = e.evidenceType === "wear-inquiry";
+    if (e.evidenceType != null && !drawn && !inquiry) return "неизвестный источник цитаты";
+    // An RP-model clarification is a bound self-report about its own authored
+    // DRAW. It is never an unanchored invisible garment or a second outfit.
+    // Every event must replay against the ORIGINAL stored answer on this swipe.
+    if (inquiry) {
+      if (!source || source.role !== "assistant" || e.actor !== "char" ||
+          e.field !== "wear" || e.certainty !== "reported" ||
+          !Number.isInteger(e.drawIndex) || e.drawIndex < 0 ||
+          e.drawIndex >= (Array.isArray(source.draws) ? source.draws.length : 0) ||
+          e.reference || e.placement) return "неверный источник уточнения одежды";
+      const note = (Array.isArray(source.wearInquiries) ? source.wearInquiries : [])
+        .find(n => n && n.schema === 1 && n.drawIndex === e.drawIndex);
+      const draw = source.draws[e.drawIndex];
+      if (!note || !draw || note.sourceDraw !== String(draw.prompt || "") ||
+          typeof note.sourceText !== "string" || !String(source.text || "").startsWith(note.sourceText) ||
+          !["yes","no","unknown"].includes(note.changed)) return "уточнение не принадлежит авторскому draw";
+      if (e.action === "invalidate" && note.changed === "yes" && e.evidence === "changed")
+        return null;
+      const values = Array.isArray(e.value) ? e.value : [];
+      if (!values.length || values.length > 3) return "некорректный результат уточнения";
+      if (e.action === "remove" && values.length === 1 && e.evidence === values[0] &&
+          note.changed !== "yes" && Array.isArray(note.previous) &&
+          note.previous.some(x => x && x.item === values[0] && x.status === "not_worn"))
+        return null;
+      if (e.action === "add" && values.length === 1 && !e.wearSlot && e.evidence === values[0] &&
+          note.changed === "yes" && Array.isArray(note.previous) &&
+          note.previous.some(x => x && x.item === values[0] && x.status === "worn"))
+        return null;
+      if (e.action === "add" && typeof e.wearSlot === "string" && e.evidence === e.wearSlot &&
+          Array.isArray(note.hidden) && note.hidden.some(x => x && x.slot === e.wearSlot &&
+            x.status === "worn" && Array.isArray(x.items) &&
+            JSON.stringify(x.items) === JSON.stringify(values)))
+        return null;
+      return "событие не подтверждается ответом RP-модели";
+    }
+    // A frame alone is not an exhaustive outfit. A current authored DRAW may
+    // explicitly assert the complete outfit (including what is NOT worn).
+    // Require an exact source-local claim rather than a model's bare boolean:
+    // "full body", cropped shots and merely unseen garments never suffice.
+    if (drawn && !["set", "clear", "add", "remove", "adjust", "invalidate"].includes(e.action))
+      return "недопустимое действие из draw";
+    if (drawn && e.action === "set" &&
+        !/(?:на\s+не[йм]\s+только|из\s+одежды\s+(?:на\s+не[йм]\s+)?только|одет[а-яё]*\s+только\s+в|wear(?:s|ing)?\s+only|only\s+wearing|nothing\s+else\s+(?:on|worn))/iu.test(str(e.evidence)))
+      return "draw не содержит однозначного полного перечня одежды";
+    if (drawn && e.action === "clear" &&
+        !/(?:совсем\s+без\s+одежды|полностью\s+обнаж|без\s+единой\s+вещи|ничего\s+не\s+надето|completely\s+naked|fully\s+nude|wearing\s+nothing)/iu.test(str(e.evidence)))
+      return "draw не подтверждает отсутствие всей одежды";
     if (drawn && e.visualScope !== "current-self")
       return "draw не подтверждён как актуальное изображение самого персонажа";
     // A continued swipe may contain several shots. An explicitly indexed
@@ -195,7 +253,7 @@
     if (drawn && e.drawIndex != null &&
         (!Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= drawList.length))
       return "недопустимый индекс авторского draw";
-    if (!drawn && e.drawIndex != null) return "индекс draw указан без draw-события";
+    if (!drawn && !inquiry && e.drawIndex != null) return "индекс draw указан без draw-события";
     const currentDraw = drawList.length
       ? drawList[e.drawIndex == null ? drawList.length - 1 : e.drawIndex] : null;
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
@@ -258,10 +316,12 @@
     if (error) return { error };
     return { event: {
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
-      value: e.action === "clear" ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
+      value: ["clear", "invalidate"].includes(e.action) ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
-        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}),
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
+        e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
+          ...(e.wearSlot ? { wearSlot: str(e.wearSlot) } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
@@ -274,12 +334,14 @@
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
-    const value = e.action === "clear" ? (LIST.has(e.field) ? [] : null) : e.value;
+    const value = ["clear", "invalidate"].includes(e.action) ? (LIST.has(e.field) ? [] : null) : e.value;
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
       ...(source && source.kind ? { kind: source.kind } : {}),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
-        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}) };
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
+        e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
+          ...(e.wearSlot ? { wearSlot: e.wearSlot } : {}) } : {}) };
     if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
@@ -391,7 +453,8 @@
           { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
       }
       for (const e of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
-        st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+        st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
+          wearInquiries: sw.wearInquiries || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.
@@ -429,13 +492,11 @@
     const kept = [];
     for (const e of events) {
       if (!e || e.field !== "wear" || e.certainty === "intent" ||
-          !["add", "remove", "adjust"].includes(e.action) ||
-          e.evidenceType !== "draw" || e.visualScope !== "current-self" ||
+          !["draw", "wear-inquiry"].includes(e.evidenceType) ||
           !Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= draws.length)
         return { ok: false, reason: "unsequenced-state-event" };
-      const photo = draws[e.drawIndex];
-      if (!photo || typeof photo.prompt !== "string" || !String(e.evidence || "").trim() ||
-          !photo.prompt.includes(e.evidence))
+      if (validateEvent(e, { role: source.role, mode: "messenger",
+        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [] }))
         return { ok: false, reason: "edited-photo-evidence" };
       if (e.drawIndex <= drawIndex) kept.push(clone(e));
     }
@@ -449,6 +510,8 @@
     const chosen = last.swipes[last.swipeIdx || 0];
     chosen.draws = chosen.draws.slice(0, drawIndex + 1);
     chosen.stateEvents = kept;
+    chosen.wearInquiries = (chosen.wearInquiries || [])
+      .filter(n => n && Number.isInteger(n.drawIndex) && n.drawIndex <= drawIndex);
     chosen.stateCorrections = [];
     chosen.sceneOps = [];
     delete chosen.stateStatus;
@@ -465,6 +528,11 @@
       const last = draws.length ? draws[draws.length - 1] : null;
       if (last && typeof last.prompt === "string" && last.prompt.trim())
         return { text: last.prompt.trim().slice(0, 440), messageId: m.id, swipeIdx: m.swipeIdx || 0 };
+      // A subsequent confirmed clothing change supersedes the earlier shot.
+      // Otherwise a stale 8-turn hint can resurrect it in the next Prism.
+      if (sw && ([...(sw.stateEvents || []), ...(sw.stateCorrections || [])]
+        .some(e => e && e.actor === "char" && e.field === "wear" &&
+          e.certainty !== "intent"))) return null;
     }
     return null;
   }
@@ -498,15 +566,16 @@
       if (last < 0 || sw.stateStatus.sourceDraw !== String(draws[last].prompt || "") ||
           sw.stateStatus.sourceDrawIndex !== last) return null;
       const visual = wear.filter(e => e.evidenceType === "draw" &&
-        e.visualScope === "current-self" && ["add", "adjust"].includes(e.action) &&
+        e.visualScope === "current-self" && ["set", "add", "adjust"].includes(e.action) &&
         (e.drawIndex == null ? last : e.drawIndex) === last &&
         !validateEvent(e, { role: m.role, draws, text: sw.text, mode: "messenger" }));
       // A later text change in this very message has no unambiguous temporal
       // order relative to its photograph; refuse to assert a photo override.
       if (wear.some(e => e.evidenceType !== "draw" || (e.drawIndex != null && e.drawIndex !== last)))
         return null;
+      const complete = visual.some(e => e.action === "set");
       const items = [...new Set(visual.flatMap(e => e.value || []))].slice(0, 12);
-      return items.length ? { items, messageId: m.id, swipeIdx: m.swipeIdx || 0, drawIndex: last } : null;
+      return items.length ? { items, complete, messageId: m.id, swipeIdx: m.swipeIdx || 0, drawIndex: last } : null;
     }
     return null;
   }

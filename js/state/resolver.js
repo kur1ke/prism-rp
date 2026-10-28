@@ -33,6 +33,13 @@
       if (known.fieldStatus && Object.prototype.hasOwnProperty.call(known.fieldStatus, field)) out[field] = clone(known[field]);
     }
     out.fieldStatus = clone(known.fieldStatus || {});
+    // A later explicit outfit change can invalidate a legacy baseline even
+    // when no replacement garments are known. Without this override the
+    // legacyWorld visualWear would leak back into the new Messenger view.
+    const wear = tracked.state && tracked.state.actors &&
+      tracked.state.actors.char && tracked.state.actors.char.wearState;
+    out.wearInvalidated = !!(wear && wear.invalidated);
+    if (out.wearInvalidated) out.visualWear = [];
     // Closed-world starting outfit (and later explicit full wear.set) is not
     // equivalent to "unknown unspecified underlayers". Expose this *derived*
     // bit to Messenger's budgeted Prism view; no second inventory is stored.
