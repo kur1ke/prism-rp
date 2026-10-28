@@ -80,6 +80,20 @@ assert.equal(unknown.invalidated,true);
 assert.deepEqual(unknown.worn,[],"old outfit must not remain on-body");
 assert.deepEqual(unknown.removed,[],"unknown is not evidence of undressing");
 assert.equal(T.fieldOf(fold([transition]),"char","wear"),null);
+assert.equal(T.latestAuthoredShot([shot,transition]),null,
+  "old authored photo must stop influencing Prism after a later outfit change");
+const afterUnknown=fold([transition]);
+const unknownWorld=R.world({visualWear:old},{
+  state:afterUnknown,character:T.forCharacter(afterUnknown),
+  latestAuthoredShot:T.latestAuthoredShot([shot,transition]),latestPhotoWear:null
+});
+assert.deepEqual(unknownWorld.visualWear,[],
+  "invalidated current outfit must not inherit legacy baseline clothing");
+assert.equal(unknownWorld.wearInvalidated,true);
+const unknownPrism=M.messengerSections({world:unknownWorld,conversation:{},temporal:{}}).place;
+assert.match(unknownPrism,/прежний комплект перестал быть актуальным/);
+assert.ok(!unknownPrism.includes("ПОЛНЫЙ перечень надетой сейчас одежды"),
+  "an old complete outfit cannot reappear as current");
 const newPartial="Орихимэ в белой футболке, снята по пояс.";
 const partialEv={actor:"char",field:"wear",action:"add",value:["белой футболке"],
   certainty:"reported",evidence:"белой футболке",evidenceType:"draw",visualScope:"current-self"};
