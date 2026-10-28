@@ -441,7 +441,12 @@
             + (Array.isArray(x.candidates) && x.candidates.length
               ? '<p class="hint">Совпавшие вещи активной ветки (не выбраны):</p><ul class="wc-list">' +
                 x.candidates.slice(0,6).map(ref => '<li>' + esc(ref.item || "?") +
-                  ' · ' + esc(ref.id || "?") + '</li>').join("") + '</ul>' : '')
+                  ' · ' + esc(ref.id || "?") +
+                  (ref.origin && (ref.origin.messageId || ref.origin.kind)
+                    ? ' · источник: ' + esc(ref.origin.kind || ref.origin.messageId) +
+                      (ref.origin.messageId ? ' ' + esc(ref.origin.messageId) +
+                        ' / swipe ' + esc(String(ref.origin.swipeIdx || 0)) : '') : '') +
+                  '</li>').join("") + '</ul>' : '')
             + '<p class="hint">Выбранный фрагмент источника:</p>'
             + '<pre class="debug-prompt">' + esc(x.fragment || "") + '</pre></div>').join("")
           + '</details>' : '';
