@@ -4746,9 +4746,9 @@ async function foundationH() {
       const compiled=await ICP.compile(draw,options,async()=>reply);
       assert.equal(compiled.compiled,false,JSON.stringify(compiled));
     }
-    // Unwrapping must not promote unverified off-body prose to a signed
-    // source role: the model's noun-only offBody.tag isn't an exact positive
-    // segment, even when the fenced JSON itself is syntactically correct.
+    // Unwrapping must not let the model rename the source-bound removed
+    // garment: "white linen blouse" is not present in the positive prose,
+    // even though the index and garment noun match.
     const offDraw="Орихимэ сняла белую блузку. Блузка лежит на кровати.";
     const offPlan=VP.create({owner:true,shotAuthored:true,draw:offDraw,
       frameObjects:[{role:"offBody",item:"белая хлопковая блузка",evidence:"Блузка лежит на кровати."}],
@@ -4756,7 +4756,7 @@ async function foundationH() {
         removed:[{item:"белая хлопковая блузка"}],partiallyWorn:[]}]});
     const offJson=JSON.stringify({prompt:"Orihime wears white lace lingerie. A white cotton blouse lies on the bed.",
       absent:[{index:0,tag:"white cotton blouse"}],
-      offBody:[{index:0,tag:"white cotton blouse"}]});
+      offBody:[{index:0,tag:"white linen blouse"}]});
     ICP.clear();
     const offResult=await ICP.compile(offDraw,{...options,wearState:offPlan.wear,visualPlan:offPlan},
       async()=>"\x60\x60\x60json\n"+offJson+"\n\x60\x60\x60");
