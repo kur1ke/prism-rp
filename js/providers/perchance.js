@@ -71,8 +71,10 @@
     const p = toPrompt(messages, names, o.closing, o.outputFormat);
     if (o.continueFrom) p.startWith = bodyOnly ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
+    const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
+    return Promise.resolve(imageBlob).then((blob) => {
     const handle = ai({
-      instruction: () => p.instruction,
+      instruction: () => blob ? [p.instruction, "\\n", blob] : p.instruction,
       startWith: () => p.startWith,
       stopSequences: () => p.stop,
       hideStartWith: true,
@@ -103,6 +105,13 @@
       }
       return { text: out.trim(), reasoning: "", finish: "stop" };
     });
+    });
+  }
+
+  async function awaitImageBlob(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Не удалось прочитать вложение");
+    return response.blob();
   }
 
   function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
