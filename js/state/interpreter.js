@@ -208,7 +208,16 @@
           const scope=bindAuthoredDrawEvidence({
             actor:"char",field:"wear",evidence:hit.evidence
           },o);
-          if(o.role!=="assistant" || candidate.field!=="wear" ||
+          // Current DRAW spans are currently authority for wear only.
+          // An unsupported field is a schema/scope error, not a failed selfie
+          // proof. Keep historical/other-actor photo evidence fail-closed.
+          if(candidate.field!=="wear"){
+            issues.push("Событие " + (index + 1) + " [" +
+              String(candidate.field || "?").slice(0,24) +
+              "]: DRAW sourceId допустим только для wear");
+            continue;
+          }
+          if(o.role!=="assistant" ||
              scope.evidenceType!=="draw" || scope.visualScope!=="current-self"){
             issues.push("Событие " + (index + 1) + ": sourceId не доказывает актуальный селфи-кадр");
             continue;
@@ -260,6 +269,14 @@
               .slice(0,3).map(x => String(x).slice(0,160)),
             fragment: String(canonical.evidence || "").slice(0,420),
             reason: String(resolved.reason || "unknown").slice(0,60),
+            ...(Array.isArray(resolved.candidates) ? {candidates:resolved.candidates
+              .slice(0,6).filter(ref=>ref&&typeof ref.id==="string"&&typeof ref.item==="string")
+              .map(ref=>({id:ref.id.slice(0,48),item:ref.item.slice(0,160),
+                ...(ref.origin ? {origin:{
+                  kind:String(ref.origin.kind||"").slice(0,32),
+                  messageId:String(ref.origin.messageId||"").slice(0,64),
+                  swipeIdx:Number.isInteger(ref.origin.swipeIdx)?ref.origin.swipeIdx:0,
+                }} : {})}))} : {}),
           });
         }
         continue;

@@ -194,4 +194,51 @@ const debug=globalThis.PRP.views.debugModal({
 assert.ok(debug.includes("Отклонённые наблюдения"));
 assert.ok(debug.includes("зелёный свитер"));
 assert.ok(debug.includes("сняла белую блузку"));
+// The live "белая рубашка" ambiguity must show WHICH active-path
+// references compete, not silently prefer the first garment or another swipe.
+const shirtDraw="Селфи Орихимэ Иноуэ. Она смотрит в камеру. На ней белая рубашка, которая полностью расстегнута и спущена с одного плеча, открывая вид на белый кружевной бюстгальтер и изгиб шеи.";
+const cottonShirt="белая хлопковая рубашка с коротким рукавом";
+const linenShirt="белая льняная рубашка с длинным рукавом";
+const shirtsInit={...init,event:{...init.event,value:[cottonShirt,linenShirt]}};
+const shirtsState=TR.fold({mode:"messenger",initialWear:shirtsInit,path:[]});
+const shirtOptions={...opts,draw:shirtDraw,draws:[{prompt:shirtDraw}],
+  references:TR.references(shirtsState,"char",["remove","adjust","add"])};
+const shirtId=ES.catalog(shirtOptions).find(x=>x.text.startsWith("На ней белая рубашка")).id;
+assert.equal(shirtId,"D2");
+const changed=parse([
+  {actor:"char",field:"wear",action:"adjust",value:["белая рубашка"],
+    certainty:"reported",sourceId:shirtId},
+  {actor:"char",field:"pose",action:"set",value:"она смотрит в камеру",
+    certainty:"reported",sourceId:shirtId},
+  {actor:"char",field:"hair",action:"set",value:"волосы распущены",
+    certainty:"reported",sourceId:shirtId},
+],shirtOptions);
+assert.equal(changed.events.length,0,JSON.stringify(changed));
+assert.equal(changed.rejectedObservations.length,1);
+assert.equal(changed.rejectedObservations[0].reason,"ambiguous-reference");
+assert.deepEqual(changed.rejectedObservations[0].candidates.map(x=>x.item),
+  [cottonShirt,linenShirt]);
+assert.ok(changed.rejectedObservations[0].candidates.every(x=>x.id.endsWith(":adjust")));
+assert.ok(changed.rejectedObservations[0].candidates.every(x=>
+  x.origin.kind==="initial-outfit"),"diagnostics retain the origin of the same active-path references");
+assert.ok(changed.issues[1].includes("pose") &&
+  changed.issues[1].includes("DRAW") && changed.issues[1].includes("wear"));
+assert.ok(changed.issues[2].includes("hair") &&
+  changed.issues[2].includes("DRAW") && changed.issues[2].includes("wear"));
+assert.ok(!changed.issues[1].includes("не доказывает актуальный селфи-кадр"));
+const shirtDebug=globalThis.PRP.views.debugModal({
+  card:{name:"Орихимэ Иноуэ"},chat:{initialWear:shirtsInit},path:[],
+  messengerView:{stateStatus:{status:"partial",eventCount:0,issues:changed.issues,
+    rejectedObservations:changed.rejectedObservations}}
+},{section:"errors"});
+assert.ok(shirtDebug.includes(cottonShirt) && shirtDebug.includes(linenShirt));
+assert.ok(shirtDebug.includes("Несколько известных вещей"));
+// Alternate swipe has only ONE matching garment; no sibling candidate leaks.
+const oneShirtState=TR.fold({mode:"messenger",
+  initialWear:{...init,event:{...init.event,value:[cottonShirt]}},path:[]});
+const oneShirt=parse([{actor:"char",field:"wear",action:"adjust",
+  value:["белая рубашка"],certainty:"reported",sourceId:shirtId}],
+  {...shirtOptions,references:TR.references(oneShirtState,"char",["remove","adjust","add"])});
+assert.equal(oneShirt.events.length,1,JSON.stringify(oneShirt));
+assert.equal(oneShirt.rejectedObservations.length,0);
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
