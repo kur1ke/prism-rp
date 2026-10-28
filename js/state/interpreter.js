@@ -170,7 +170,7 @@
     const value = jsonObject(raw);
     if (!value) return { valid: false, events: [], issues: ["Ответ наблюдателя не содержит корректный JSON со списком событий"] };
     if (!Array.isArray(value.events) || value.events.length > MAX) return { valid: false, events: [], issues: ["Некорректный список событий"] };
-    const events = [], issues = [], indexedEvents = new Map();
+    const events = [], issues = [], rejectedObservations = [], indexedEvents = new Map();
     for (let index = 0; index < value.events.length; index++) {
       const candidate = value.events[index];
       // A language model often writes the current speaker's name or "assistant"
@@ -248,6 +248,20 @@
       const resolved = WO ? WO.resolve(canonical, o) : { event: canonical };
       if (resolved.unresolved) {
         issues.push("Событие " + (index + 1) + " [wear]: " + resolved.unresolved);
+        // Diagnostic data, never canonical state or model instructions:
+        // the ONLY selected fragment, the model's short claim and a reason.
+        // A generic error alone hid a broken Unicode lexer in sourcePhrase.
+        if (canonical && canonical.field === "wear" && rejectedObservations.length < MAX) {
+          rejectedObservations.push({
+            index, sourceId: String(candidate && candidate.sourceId || "legacy").slice(0,16),
+            kind: canonical.evidenceType === "draw" ? "draw" : "text",
+            action: String(canonical.action || "").slice(0,24),
+            value: (Array.isArray(canonical.value) ? canonical.value : [])
+              .slice(0,3).map(x => String(x).slice(0,160)),
+            fragment: String(canonical.evidence || "").slice(0,420),
+            reason: String(resolved.reason || "unknown").slice(0,60),
+          });
+        }
         continue;
       }
       canonical = resolved.event;
@@ -323,7 +337,7 @@
         issues.push("Неоднозначная ссылка: " + entry.trim().slice(0, 140));
       }
     }
-    return { valid: true, events, frameObjects, issues };
+    return { valid: true, events, frameObjects, issues, rejectedObservations };
   }
 
   /* Резервный разбор — только непосредственно утверждаемые самоописания.
