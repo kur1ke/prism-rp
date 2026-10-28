@@ -94,8 +94,13 @@
     if(!found.reference){
       // An explicitly new garment, with no matching reference, can still
       // be added by existing grounded validation.
-      if(e.action==="add"&&found.reason==="unknown-garment"&&explicit==null)
-        return {event:e,skipped:true};
+      if(e.action==="add"&&found.reason==="unknown-garment"&&exactValue) {
+        // A genuinely new garment has no old reference: don't turn the
+        // resolver into an outfit lock. Leave its literal wear.add to the
+        // existing source-grounded Tracker path.
+        const novel={...e};delete novel.itemMention;
+        return {event:novel,skipped:true};
+      }
       return {unresolved:"Разрешение предмета: "+found.reason};
     }
     // Only an exact branch-local ref can override the model's surface name.
