@@ -96,6 +96,68 @@ t("WI-DEBUG-1: show RP answer and request status without leaking sibling swipes"
   assert.ok(render().includes("предыдущей сборкой"));
 });
 
+/* DRAW-SOURCE-BIND-1: an exact original DRAW quote is not the text caption. */
+t("DRAW-SOURCE-BIND-1: current selfie removal without evidenceType reaches Tracker", () => {
+  const I=globalThis.PRP.stateInterpreter, T=globalThis.PRP.stateTracker;
+  const draw="Селфи в зеркале. Орихимэ Иноуэ стоит прямо. Она полностью сняла белую хлопковую блузку, оставшись в белом кружевном белье.";
+  const text="Хи-хи, я знала, что тебе понравится!";
+  const candidate={actor:"char",field:"wear",action:"remove",
+    value:["белую хлопковую блузку"],certainty:"reported",
+    evidence:"полностью сняла белую хлопковую блузку"};
+  const opts={mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
+    text,draw,draws:[{prompt:draw}],references:[]};
+  const parsed=I.parse(JSON.stringify({events:[candidate]}),opts);
+  assert.deepStrictEqual(parsed.issues,[],JSON.stringify(parsed));
+  assert.strictEqual(parsed.events.length,1);
+  assert.strictEqual(parsed.events[0].evidenceType,"draw");
+  assert.strictEqual(parsed.events[0].visualScope,"current-self");
+  const initialWear={schema:1,kind:"initial-outfit",event:{actor:"char",field:"wear",
+    action:"set",value:["белая хлопковая блузка с коротким рукавом","бежевая юбка"],
+    certainty:"reported",evidence:""}};
+  const msg={id:"photo-1",role:"assistant",swipeIdx:0,
+    swipes:[{text,draws:[{prompt:draw}],stateEvents:parsed.events}]};
+  const outfit=T.fold({mode:"messenger",initialWear,path:[msg]}).actors.char.wearState;
+  assert.deepStrictEqual(outfit.worn.map(x=>x.item),["бежевая юбка"]);
+  assert.deepStrictEqual(outfit.removed.map(x=>x.item),["белая хлопковая блузка с коротким рукавом"]);
+});
+t("DRAW-SOURCE-BIND-2: lifted blouse is adjusted, not removed", () => {
+  const I=globalThis.PRP.stateInterpreter,T=globalThis.PRP.stateTracker;
+  const draw="Селфи в зеркале. Орихимэ Иноуэ полностью подняла белую хлопковую блузку вверх, открывая кружевное бельё.";
+  const quote="полностью подняла белую хлопковую блузку вверх";
+  const event={actor:"char",field:"wear",action:"adjust",
+    value:["белую хлопковую блузку"],certainty:"reported",evidence:quote,placement:quote};
+  const parsed=I.parse(JSON.stringify({events:[event]}),{mode:"messenger",role:"assistant",
+    speakerName:"Орихимэ Иноуэ",text:"Держи фото!",draw,draws:[{prompt:draw}]});
+  assert.strictEqual(parsed.events.length,1,JSON.stringify(parsed));
+  const origin={schema:1,kind:"initial-outfit",event:{actor:"char",field:"wear",action:"set",
+    value:["белая хлопковая блузка","бежевая юбка"],certainty:"reported",evidence:""}};
+  const state=T.fold({mode:"messenger",initialWear:origin,path:[{id:"p1",role:"assistant",swipeIdx:0,
+    swipes:[{text:"Держи фото!",draws:[{prompt:draw}],stateEvents:parsed.events}]}]}).actors.char.wearState;
+  assert.strictEqual(state.removed.length,0,"lifted is not undressed");
+  assert.deepStrictEqual(state.partiallyWorn.map(x=>x.item),["белая хлопковая блузка"]);
+});
+t("DRAW-SOURCE-BIND-3: no promotion from old photos, other actor, explicit text source or nonmatching quote", () => {
+  const I=globalThis.PRP.stateInterpreter;
+  const text="Смотри";
+  const draw="Селфи в зеркале. Орихимэ Иноуэ полностью сняла белую блузку.";
+  const event={actor:"char",field:"wear",action:"remove",value:["белую блузку"],
+    certainty:"reported",evidence:"полностью сняла белую блузку"};
+  const opts={mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
+    text,draw,draws:[{prompt:draw}]};
+  const rejected=[
+    [{...opts,draw:"Старое "+draw,draws:[{prompt:"Старое "+draw}]},event],
+    [{...opts,otherName:"Орихимэ Иноуэ"},event],
+    [opts,{...event,evidenceType:"text"}],
+    [opts,{...event,visualScope:"past-self"}],
+    [opts,{...event,evidence:"сняла другую рубашку"}],
+    [{...opts,text:event.evidence},event],
+    [{...opts,role:"user"},event]
+  ];
+  for (const [o,e] of rejected) {
+    const p=I.parse(JSON.stringify({events:[e]}),o);
+    assert.strictEqual(p.events.length,0,JSON.stringify({o,e,p}));
+  }
+});
 /* ── SR-1: one read-only StateResolver across consumer modules ── */
 {
   const SR = globalThis.PRP.stateResolver;
