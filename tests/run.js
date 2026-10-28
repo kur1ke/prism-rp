@@ -40,6 +40,7 @@ require(J("prism/memory-cycle.js"));
 require(J("state/tracker.js"));
 require(J("state/resolver.js"));
 require(J("state/interpreter.js"));
+require(J("state/wear-inquiry.js"));
 require(J("state/service.js"));
 require(J("images/compose.js"));
 require(J("images/visual-plan.js"));
