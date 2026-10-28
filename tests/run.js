@@ -50,6 +50,8 @@ require(J("assist/assist.js"));
 require(J("core/settings.js"));
 require(J("core/perf.js"));
 require(J("ui/render.js"));
+require(J("ui/views/kit.js"));
+require(J("ui/views/drawer.js"));
 require("./state-observation-continuity.js");
 const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG, cardModel: CM, cardFormats: CF, cardImport: IMP, cardValidate: VAL } = globalThis.PRP;
 // Импорт карточки из объекта → черновик (для тестов, где важен только результат).
@@ -61,6 +63,38 @@ function t(name, fn) {
   try { fn(); passed++; }
   catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.message || e)); }
 }
+
+t("WI-DEBUG-1: show RP answer and request status without leaking sibling swipes", () => {
+  const note={schema:1,drawIndex:0,sourceDraw:"На ней красное платье",
+    sourceText:"Смотри!",changed:"yes",
+    previous:[{item:"бежевая юбка",status:"not_worn"}],
+    hidden:[{slot:"underwear_bottom",status:"worn",items:["белые трусики"]},
+      {slot:"hosiery",status:"unknown",items:[]}]};
+  const valid={text:"Смотри!",draws:[{prompt:note.sourceDraw}],
+    stateEvents:[],wearInquiries:[note],
+    stateStatus:{sourceText:"Смотри!",sourceDraw:note.sourceDraw,
+      sourceDrawIndex:0,wearInquiry:{status:"ok",drawIndex:0}}};
+  const sibling={...valid,wearInquiries:[{...note,
+    hidden:[{slot:"underwear_bottom",status:"worn",items:["НЕ ДОЛЖНО ПОЯВИТЬСЯ"]}]}]};
+  const msg={id:"msg-1",role:"assistant",swipeIdx:0,swipes:[valid,sibling]};
+  const model={chat:{mode:"messenger"},messengerView:{world:{},events:[]},
+    path:[msg]};
+  const render=()=>globalThis.PRP.views.debugModal(model,{section:"events"});
+  const html=render();
+  assert.ok(html.includes("Уточнение невидимой одежды (RP-модель)"));
+  assert.ok(html.includes("RP-модели отправлено уточнение"));
+  assert.ok(html.includes("белые трусики"));
+  assert.ok(html.includes("unknown"));
+  assert.ok(!html.includes("НЕ ДОЛЖНО ПОЯВИТЬСЯ"),
+    "selected swipe is the only source for debug");
+  valid.stateStatus.wearInquiry={status:"skipped",reason:"not-needed",drawIndex:0};
+  assert.ok(render().includes("Уточнение не отправлялось"));
+  valid.stateStatus.wearInquiry={status:"error",reason:"invalid-json",drawIndex:0};
+  assert.ok(render().includes("invalid-json"));
+  valid.wearInquiries=[];
+  valid.stateStatus.wearInquiry=null;
+  assert.ok(render().includes("предыдущей сборкой"));
+});
 
 /* ── SR-1: one read-only StateResolver across consumer modules ── */
 {
@@ -6994,6 +7028,7 @@ async function unifiedTracker() {
       assert.equal(w.removed.length,0,"superseded garments must not be manufactured as removal events");
       const sw=h.chat.path().at(-1).swipes[0];
       assert.equal(sw.wearInquiries.length,1);
+      assert.deepStrictEqual(sw.stateStatus.wearInquiry,{status:"ok",drawIndex:0});
       assert.ok(sw.stateEvents.some(e=>e.evidenceType==="wear-inquiry"&&e.action==="invalidate"));
       const stored=(await h.ctx.DB.get("messages",response.id)).swipes[0];
       assert.equal(stored.wearInquiries[0].sourceDraw,photo);
