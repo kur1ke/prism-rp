@@ -68,7 +68,7 @@
     const raw=str(evidence),words=stems(named),terms=tokens(named);
     if(!words.length||!terms.length)return null;
     const noun=words[words.length-1];
-    const spans=[...raw.matchAll(/[\\p{L}\\p{N}]+/gu)].map(m=>({
+    const spans=[...raw.matchAll(/[\p{L}\p{N}]+/gu)].map(m=>({
       text:m[0],start:m.index,end:m.index+m[0].length,stem:stem(m[0])
     }));
     const found=[];
@@ -103,10 +103,12 @@
       const found=refs.map(ref=>({ref,mention:phrase(evidence,ref)}))
         .filter(x=>x.mention&&(named===x.ref.item||
           match(named,[x.ref]).reference));
-      if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment"};
+      if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment",
+        reason:"ambiguous-reference"};
       if(found.length===1){
         const valid=match(found[0].mention,refs);
-        if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason};
+        if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason,
+          reason:valid.reason};
         return {event:{...e,value:[found[0].ref.item],reference:found[0].ref,
           itemMention:found[0].mention},resolved:true};
       }
@@ -114,7 +116,13 @@
         const literal=sourcePhrase(evidence,named);
         if(literal)return {event:{...e,value:[literal]},resolved:true};
       }
-      return {unresolved:"Названный предмет не подтверждён выбранным исходным фрагментом"};
+      // Explain the failed boundary without promoting an unsupported fact.
+      // The same error text formerly hid a wrong sourceId, a missing prior
+      // reference, and a lexical parsing failure. Keep these distinct in Debug.
+      const literal=sourcePhrase(evidence,named);
+      return {unresolved:"Названный предмет не подтверждён выбранным исходным фрагментом",
+        reason:literal ? "garment-not-in-current-references" :
+          refs.length ? "source-has-no-matching-garment" : "unrecognized-garment-in-source"};
     }
     if(!refs.length){
       const plain={...e};delete plain.itemMention;
