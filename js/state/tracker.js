@@ -11,6 +11,7 @@
   const SC = PRP.scene || (typeof require !== "undefined" ? require("../prism/scene.js") : null);
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
   const WO = PRP.wearObservation || (typeof require !== "undefined" ? require("./wear-observation.js") : null);
+  const ES = PRP.evidenceSpans || (typeof require !== "undefined" ? require("./evidence-spans.js") : null);
   const FIELDS = Object.freeze(["location", "activity", "wear", "pose", "hair", "nearby", "ongoing", "availability"]);
   const LIST = new Set(["wear", "nearby", "ongoing"]);
   const CERTAINTY = new Set(["established", "reported", "intent"]);
@@ -191,6 +192,14 @@
       } else if (typeof e.value !== "string" || !e.value.trim() || e.value.length > 240) return "некорректное значение";
     }
     if (e.evidence != null && (typeof e.evidence !== "string" || e.evidence.length > 450)) return "некорректная цитата";
+    // Source-span evidence is reconstructed by the application, NEVER taken
+    // as a literal citation supplied by the model. Verify exact offsets and
+    // deterministic segmentation again on every branch/swipe replay.
+    if (e.sourceSpan) {
+      const error = ES && ES.validate(e, source);
+      if (error) return error;
+      if (!ES) return "модуль адресных цитат недоступен";
+    }
     // Text and author-generated [draw:] are distinct evidence surfaces of
     // ONE swipe. A draw never becomes a hidden instruction or a separate store:
     // replay must prove the exact quoted fragment is still in its source shot.
@@ -327,6 +336,7 @@
       actor: e.actor, field: e.field, action: e.action, certainty: e.certainty,
       value: ["clear", "invalidate"].includes(e.action) ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
+      ...(e.sourceSpan ? { sourceSpan: clone(e.sourceSpan) } : {}),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
         ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
         e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
@@ -348,6 +358,7 @@
     const value = ["clear", "invalidate"].includes(e.action) ? (LIST.has(e.field) ? [] : null) : e.value;
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
+      ...(e.sourceSpan ? { sourceSpan: clone(e.sourceSpan) } : {}),
       ...(source && source.kind ? { kind: source.kind } : {}),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
         ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
