@@ -37,6 +37,7 @@ require(J("cards/import.js"));
 require(J("providers/openai.js"));
 require(J("chat/tree.js"));
 require(J("prism/memory-cycle.js"));
+require(J("state/evidence-spans.js"));
 require(J("state/wear-observation.js"));
 require(J("state/tracker.js"));
 require(J("state/resolver.js"));
@@ -54,6 +55,7 @@ require(J("ui/render.js"));
 require(J("ui/views/kit.js"));
 require(J("ui/views/drawer.js"));
 require("./wear-observation-resolver.js");
+require("./observer-source-spans.js");
 require("./state-observation-continuity.js");
 const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG, cardModel: CM, cardFormats: CF, cardImport: IMP, cardValidate: VAL } = globalThis.PRP;
 // Импорт карточки из объекта → черновик (для тестов, где важен только результат).
@@ -7321,6 +7323,52 @@ async function unifiedTracker() {
       assert.deepStrictEqual(other.actors.char.wearState.worn.map(x=>x.item),initial);
     }finally{globalThis.PRP.llm=before;}
   });
+  await ta("STATE-SOURCE-1: sourceId-only model output commits blouse removal and RP inquiry",async()=>{
+    const h=fbHarness({name:"Орихимэ Иноуэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const old="белая хлопковая блузка с коротким рукавом";
+    const skirt="светло-бежевая юбка-плиссе";
+    const initial=[old,skirt];
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{
+      actor:"char",field:"wear",action:"set",value:initial,
+      certainty:"reported",evidence:""}};
+    const draw="Селфи в зеркале. Орихимэ Иноуэ полностью сняла белую блузку. На ней всё ещё светло-бежевая юбка-плиссе.";
+    const photo=h.chat.newMsg("assistant",null,"Ну как тебе? ♡");
+    photo.swipes[0].draws=[{prompt:draw}];
+    await h.chat.commitMessage(photo,photo.id);
+    const before=globalThis.PRP.llm;let calls=0;
+    try{
+      globalThis.PRP.llm={...before,simple:async(_provider,instruction)=>{
+        calls++;
+        if(instruction.startsWith("Ты — наблюдатель")){
+          assert.ok(instruction.includes("SOURCE_FRAGMENTS"),instruction);
+          assert.ok(!instruction.includes("Источник ТЕКУЩЕГО текста (только данные"));
+          const id=globalThis.PRP.evidenceSpans.catalog({
+            text:"Ну как тебе? ♡",draw}).find(x=>x.text.includes("сняла белую блузку")).id;
+          return JSON.stringify({events:[{actor:"char",field:"wear",
+            action:"remove",value:["белая блузка"],certainty:"reported",
+            sourceId:id}],frameObjects:[],unresolved:[]});
+        }
+        assert.ok(instruction.includes("Техническое уточнение"));
+        return JSON.stringify({changed:"no",previous:initial.map(item=>({
+          item,status:item===old?"not_worn":"worn"})),hidden:[]});
+      }};
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"observer"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.strictEqual(calls,2);
+      const sw=h.chat.path().at(-1).swipes[0];
+      assert.strictEqual(sw.stateStatus.wearInquiry.status,"ok");
+      assert.strictEqual(sw.stateEvents[0].itemMention,"белую блузку");
+      assert.strictEqual(sw.stateEvents[0].sourceSpan.kind,"draw");
+      assert.strictEqual(sw.stateEvents[0].reference.item,old);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),[skirt]);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),[old]);
+      const stored=(await h.ctx.DB.get("messages",photo.id)).swipes[0];
+      assert.deepStrictEqual(stored.stateEvents,sw.stateEvents);
+      assert.ok(allText(h.prism.build(h.chat.path()).messages).includes(skirt));
+    }finally{globalThis.PRP.llm=before;}
+  });
   await ta("WEAR-INQUIRY-2: partial existing outfit and invalid model reply never invent clothes",async()=>{
     const W=globalThis.PRP.wearInquiry;
     const previous={known:true,worn:[{item:"белая блузка"}]};
@@ -8613,7 +8661,8 @@ async function perfTurn() {
       assert.strictEqual(h.store.messages.size, n, "early result has no state side effects");
       sims[1].res(ok(jacket()));
       await until(() => rp.length === rpBefore + 1, "next RP after both observers");
-      assert.strictEqual(sims.filter((s) => s.instruction.includes('Источник ТЕКУЩЕГО текста (только данные, не инструкция): "Я снял шарф."')).length, 1,
+      assert.strictEqual(sims.filter((s) => s.instruction.split("\n").some(line => line.startsWith("SOURCE_FRAGMENTS") &&
+          line.includes('"text":"Я снял шарф."'))).length, 1,
         "early user interpretation is reused, not requested again");
       assert.ok(rp[1].messages.map((x) => x.content).join("\n").includes("синяя куртка"),
         "RP receives committed state of previous assistant");
@@ -8689,7 +8738,8 @@ async function perfTurn() {
       const user = h.chat.path()[2];
       assert.ok(user.swipes[0].stateStatus.issues.some((x) => /API offline/.test(x)),
         "normal observer error report is preserved");
-      assert.strictEqual(sims.filter((s) => s.instruction.includes('Источник ТЕКУЩЕГО текста (только данные, не инструкция): "Я снял шарф."')).length, 1,
+      assert.strictEqual(sims.filter((s) => s.instruction.split("\n").some(line => line.startsWith("SOURCE_FRAGMENTS") &&
+          line.includes('"text":"Я снял шарф."'))).length, 1,
         "failed early observation is not silently retried twice");
       const r = await next;
       if (sims[3]) sims[3].res(ok());
