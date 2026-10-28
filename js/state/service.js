@@ -455,6 +455,10 @@
       const stateStatus = { status, sourceText, sourceDraw, sourceDrawIndex: latestIndex,
         issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
+        // Current-swipe, bounded diagnostics only; failed model guesses never
+        // become state events, memory, instructions or a separate garment DB.
+        rejectedObservations: Array.isArray(result.rejectedObservations)
+          ? result.rejectedObservations.slice(0, INT.MAX) : [],
         wearInquiry: wearInquiryStatus,
         // Shot-local provenance, not wardrobe state. Same-swipe image use only.
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };

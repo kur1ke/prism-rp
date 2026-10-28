@@ -110,4 +110,34 @@ continued.swipes[0].stateEvents.push({...again.events[0],drawIndex:1});
 const finalState=TR.fold({mode:"messenger",initialWear:init,path:[continued]});
 assert.deepEqual(finalState.actors.char.wearState.worn.map(x=>x.item),[skirt,title],
   JSON.stringify({diagnostics:finalState.diagnostics,events:continued.swipes[0].stateEvents}));
+// PR #109 regression: a newly observed garment has no prior reference.
+// The Unicode lexer must read Russian words instead of returning [].
+const newGarmentDraw="Селфи в зеркале. Орихимэ Иноуэ теперь в красном кардигане.";
+const newGarmentOpts={...opts,draw:newGarmentDraw,draws:[{prompt:newGarmentDraw}],
+  references:opts.references.filter(r=>r.item!==title)};
+const freshId=ES.catalog(newGarmentOpts).find(x=>x.text.includes("красном кардигане")).id;
+const novel=parse([{actor:"char",field:"wear",action:"add",
+  certainty:"reported",value:["красный кардиган"],sourceId:freshId}],newGarmentOpts);
+assert.equal(novel.events.length,1,JSON.stringify(novel));
+assert.deepEqual(novel.events[0].value,["красном кардигане"]);
+assert.equal(novel.events[0].reference,undefined);
+// A reported object that IS NOT in the selected sentence is never invented.
+const mismatch=parse([{...base,value:["зелёный свитер"]}],opts);
+assert.equal(mismatch.events.length,0);
+assert.equal(mismatch.rejectedObservations.length,1);
+assert.equal(mismatch.rejectedObservations[0].sourceId,sourceId);
+assert.equal(mismatch.rejectedObservations[0].reason,"source-has-no-matching-garment");
+assert.ok(mismatch.rejectedObservations[0].fragment.includes("сняла белую блузку"));
+// The Debug panel explains which source was chosen without copying raw model
+// instructions or silently treating a rejected observation as an event.
+const debug=globalThis.PRP.views.debugModal({
+  card:{name:"Орихимэ Иноуэ"},
+  chat:{initialWear:init},
+  path:[],
+  messengerView:{stateStatus:{status:"partial",eventCount:0,
+    issues:mismatch.issues,rejectedObservations:mismatch.rejectedObservations}}
+},{section:"errors"});
+assert.ok(debug.includes("Отклонённые наблюдения"));
+assert.ok(debug.includes("зелёный свитер"));
+assert.ok(debug.includes("сняла белую блузку"));
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");

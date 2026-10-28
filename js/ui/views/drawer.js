@@ -418,10 +418,33 @@
           + '<p class="hint">Начальный комплект не был записан. Одежда осталась неизвестной; это не означает отсутствие одежды.</p>'
           + '<p>Причина: ' + esc(init.reason || "неизвестна") + '</p></div>'
         : '';
+      const rejected = status && Array.isArray(status.rejectedObservations)
+        ? status.rejectedObservations.slice(0,6) : [];
+      const rejectCodes = {
+        "unrecognized-garment-in-source": "Не удалось извлечь название новой вещи из выбранного фрагмента",
+        "garment-not-in-current-references": "Вещь найдена в источнике, но отсутствует среди известных вещей для действия",
+        "source-has-no-matching-garment": "Слова модели не соответствуют вещи в выбранном фрагменте",
+        "ambiguous-reference": "Несколько известных вещей подходят одинаково",
+        "ambiguous-garment": "Невозможно однозначно выбрать известную вещь",
+        "unknown-garment": "Соответствующей вещи нет в активном комплекте",
+      };
+      const rejectDetails = rejected.length
+        ? '<details class="block exp-debug"><summary>Отклонённые наблюдения — источник и причина (' +
+            rejected.length + ')</summary>'
+          + '<p class="hint">Это диагностические данные, не события Tracker. Показывается только текущий выбранный свайп.</p>'
+          + rejected.map(x => '<div class="block">'
+            + '<p><b>Событие ' + esc(String((x.index || 0) + 1))
+            + '</b> · ' + esc(x.action || "?") + ' · ' + esc(x.sourceId || "?")
+            + ' (' + esc(x.kind || "?") + ')</p>'
+            + '<p class="hint">Модель назвала: ' + esc((x.value || []).join(", ") || "неизвестно") + '</p>'
+            + '<p class="hint">Причина: ' + esc(rejectCodes[x.reason] || x.reason || "неизвестно") + '</p>'
+            + '<p class="hint">Выбранный фрагмент источника:</p>'
+            + '<pre class="debug-prompt">' + esc(x.fragment || "") + '</pre></div>').join("")
+          + '</details>' : '';
       content = initIssue + '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
         + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
         + '<button class="btn btn-sm" data-act="state-retry">Повторить анализ</button></div>'
-        + imageIssue
+        + rejectDetails + imageIssue
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
     }
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal debug-modal" role="dialog" aria-modal="true" aria-label="Debug">

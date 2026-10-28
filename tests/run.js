@@ -7323,6 +7323,49 @@ async function unifiedTracker() {
       assert.deepStrictEqual(other.actors.char.wearState.worn.map(x=>x.item),initial);
     }finally{globalThis.PRP.llm=before;}
   });
+  await ta("STATE-SOURCE-2: rejected source observation is persisted only as diagnostic",async()=>{
+    const h=fbHarness({name:"Орихимэ Иноуэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const old="белая хлопковая блузка с коротким рукавом";
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{
+      actor:"char",field:"wear",action:"set",value:[old],certainty:"reported",evidence:""}};
+    const draw="Селфи в зеркале. Орихимэ Иноуэ полностью сняла белую блузку.";
+    const photo=h.chat.newMsg("assistant",null,"Держи фото!");
+    photo.swipes[0].draws=[{prompt:draw}];
+    await h.chat.commitMessage(photo,photo.id);
+    const oldLLM=globalThis.PRP.llm;
+    let called=0;
+    try{
+      globalThis.PRP.llm={...oldLLM,simple:async(_provider,query)=>{
+        called++;
+        assert.ok(query.startsWith("Ты — наблюдатель"));
+        const sourceId=globalThis.PRP.evidenceSpans.catalog({
+          text:"Держи фото!",draw}).find(x=>x.text.includes("сняла белую блузку")).id;
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
+          value:["зелёный свитер"],certainty:"reported",sourceId}],frameObjects:[]});
+      }};
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"observer"});
+      assert.strictEqual(result.status,"partial",JSON.stringify(result));
+      assert.strictEqual(result.events.length,0);
+      assert.strictEqual(called,1,"invalid observed garment cannot trigger hidden inquiry");
+      const sw=h.chat.path().at(-1).swipes[0];
+      assert.strictEqual(sw.stateStatus.rejectedObservations.length,1);
+      const note=sw.stateStatus.rejectedObservations[0];
+      assert.deepStrictEqual(note.value,["зелёный свитер"]);
+      assert.ok(note.fragment.includes("сняла белую блузку"));
+      assert.strictEqual(note.reason,"source-has-no-matching-garment");
+      assert.deepStrictEqual((await h.ctx.DB.get("messages",photo.id))
+        .swipes[0].stateStatus.rejectedObservations,[note]);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn
+        .map(x=>x.item),[old],"rejected observation cannot mutate wardrobe");
+      const alt=structuredClone(h.chat.path().at(-1));
+      alt.swipes.push({text:"Нет снимка",draws:[],stateEvents:[]});alt.swipeIdx=1;
+      assert.deepStrictEqual(globalThis.PRP.stateTracker.fold({
+        mode:"messenger",initialWear:h.ctx.chat().initialWear,path:[alt]})
+        .actors.char.wearState.worn.map(x=>x.item),[old]);
+    }finally{globalThis.PRP.llm=oldLLM;}
+  });
   await ta("STATE-SOURCE-1: sourceId-only model output commits blouse removal and RP inquiry",async()=>{
     const h=fbHarness({name:"Орихимэ Иноуэ",description:"Персонаж."});
     await h.chat.createChat("messenger","c1");
