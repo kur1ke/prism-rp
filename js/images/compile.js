@@ -289,7 +289,11 @@
             const index = wear.removed.findIndex(x => x.item === object.item);
             const matching = supplied.filter(x => x && x.index === index &&
               typeof x.tag === "string" && x.tag.length >= 3 && x.tag.length <= 140);
-            if (index < 0 || matching.length !== 1 || !tagParts(prompt).some(p => sameTag(p.raw, matching[0].tag)))
+            const signedPositive = index >= 0 && matching.length === 1 &&
+              (hybrid ? proseClauses(prompt).some(clause =>
+                proseOffBodyClause(clause, matching[0].tag, garmentHead(absent[index].tag))) :
+                tagParts(prompt).some(p => sameTag(p.raw, matching[0].tag)));
+            if (!signedPositive)
               return failure("Off-body роль не подтверждается финальным positive");
             offBodyTags.push({ index, tag: matching[0].tag });
           }
