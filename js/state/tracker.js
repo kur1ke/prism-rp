@@ -505,8 +505,13 @@
           !["draw", "wear-inquiry"].includes(e.evidenceType) ||
           !Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= draws.length)
         return { ok: false, reason: "unsequenced-state-event" };
+      // Historical preflight checks the authored quote and typed evidence.
+      // Identity references are re-derived against the real active-path
+      // wardrobe by fold() in the consumer; never use this provisional
+      // source object as a persisted identity or a second outfit.
       if (validateEvent(e, { role: source.role, mode: "messenger",
-        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [] }))
+        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [],
+        references: e.reference ? [e.reference] : [] }))
         return { ok: false, reason: "edited-photo-evidence" };
       if (e.drawIndex <= drawIndex) kept.push(clone(e));
     }
