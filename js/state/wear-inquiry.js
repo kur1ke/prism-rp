@@ -67,7 +67,7 @@
         items:entry.items.map(clean)});
     }
     return {answer:{schema:1,drawIndex:c.drawIndex,sourceDraw:draw,
-      sourceText:clean(c.text),changed:value.changed,previous:old,hidden}};
+      sourceText:String(c.sourceText == null ? c.text : c.sourceText),changed:value.changed,previous:old,hidden}};
   }
   function events(answer){
     if(!answer)return [];
