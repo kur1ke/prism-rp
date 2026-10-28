@@ -34,13 +34,13 @@
             const response = await plugin({
               instruction: [
                 "Это проверка Vision. Опиши изображение на русском языке: основные объекты и видимый текст. Не додумывай то, чего не видно.",
-                "\\n",
+                "\n",
                 file
               ]
             });
-            status.textContent = "Vision: ответ модели\\n\\n" + String(response && response.generatedText != null ? response.generatedText : response);
+            status.textContent = "Vision: ответ модели\n\n" + String(response && response.generatedText != null ? response.generatedText : response);
           } catch (e) {
-            status.textContent = "Vision: ошибка\\n" + String(e && e.message || e);
+            status.textContent = "Vision: ошибка\n" + String(e && e.message || e);
             console.error("PRISM Vision test:", e);
           }
         };
