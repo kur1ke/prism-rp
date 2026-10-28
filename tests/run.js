@@ -4018,7 +4018,8 @@ async function foundationH() {
     assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"edited-photo-evidence",
       "moving an earlier quote to a crop must fail exact source validation");
     obj.swipes[0].stateEvents[0].evidence="close up";
-    assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"target-photo-not-observed");
+    assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"edited-photo-evidence",
+      "a cited phrase without the asserted garment is not valid evidence");
     obj.swipes[0].stateEvents[0].drawIndex=0;
     obj.swipes[0].stateEvents[0].evidenceType="text";
     assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"unsequenced-state-event");
