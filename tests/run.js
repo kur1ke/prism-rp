@@ -5305,6 +5305,11 @@ async function foundationH() {
     assert.equal(calls,1,"no new provider or repair request");
     assert.equal((await ICP.compile(draw,options,async()=>{throw Error("cache miss");})).cached,true);
     assert.equal(ICP.auditFinal(result.text,"",plan,result.wearItems,result.offBodyTags,{}, {hybrid:true}).validated,true);
+    // A duplicate reintroduced by fixedPrompt after compilation must still
+    // fail the LAST audit: normalization only handles one model-format tail.
+    const finalDuplicate=ICP.auditFinal(result.text+", "+tag,"",plan,
+      result.wearItems,result.offBodyTags,{}, {hybrid:true});
+    assert.ok(finalDuplicate.issues.length,"no semantic bypass after finalise");
     for(const changed of [
       prompt+", dark blue school skirt",
       expected+", dark blue school skirt, white cotton panties",
