@@ -140,6 +140,31 @@
     return Object.assign({}, candidate, { value: [value] });
   }
 
+  // The model sometimes quotes a current authored DRAW correctly but omits
+  // the source annotation. Recover only the source *binding*, never missing
+  // clothing, activity, or authority. Draw-specific scope must be explicit or
+  // unambiguous from a named current selfie; historical/other photos fail shut.
+  function bindAuthoredDrawEvidence(candidate, opts) {
+    const e = candidate, o = opts || {};
+    if (!e || e.evidenceType != null || e.actor !== "char" ||
+        e.field !== "wear" || o.role !== "assistant" ||
+        typeof e.evidence !== "string" || !e.evidence.trim() ||
+        typeof o.draw !== "string" || !o.draw.includes(e.evidence) ||
+        String(o.text || "").includes(e.evidence) ||
+        (e.visualScope != null && e.visualScope !== "current-self")) return e;
+    if (e.visualScope == null) {
+      const draw = o.draw.toLowerCase().replace(/ё/g, "е");
+      const name = String(o.speakerName || "").trim().toLowerCase().replace(/ё/g, "е");
+      const selfieAt = draw.search(/селфи|selfie/iu);
+      const nameAt = name.length >= 4 ? draw.indexOf(name) : -1;
+      if (selfieAt < 0 || nameAt < 0 || Math.abs(selfieAt - nameAt) > 80 ||
+          /(?:стар(?:ое|ый|ом)|архив|вчера|прошл(?:ое|ого|ом)|флешбэк|рисун|скриншот|фантази|воображ|сон\b|сновиден|old\s+selfie|past\s+selfie|screenshot|flashback)/iu.test(draw) ||
+          (o.otherName && draw.toLowerCase().includes(String(o.otherName).toLowerCase())))
+        return e;
+    }
+    return Object.assign({}, e, { evidenceType: "draw", visualScope: "current-self" });
+  }
+
   function parse(raw, o) {
     const value = jsonObject(raw);
     if (!value) return { valid: false, events: [], issues: ["Ответ наблюдателя не содержит корректный JSON со списком событий"] };
@@ -150,7 +175,7 @@
       // A language model often writes the current speaker's name or "assistant"
       // instead of PRISM's internal actor id. Resolve ONLY the current speaker;
       // another person's name must never gain permission to alter their state.
-      let canonical = scalarListCandidate(speakerEvent(candidate, o));
+      let canonical = bindAuthoredDrawEvidence(scalarListCandidate(speakerEvent(candidate, o)), o);
       // Model-side certainty is sometimes too strong for a remote report.
       // Downcast only, never upgrade intent or bypass provenance validation.
       if (o && o.mode === "messenger" && canonical && canonical.certainty === "established")
