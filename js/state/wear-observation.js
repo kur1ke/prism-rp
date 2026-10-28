@@ -37,18 +37,34 @@
     return eligible.length===1?{reference:eligible[0]}:
       {reason:eligible.length?"ambiguous-garment":"unknown-garment"};
   }
+  // A canonical garment can contain additional nouns after a preposition
+  // ("блузка с коротким рукавом"). Anchor an abbreviated quote to the
+  // garment's leading noun, never to a shared adjective ("белом белье").
+  // This is a lexical guard, not a per-character clothing dictionary.
+  function garmentHead(item) {
+    const lead=str(item).split(/\s+(?:с|со|без|из|для|на|в|под)\s+/iu)[0];
+    const words=tokens(lead), qualifier=/(?:ая|яя|ое|ее|ые|ие|ый|ий|ой|ей|ую|юю|ых|их|ым|им)$/iu;
+    const russian=/[а-яё]/iu.test(lead);
+    // Skip compound-colour prefixes such as "светло-розовая"; keep the
+    // first nominal token in "юбка-плиссе", not its trailing descriptor.
+    const noun=russian?words.find((word,i)=>word.length>=3&&!qualifier.test(word)&&
+      !(i+1<words.length&&qualifier.test(words[i+1]))):
+      words.slice().reverse().find(word=>word.length>=3);
+    return noun?stem(noun):null;
+  }
   // Transitional compatibility for Observer models that return the known
   // full name instead of a short literal quote. Derive only the contiguous
   // noun phrase immediately supported by the evidence. Explicit itemMention
   // is preferred; no free-form fuzzy guessing of arbitrary nouns.
   function phrase(evidence,ref) {
-    const words=stems(ref.item),raw=str(evidence);
+    const words=stems(ref.item),raw=str(evidence),head=garmentHead(ref.item);
+    if(!head)return null;
     const spans=[...raw.matchAll(/[\p{L}\p{N}]+/gu)].map(m=>({
       text:m[0],stem:stem(m[0]),start:m.index,end:m.index+m[0].length
     }));
     const matches=[];
     for(let i=0;i<spans.length;i++){
-      if(!contains(words,spans[i].stem))continue;
+      if(!similar(head,spans[i].stem))continue;
       if(/(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им)$/iu.test(spans[i].text))continue;
       let first=i;
       while(first>0&&i-first<5&&contains(words,spans[first-1].stem))first--;

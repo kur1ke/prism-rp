@@ -36,6 +36,60 @@ assert.equal(p.events[0].itemMention,"белую блузку");
 assert.deepEqual(p.events[0].value,[title]);
 assert.equal(p.events[0].sourceSpan.kind,"draw");
 assert.equal(p.events[0].evidence,spans.find(x=>x.id===sourceId).text);
+// Regression from the live Messenger DRAW: the same source fragment mentions
+// a white blouse AND white lace underwear. Shared colour is not garment identity.
+// The selected source is D2; the Observer returns the canonical blouse label.
+const lingerie="белое кружевное бельё";
+const realDraw="Селфи в зеркале. Орихимэ Иноуэ смотрит в камеру. Она полностью сняла белую блузку, оставаясь в белом кружевном белье, которое подчеркивает её грудь.";
+const realInit={...init,event:{...init.event,value:[title,skirt,lingerie]}};
+const realState=TR.fold({mode:"messenger",initialWear:realInit,path:[]});
+const realOpts={...opts,draw:realDraw,draws:[{prompt:realDraw}],
+  references:TR.references(realState,"char",["remove","adjust","add"])};
+const realSourceId=ES.catalog(realOpts)
+  .find(x=>x.text.startsWith("Она полностью сняла белую блузку")).id;
+assert.equal(realSourceId,"D2");
+const real=parse([{...base,value:[title],sourceId:realSourceId}],realOpts);
+assert.equal(real.events.length,1,JSON.stringify(real));
+assert.equal(real.events[0].itemMention,"белую блузку");
+assert.equal(real.events[0].reference.item,title);
+const realMsg={id:"real-source",role:"assistant",swipeIdx:0,
+  swipes:[{text:caption,draws:[{prompt:realDraw}],stateEvents:real.events}]};
+const realFold=TR.fold({mode:"messenger",initialWear:realInit,path:[realMsg]});
+assert.deepEqual(realFold.actors.char.wearState.worn.map(x=>x.item),[skirt,lingerie]);
+assert.deepEqual(realFold.actors.char.wearState.removed.map(x=>x.item),[title]);
+const realSibling=structuredClone(realMsg);
+realSibling.swipes.push({text:"Другое фото",draws:[],stateEvents:[]});
+realSibling.swipeIdx=1;
+assert.deepEqual(TR.fold({mode:"messenger",initialWear:realInit,path:[realSibling]})
+  .actors.char.wearState.worn.map(x=>x.item),[title,skirt,lingerie]);
+// Without the garment noun, shared colour in another garment is insufficient.
+const noBlouseDraw=realDraw.replace("Она полностью сняла белую блузку, ", "");
+const noBlouseOpts={...realOpts,draw:noBlouseDraw,draws:[{prompt:noBlouseDraw}]};
+const noBlouseId=ES.catalog(noBlouseOpts).find(x=>x.text.includes("белом кружевном белье")).id;
+assert.equal(parse([{...base,value:[title],sourceId:noBlouseId}],noBlouseOpts).events.length,0);
+// Conflicting colour cannot resolve to the existing white blouse.
+const redDraw=realDraw.replace("сняла белую блузку","сняла красную блузку");
+const redOpts={...realOpts,draw:redDraw,draws:[{prompt:redDraw}]};
+const redId=ES.catalog(redOpts).find(x=>x.text.includes("сняла красную блузку")).id;
+assert.equal(parse([{...base,value:[title],sourceId:redId}],redOpts).events.length,0);
+// Two known white blouses with different materials remain ambiguous even
+// when the model chooses a full canonical name absent from the DRAW.
+const otherBlouse="белая льняная блузка с длинным рукавом";
+const doubleInit={...realInit,event:{...realInit.event,
+  value:[title,skirt,lingerie,otherBlouse]}};
+const doubleState=TR.fold({mode:"messenger",initialWear:doubleInit,path:[]});
+const doubleOpts={...realOpts,references:TR.references(doubleState,"char",["remove","adjust","add"])};
+const ambiguous=parse([{...base,value:[title],sourceId:realSourceId}],doubleOpts);
+assert.equal(ambiguous.events.length,0,JSON.stringify(ambiguous));
+assert.equal(ambiguous.rejectedObservations[0].reason,"ambiguous-garment");
+// Generic noun anchors also work with hyphenated colours and garment
+// descriptors; no fixed dictionary of character-specific garments.
+const WO=require("../js/state/wear-observation.js");
+assert.equal(WO.phrase("Она сняла светло-бежевую юбку-плиссе.",
+  {item:"светло-бежевая юбка-плиссе"}),"светло-бежевую юбку");
+assert.equal(WO.phrase("На ней светло-розовые балетки.",
+  {item:"светло-розовые балетки"}),"светло-розовые балетки");
+
 const msg={id:"m-source",role:"assistant",swipeIdx:0,
   swipes:[{text:caption,draws:[{prompt:draw}],stateEvents:p.events}]};
 const folded=TR.fold({mode:"messenger",initialWear:init,path:[msg]});
