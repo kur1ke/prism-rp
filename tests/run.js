@@ -7215,6 +7215,44 @@ async function unifiedTracker() {
       assert.ok(sw.messengerAt,"photo-only reply gets proper Messenger time");
     }finally{globalThis.PRP.llm.simple=before;fbLLM=oldLLM;}
   });
+  await ta("DRAW-SOURCE-BIND-5: omitted source metadata still commits blouse removal and RP hidden inquiry",async()=>{
+    const h=fbHarness({name:"Орихимэ Иноуэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const initial=["белая хлопковая блузка","бежевая юбка","белые трусики"];
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{actor:"char",
+      field:"wear",action:"set",value:initial,certainty:"reported",evidence:""}};
+    const draw="Селфи в зеркале. Орихимэ Иноуэ полностью сняла белую хлопковую блузку, оставшись в кружевном белье.";
+    const reply=h.chat.newMsg("assistant",null,"Держи фото ♡");
+    reply.swipes[0].draws=[{prompt:draw}];
+    await h.chat.commitMessage(reply,reply.id);
+    const previous=globalThis.PRP.llm;
+    let queried=0;
+    try{
+      globalThis.PRP.llm={...previous,simple:async(_provider,instruction)=>{
+        queried++;
+        if(instruction.startsWith("Ты — наблюдатель"))
+          return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
+            value:["белую хлопковую блузку"],certainty:"reported",
+            evidence:"полностью сняла белую хлопковую блузку"}]});
+        assert.ok(instruction.includes("Техническое уточнение"));
+        return JSON.stringify({changed:"no",
+          previous:initial.map(item=>({item,status:item==="белая хлопковая блузка"?"not_worn":"worn"})),
+          hidden:[{slot:"underwear_bottom",status:"worn",items:["белые трусики"]}]});
+      }};
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"observer"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.strictEqual(queried,2,"both Observer and RP self-report must be called");
+      const sw=h.chat.path().at(-1).swipes[0];
+      assert.strictEqual(sw.stateStatus.wearInquiry.status,"ok");
+      assert.strictEqual(sw.wearInquiries.length,1);
+      assert.strictEqual(sw.stateEvents[0].evidenceType,"draw");
+      const wear=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(wear.worn.map(x=>x.item).sort(),["бежевая юбка","белые трусики"].sort());
+      assert.deepStrictEqual(wear.removed.map(x=>x.item),["белая хлопковая блузка"]);
+      assert.strictEqual(wear.complete,true,"partial removal must preserve closed outfit");
+    }finally{globalThis.PRP.llm=previous;}
+  });
   await ta("WEAR-INQUIRY-2: partial existing outfit and invalid model reply never invent clothes",async()=>{
     const W=globalThis.PRP.wearInquiry;
     const previous={known:true,worn:[{item:"белая блузка"}]};
