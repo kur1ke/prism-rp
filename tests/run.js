@@ -7268,6 +7268,59 @@ async function unifiedTracker() {
       assert.strictEqual(wear.complete,true,"partial removal must preserve closed outfit");
     }finally{globalThis.PRP.llm=previous;}
   });
+  await ta("STATE-OBS-1: real Observer path binds short DRAW name to origin and exposes provenance",async()=>{
+    const h=fbHarness({name:"Орихимэ Иноуэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const original="белая хлопковая блузка с коротким рукавом";
+    const skirt="светло-бежевая юбка-плиссе";
+    const initial=[original,skirt];
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{
+      actor:"char",field:"wear",action:"set",value:initial,certainty:"reported",evidence:""}};
+    const draw="Селфи в зеркале. Орихимэ Иноуэ стоит, глядя в камеру. Она полностью сняла белую блузку и отбросила её в сторону, оставаясь в белом кружевном белье. На ней всё ещё надета светло-бежевая юбка-плиссе.";
+    const message=h.chat.newMsg("assistant",null,"Ну как тебе? ♡");
+    message.swipes[0].draws=[{prompt:draw}];
+    await h.chat.commitMessage(message,message.id);
+    const before=globalThis.PRP.llm;
+    let calls=0;
+    globalThis.PRP.llm={...before,simple:async(_provider,instruction)=>{
+      calls++;
+      if(instruction.startsWith("Ты — наблюдатель"))return JSON.stringify({events:[
+        {actor:"char",field:"wear",action:"remove",value:[original],
+          certainty:"reported",evidence:"полностью сняла белую блузку"}],
+        frameObjects:[],unresolved:[]});
+      assert.ok(instruction.includes("Техническое уточнение"));
+      return JSON.stringify({changed:"no",previous:initial.map(item=>({
+        item,status:item===original?"not_worn":"worn"})),
+        hidden:[{slot:"underwear_bottom",status:"unknown",items:[]}]});
+    }};
+    try{
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"processing-provider"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.strictEqual(calls,2,"two existing bounded requests: Observer and RP inquiry");
+      const chosen=h.chat.path().at(-1).swipes[0];
+      const event=chosen.stateEvents.find(e=>e.evidenceType==="draw"&&e.action==="remove");
+      assert.ok(event,"canonical state event persisted on the chosen swipe");
+      assert.strictEqual(event.itemMention,"белую блузку");
+      assert.strictEqual(event.reference.item,original);
+      assert.strictEqual(event.value[0],original);
+      const w=h.ctx.svc.state.snapshot().actors.char.wearState;
+      assert.deepStrictEqual(w.worn.map(x=>x.item),[skirt]);
+      assert.deepStrictEqual(w.removed.map(x=>x.item),[original]);
+      const html=globalThis.PRP.views.debugModal({
+        chat:h.ctx.chat(),path:h.chat.path(),messengerView:{world:{},events:[]}
+      },{section:"events"});
+      assert.ok(html.includes("Названо:")&&html.includes("белую блузку"));
+      assert.ok(html.includes("Привязано к:")&&html.includes(original));
+      assert.ok(allText(h.prism.build(h.chat.path()).messages).includes(skirt));
+      const different=structuredClone(h.chat.path().at(-1));
+      different.swipes.push({text:"Ничего не снимала",draws:[],stateEvents:[],sceneOps:[]});
+      different.swipeIdx=1;
+      const other=globalThis.PRP.stateTracker.fold({
+        mode:"messenger",initialWear:h.ctx.chat().initialWear,path:[different]});
+      assert.deepStrictEqual(other.actors.char.wearState.worn.map(x=>x.item),initial);
+    }finally{globalThis.PRP.llm=before;}
+  });
   await ta("WEAR-INQUIRY-2: partial existing outfit and invalid model reply never invent clothes",async()=>{
     const W=globalThis.PRP.wearInquiry;
     const previous={known:true,worn:[{item:"белая блузка"}]};
