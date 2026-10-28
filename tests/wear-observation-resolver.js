@@ -10,7 +10,11 @@ const skirt="светло-бежевая юбка-плиссе";
 const shirt="белая шелковая блузка с длинным рукавом";
 const ref=(item,id,action="remove")=>({id,actor:"char",field:"wear",action,item,
   source:{role:"initial",kind:"initial-outfit"}});
-const base=[ref(old,"wear:char:0"),ref(skirt,"wear:char:1")];
+const origin={schema:1,kind:"initial-outfit",
+  event:{actor:"char",field:"wear",action:"set",value:[old,skirt],
+    certainty:"reported",evidence:""}};
+const base=TR.references(TR.fold({mode:"messenger",initialWear:origin,path:[]}),
+  "char",["remove","adjust","add"]).filter(x=>x.action==="remove");
 const draw="Селфи в зеркале. Орихимэ Иноуэ стоит, глядя в камеру. Она полностью сняла белую блузку и отбросила её в сторону, оставаясь в белом кружевном белье. На ней всё ещё надета светло-бежевая юбка-плиссе.";
 const evidence="полностью сняла белую блузку";
 const options={mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
@@ -28,9 +32,6 @@ assert.ok(TR.normalize({...observed.events[0],itemMention:"красную юбк
   {...options,references:base}).error);
 const sourceWithRefs={...options,references:base};
 assert.equal(TR.normalize(observed.events[0],sourceWithRefs).error,undefined);
-const origin={schema:1,kind:"initial-outfit",
-  event:{actor:"char",field:"wear",action:"set",value:[old,skirt],
-    certainty:"reported",evidence:""}};
 const m={id:"m1",role:"assistant",swipeIdx:0,swipes:[{
   text:options.text,draws:[{prompt:draw}],stateEvents:observed.events}]};
 const worn=TR.fold({mode:"messenger",initialWear:origin,path:[m]}).actors.char.wearState;
