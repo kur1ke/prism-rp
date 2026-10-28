@@ -57,7 +57,10 @@
       const prefixKey = () => { const p = chat().path(), i = p.indexOf(msg); return i < 0 ? null : turnKey(p.slice(0, i + 1)); };
       const anchor = prefixKey();
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : prov;
-      const analysed = st && msg && text.trim() ? st.track(msg, observerProvider) : Promise.resolve(null);
+      const hasAuthoredDraw = Array.isArray(sw.draws) && sw.draws.some(d =>
+        d && typeof d.prompt === "string" && d.prompt.trim());
+      const analysed = st && msg && (text.trim() || hasAuthoredDraw)
+        ? st.track(msg, observerProvider) : Promise.resolve(null);
       return analysed.then((res) => {
         // Independent non-blocking Memory → Reflection cycle after a committed answer.
         // No manual interaction, no writes on failed/stale generation.
@@ -196,7 +199,9 @@
       if (error) sw.error = error; else delete sw.error;
       /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
          прежняя метка не меняется, новая ставится, только если её не было. Ветка для положения — до этого сообщения. */
-      if (ms && !error && !ctrl.signal.aborted && String(sw.text || "").trim() && !(mode === "continue" && sw.messengerAt)) {
+      if (ms && !error && !ctrl.signal.aborted &&
+          (String(sw.text || "").trim() || dr.draws.length) &&
+          !(mode === "continue" && sw.messengerAt)) {
         const snap = ms.snapshot(mode === "new" ? full : path, msNow);
         if (snap) sw.messengerAt = snap;
       }
@@ -210,7 +215,8 @@
       ui.scrollBottom();
       const shownAt = now();
       // Ответ сохранён и показан, замок снят: разбор и картинка идут отдельно и не держат переписку.
-      const post = !error && sw.text ? afterReply(target, prov, dr.draws.length ? dr.draws[0] : null) : Promise.resolve(null);
+      const post = !error && (String(sw.text || "").trim() || dr.draws.length)
+        ? afterReply(target, prov, dr.draws.length ? dr.draws[0] : null) : Promise.resolve(null);
       const reply = { msgId: target.id, chatId: c.id, shownAt, post };
       if (!o.turn) ready(reply); // без хода ничего больше не держит ввод
       return reply;
