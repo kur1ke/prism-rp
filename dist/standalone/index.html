@@ -5762,7 +5762,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const raw=str(evidence),words=stems(named),terms=tokens(named);
     if(!words.length||!terms.length)return null;
     const noun=words[words.length-1];
-    const spans=[...raw.matchAll(/[\\p{L}\\p{N}]+/gu)].map(m=>({
+    const spans=[...raw.matchAll(/[\p{L}\p{N}]+/gu)].map(m=>({
       text:m[0],start:m.index,end:m.index+m[0].length,stem:stem(m[0])
     }));
     const found=[];
@@ -5797,10 +5797,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const found=refs.map(ref=>({ref,mention:phrase(evidence,ref)}))
         .filter(x=>x.mention&&(named===x.ref.item||
           match(named,[x.ref]).reference));
-      if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment"};
+      if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment",
+        reason:"ambiguous-reference"};
       if(found.length===1){
         const valid=match(found[0].mention,refs);
-        if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason};
+        if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason,
+          reason:valid.reason};
         return {event:{...e,value:[found[0].ref.item],reference:found[0].ref,
           itemMention:found[0].mention},resolved:true};
       }
@@ -5808,7 +5810,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         const literal=sourcePhrase(evidence,named);
         if(literal)return {event:{...e,value:[literal]},resolved:true};
       }
-      return {unresolved:"Названный предмет не подтверждён выбранным исходным фрагментом"};
+      // Explain the failed boundary without promoting an unsupported fact.
+      // The same error text formerly hid a wrong sourceId, a missing prior
+      // reference, and a lexical parsing failure. Keep these distinct in Debug.
+      const literal=sourcePhrase(evidence,named);
+      return {unresolved:"Названный предмет не подтверждён выбранным исходным фрагментом",
+        reason:literal ? "garment-not-in-current-references" :
+          refs.length ? "source-has-no-matching-garment" : "unrecognized-garment-in-source"};
     }
     if(!refs.length){
       const plain={...e};delete plain.itemMention;
@@ -6837,7 +6845,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const value = jsonObject(raw);
     if (!value) return { valid: false, events: [], issues: ["Ответ наблюдателя не содержит корректный JSON со списком событий"] };
     if (!Array.isArray(value.events) || value.events.length > MAX) return { valid: false, events: [], issues: ["Некорректный список событий"] };
-    const events = [], issues = [], indexedEvents = new Map();
+    const events = [], issues = [], rejectedObservations = [], indexedEvents = new Map();
     for (let index = 0; index < value.events.length; index++) {
       const candidate = value.events[index];
       // A language model often writes the current speaker's name or "assistant"
@@ -6915,6 +6923,20 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const resolved = WO ? WO.resolve(canonical, o) : { event: canonical };
       if (resolved.unresolved) {
         issues.push("Событие " + (index + 1) + " [wear]: " + resolved.unresolved);
+        // Diagnostic data, never canonical state or model instructions:
+        // the ONLY selected fragment, the model's short claim and a reason.
+        // A generic error alone hid a broken Unicode lexer in sourcePhrase.
+        if (canonical && canonical.field === "wear" && rejectedObservations.length < MAX) {
+          rejectedObservations.push({
+            index, sourceId: String(candidate && candidate.sourceId || "legacy").slice(0,16),
+            kind: canonical.evidenceType === "draw" ? "draw" : "text",
+            action: String(canonical.action || "").slice(0,24),
+            value: (Array.isArray(canonical.value) ? canonical.value : [])
+              .slice(0,3).map(x => String(x).slice(0,160)),
+            fragment: String(canonical.evidence || "").slice(0,420),
+            reason: String(resolved.reason || "unknown").slice(0,60),
+          });
+        }
         continue;
       }
       canonical = resolved.event;
@@ -6990,7 +7012,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         issues.push("Неоднозначная ссылка: " + entry.trim().slice(0, 140));
       }
     }
-    return { valid: true, events, frameObjects, issues };
+    return { valid: true, events, frameObjects, issues, rejectedObservations };
   }
 
   /* Резервный разбор — только непосредственно утверждаемые самоописания.
@@ -10020,10 +10042,33 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           + '<p class="hint">Начальный комплект не был записан. Одежда осталась неизвестной; это не означает отсутствие одежды.</p>'
           + '<p>Причина: ' + esc(init.reason || "неизвестна") + '</p></div>'
         : '';
+      const rejected = status && Array.isArray(status.rejectedObservations)
+        ? status.rejectedObservations.slice(0,6) : [];
+      const rejectCodes = {
+        "unrecognized-garment-in-source": "Не удалось извлечь название новой вещи из выбранного фрагмента",
+        "garment-not-in-current-references": "Вещь найдена в источнике, но отсутствует среди известных вещей для действия",
+        "source-has-no-matching-garment": "Слова модели не соответствуют вещи в выбранном фрагменте",
+        "ambiguous-reference": "Несколько известных вещей подходят одинаково",
+        "ambiguous-garment": "Невозможно однозначно выбрать известную вещь",
+        "unknown-garment": "Соответствующей вещи нет в активном комплекте",
+      };
+      const rejectDetails = rejected.length
+        ? '<details class="block exp-debug"><summary>Отклонённые наблюдения — источник и причина (' +
+            rejected.length + ')</summary>'
+          + '<p class="hint">Это диагностические данные, не события Tracker. Показывается только текущий выбранный свайп.</p>'
+          + rejected.map(x => '<div class="block">'
+            + '<p><b>Событие ' + esc(String((x.index || 0) + 1))
+            + '</b> · ' + esc(x.action || "?") + ' · ' + esc(x.sourceId || "?")
+            + ' (' + esc(x.kind || "?") + ')</p>'
+            + '<p class="hint">Модель назвала: ' + esc((x.value || []).join(", ") || "неизвестно") + '</p>'
+            + '<p class="hint">Причина: ' + esc(rejectCodes[x.reason] || x.reason || "неизвестно") + '</p>'
+            + '<p class="hint">Выбранный фрагмент источника:</p>'
+            + '<pre class="debug-prompt">' + esc(x.fragment || "") + '</pre></div>').join("")
+          + '</details>' : '';
       content = initIssue + '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
         + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
         + '<button class="btn btn-sm" data-act="state-retry">Повторить анализ</button></div>'
-        + imageIssue
+        + rejectDetails + imageIssue
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
     }
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal debug-modal" role="dialog" aria-modal="true" aria-label="Debug">
@@ -10719,6 +10764,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <div class="head-who"><div class="head-name">Ассистент</div><span class="head-scene">${esc(a.messages.length ? a.title : "Разговор с моделью вне игры")}</span></div>
       <div class="head-tools">
         <button class="pill" data-act="assist-ctx" title="Что ассистент видит: карточку персонажа и выдержку из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
+        <button class="pill" data-act="vision-test" title="Проверить распознавание изображений через Perchance">Тест Vision</button>
         <button class="icon-btn" data-act="assist-list" title="Все разговоры">${icon("clock")}</button>
         <button class="icon-btn" data-act="assist-new" title="Новый разговор">${icon("plus")}</button>
         ${a.messages.length ? `<button class="icon-btn" data-act="assist-del" title="Удалить разговор">${icon("trash")}</button>` : ""}
@@ -10755,7 +10801,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <span class="spacer"></span>
         ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>` : `<button class="send" data-act="send" title="Отправить (Enter)">${icon("send")}</button>`}
       </div></div></div>`;
-    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div>${composer}</section>`;
+    return `<section class="chat assist">${head}<div class="feed" id="feed"><div class="feed-inner" id="feed-inner">${empty}${feed}</div></div><div id="vision-test-status" role="status" aria-live="polite" style="display:none; white-space:pre-wrap; padding:12px; max-height:240px; overflow:auto; border-top:1px solid var(--border, #7775);"></div>${composer}</section>`;
   }
 
   function assistCtxPop(m) {
@@ -12506,6 +12552,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const stateStatus = { status, sourceText, sourceDraw, sourceDrawIndex: latestIndex,
         issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
+        // Current-swipe, bounded diagnostics only; failed model guesses never
+        // become state events, memory, instructions or a separate garment DB.
+        rejectedObservations: Array.isArray(result.rejectedObservations)
+          ? result.rejectedObservations.slice(0, INT.MAX) : [],
         wearInquiry: wearInquiryStatus,
         // Shot-local provenance, not wardrobe state. Same-swipe image use only.
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
@@ -14932,6 +14982,37 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       assist: () => nav.openAssist(S.assist && S.assist.messages.length ? S.assist.id : null),
       "assist-new": () => { ui.closePop(); if (S.assist && !S.assist.messages.length) { $("#input") && $("#input").focus(); return; } nav.openAssist(null, S.assist ? { cardId: S.assist.ctx.cardId, chatId: S.assist.ctx.chatId } : null); },
       "assist-open": (t) => { ui.closePop(); nav.openAssist(t.dataset.id); },
+      "vision-test": () => {
+        const plugin = typeof window.ai === "function" ? window.ai : (window.root && typeof window.root.ai === "function" ? window.root.ai : null);
+        const status = $("#vision-test-status");
+        if (!status) return;
+        status.style.display = "block";
+        if (!plugin) { status.textContent = "Vision недоступен: ai-text-plugin не подключён. Откройте сборку непосредственно на Perchance."; return; }
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/png,image/jpeg,image/webp";
+        input.onchange = async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) { status.textContent = "Поддерживаются PNG, JPEG и WebP."; return; }
+          if (file.size > 20 * 1024 * 1024) { status.textContent = "Для теста выберите изображение до 20 МиБ."; return; }
+          status.textContent = "Vision: отправляю изображение в ai-text-plugin…";
+          try {
+            const response = await plugin({
+              instruction: [
+                "Это проверка Vision. Опиши изображение на русском языке: основные объекты и видимый текст. Не додумывай то, чего не видно.",
+                "\n",
+                file
+              ]
+            });
+            status.textContent = "Vision: ответ модели\n\n" + String(response && response.generatedText != null ? response.generatedText : response);
+          } catch (e) {
+            status.textContent = "Vision: ошибка\n" + String(e && e.message || e);
+            console.error("PRISM Vision test:", e);
+          }
+        };
+        input.click();
+      },
       "assist-list": (t) => ui.openPop(V.assistListPop(ui.vm()), t),
       "assist-ctx": (t) => ui.openPop(V.assistCtxPop(ui.vm()), t),
       "assist-pick-card": async (t) => {
