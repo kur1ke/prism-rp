@@ -327,10 +327,14 @@
       // report independently grounded compatible text facts; don't guess.
       const visualChange = result.events.some((e) => e.actor === "char" &&
         e.field === "wear" && e.evidenceType === "draw" &&
-        (e.action === "remove" || e.action === "adjust"));
+        ["set", "clear", "remove", "adjust", "invalidate"].includes(e.action));
+      // An authoritative current outfit replacement must not be followed by a
+      // lexical fallback that re-adds garments from the pre-replacement text.
+      const outfitReplaced = result.events.some((e) => e.field === "wear" &&
+        e.certainty !== "intent" && ["set", "clear", "invalidate"].includes(e.action));
       for (const e of fallback) {
         if (events.length >= INT.MAX) break;
-        if (visualChange && e.field === "wear") continue;
+        if ((visualChange || outfitReplaced) && e.field === "wear") continue;
         const sameField = events.filter((x) => x.actor === e.actor && x.field === e.field && x.certainty !== "intent");
         if (e.field === "wear" && e.action === "add" && Array.isArray(e.value)) {
           // A model may return one garment (or an invalid second garment).
