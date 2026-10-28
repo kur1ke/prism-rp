@@ -8863,7 +8863,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
     return Promise.resolve(imageBlob).then((blob) => {
     const handle = ai({
-      instruction: () => blob ? [p.instruction, "\\n", blob] : p.instruction,
+      instruction: () => blob ? [p.instruction, "\n\nК последнему сообщению пользователя прикреплено изображение. Это фотография в переписке, а не свидетельство текущей обстановки персонажа. Ответь в роли персонажа с учётом действительно видимого на снимке.\n", blob] : p.instruction,
       startWith: () => p.startWith,
       stopSequences: () => p.stop,
       hideStartWith: true,
