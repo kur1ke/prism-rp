@@ -10,6 +10,7 @@
   const PRP = (root.PRP = root.PRP || {});
   const SC = PRP.scene || (typeof require !== "undefined" ? require("../prism/scene.js") : null);
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
+  const WO = PRP.wearObservation || (typeof require !== "undefined" ? require("./wear-observation.js") : null);
   const FIELDS = Object.freeze(["location", "activity", "wear", "pose", "hair", "nearby", "ongoing", "availability"]);
   const LIST = new Set(["wear", "nearby", "ongoing"]);
   const CERTAINTY = new Set(["established", "reported", "intent"]);
@@ -275,6 +276,14 @@
           x.field === e.field && x.action === e.action && x.item === e.value[0] &&
           JSON.stringify(x) === JSON.stringify(e.reference));
         if (!match) return "ссылка не подтверждена текущей веткой";
+        // New resolved observations preserve their short literal garment
+        // mention. Revalidate independently at every branch/swipe replay.
+        // Old stored VIS-REF-1 events without itemMention remain compatible.
+        if (e.itemMention != null &&
+            (!WO || !WO.proof(e.itemMention,e.evidence,match)))
+          return "упоминание предмета не соответствует текущей ссылке";
+      } else if (e.itemMention != null) {
+        return "упоминание предмета без проверенной ссылки";
       }
       if (e.action !== "clear" && !e.reference) {
         // Точная цитата сама по себе не гарантирует, что модель не придумала
@@ -323,14 +332,16 @@
         e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
           ...(e.wearSlot ? { wearSlot: str(e.wearSlot) } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
-      ...(e.reference ? { reference: clone(e.reference) } : {}),
+      ...(e.reference ? { reference: clone(e.reference),
+        ...(e.itemMention ? { itemMention: str(e.itemMention) } : {}) } : {}),
     } };
   }
 
   function apply(state, input, source) {
     const out = clone(state);
     const refSource = input && input.reference
-      ? Object.assign({}, source || {}, { references: references(out, input.actor, [input.action]) }) : source;
+      ? Object.assign({}, source || {}, { references: source && Array.isArray(source.references)
+        ? source.references : references(out, input.actor, [input.action]) }) : source;
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
@@ -452,9 +463,24 @@
           { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 },
           { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
       }
+      // References are anchored to the BEGINNING of each observation unit.
+      // A single DRAW can adjust one garment then remove another; their
+      // prior reference IDs must NOT renumber after the first mutation.
+      // A later continued DRAW gets a new reference set from the outcome of
+      // earlier shots. This is ephemeral folding context, never a new store.
+      let referenceUnit = null, unitReferences = [];
       for (const e of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
+        const key = e && ["draw","wear-inquiry"].includes(e.evidenceType)
+          ? (Number.isInteger(e.drawIndex) ? e.drawIndex : (sw.draws || []).length - 1)
+          : -1;
+        if (referenceUnit !== key) {
+          referenceUnit = key;
+          unitReferences = references(st, m.role === "user" ? "user" : "char",
+            ["remove","adjust","add"]);
+        }
         st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
-          wearInquiries: sw.wearInquiries || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+          references: unitReferences, wearInquiries: sw.wearInquiries || [],
+          messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.
@@ -495,8 +521,13 @@
           !["draw", "wear-inquiry"].includes(e.evidenceType) ||
           !Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= draws.length)
         return { ok: false, reason: "unsequenced-state-event" };
+      // Historical preflight checks the authored quote and typed evidence.
+      // Identity references are re-derived against the real active-path
+      // wardrobe by fold() in the consumer; never use this provisional
+      // source object as a persisted identity or a second outfit.
       if (validateEvent(e, { role: source.role, mode: "messenger",
-        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [] }))
+        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [],
+        references: e.reference ? [e.reference] : [] }))
         return { ok: false, reason: "edited-photo-evidence" };
       if (e.drawIndex <= drawIndex) kept.push(clone(e));
     }

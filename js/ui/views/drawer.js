@@ -383,7 +383,16 @@
         + (rows.length ? '<ul class="wc-list">' + rows.map(({e,msg}) =>
             '<li><span class="tag">' + esc(e.actor || "") + '</span> <b>' + esc(e.field || "") + '</b> · ' + esc(e.action || "")
             + '<div>' + esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) + '</div>'
-            + '<small>' + esc(e.certainty || "") + ' · ' + esc(msg.id || "") + '</small></li>').join("") + '</ul>'
+            + '<small>' + esc(e.certainty || "") + ' · ' + esc(msg.id || "") + '</small>'
+            + (e.evidence ? '<details class="exp-debug"><summary>Наблюдение и происхождение</summary>'
+              + '<p class="hint">Источник: ' + esc(e.evidenceType === "draw"
+                ? "авторский DRAW " + (e.drawIndex == null ? "последний" : e.drawIndex)
+                : e.evidenceType === "wear-inquiry" ? "уточнение RP-модели" : "текст") + '</p>'
+              + '<p class="hint">Цитата: ' + esc(e.evidence) + '</p>'
+              + (e.itemMention ? '<p class="hint">Названо: ' + esc(e.itemMention) + '</p>' : '')
+              + (e.reference ? '<p class="hint">Привязано к: ' + esc(e.reference.item)
+                + ' (' + esc(e.reference.id) + ')</p>' : '')
+              + '</details>' : '') + '</li>').join("") + '</ul>'
           : '<p class="empty-note">Извлечённых событий в активной ветке нет.</p>') + '</div>'
         + '<div class="block"><div class="block-title">Старые изменения среды <small>' + (v.events || []).length + '</small></div>'
         + ((v.events || []).length ? '<ul class="wc-list">' + v.events.slice().reverse().map(e =>
