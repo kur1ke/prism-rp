@@ -97,6 +97,7 @@ const again=parse([{actor:"char",field:"wear",action:"add",value:["белая б
   certainty:"reported",sourceId:newId}],newOpts);
 assert.equal(again.events.length,1,JSON.stringify(again));
 continued.swipes[0].stateEvents.push({...again.events[0],drawIndex:1});
-assert.deepEqual(TR.fold({mode:"messenger",initialWear:init,path:[continued]})
-  .actors.char.wearState.worn.map(x=>x.item),[skirt,title]);
+const finalState=TR.fold({mode:"messenger",initialWear:init,path:[continued]});
+assert.deepEqual(finalState.actors.char.wearState.worn.map(x=>x.item),[skirt,title],
+  JSON.stringify({diagnostics:finalState.diagnostics,events:continued.swipes[0].stateEvents}));
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
