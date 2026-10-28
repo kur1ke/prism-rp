@@ -82,6 +82,30 @@
       !/\b(?:her|his|their)\s+(?:chest|torso|shoulders|body)\b/i.test(clause);
   }
 
+  // Formatting-only normalization for a single source-verified off-body
+  // garment in hybrid prose. Older compiler guidance made models append
+  // ", exact garment tag" after already describing that same off-body object.
+  // This trailing duplicate is not a second scene fact. Never normalize if
+  // source provenance, translated mapping, or the off-body clause is missing;
+  // the full semantic audit still executes on the resulting executable prompt.
+  function stripDuplicateHybridTail(prompt, absent, supplied, plan, wear) {
+    const visible=plan&&plan.shotAuthored&&Array.isArray(plan.offBodyVisible)
+      ?plan.offBodyVisible:[];
+    if(visible.length!==1||!Array.isArray(supplied)||supplied.length!==1||
+       !Array.isArray(absent)||!wear||!Array.isArray(wear.removed))return prompt;
+    const index=wear.removed.findIndex(x=>x.item===visible[0].item);
+    const mapped=index>=0?absent[index]:null, role=supplied[0];
+    if(index<0||!mapped||mapped.index!==index||!role||role.index!==index||
+       typeof mapped.tag!=="string"||typeof role.tag!=="string"||
+       !sameTag(mapped.tag,role.tag))return prompt;
+    const comma=prompt.lastIndexOf(",");
+    if(comma<0||!sameTag(prompt.slice(comma+1).trim(),role.tag))return prompt;
+    const prose=prompt.slice(0,comma).trim(),noun=garmentHead(mapped.tag);
+    if(!prose||!noun)return prompt;
+    const proven=proseClauses(prose).filter(clause=>proseOffBodyClause(clause,role.tag,noun));
+    return proven.length===1?prose:prompt;
+  }
+
   function auditFinal(prompt, negative, visualPlan, wearItems, offBodyTags, subjectScope, options) {
     const plan = visualPlan && visualPlan.wear ? visualPlan : null;
     if (!plan || plan.actor !== "char") return { validated: false, scope: "not-owner", issues: [] };
@@ -221,7 +245,7 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v20-hybrid-offbody-prose" : "v14-mirror-framing",
+    const key = [hybrid ? "v21-hybrid-offbody-tail" : "v14-mirror-framing",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
@@ -274,8 +298,11 @@
       let result;
       if (negativesRequired) {
         const decoded = canonicalJSON(raw);
-        const prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";
+        let prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";
         const absent = decoded.absent;
+        const supplied = o.visualPlan && o.visualPlan.shotAuthored
+          ? (decoded.offBody == null ? [] : decoded.offBody) : [];
+        if (hybrid) prompt = stripDuplicateHybridTail(prompt, absent, supplied, o.visualPlan, wear);
         if (hybrid && validateHybrid(prompt))
           return failure(validateHybrid(prompt));
         if (prompt.length < 4 || !Array.isArray(absent) || absent.length !== wear.removed.length ||
@@ -286,7 +313,6 @@
           ? o.visualPlan.offBodyVisible : [];
         const offBodyTags = [];
         if (o.visualPlan && o.visualPlan.shotAuthored) {
-          const supplied = decoded.offBody == null ? [] : decoded.offBody;
           if (!Array.isArray(supplied) || supplied.length !== visible.length)
             return failure("Отсутствуют подтверждённые off-body роли для текущего кадра");
           for (const object of visible) {
