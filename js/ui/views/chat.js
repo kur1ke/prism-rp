@@ -203,7 +203,7 @@
       }
       const parts = R.bubbles(sw.text);
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
-      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
+      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${sw.imageDataUrl ? `<div class="bub"><img src="${esc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
         <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
@@ -237,6 +237,7 @@
       <div class="composer-bar">
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}
+        ${m.chat.mode === "messenger" ? `<button class="pill" data-act="attach-photo" title="Отправить фотографию персонажу">${icon("image")}<span>Фото</span></button>` : ""}
         <span class="spacer"></span>
         ${m.chat.mode === "messenger" ? `<button class="pill initiative-btn" data-act="initiative" ${m.gen ? "disabled" : ""} title="Спросить, написал(а) бы ${esc(m.card.name)} сейчас первым — персонаж может и промолчать. Ничего не запускается само.">${icon("bubble")}<span>Проверить инициативу</span></button>` : ""}
         ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>`
