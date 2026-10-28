@@ -49,6 +49,7 @@ require(J("assist/assist.js"));
 require(J("core/settings.js"));
 require(J("core/perf.js"));
 require(J("ui/render.js"));
+require("./state-observation-continuity.js");
 const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, imgCompose: IC, imgBackends: IB, imgCompile: ICP, assist: AST, render: RN, settings: STG, cardModel: CM, cardFormats: CF, cardImport: IMP, cardValidate: VAL } = globalThis.PRP;
 // Импорт карточки из объекта → черновик (для тестов, где важен только результат).
 const normalize = (json) => { const r = IMP.fromObject(json, "json", "t.json"); if (!r.ok) throw new Error(r.issues.map((x) => x.message).join("; ")); return r.draft; };
