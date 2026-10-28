@@ -15,7 +15,7 @@
   function chat(prov, messages, opts) {
     const o = opts || {};
     return prov.kind === "perchance"
-      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null, outputFormat: o.outputFormat || null })
+      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null, outputFormat: o.outputFormat || null, imageDataUrl: o.imageDataUrl || null })
       : OA.chat(prov, messages, o.sampler, { signal: o.signal, onDelta: o.onDelta });
   }
 
