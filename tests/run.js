@@ -7017,6 +7017,52 @@ async function unifiedTracker() {
       assert.ok(!prism.includes("ПОЛНЫЙ перечень надетой сейчас одежды: бежевая юбка"));
     }finally {globalThis.PRP.llm=old;}
   });
+  await ta("WEAR-INQUIRY-3: continued swipe keeps hidden facts and reads new photo against prior shot",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{actor:"char",
+      field:"wear",action:"set",value:["бежевая юбка"],certainty:"reported",evidence:""}};
+    const m=h.chat.newMsg("assistant",null,"Смотри!");
+    m.swipes[0].draws=[{prompt:"На Орихимэ красное платье"}];
+    await h.chat.commitMessage(m,m.id);
+    const old=globalThis.PRP.llm;
+    let observed=0,inquired=0;
+    globalThis.PRP.llm={...old,simple:async(_provider,instruction)=>{
+      if(instruction.startsWith("Ты — наблюдатель")){
+        observed++;
+        const isSecond=instruction.includes("чёрная куртка");
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"add",
+          value:[isSecond?"чёрная куртка":"красное платье"],
+          evidence:isSecond?"чёрная куртка":"красное платье",
+          certainty:"reported",evidenceType:"draw",visualScope:"current-self"}]});
+      }
+      inquired++;
+      const second=instruction.includes("чёрная куртка");
+      return JSON.stringify({changed:second?"no":"yes",
+        previous:(second?["красное платье","белое бельё"]:["бежевая юбка"])
+          .map(item=>({item,status:second?"worn":"not_worn"})),
+        hidden:second?[]:[{slot:"underwear_bottom",status:"worn",items:["белое бельё"]}]});
+    }};
+    try {
+      assert.equal((await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"})).status,"ok");
+      const sw=h.chat.path()[0].swipes[0];
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item).sort(),
+        ["красное платье","белое бельё"].sort());
+      sw.text+=" Потом ещё один снимок.";
+      sw.draws.push({prompt:"Орихимэ, красное платье, чёрная куртка"});
+      assert.equal((await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"})).status,"ok");
+      assert.equal(observed,2);assert.equal(inquired,2);
+      assert.equal(sw.wearInquiries.length,2);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item).sort(),
+        ["красное платье","белое бельё","чёрная куртка"].sort());
+      const previous=globalThis.PRP.stateTracker.historicalDrawPath(h.chat.path(),0);
+      assert.equal(previous.ok,true,previous.reason);
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot(previous.path).actors.char.wearState.worn.map(x=>x.item).sort(),
+        ["красное платье","белое бельё"].sort(),
+        "second shot cannot rewrite first shot's hidden garments");
+    }finally{globalThis.PRP.llm=old;}
+  });
   await ta("WEAR-INQUIRY-2: partial existing outfit and invalid model reply never invent clothes",async()=>{
     const W=globalThis.PRP.wearInquiry;
     const previous={known:true,worn:[{item:"белая блузка"}]};
