@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "e85cf90310add7239f6afbaf6d7a9cb80009517e";
+  window.PRISM_RP_BUILD_SHA = "f7430473c3ef764da0d6fdbdc005bb41bc246f39";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -8092,8 +8092,10 @@
     const p = toPrompt(messages, names, o.closing, o.outputFormat);
     if (o.continueFrom) p.startWith = bodyOnly ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
+    const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
+    return Promise.resolve(imageBlob).then((blob) => {
     const handle = ai({
-      instruction: () => p.instruction,
+      instruction: () => blob ? [p.instruction, "\\n", blob] : p.instruction,
       startWith: () => p.startWith,
       stopSequences: () => p.stop,
       hideStartWith: true,
@@ -8124,6 +8126,13 @@
       }
       return { text: out.trim(), reasoning: "", finish: "stop" };
     });
+    });
+  }
+
+  async function awaitImageBlob(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Не удалось прочитать вложение");
+    return response.blob();
   }
 
   function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
@@ -8158,7 +8167,7 @@
   function chat(prov, messages, opts) {
     const o = opts || {};
     return prov.kind === "perchance"
-      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null, outputFormat: o.outputFormat || null })
+      ? PC.chat(o.names || {}, messages, { signal: o.signal, onDelta: o.onDelta, continueFrom: o.continueFrom || null, closing: o.closing || null, outputFormat: o.outputFormat || null, imageDataUrl: o.imageDataUrl || null })
       : OA.chat(prov, messages, o.sampler, { signal: o.signal, onDelta: o.onDelta });
   }
 
@@ -8768,7 +8777,7 @@
       }
       const parts = R.bubbles(sw.text);
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
-      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
+      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${sw.imageDataUrl ? `<div class="bub"><img src="${esc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
         <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
@@ -8802,6 +8811,7 @@
       <div class="composer-bar">
         <button class="pill" data-act="model-pop" title="Модель и стиль генерации">${icon("cpu")}<span>${esc(p ? p.label : "Выбрать модель")}${preset && p && p.kind !== "perchance" ? " · " + esc(preset.name) : ""}</span></button>
         ${r ? `<button class="pill" data-act="open-prism" title="Сколько контекста занято: ${r.used} из ${r.budget} токенов">${meter(m)}<span>${Math.round((r.used / r.budget) * 100)}%</span></button>` : ""}
+        ${m.chat.mode === "messenger" ? `<button class="pill" data-act="attach-photo" title="Отправить фотографию персонажу">${icon("image")}<span>Фото</span></button>` : ""}
         <span class="spacer"></span>
         ${m.chat.mode === "messenger" ? `<button class="pill initiative-btn" data-act="initiative" ${m.gen ? "disabled" : ""} title="Спросить, написал(а) бы ${esc(m.card.name)} сейчас первым — персонаж может и промолчать. Ничего не запускается само.">${icon("bubble")}<span>Проверить инициативу</span></button>` : ""}
         ${m.gen ? `<button class="send stop" data-act="stop" title="Остановить">${icon("stop")}</button>`
@@ -12021,10 +12031,13 @@
       let raw = "", reasoning = "", error = null;
       const rpT0 = now();
       try {
+        const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
+        const imageDataUrl = imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null;
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
           signal: ctrl.signal, onDelta, continueFrom: prefix || null,
           outputFormat: ms ? "message-body" : null,
+          imageDataUrl,
         });
         raw = res.text; reasoning = res.reasoning;
       } catch (e) {
@@ -13499,8 +13512,46 @@
       if (S.drawerOpen) ui.renderDrawer();
     }
 
+    async function attachPhoto() {
+      const c = ctx.chat();
+      if (!c || c.mode !== "messenger" || S.gen || (S.turn && S.turn.chatId === c.id)) return;
+      if (!ctx.provider() || ctx.provider().kind !== "perchance") { ui.toast("Отправка фотографий пока поддерживается только моделью Perchance.", true); return; }
+      const picker = document.createElement("input");
+      picker.type = "file";
+      picker.accept = "image/png,image/jpeg,image/webp";
+      picker.onchange = async () => {
+        const file = picker.files && picker.files[0];
+        if (!file) return;
+        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 20 * 1024 * 1024) {
+          ui.toast("Выберите PNG, JPEG или WebP до 20 МиБ.", true); return;
+        }
+        try {
+          const bitmap = await createImageBitmap(file);
+          const scale = Math.min(1, 960 / Math.max(bitmap.width, bitmap.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+          canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Canvas недоступен");
+          context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          const imageDataUrl = canvas.toDataURL("image/jpeg", 0.78);
+          const textArea = $("#input");
+          const caption = textArea ? textArea.value.trim() : "";
+          const message = caption || "[Отправлена фотография]";
+          const stamp = svc.messenger.stampForNew();
+          const result = await svc.gen.send(message, { messengerAt: stamp, imageDataUrl });
+          if (result && result.outcome === "sent" && textArea && textArea.value.trim() === caption) {
+            textArea.value = ""; ui.autoGrow(textArea); ui.clearDraft(c.id);
+          }
+        } catch (error) { ui.toast("Ошибка обработки фото: " + (error.message || String(error)), true); }
+      };
+      picker.click();
+    }
+
     const actions = {
       send: sendUser,
+      "attach-photo": attachPhoto,
       // Отменить отправку, ожидающую разбора предыдущего ответа: текст вернётся в поле ввода.
       "send-cancel": () => svc.gen.cancelTurn(),
       stop: () => svc.gen.stop(),
