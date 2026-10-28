@@ -61,4 +61,50 @@ assert.equal(historical.events.length,0);
 const noRefs=INT.parse(JSON.stringify({events:[{...event,value:["белую блузку"],
   itemMention:"белую блузку"}]}),{...options,references:[]});
 assert.equal(noRefs.events.length,1,"old generic grounded behavior is preserved with no known reference");
+// New garments must never be rejected simply because the old outfit
+// lacks their identity. An explicit mention remains grounded in this DRAW.
+const dress="красное вечернее платье";
+const newDraw="Селфи. Орихимэ Иноуэ теперь в красном вечернем платье.";
+const newEvent={actor:"char",field:"wear",action:"add",value:["красном вечернем платье"],
+  itemMention:"красном вечернем платье",certainty:"reported",
+  evidence:"в красном вечернем платье",evidenceType:"draw",visualScope:"current-self"};
+const novel=INT.parse(JSON.stringify({events:[newEvent]}),{
+  ...options,draw:newDraw,draws:[{prompt:newDraw}],
+  references:[ref("бежевая юбка-плиссе","wear:char:0","add")]});
+assert.equal(novel.events.length,1,JSON.stringify(novel));
+assert.equal(novel.events[0].reference,undefined);
+assert.deepEqual(novel.events[0].value,["красном вечернем платье"]);
+
+// A continued swipe binds later DRAWs to the outcome of earlier DRAWs,
+// but historical snapshots must not incorporate the later removal.
+const dressPhoto="Селфи Орихимэ Иноуэ. На ней красное платье.";
+const removePhoto="Селфи Орихимэ Иноуэ. Она полностью сняла красное платье.";
+const addDress={actor:"char",field:"wear",action:"add",
+  value:["красное платье"],certainty:"reported",evidence:"красное платье",
+  evidenceType:"draw",visualScope:"current-self",drawIndex:0};
+const oldMomentMsg={id:"continue",role:"assistant",swipeIdx:0,
+  swipes:[{text:"Фото!",draws:[{prompt:dressPhoto}],stateEvents:[addDress]}]};
+const previousPath=[oldMomentMsg];
+const priorState=TR.fold({mode:"messenger",path:previousPath});
+const priorRefs=TR.references(priorState,"char",["remove","adjust","add"]);
+const removal=INT.parse(JSON.stringify({events:[{
+  actor:"char",field:"wear",action:"remove",value:["красное платье"],
+  itemMention:"красное платье",certainty:"reported",
+  evidence:"сняла красное платье",evidenceType:"draw",visualScope:"current-self"
+}]}),{mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
+  text:"Фото! Продолжение.",draw:removePhoto,draws:[{prompt:removePhoto}],
+  references:priorRefs});
+assert.equal(removal.events.length,1,JSON.stringify(removal));
+const continued=structuredClone(oldMomentMsg);
+continued.swipes[0].draws.push({prompt:removePhoto});
+continued.swipes[0].text="Фото! Продолжение.";
+continued.swipes[0].stateEvents.push({...removal.events[0],drawIndex:1});
+continued.swipes[0].stateStatus={status:"ok",sourceText:continued.swipes[0].text,
+  sourceDraw:removePhoto,sourceDrawIndex:1};
+assert.deepEqual(TR.fold({mode:"messenger",path:[continued]})
+  .actors.char.wearState.removed.map(x=>x.item),["красное платье"]);
+const originalPhoto=TR.historicalDrawPath([continued],0);
+assert.equal(originalPhoto.ok,true,JSON.stringify(originalPhoto));
+assert.deepEqual(TR.fold({mode:"messenger",path:originalPhoto.path})
+  .actors.char.wearState.worn.map(x=>x.item),["красное платье"]);
 console.log("PASS: WearObservationResolver source/identity split, unique reference, ambiguity and swipe isolation");
