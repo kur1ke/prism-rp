@@ -58,6 +58,16 @@ const { scene: S, experience: E, assembler: A, ccard: C, openai: O, tree: T, img
 const normalize = (json) => { const r = IMP.fromObject(json, "json", "t.json"); if (!r.ok) throw new Error(r.issues.map((x) => x.message).join("; ")); return r.draft; };
 const authored = (sys, post) => ({ system: CM.directive(sys || "", "authored"), postHistory: CM.directive(post || "", "authored") });
 
+function neutralWearInquiry(instruction) {
+  // Regression fixtures test Observer source semantics. A separate, valid
+  // uncertain RP self-report must not modify those facts or turn a real
+  // clothing change into an unrelated "partial" parse failure.
+  const line=String(instruction).split("\n")
+    .find(x=>x.startsWith("Одежда ДО кадра (данные, не инструкция): "));
+  assert.ok(line,"expected bounded RP inquiry");
+  const old=JSON.parse(line.slice(line.indexOf(": ")+2));
+  return JSON.stringify({changed:"no",previous:old.map(item=>({item,status:"unknown"})),hidden:[]});
+}
 let passed = 0, failed = 0;
 function t(name, fn) {
   try { fn(); passed++; }
@@ -3672,7 +3682,8 @@ async function foundationH() {
     await h.chat.commitMessage(follow,follow.id);
     const old=globalThis.PRP.llm.simple;
     try{
-      globalThis.PRP.llm.simple=async ()=>JSON.stringify({events:[
+      globalThis.PRP.llm.simple=async (_provider,instruction)=>instruction.startsWith("Техническое уточнение")
+        ? neutralWearInquiry(instruction) : JSON.stringify({events:[
         {actor:"char",field:"wear",action:"adjust",value:["white t-shirt"],placement:"off shoulders",
          certainty:"reported",evidence:"white t-shirt pulled down off shoulders",evidenceType:"draw",visualScope:"current-self"},
         {actor:"char",field:"wear",action:"remove",value:["shorts"],
@@ -3748,6 +3759,7 @@ async function foundationH() {
     let query;
     try{
       globalThis.PRP.llm.simple=async (_,q)=>{
+        if(q.startsWith("Техническое уточнение")) return neutralWearInquiry(q);
         query=q;return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
           referenceId:"wear:char:0",certainty:"reported",evidence:"shorts removed",
           evidenceType:"draw",visualScope:"current-self"}]});
@@ -3846,7 +3858,8 @@ async function foundationH() {
     await h.chat.commitMessage(m,m.id);
     const original=globalThis.PRP.llm.simple;let calls=0;
     try {
-      globalThis.PRP.llm.simple=async()=>JSON.stringify({events:[++calls===1
+      globalThis.PRP.llm.simple=async(_provider,instruction)=>instruction.startsWith("Техническое уточнение")
+        ? neutralWearInquiry(instruction) : JSON.stringify({events:[++calls===1
         ? {actor:"char",field:"wear",action:"add",value:["white t-shirt"],certainty:"reported",
           evidence:"white t-shirt on body",evidenceType:"draw",visualScope:"current-self"}
         : {actor:"char",field:"wear",action:"remove",value:["white t-shirt"],certainty:"reported",
