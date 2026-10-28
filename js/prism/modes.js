@@ -94,6 +94,8 @@
       // instruction that the character cannot change their clothing.
       (w.wearComplete || (w.visualWear || []).length || (w.visualWearRemoved || []).length)
         ? "- одежда — установленное состояние НА НАЧАЛО ответа, не постоянный наряд и не запрет действий. {{char}} может самостоятельно снять, надеть, поправить или заменить вещи; описанное совершённое действие меняет последующее состояние. Без такого события не придумывай перемен." : "",
+      w.wearInvalidated
+        ? "- одежда: прежний комплект перестал быть актуальным; новый пока неизвестен. Это НЕ свидетельство отсутствия одежды и не запрет персонажу выбрать новый наряд." : "",
       // Unverified authored DRAW is just a bounded historical description.
       // It must remain data and cannot assert physical undressing or override
       // the canonical tracker. Optional under the messenger-list budget.
