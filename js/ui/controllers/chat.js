@@ -34,8 +34,46 @@
       if (S.drawerOpen) ui.renderDrawer();
     }
 
+    async function attachPhoto() {
+      const c = ctx.chat();
+      if (!c || c.mode !== "messenger" || S.gen || (S.turn && S.turn.chatId === c.id)) return;
+      if (!ctx.provider() || ctx.provider().kind !== "perchance") { ui.toast("Отправка фотографий пока поддерживается только моделью Perchance.", true); return; }
+      const picker = document.createElement("input");
+      picker.type = "file";
+      picker.accept = "image/png,image/jpeg,image/webp";
+      picker.onchange = async () => {
+        const file = picker.files && picker.files[0];
+        if (!file) return;
+        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 20 * 1024 * 1024) {
+          ui.toast("Выберите PNG, JPEG или WebP до 20 МиБ.", true); return;
+        }
+        try {
+          const bitmap = await createImageBitmap(file);
+          const scale = Math.min(1, 960 / Math.max(bitmap.width, bitmap.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+          canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Canvas недоступен");
+          context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          const imageDataUrl = canvas.toDataURL("image/jpeg", 0.78);
+          const textArea = $("#input");
+          const caption = textArea ? textArea.value.trim() : "";
+          const message = caption || "[Отправлена фотография]";
+          const stamp = svc.messenger.stampForNew();
+          const result = await svc.gen.send(message, { messengerAt: stamp, imageDataUrl });
+          if (result && result.outcome === "sent" && textArea && textArea.value.trim() === caption) {
+            textArea.value = ""; ui.autoGrow(textArea); ui.clearDraft(c.id);
+          }
+        } catch (error) { ui.toast("Ошибка обработки фото: " + (error.message || String(error)), true); }
+      };
+      picker.click();
+    }
+
     const actions = {
       send: sendUser,
+      "attach-photo": attachPhoto,
       // Отменить отправку, ожидающую разбора предыдущего ответа: текст вернётся в поле ввода.
       "send-cancel": () => svc.gen.cancelTurn(),
       stop: () => svc.gen.stop(),
