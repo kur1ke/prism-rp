@@ -17,7 +17,11 @@ const origin = {schema:1,kind:"initial-outfit",event:{
 }};
 function msg(id, text, events=[], draws=[]) {
   return {id,role:"assistant",chatId:"c1",swipeIdx:0,swipes:[{
-    text,draws,sceneOps:[],stateCorrections:[],stateEvents:events
+    text,draws,sceneOps:[],stateCorrections:[],stateEvents:events,
+    ...(draws.length && events.length ? {stateStatus:{
+      status:"ok",sourceText:text,sourceDraw:draws.at(-1).prompt,
+      sourceDrawIndex:draws.length-1
+    }} : {})
   }]};
 }
 function fold(path) {return T.fold({mode:"messenger",initialWear:origin,path,charName:"Орихимэ",userName:"Друг"});}
