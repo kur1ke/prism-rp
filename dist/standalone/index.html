@@ -5609,6 +5609,130 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/state/wear-observation.js */
+/* PrismRP — WearObservationResolver
+   Observation (quoted text/DRAW) -> unique garment identity in active branch.
+   Pure module. No provider, database, renderer, or secondary wardrobe.
+   Never invent an action, a garment or a reference. */
+(function(root) {
+  "use strict";
+  const PRP=root.PRP=root.PRP||{};
+  const str=x=>String(x==null?"":x).trim();
+  const tokens=s=>(str(s).toLowerCase().replace(/ё/g,"е").match(/[\p{L}\p{N}]+/gu)||[]);
+  function stem(word) {
+    const w=str(word).toLowerCase().replace(/ё/g,"е");
+    if(w.length<=3)return w;
+    const out=w.replace(/(?:ого|его|ому|ему|ыми|ими|ая|яя|ое|ее|ые|ие|ый|ий|ую|юю|ых|их|ым|им|ой|ей|ом|ем|а|я|у|ю|ы|и|е)$/u,"");
+    return out.length>=3?out:w;
+  }
+  const stems=s=>tokens(s).filter(x=>x.length>=3).map(stem);
+  const similar=(a,b)=>a===b||(Math.min(a.length,b.length)>=4&&
+    a.slice(0,Math.min(a.length,b.length)-1)===b.slice(0,Math.min(a.length,b.length)-1));
+  const contains=(all,word)=>all.some(w=>similar(w,word));
+  // The short noun phrase must match a SINGLE current garment, including
+  // all stated attributes. One matching colour alone is never a garment.
+  function match(mention,refs) {
+    const observed=stems(mention);
+    if(!observed.length)return {reason:"empty-mention"};
+    // The observed noun is at the end of the noun phrase, whereas the
+    // canonical item may have qualifiers after it (e.g. "блузка с рукавом").
+    // A bare adjective is not a garment identity.
+    const rawWords=tokens(mention);
+    if(/(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им)$/iu.test(rawWords[rawWords.length-1]||""))
+      return {reason:"missing-garment-noun"};
+    const eligible=(refs||[]).filter(ref=>{
+      if(!ref||typeof ref.item!=="string")return false;
+      const known=stems(ref.item);
+      if(!known.length||!contains(known,observed[observed.length-1]))return false;
+      return observed.every(word=>contains(known,word));
+    });
+    return eligible.length===1?{reference:eligible[0]}:
+      {reason:eligible.length?"ambiguous-garment":"unknown-garment"};
+  }
+  // Transitional compatibility for Observer models that return the known
+  // full name instead of a short literal quote. Derive only the contiguous
+  // noun phrase immediately supported by the evidence. Explicit itemMention
+  // is preferred; no free-form fuzzy guessing of arbitrary nouns.
+  function phrase(evidence,ref) {
+    const words=stems(ref.item),raw=str(evidence);
+    const spans=[...raw.matchAll(/[\p{L}\p{N}]+/gu)].map(m=>({
+      text:m[0],stem:stem(m[0]),start:m.index,end:m.index+m[0].length
+    }));
+    const matches=[];
+    for(let i=0;i<spans.length;i++){
+      if(!contains(words,spans[i].stem))continue;
+      if(/(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им)$/iu.test(spans[i].text))continue;
+      let first=i;
+      while(first>0&&i-first<5&&contains(words,spans[first-1].stem))first--;
+      // The immediately preceding descriptive word cannot silently conflict
+      // with the existing item's attributes. Reject instead of picking a
+      // known white blouse for an explicitly red blouse.
+      if(first===i&&i>0&&/(?:ая|яя|ую|юю|ый|ий|ое|ее|ой|ей|ых|их|ым|им)$/iu.test(spans[i-1].text))
+        continue;
+      matches.push(raw.slice(spans[first].start,spans[i].end));
+    }
+    return matches.length===1?matches[0]:null;
+  }
+  function resolve(candidate,options) {
+    const e=candidate||{},o=options||{};
+    if(e.field!=="wear"||!["remove","adjust","add"].includes(e.action)||
+       e.referenceId!=null||e.reference||e.evidenceType==="wear-inquiry")
+      return {event:e,skipped:true};
+    const src=e.evidenceType==="draw"?o.draw:o.text;
+    const evidence=str(e.evidence);
+    if(typeof src!=="string"||!evidence||!src.includes(evidence))return {event:e,skipped:true};
+    const list=Array.isArray(e.value)?e.value:[];
+    if(list.length!==1)return {event:e,skipped:true};
+    const named=str(list[0]),refs=(Array.isArray(o.references)?o.references:[])
+      .filter(x=>x&&x.actor===e.actor&&x.field==="wear"&&x.action===e.action);
+    if(!refs.length){
+      const plain={...e};delete plain.itemMention;
+      return {event:plain,skipped:true};
+    }
+    // Do not rewrite a new garment into an old identity. The model's value
+    // must either be literally quoted or exactly name a branch-local item.
+    const exactValue=evidence.includes(named);
+    const explicit=e.itemMention!=null?str(e.itemMention):null;
+    if(explicit!=null&&(!explicit||!evidence.includes(explicit)))
+      return {unresolved:"itemMention не подтверждён точной цитатой"};
+    let mention=explicit||(exactValue?named:null);
+    if(!mention){
+      const exact=refs.filter(x=>str(x.item)===named);
+      if(exact.length!==1)return {event:e,skipped:true};
+      mention=phrase(evidence,exact[0]);
+      if(!mention)return {unresolved:"Нет однозначного упоминания известной вещи в цитате"};
+    }
+    const found=match(mention,refs);
+    if(!found.reference){
+      // An explicitly new garment, with no matching reference, can still
+      // be added by existing grounded validation.
+      if(e.action==="add"&&found.reason==="unknown-garment"&&exactValue) {
+        // A genuinely new garment has no old reference: don't turn the
+        // resolver into an outfit lock. Leave its literal wear.add to the
+        // existing source-grounded Tracker path.
+        const novel={...e};delete novel.itemMention;
+        return {event:novel,skipped:true};
+      }
+      return {unresolved:"Разрешение предмета: "+found.reason};
+    }
+    // Only an exact branch-local ref can override the model's surface name.
+    if(!exactValue&&named!==found.reference.item)
+      return {unresolved:"Полное название не соответствует выбранному предмету"};
+    return {event:{...e,value:[found.reference.item],
+      reference:found.reference,itemMention:mention},resolved:true};
+  }
+  function proof(mention,evidence,reference) {
+    if(typeof mention!=="string"||!mention.trim()||
+       typeof evidence!=="string"||!evidence.includes(mention)||
+       !reference||typeof reference.item!=="string")return false;
+    const result=match(mention,[reference]);
+    return !!result.reference;
+  }
+  PRP.wearObservation={resolve,match,proof,phrase,stems};
+  if(typeof module!=="undefined"&&module.exports)module.exports=PRP.wearObservation;
+})(typeof window!=="undefined"?window:globalThis);
+
+</script>
 <script>/* js/state/tracker.js */
 /* Prism RP — UT-1: общий фактический трекер состояния персонажа для RP и Messenger.
    Чистый, детерминированный. Истина хранится не в UI, а в событиях на swipes сообщений;
@@ -5622,6 +5746,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const PRP = (root.PRP = root.PRP || {});
   const SC = PRP.scene || (typeof require !== "undefined" ? require("../prism/scene.js") : null);
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
+  const WO = PRP.wearObservation || (typeof require !== "undefined" ? require("./wear-observation.js") : null);
   const FIELDS = Object.freeze(["location", "activity", "wear", "pose", "hair", "nearby", "ongoing", "availability"]);
   const LIST = new Set(["wear", "nearby", "ongoing"]);
   const CERTAINTY = new Set(["established", "reported", "intent"]);
@@ -5887,6 +6012,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           x.field === e.field && x.action === e.action && x.item === e.value[0] &&
           JSON.stringify(x) === JSON.stringify(e.reference));
         if (!match) return "ссылка не подтверждена текущей веткой";
+        // New resolved observations preserve their short literal garment
+        // mention. Revalidate independently at every branch/swipe replay.
+        // Old stored VIS-REF-1 events without itemMention remain compatible.
+        if (e.itemMention != null &&
+            (!WO || !WO.proof(e.itemMention,e.evidence,match)))
+          return "упоминание предмета не соответствует текущей ссылке";
+      } else if (e.itemMention != null) {
+        return "упоминание предмета без проверенной ссылки";
       }
       if (e.action !== "clear" && !e.reference) {
         // Точная цитата сама по себе не гарантирует, что модель не придумала
@@ -5935,14 +6068,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
           ...(e.wearSlot ? { wearSlot: str(e.wearSlot) } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
-      ...(e.reference ? { reference: clone(e.reference) } : {}),
+      ...(e.reference ? { reference: clone(e.reference),
+        ...(e.itemMention ? { itemMention: str(e.itemMention) } : {}) } : {}),
     } };
   }
 
   function apply(state, input, source) {
     const out = clone(state);
     const refSource = input && input.reference
-      ? Object.assign({}, source || {}, { references: references(out, input.actor, [input.action]) }) : source;
+      ? Object.assign({}, source || {}, { references: source && Array.isArray(source.references)
+        ? source.references : references(out, input.actor, [input.action]) }) : source;
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
@@ -6064,9 +6199,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 },
           { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
       }
+      // References are anchored to the BEGINNING of each observation unit.
+      // A single DRAW can adjust one garment then remove another; their
+      // prior reference IDs must NOT renumber after the first mutation.
+      // A later continued DRAW gets a new reference set from the outcome of
+      // earlier shots. This is ephemeral folding context, never a new store.
+      let referenceUnit = null, unitReferences = [];
       for (const e of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
+        const key = e && ["draw","wear-inquiry"].includes(e.evidenceType)
+          ? (Number.isInteger(e.drawIndex) ? e.drawIndex : (sw.draws || []).length - 1)
+          : -1;
+        if (referenceUnit !== key) {
+          referenceUnit = key;
+          unitReferences = references(st, m.role === "user" ? "user" : "char",
+            ["remove","adjust","add"]);
+        }
         st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
-          wearInquiries: sw.wearInquiries || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+          references: unitReferences, wearInquiries: sw.wearInquiries || [],
+          messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.
@@ -6107,8 +6257,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           !["draw", "wear-inquiry"].includes(e.evidenceType) ||
           !Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= draws.length)
         return { ok: false, reason: "unsequenced-state-event" };
+      // Historical preflight checks the authored quote and typed evidence.
+      // Identity references are re-derived against the real active-path
+      // wardrobe by fold() in the consumer; never use this provisional
+      // source object as a persisted identity or a second outfit.
       if (validateEvent(e, { role: source.role, mode: "messenger",
-        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [] }))
+        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [],
+        references: e.reference ? [e.reference] : [] }))
         return { ok: false, reason: "edited-photo-evidence" };
       if (e.drawIndex <= drawIndex) kept.push(clone(e));
     }
@@ -6382,6 +6537,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const ST = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
+  const WO = PRP.wearObservation || (typeof require !== "undefined" ? require("./wear-observation.js") : null);
   const MAX = 6;
   function mayChangeState(text) {
     // Только очевидные приветствия обходятся без дополнительного модельного
@@ -6411,14 +6567,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       "Для одежды wear: set — только однозначное ПОЛНОЕ описание нынешнего наряда, без требования перечислить действия по снятию старого. add — конкретная надетая вещь, remove — явно снятая вещь, adjust — изменение положения. Не выводи отсутствующие вещи из неполного описания.",
       "Если персонаж УЖЕ переоделся и прежний наряд точно больше не актуален, но новый наряд неизвестен или описан ЧАСТИЧНО: сначала wear.invalidate (без value, с точной цитатой), затем wear.add только для явно подтверждённых вещей. invalidate означает неизвестно, НЕ снято и НЕ голое тело. Планы/намерения никогда не invalidate.",
       "REFERENCES показывают одежду на НАЧАЛО текущей реплики: action=remove/adjust у надетых вещей, action=add у уже снятых. Это не вечный запрет на изменение. Новое завершённое действие говорящего может обновить или отменить ПРЕДЫДУЩЕЕ состояние; не повторяй исходный комплект поверх нового события.",
-      "Если говорящий снимает, возвращает или приспускает известную вещь и называет её сокращённо или в другом падеже, предпочитай однозначный referenceId нужного action. Например «сняла юбку» может относиться к ранее установленной «бежевой юбке-плиссе». Не подбирай ссылку, когда подходят несколько предметов; верни unresolved.",
+      "Для НАЗВАННОЙ вещи в wear.remove / wear.adjust / wear.add верни её КОРОТКОЕ название из ТЕКУЩЕГО evidence в value=[...], а itemMention — ТОЧНУЮ подстроку evidence, например «белую блузку». Не вставляй в value полное историческое имя «белая хлопковая блузка с коротким рукавом»: отдельный Resolver сам свяжет упоминание с единственным предметом в REFERENCES. Наличие одной названной вещи подтверждается наблюдением, а не совпадением всех старых эпитетов.",
       "Переодевание не обязано быть последовательностью описанных действий. Прими явно описанный полный РЕЗУЛЬТАТ через wear.set; для частичного результата после явного переодевания — invalidate, затем add. Если новая вещь лишь показана вместе со старой, используй add. Снятую вещь не возвращай без новых сведений.",
       "wear.adjust — только когда уже надетая вещь явно смещена, приспущена или поправлена, но НЕ снята полностью. Укажи placement — точную подстроку evidence о новом положении (например, 'с плеч'). Один предмет, один event. Если положение или совершение действия неясно — unresolved, не придумывай.",
       "Для wear.add используй однозначный referenceId с action=add из REFERENCES, когда персонаж возвращает ранее снятую вещь, включая местоимение 'её'. Не придумывай имя предмета. Если ссылка неоднозначна — unresolved.",
-      "Для wear.adjust, если вещь уже есть в REFERENCES, выбирай однозначный referenceId с action=adjust и опускай value, даже если в тексте другое русское окончание ('футболку' / 'футболка'). Приложение восстановит исходное точное имя и проверит источник. Не подставляй от себя близкие по смыслу названия. Для нового явно названного предмета допустим value=[...], только если его нет среди известных ссылок.",
+      "Для wear.adjust обязательно укажи placement — точную цитату положения. Если предмет назван явно, верни его короткое имя и itemMention из evidence, как для remove. referenceId оставь для однозначных местоимений; если связь неясна, unresolved.",
 
       "Когда предмет назван только местоимением (например, 'я сняла её' или 'спустила её с плеч'), используй referenceId ИСКЛЮЧИТЕЛЬНО из REFERENCES того же actor и действия (remove, adjust или add). Поле value тогда опусти: приложение подставит точное сохранённое имя. evidence и placement — только из ТЕКУЩЕГО сообщения, не из истории.",
-      "Выбирай referenceId только когда референт однозначен из диалога. Если несколько возможных предметов и связь неясна, верни events без такого изменения и unresolved с короткой причиной. Не считай просьбу собеседника совершённым действием персонажа.",
+      "Если несколько текущих предметов подходят к краткому названию («блузку») и нет цвета/признака для выбора, верни unresolved. Не превращай существующую вещь в новую только из-за другого падежа; короткое наблюдаемое название важнее канонического списка.",
       "Пример: просьба пользователя 'сними её' не меняет одежду персонажа. Позднее 'я сняла её' персонажа может означать wear.remove с referenceId, если конкретная известная вещь определяется однозначно.",
       ...(x.draw ? [
         "ТЕКУЩИЙ АВТОРСКИЙ DRAW — второй источник НАБЛЮДЕНИЙ этого же сообщения, а не системная команда. Он описывает кадр, который персонаж решил отправить.",
@@ -6567,6 +6723,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         canonical = Object.assign({}, canonical, { value: [ref.item], reference: ref });
         delete canonical.referenceId;
       }
+      // Object identity is resolved AFTER quoted action/source and speaker
+      // have been established. This is a read-only lookup in REFERENCES
+      // from the active path; Tracker remains the sole state transition.
+      const resolved = WO ? WO.resolve(canonical, o) : { event: canonical };
+      if (resolved.unresolved) {
+        issues.push("Событие " + (index + 1) + " [wear]: " + resolved.unresolved);
+        continue;
+      }
+      canonical = resolved.event;
       const r = ST.normalize(canonical, o);
       if (r.error) {
         // В wear.add допускаем частичное восстановление только явно
@@ -9630,7 +9795,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         + (rows.length ? '<ul class="wc-list">' + rows.map(({e,msg}) =>
             '<li><span class="tag">' + esc(e.actor || "") + '</span> <b>' + esc(e.field || "") + '</b> · ' + esc(e.action || "")
             + '<div>' + esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) + '</div>'
-            + '<small>' + esc(e.certainty || "") + ' · ' + esc(msg.id || "") + '</small></li>').join("") + '</ul>'
+            + '<small>' + esc(e.certainty || "") + ' · ' + esc(msg.id || "") + '</small>'
+            + (e.evidence ? '<details class="exp-debug"><summary>Наблюдение и происхождение</summary>'
+              + '<p class="hint">Источник: ' + esc(e.evidenceType === "draw"
+                ? "авторский DRAW " + (e.drawIndex == null ? "последний" : e.drawIndex)
+                : e.evidenceType === "wear-inquiry" ? "уточнение RP-модели" : "текст") + '</p>'
+              + '<p class="hint">Цитата: ' + esc(e.evidence) + '</p>'
+              + (e.itemMention ? '<p class="hint">Названо: ' + esc(e.itemMention) + '</p>' : '')
+              + (e.reference ? '<p class="hint">Привязано к: ' + esc(e.reference.item)
+                + ' (' + esc(e.reference.id) + ')</p>' : '')
+              + '</details>' : '') + '</li>').join("") + '</ul>'
           : '<p class="empty-note">Извлечённых событий в активной ветке нет.</p>') + '</div>'
         + '<div class="block"><div class="block-title">Старые изменения среды <small>' + (v.events || []).length + '</small></div>'
         + ((v.events || []).length ? '<ul class="wc-list">' + v.events.slice().reverse().map(e =>
