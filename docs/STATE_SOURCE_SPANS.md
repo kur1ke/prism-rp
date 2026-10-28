@@ -37,3 +37,12 @@ Manual TEST checklist: confirm published bundle SHA; use Messenger with initial 
 ## Rollback / compatibility
 
 No migration is required to store sourceSpan on existing swipe stateEvents. Older compatible builds ignore that additional property but can still replay the canonical event via the stored literal evidence and reference. Check IndexedDB schema compatibility before rolling back the application bundle; never overwrite or delete the TEST database merely to refresh the loader.
+
+
+## STATE-DIAG-1 — diagnostics of ambiguous garment references and DRAW field scope
+
+When an indexed `wear.adjust`, `wear.remove` or `wear.add` cannot identify a **unique** referenced item, `rejectedObservations` on the selected swipe may now include up to six diagnostic `candidates: [{id,item}]` derived exclusively from `StateTracker.references()` on the active path. These values are read-only, size-bounded, escaped in Debug and never used as a second inventory, model instruction or basis for choosing the first item. `ambiguous-reference` and `ambiguous-garment` continue to reject the event without mutating canonical clothing.
+
+Indexed DRAW fragments currently authorize `wear` observations only. If the Observer supplies `pose`, `hair` or another field with a `D...` source ID, Debug reports the unsupported field explicitly. The existing **current-self** source check remains unchanged for supported `wear` fields; old photos, screenshots, other actors, invalid spans and sibling swipes still fail closed. `sourceId` is source provenance, not authority to reinterpret unrelated fields.
+
+The reported live `D2` fragment names `белая рубашка`, but does not enumerate the competing active-path `REFERENCES`. Before choosing an identity, inspect the next Debug candidate list on the existing TEST chat. Do not equate `рубашка` and `блузка` without unique source-backed identity. No storage migration, prompt change, additional LLM call or `main` update. Live Perchance validation remains NOT RUN until publication.
