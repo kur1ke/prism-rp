@@ -17,6 +17,11 @@
   const similar=(a,b)=>a===b||(Math.min(a.length,b.length)>=4&&
     a.slice(0,Math.min(a.length,b.length)-1)===b.slice(0,Math.min(a.length,b.length)-1));
   const contains=(all,word)=>all.some(w=>similar(w,word));
+  // Diagnostic-only active-path identities; no source evidence or model data
+  // becomes an instruction, selected garment or new inventory.
+  const candidates=refs=>(refs||[]).slice(0,6)
+    .filter(ref=>ref&&typeof ref.id==="string"&&typeof ref.item==="string")
+    .map(ref=>({id:ref.id.slice(0,48),item:ref.item.slice(0,160)}));
   // The short noun phrase must match a SINGLE current garment, including
   // all stated attributes. One matching colour alone is never a garment.
   function match(mention,refs) {
@@ -35,7 +40,8 @@
       return observed.every(word=>contains(known,word));
     });
     return eligible.length===1?{reference:eligible[0]}:
-      {reason:eligible.length?"ambiguous-garment":"unknown-garment"};
+      {reason:eligible.length?"ambiguous-garment":"unknown-garment",
+        ...(eligible.length>1?{candidates:candidates(eligible)}:{})};
   }
   // A canonical garment can contain additional nouns after a preposition
   // ("блузка с коротким рукавом"). Anchor an abbreviated quote to the
@@ -120,11 +126,11 @@
         .filter(x=>x.mention&&(named===x.ref.item||
           match(named,[x.ref]).reference));
       if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment",
-        reason:"ambiguous-reference"};
+        reason:"ambiguous-reference",candidates:candidates(found.map(x=>x.ref))};
       if(found.length===1){
         const valid=match(found[0].mention,refs);
         if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason,
-          reason:valid.reason};
+          reason:valid.reason,...(valid.candidates?{candidates:valid.candidates}:{})};
         return {event:{...e,value:[found[0].ref.item],reference:found[0].ref,
           itemMention:found[0].mention},resolved:true};
       }
@@ -168,7 +174,8 @@
         const novel={...e};delete novel.itemMention;
         return {event:novel,skipped:true};
       }
-      return {unresolved:"Разрешение предмета: "+found.reason};
+      return {unresolved:"Разрешение предмета: "+found.reason,
+        ...(found.candidates?{candidates:found.candidates}:{})};
     }
     // Only an exact branch-local ref can override the model's surface name.
     if(!exactValue&&named!==found.reference.item)
