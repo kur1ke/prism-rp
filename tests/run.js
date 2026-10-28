@@ -5214,6 +5214,56 @@ async function foundationH() {
     assert.strictEqual(yes.negative,"");
     assert.strictEqual(no.negative,"");
   });
+  await ta("VIS-HYBRID-OFFBODY-1: real prose describes source-verified removed blouse off body",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const draw="Орихимэ полностью сняла белую блузку. Блузка лежит на застеленной кровати.";
+    const blouse="белая хлопковая блузка с коротким рукавом";
+    const facts=[{actor:"char",known:true,complete:true,
+      worn:[{item:"белое кружевное бельё"},{item:"бежевая юбка"}],
+      removed:[{item:blouse}],partiallyWorn:[]}];
+    const role={role:"offBody",item:blouse,evidence:"Блузка лежит на застеленной кровати."};
+    const plan=VP.create({owner:true,shotAuthored:true,draw,wearFacts:facts,
+      frameObjects:[role]});
+    assert.equal(plan.offBodyVisible.length,1);
+    const prompt="A full body portrait of Orihime Inoue, tilting her head slightly with an embarrassed yet playful smile. She is wearing white lace lingerie, a light beige pleated skirt, beige nylon tights, white short socks, and a floral hair clip. In the background of the bright room, a white cotton short sleeve blouse lies on a made bed.";
+    const mapped={prompt,absent:[{index:0,tag:"white cotton short sleeve blouse"}],
+      offBody:[{index:0,tag:"white cotton short sleeve blouse"}]};
+    ICP.clear();let calls=0;
+    const generate=async()=>{calls++;return "```json\n"+JSON.stringify(mapped)+"\n```";};
+    const options={format:"hybrid",intentMode:true,wearState:plan.wear,visualPlan:plan,debug:true};
+    const compiled=await ICP.compile(draw,options,generate);
+    assert.equal(compiled.compiled,true,JSON.stringify(compiled));
+    assert.equal(compiled.semanticValidated,true,JSON.stringify(compiled));
+    assert.equal(compiled.negative,"");
+    assert.equal(calls,1,"no additional interpreter or provider request");
+    assert.deepStrictEqual(compiled.offBodyTags,mapped.offBody);
+    const audited=ICP.auditFinal(prompt+", masterpiece, best quality","",
+      plan,compiled.wearItems,compiled.offBodyTags,{}, {hybrid:true});
+    assert.equal(audited.validated,true,JSON.stringify(audited));
+    assert.equal((await ICP.compile(draw,options,async()=>{throw Error("cached translation");})).cached,true);
+    const badPrompts=[
+      prompt+" She is wearing a white cotton short sleeve blouse.",
+      prompt.replace("blouse lies on a made bed","blouse is worn on her shoulders"),
+      prompt.replace("blouse lies on a made bed","blouse lies across her chest"),
+      prompt.replace("blouse lies on a made bed","blouse is lifted up and draped on the bed"),
+      prompt.replace("blouse lies on a made bed","blouse lies on the bed while she wears it"),
+    ];
+    for(const wrong of badPrompts) {
+      const verdict=ICP.auditFinal(wrong,"",plan,
+        compiled.wearItems,compiled.offBodyTags,{}, {hybrid:true});
+      assert.ok(verdict.issues.length,JSON.stringify({wrong,verdict}));
+    }
+    const unbound=VP.create({owner:true,shotAuthored:true,draw,wearFacts:facts});
+    ICP.clear();
+    const notSourced=await ICP.compile(draw,{...options,wearState:unbound.wear,visualPlan:unbound},
+      async()=>JSON.stringify(mapped));
+    assert.equal(notSourced.compiled,false,"model alone cannot assert off-body visibility");
+    ICP.clear();
+    const renamed=await ICP.compile(draw,options,async()=>JSON.stringify({
+      ...mapped,offBody:[{index:0,tag:"white cotton skirt"}]}));
+    assert.equal(renamed.compiled,false,"off-body index cannot rename clothing");
+    ICP.clear();
+  });
   await ta("VC-02-5: persisted matching author-shot roles reach the image compiler, not canon",async()=>{
     const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");
