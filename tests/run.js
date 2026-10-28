@@ -150,13 +150,38 @@ t("DRAW-SOURCE-BIND-3: no promotion from old photos, other actor, explicit text 
     [opts,{...event,evidenceType:"text"}],
     [opts,{...event,visualScope:"past-self"}],
     [opts,{...event,evidence:"сняла другую рубашку"}],
-    [{...opts,text:event.evidence},event],
     [{...opts,role:"user"},event]
   ];
   for (const [o,e] of rejected) {
     const p=I.parse(JSON.stringify({events:[e]}),o);
     assert.strictEqual(p.events.length,0,JSON.stringify({o,e,p}));
   }
+  const both=I.parse(JSON.stringify({events:[event]}),{...opts,text:event.evidence});
+  assert.strictEqual(both.events.length,1,"a real caption citation remains valid");
+  assert.notStrictEqual(both.events[0].evidenceType,"draw",
+    "ambiguous identical quote cannot be silently promoted to a photo citation");
+});
+t("DRAW-SOURCE-BIND-4: removal/adjustment opens narrow inquiry without whole-outfit invalidation", () => {
+  const W=globalThis.PRP.wearInquiry;
+  const previous={known:true,worn:[{item:"белая хлопковая блузка"},{item:"бежевая юбка"}]};
+  const draw="Селфи в зеркале. Орихимэ Иноуэ сняла белую хлопковую блузку.";
+  const base={role:"assistant",mode:"messenger",draw,previous};
+  const e={actor:"char",field:"wear",action:"remove",certainty:"reported",
+    evidenceType:"draw",value:["белую хлопковую блузку"]};
+  assert.strictEqual(W.needed({...base,events:[e]}),true);
+  assert.strictEqual(W.needed({...base,events:[{...e,action:"adjust"}]}),true);
+  assert.strictEqual(W.needed({...base,events:[]}),false);
+  const ctx={...base,drawIndex:0,text:"Смотри!",events:[e]};
+  const ok=W.parse(JSON.stringify({changed:"no",
+    previous:[{item:"белая хлопковая блузка",status:"not_worn"},
+      {item:"бежевая юбка",status:"worn"}],
+    hidden:[{slot:"underwear_bottom",status:"unknown",items:[]}] }),ctx);
+  assert.ok(ok.answer,JSON.stringify(ok));
+  assert.ok(!W.events(ok.answer).some(ev=>ev.action==="invalidate"));
+  const bad=W.parse(JSON.stringify({changed:"yes",
+    previous:[{item:"белая хлопковая блузка",status:"not_worn"},
+      {item:"бежевая юбка",status:"not_worn"}],hidden:[]}),ctx);
+  assert.strictEqual(bad.error,"whole-outfit-change-not-grounded");
 });
 /* ── SR-1: one read-only StateResolver across consumer modules ── */
 {
