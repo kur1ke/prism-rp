@@ -122,4 +122,46 @@ const overconfident=I.parse(JSON.stringify({events:[{...fullEvent,certainty:"est
 });
 assert.equal(overconfident.events[0].certainty,"reported",
   "remote observation must downcast model certainty, not reject the observation");
+
+// Inquiry facts remain attached to their own shot when the same swipe is
+// continued; retrospective snapshots must never inherit a later outfit.
+const inquirySource="Орихимэ в красном платье и туфлях";
+const inquiryNote={schema:1,drawIndex:0,sourceDraw:inquirySource,
+  sourceText:"Смотри!",changed:"yes",
+  previous:old.map(item=>({item,status:"not_worn"})),
+  hidden:[{slot:"underwear_bottom",status:"worn",items:["белое бельё"]}]};
+const inquiryEvents=[
+  {actor:"char",field:"wear",action:"invalidate",certainty:"reported",
+    evidence:"changed",evidenceType:"wear-inquiry",drawIndex:0},
+  {actor:"char",field:"wear",action:"add",certainty:"reported",
+    value:["белое бельё"],evidence:"underwear_bottom",
+    evidenceType:"wear-inquiry",drawIndex:0,wearSlot:"underwear_bottom"}
+];
+const continued=msg("series","Смотри!",[
+  ...inquiryEvents,
+  {actor:"char",field:"wear",action:"add",certainty:"reported",
+    value:["красном платье"],evidence:"красном платье",
+    evidenceType:"draw",visualScope:"current-self",drawIndex:0},
+  {actor:"char",field:"wear",action:"add",certainty:"reported",
+    value:["чёрной куртке"],evidence:"чёрной куртке",
+    evidenceType:"draw",visualScope:"current-self",drawIndex:1}
+],[{prompt:inquirySource},{prompt:"Орихимэ в чёрной куртке"}]);
+continued.swipes[0].wearInquiries=[inquiryNote];
+continued.swipes[0].stateStatus={
+  status:"ok",sourceText:"Смотри!",sourceDraw:"Орихимэ в чёрной куртке",
+  sourceDrawIndex:1
+};
+const priorShot=T.historicalDrawPath([continued],0);
+assert.equal(priorShot.ok,true,priorShot.reason);
+const beforeSecond=fold(priorShot.path).actors.char.wearState;
+assert.deepEqual(beforeSecond.worn.map(x=>x.item).sort(),
+  ["красном платье","белое бельё"].sort(),
+  "retrospective shot must not include newer garments");
+assert.equal(priorShot.path[0].swipes[0].wearInquiries[0].drawIndex,0);
+assert.ok(!fold([continued]).diagnostics.length,"both authored shots replay with exact provenance");
+const forgery=structuredClone(continued);
+forgery.swipes[0].wearInquiries[0].sourceDraw="изменённый DRAW";
+assert.ok(fold([forgery]).diagnostics.some(d=>/уточнение/.test(d.issue)),
+  "altered inquiry provenance must not be replayed");
+
 console.log("PASS: STATE-CONTINUITY-1 full/partial DRAW, unknown, provenance, swipes, stale hints");
