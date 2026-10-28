@@ -352,14 +352,14 @@
       let wearInquiries = archivedWearInquiries.slice();
       // Separate hidden self-report only after a positive, verified current
       // DRAW garment change. No report is created by a mere crop/portrait.
-      if (sourceDraw && msg.role === "assistant" && result.valid &&
-          wearInquiries.length < 8) {
+      if (sourceDraw && sourceDraw.length <= 1600 &&
+          msg.role === "assistant" && result.valid && wearInquiries.length < 8) {
         const previousWear = (priorDrawState ||
           snapshot(initialPath.slice(0,index))).actors.char.wearState;
         const probe = await inquireWear({
           mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
           drawIndex: latestIndex, text: sourceText.slice(0,400),
-          character: (ctx.card()||{}).name,
+          sourceText, character: (ctx.card()||{}).name,
           previous: previousWear,
           visible: currentEvents.filter(e => e.field === "wear" &&
             e.evidenceType === "draw" && e.action === "add")
