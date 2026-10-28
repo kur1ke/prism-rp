@@ -3654,8 +3654,7 @@ async function foundationH() {
       {...valid,visualScope:"old-photo"},
       {...valid,action:"set"},
       {...valid,action:"clear",value:null},
-      {...valid,actor:"user"},
-      {...valid,certainty:"established"}
+      {...valid,actor:"user"}
     ];
     for(const event of rejected){
       const p=INT.parse(JSON.stringify({events:[event]}),options);
@@ -3663,6 +3662,12 @@ async function foundationH() {
     }
     const good=INT.parse(JSON.stringify({events:[valid]}),options);
     assert.strictEqual(good.events.length,1,JSON.stringify(good));
+    // Model certainty is downcast; persisted forged 'established' remains
+    // invalid under the strict Tracker replay contract.
+    const downgraded=INT.parse(JSON.stringify({events:[{...valid,certainty:"established"}]}),options);
+    assert.strictEqual(downgraded.events.length,1);
+    assert.strictEqual(downgraded.events[0].certainty,"reported");
+    assert.ok(TRACK.normalize({...valid,certainty:"established"},options).error);
     const m={id:"photo",role:"assistant",swipeIdx:0,swipes:[{text:"Лови!",draws:[{prompt:current}],stateEvents:good.events},
       {text:"Прошлое",draws:[{prompt:"an old stock image of jeans"}],stateEvents:[]}]};
     const make=(idx)=>TRACK.fold({mode:"messenger",charName:"Орихимэ",path:[{...m,swipeIdx:idx}]});
@@ -7096,7 +7101,11 @@ async function unifiedTracker() {
     const state = STATE.fold({ mode: "messenger", path: [m] });
     assert.strictEqual(STATE.forCharacter(state).location, null);
     assert.ok(state.diagnostics.length);
-    assert.strictEqual(INTR.parse(JSON.stringify({ events: [m.swipes[0].stateEvents[0]] }), { mode: "messenger", role: "assistant", text: m.swipes[0].text }).events.length, 0);
+    const repaired=INTR.parse(JSON.stringify({ events: [m.swipes[0].stateEvents[0]] }),
+      { mode: "messenger", role: "assistant", text: m.swipes[0].text });
+    assert.strictEqual(repaired.events.length,1);
+    assert.strictEqual(repaired.events[0].certainty,"reported",
+      "model boundary may downcast certainty, but Tracker still rejects raw established");
   });
   await ta("UT-6: недоказанные значения и инструкции в тексте не применяются", async () => {
     const r = INTR.parse('{"events":[{"actor":"char","field":"hair","action":"set","certainty":"reported","value":"розовые","evidence":"вымышленное подтверждение"}]}',
