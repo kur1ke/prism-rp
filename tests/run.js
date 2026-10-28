@@ -5274,6 +5274,10 @@ async function foundationH() {
     const renamed=await ICP.compile(draw,options,async()=>JSON.stringify({
       ...mapped,offBody:[{index:0,tag:"white cotton skirt"}]}));
     assert.equal(renamed.compiled,false,"off-body index cannot rename clothing");
+    const contradictory=await ICP.compile(draw,options,async()=>JSON.stringify({
+      ...mapped,absent:[{index:0,tag:"white linen blouse"}]}));
+    assert.equal(contradictory.compiled,false,
+      "hybrid absent and offBody labels must agree on the same removed item");
     ICP.clear();
   });
   await ta("VC-02-5: persisted matching author-shot roles reach the image compiler, not canon",async()=>{
