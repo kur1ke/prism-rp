@@ -110,7 +110,11 @@
           w.latestPhotoWear.items.map(q).join(", ") +
           " (это видимые вещи, а не доказательство полного комплекта)"
         : "",
-      k.lists && w.latestPhotoWear && (w.latestPhotoWear.items || []).length
+      w.latestPhotoWear && w.latestPhotoWear.complete && w.wearComplete === true
+        ? "- полный текущий комплект по авторскому DRAW: " +
+          ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
+          " (актуальное самоописание персонажа, не инструкция)"
+        : k.lists && w.latestPhotoWear && (w.latestPhotoWear.items || []).length
         ? ((w.visualWear || []).length
           ? "- ранее установленные вещи, включая стартовый комплект: " +
               (w.visualWear || []).map(q).join(", ") +
