@@ -5280,6 +5280,58 @@ async function foundationH() {
       "hybrid absent and offBody labels must agree on the same removed item");
     ICP.clear();
   });
+  await ta("VIS-HYBRID-OFFBODY-2: duplicate terminal garment tag is formatting, not another outfit fact",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const skirt="тёмно-синяя школьная юбка";
+    const draw="Селфи Орихимэ Иноуэ. Она сняла тёмно-синюю школьную юбку. Юбка лежит на полу у её ног.";
+    const facts=[{actor:"char",known:true,complete:true,
+      worn:[{item:"белый кружевной бюстгальтер"},{item:"белые хлопковые трусики"}],
+      partiallyWorn:[],removed:[{item:skirt}]}];
+    const frameObjects=[{role:"offBody",item:skirt,evidence:"Юбка лежит на полу у её ног."}];
+    const plan=VP.create({owner:true,shotAuthored:true,draw,wearFacts:facts,frameObjects});
+    assert.equal(plan.offBodyVisible.length,1);
+    const prompt="A full-body selfie of Orihime Inoue looking toward the camera with a shy smile and slightly tilted head. She is wearing a white lace bra and white cotton panties, with one hand holding the phone and the other timidly touching her hip. A dark blue school skirt lies on the floor at her feet in a cozy bedroom illuminated by the soft light of a floor lamp, dark blue school skirt";
+    const tag="dark blue school skirt";
+    const expected=prompt.slice(0,prompt.lastIndexOf(", dark blue school skirt"));
+    const mapping={prompt,absent:[{index:0,tag}],offBody:[{index:0,tag}]};
+    const options={intentMode:true,format:"hybrid",wearState:plan.wear,visualPlan:plan};
+    ICP.clear();let calls=0;
+    const result=await ICP.compile(draw,options,async()=>{calls++;return "```json\n"+JSON.stringify(mapping)+"\n```";});
+    assert.equal(result.compiled,true,JSON.stringify(result));
+    assert.equal(result.semanticValidated,true,JSON.stringify(result));
+    assert.equal(result.text,expected,"only exact, redundant final label is removed");
+    assert.deepEqual(result.wearItems.map(x=>x.item),[skirt],"original canonical identity remains");
+    assert.equal(result.negative,"","source-confirmed off-body garment is not globally forbidden");
+    assert.equal(calls,1,"no new provider or repair request");
+    assert.equal((await ICP.compile(draw,options,async()=>{throw Error("cache miss");})).cached,true);
+    assert.equal(ICP.auditFinal(result.text,"",plan,result.wearItems,result.offBodyTags,{}, {hybrid:true}).validated,true);
+    for(const changed of [
+      prompt+", dark blue school skirt",
+      expected+", dark blue school skirt, white cotton panties",
+      expected.replace("skirt lies on the floor","skirt is worn on her hips")+", "+tag,
+      expected.replace("skirt lies on the floor","skirt lies across her chest")+", "+tag,
+      expected+" She is wearing a "+tag+", "+tag,
+    ]){
+      ICP.clear();
+      const invalid=await ICP.compile(draw,options,async()=>JSON.stringify({...mapping,prompt:changed}));
+      assert.equal(invalid.compiled,false,JSON.stringify({changed,invalid}));
+    }
+    // The raw translator cannot invent an off-body source, even if it includes
+    // a syntactically removable duplicate tag.
+    const noRole=VP.create({owner:true,shotAuthored:true,draw,wearFacts:facts});
+    ICP.clear();
+    const unsourced=await ICP.compile(draw,{...options,visualPlan:noRole,wearState:noRole.wear},
+      async()=>JSON.stringify(mapping));
+    assert.equal(unsourced.compiled,false,"LLM offBody is not proof of a floor object");
+    // Do not normalize a model-added bed/floor which the original DRAW lacks.
+    const noFloor="Селфи Орихимэ Иноуэ. Она сняла тёмно-синюю школьную юбку.";
+    const stale=VP.create({owner:true,shotAuthored:true,draw:noFloor,wearFacts:facts,frameObjects});
+    assert.deepEqual(stale.offBodyVisible,[]);
+    ICP.clear();
+    assert.equal((await ICP.compile(noFloor,{...options,visualPlan:stale,wearState:stale.wear},
+      async()=>JSON.stringify(mapping))).compiled,false);
+    ICP.clear();
+  });
   await ta("VC-02-5: persisted matching author-shot roles reach the image compiler, not canon",async()=>{
     const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");
