@@ -50,6 +50,12 @@ assert.ok(TR.normalize({...p.events[0],evidence:"пересказала снят
   references:opts.references}).error);
 assert.equal(parse([{...base,sourceId:"D99"}]).events.length,0);
 assert.equal(parse([{...base,sourceId:"T0"}]).events.length,0);
+assert.equal(parse([{...base,sourceSpan:{kind:"draw",start:0,end:10}}]).events.length,0,
+  "observer cannot supply its own numeric offsets");
+assert.equal(parse([{...base,sourceId,evidenceType:"text"}]).events.length,0,
+  "explicitly contradictory provenance fails closed");
+assert.equal(parse([{...base,sourceId,visualScope:"past-self"}]).events.length,0,
+  "model cannot reclassify a past photo as a current shot");
 const old="Старое фото. "+draw;
 const oldOptions={...opts,draw:old,draws:[{prompt:old}]};
 const oldId=ES.catalog(oldOptions).find(x=>x.text.includes("сняла белую блузку")).id;
