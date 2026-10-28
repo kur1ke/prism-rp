@@ -300,6 +300,7 @@
       // exact previously verified photo events; do not pull future text or
       // later Scene directives back into that earlier moment.
       const contextual = observationContext(initialPath.slice(0, index), msg.role);
+      let priorDrawState = null;
       if (previousIndex >= 0 && archivedDrawEvents.length) {
         const priorMessage = {
           id: msg.id, chatId: msg.chatId, parentId: msg.parentId,
@@ -313,6 +314,7 @@
           }],
         };
         const localState = snapshot(initialPath.slice(0, index).concat([priorMessage]));
+        priorDrawState = localState;
         contextual.references = TRACK.references(localState, "char", ["remove", "adjust", "add"]);
       }
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
@@ -352,7 +354,8 @@
       // DRAW garment change. No report is created by a mere crop/portrait.
       if (sourceDraw && msg.role === "assistant" && result.valid &&
           wearInquiries.length < 8) {
-        const previousWear = snapshot(initialPath.slice(0,index)).actors.char.wearState;
+        const previousWear = (priorDrawState ||
+          snapshot(initialPath.slice(0,index))).actors.char.wearState;
         const probe = await inquireWear({
           mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
           drawIndex: latestIndex, text: sourceText.slice(0,400),
