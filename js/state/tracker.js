@@ -492,13 +492,11 @@
     const kept = [];
     for (const e of events) {
       if (!e || e.field !== "wear" || e.certainty === "intent" ||
-          !["add", "remove", "adjust"].includes(e.action) ||
-          e.evidenceType !== "draw" || e.visualScope !== "current-self" ||
+          !["draw", "wear-inquiry"].includes(e.evidenceType) ||
           !Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= draws.length)
         return { ok: false, reason: "unsequenced-state-event" };
-      const photo = draws[e.drawIndex];
-      if (!photo || typeof photo.prompt !== "string" || !String(e.evidence || "").trim() ||
-          !photo.prompt.includes(e.evidence))
+      if (validateEvent(e, { role: source.role, mode: "messenger",
+        text: swipe.text, draws, wearInquiries: swipe.wearInquiries || [] }))
         return { ok: false, reason: "edited-photo-evidence" };
       if (e.drawIndex <= drawIndex) kept.push(clone(e));
     }
@@ -512,6 +510,8 @@
     const chosen = last.swipes[last.swipeIdx || 0];
     chosen.draws = chosen.draws.slice(0, drawIndex + 1);
     chosen.stateEvents = kept;
+    chosen.wearInquiries = (chosen.wearInquiries || [])
+      .filter(n => n && Number.isInteger(n.drawIndex) && n.drawIndex <= drawIndex);
     chosen.stateCorrections = [];
     chosen.sceneOps = [];
     delete chosen.stateStatus;
