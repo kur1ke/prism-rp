@@ -350,6 +350,18 @@
         ? { ...e, drawIndex: latestIndex } : e);
       const events = currentEvents.slice();
       let wearInquiries = archivedWearInquiries.slice();
+      // Diagnostic metadata only: never treat the status as a clothing fact.
+      // Unlike successful normalized inquiry answers, failures/skips have
+      // previously been invisible to the person testing the RP provider.
+      let wearInquiryStatus = {
+        status: "skipped", reason: !sourceDraw ? "no-draw"
+          : msg.role !== "assistant" ? "not-author"
+          : sourceDraw.length > 1600 ? "draw-too-long"
+          : !result.valid ? "observer-failed"
+          : wearInquiries.length >= 8 ? "inquiry-limit"
+          : "not-eligible",
+        drawIndex: latestIndex,
+      };
       // Separate hidden self-report only after a positive, verified current
       // DRAW garment change. No report is created by a mere crop/portrait.
       if (sourceDraw && sourceDraw.length <= 1600 &&
@@ -368,11 +380,19 @@
         });
         if (probe.answer) {
           wearInquiries.push(probe.answer);
+          wearInquiryStatus = { status: "ok", drawIndex: latestIndex };
           const newEvents = WI.events(probe.answer).filter(e =>
             !TRACK.normalize(e, { role: msg.role, mode: c.mode,
               text: sourceText, draws, wearInquiries }).error);
           events.push(...newEvents);
-        } else if (probe.error) result.issues.push("Уточнение одежды: " + probe.error);
+        } else if (probe.skipped) {
+          wearInquiryStatus = { status: "skipped", reason: probe.skipped,
+            drawIndex: latestIndex };
+        } else if (probe.error) {
+          wearInquiryStatus = { status: "error",
+            reason: String(probe.error).slice(0, 100), drawIndex: latestIndex };
+          result.issues.push("Уточнение одежды: " + probe.error);
+        }
       }
       // Prior snapshots are evidence, not an unbounded event log. Bound the
       // archival slice, report truncation and never override a fresh event.
@@ -435,6 +455,7 @@
       const stateStatus = { status, sourceText, sourceDraw, sourceDrawIndex: latestIndex,
         issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
+        wearInquiry: wearInquiryStatus,
         // Shot-local provenance, not wardrobe state. Same-swipe image use only.
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
       const next = JSON.parse(JSON.stringify(msg));

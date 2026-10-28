@@ -314,6 +314,64 @@
         return (sw && sw.stateCorrections || []).map(e => ({ e, msg }));
       });
       const rows = active.concat(corrections);
+      // WearInquiry is a source-bound RP-model self-report, not a hidden
+      // instruction and not a second canonical wardrobe. Debug reads ONLY
+      // the selected path/swipes, never alternative swipe or chat data.
+      const reported = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return (sw && Array.isArray(sw.wearInquiries) ? sw.wearInquiries : [])
+          .map(note => ({ note, msg }));
+      }).slice(-12).reverse();
+      const lastShotMessage = (m.path || []).slice().reverse().find(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return msg.role === "assistant" && sw && Array.isArray(sw.draws) &&
+          sw.draws.some(d => d && String(d.prompt || "").trim());
+      });
+      const lastShot = lastShotMessage && lastShotMessage.swipes[lastShotMessage.swipeIdx || 0];
+      const shotIndex = lastShot && lastShot.draws.length - 1;
+      const currentCheck = lastShot && lastShot.stateStatus &&
+        lastShot.stateStatus.sourceDrawIndex === shotIndex &&
+        lastShot.stateStatus.sourceDraw === String(lastShot.draws[shotIndex].prompt || "") &&
+        lastShot.stateStatus.sourceText === String(lastShot.text || "")
+        ? lastShot.stateStatus.wearInquiry : null;
+      const reason = {
+        "no-draw": "В этом сообщении нет авторского DRAW",
+        "not-author": "Сообщение не от персонажа",
+        "draw-too-long": "DRAW превышает допустимый объём",
+        "observer-failed": "Observer не подтвердил результат",
+        "inquiry-limit": "Достигнут лимит уточнений в одном свайпе",
+        "not-eligible": "Условия адресного уточнения не выполнены",
+        "not-needed": "Нет нового подтверждённого предмета при известном старом комплекте",
+        "no-rp-provider": "RP-модель недоступна",
+        budget: "Недостаточно места в бюджете",
+      };
+      const diagnostic = !lastShot
+        ? "Авторских DRAW в активной ветке нет."
+        : !currentCheck
+        ? "Для последнего DRAW нет диагностики запроса (сообщение обработано предыдущей сборкой или ещё не проанализировано)."
+        : currentCheck.status === "ok"
+        ? "RP-модели отправлено уточнение, получен корректный структурированный ответ."
+        : currentCheck.status === "error"
+        ? "RP-модели отправлено уточнение, но ответ не удалось принять: " + String(currentCheck.reason || "ошибка")
+        : "Уточнение не отправлялось: " + (reason[currentCheck.reason] || String(currentCheck.reason || "нет основания"));
+      const inquiryContent = '<div class="block"><div class="block-title">Уточнение невидимой одежды (RP-модель)</div>'
+        + '<p class="hint">' + esc(diagnostic) + '</p>'
+        + (lastShot ? '<p class="hint">Последний DRAW: ' +
+          esc(lastShotMessage.id || "?") + ' · swipe ' +
+          esc(String(lastShotMessage.swipeIdx || 0)) + ' · draw ' +
+          esc(String(shotIndex)) + '</p>' : "")
+        + (reported.length ? '<div class="hint">Принятые ответы RP-модели из активной ветки (сверху новые):</div>'
+          + reported.map(({ note, msg }) => {
+            const answer = { changed: note.changed,
+              previous: Array.isArray(note.previous) ? note.previous : [],
+              hidden: Array.isArray(note.hidden) ? note.hidden : [] };
+            return '<details class="exp-debug" open><summary>' +
+              esc((msg.id || "?") + " · swipe " + (msg.swipeIdx || 0) +
+                " · DRAW " + note.drawIndex + " · changed=" + note.changed) +
+              '</summary><pre class="debug-prompt">' +
+              esc(JSON.stringify(answer, null, 2)) + '</pre></details>';
+          }).join("")
+          : '<p class="hint">Принятых уточнений в активной ветке нет.</p>') + '</div>';
       const origin = m.chat && m.chat.initialWear;
       const originContent = origin && origin.kind === "initial-outfit" && origin.event
         ? '<div class="block"><div class="block-title">Начальный комплект (до сообщений)</div>'
@@ -321,7 +379,7 @@
           + '<p>' + esc(origin.event.action === "clear" ? "ничего не надето"
             : (origin.event.value || []).join(", ")) + '</p></div>'
         : '';
-      content = originContent + '<div class="block"><div class="block-title">События активной ветки <small>' + rows.length + '</small></div>'
+      content = originContent + inquiryContent + '<div class="block"><div class="block-title">События активной ветки <small>' + rows.length + '</small></div>'
         + (rows.length ? '<ul class="wc-list">' + rows.map(({e,msg}) =>
             '<li><span class="tag">' + esc(e.actor || "") + '</span> <b>' + esc(e.field || "") + '</b> · ' + esc(e.action || "")
             + '<div>' + esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) + '</div>'
