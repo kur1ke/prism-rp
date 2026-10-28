@@ -108,6 +108,10 @@
       if (idx < 0 || !found || found.index !== idx || typeof found.tag !== "string" ||
           !wordExists(IC.bareTag(found.tag).toLowerCase().replace(/[_-]/g, " "), noun) ||
           bodyAction.test(found.tag)) return true;
+      // In hybrid, offBody.tag names the garment, not an action tag.
+      // It must agree with the same removed item's translated absent tag.
+      if (hybrid && proseWords(found.tag).join(" ") !== proseWords(mapped[idx].tag).join(" "))
+        return true;
       if (!hybrid) return !tagParts(prompt).some((p) => sameTag(p.raw, found.tag));
       const matches = clauses.map((clause, n) => proseOffBodyClause(clause, found.tag, noun) ? n : -1)
         .filter(n => n !== -1);
