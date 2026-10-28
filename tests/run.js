@@ -4713,6 +4713,58 @@ async function foundationH() {
     assert.strictEqual(result.negative,"","authored off-body potential excludes global negatives");
     assert.strictEqual(result.semanticValidated,true);
   });
+  await ta("VIS-JSON-FENCE-1: complete JSON markdown envelope is syntax-only, never bypasses canonical audit",async()=>{
+    const VP=globalThis.PRP.visualPlan;
+    const draw="Орихимэ сняла белую хлопковую блузку; на ней белое кружевное бельё и бежевая юбка.";
+    const plan=VP.create({owner:true,shotAuthored:true,draw,
+      wearFacts:[{actor:"char",known:true,complete:true,
+        worn:[{item:"белое кружевное бельё"},{item:"бежевая юбка"}],
+        removed:[{item:"белая хлопковая блузка"}],partiallyWorn:[]}]});
+    const options={intentMode:true,format:"hybrid",wearState:plan.wear,visualPlan:plan,debug:true};
+    const valid=JSON.stringify({prompt:"Orihime wears white lace lingerie and a beige skirt.",
+      absent:[{index:0,tag:"white cotton blouse"}],offBody:[]});
+    for(const reply of [valid,"\x60\x60\x60json\n"+valid+"\n\x60\x60\x60",
+      "\x60\x60\x60\n"+valid+"\n\x60\x60\x60",
+      "\x60\x60\x60JSON\r\n"+valid+"\r\n\x60\x60\x60"]) {
+      ICP.clear();let calls=0;
+      const compiled=await ICP.compile(draw,options,async()=>{calls++;return reply;});
+      assert.strictEqual(compiled.compiled,true,JSON.stringify(compiled));
+      assert.strictEqual(compiled.text,"Orihime wears white lace lingerie and a beige skirt.");
+      assert.deepStrictEqual(compiled.wearItems.map(x=>x.item),["белая хлопковая блузка"]);
+      assert.equal(compiled.semanticValidated,true);
+      assert.equal(calls,1,"must not retry or call another model");
+      assert.equal((await ICP.compile(draw,options,async()=>{throw Error("cached");})).cached,true);
+    }
+    const invalid=[
+      "explanation\n\x60\x60\x60json\n"+valid+"\n\x60\x60\x60",
+      "\x60\x60\x60json\n"+valid+"\n\x60\x60\x60\nmore text",
+      "\x60\x60\x60json\n"+valid+"\n\x60\x60\x60\n\x60\x60\x60json\n"+valid+"\n\x60\x60\x60",
+      "\x60\x60\x60json\n"+valid.slice(0,-1)+"\n\x60\x60\x60",
+    ];
+    for(const reply of invalid){
+      ICP.clear();
+      const compiled=await ICP.compile(draw,options,async()=>reply);
+      assert.equal(compiled.compiled,false,JSON.stringify(compiled));
+    }
+    // Unwrapping must not promote unverified off-body prose to a signed
+    // source role: the model's noun-only offBody.tag isn't an exact positive
+    // segment, even when the fenced JSON itself is syntactically correct.
+    const offDraw="Орихимэ сняла белую блузку. Блузка лежит на кровати.";
+    const offPlan=VP.create({owner:true,shotAuthored:true,draw:offDraw,
+      frameObjects:[{role:"offBody",item:"белая хлопковая блузка",evidence:"Блузка лежит на кровати."}],
+      wearFacts:[{actor:"char",known:true,complete:true,worn:[{item:"белое кружевное бельё"}],
+        removed:[{item:"белая хлопковая блузка"}],partiallyWorn:[]}]});
+    const offJson=JSON.stringify({prompt:"Orihime wears white lace lingerie. A white cotton blouse lies on the bed.",
+      absent:[{index:0,tag:"white cotton blouse"}],
+      offBody:[{index:0,tag:"white cotton blouse"}]});
+    ICP.clear();
+    const offResult=await ICP.compile(offDraw,{...options,wearState:offPlan.wear,visualPlan:offPlan},
+      async()=>"\x60\x60\x60json\n"+offJson+"\n\x60\x60\x60");
+    assert.equal(offResult.compiled,false);
+    assert.ok(offResult.error.includes("Off-body роль"),JSON.stringify(offResult));
+    assert.ok(!offResult.error.includes("JSON"),"the strict off-body audit, not JSON parsing, must reject");
+    ICP.clear();
+  });
   await ta("VIS-MODE-CAMERA-3: Prism injects only active mode visual contract",async()=>{
     for (const mode of ["rp","messenger"]) {
       const h=fbHarness({name:"Орихимэ Иноуэ",description:"Персонаж"});

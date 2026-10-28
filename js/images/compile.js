@@ -145,6 +145,16 @@
     return "";
   }
 
+  // LLMs occasionally wrap otherwise valid JSON in one Markdown code
+  // fence. Strip ONLY a complete JSON/unlabelled envelope: no prose, trailing
+  // blocks, embedded extraction, repairs, or semantic conversion. All garment
+  // and source-scoped off-body checks still apply after strict JSON.parse.
+  function canonicalJSON(raw) {
+    const body=String(raw || "").trim();
+    const fenced=/^\x60\x60\x60(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n\x60\x60\x60$/i.exec(body);
+    return JSON.parse(fenced ? fenced[1].trim() : body);
+  }
+
   // One compiler call owns both the reconciled positive shot and negative
   // garment tags from the SAME selected-path wear facts, never a second model.
   async function compile(scene, opts, generateText) {
@@ -222,7 +232,7 @@
       const raw = rawReply = String((await generateText(instruction)) || "").trim();
       let result;
       if (negativesRequired) {
-        const decoded = JSON.parse(raw);
+        const decoded = canonicalJSON(raw);
         const prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";
         const absent = decoded.absent;
         if (hybrid && validateHybrid(prompt))
