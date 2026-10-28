@@ -89,7 +89,11 @@ const continued=structuredClone(msg);
 const nextDraw="Селфи в зеркале. Орихимэ Иноуэ снова надела белую блузку.";
 continued.swipes[0].draws.push({prompt:nextDraw});
 continued.swipes[0].stateEvents[0].drawIndex=0;
-const prior=TR.fold({mode:"messenger",initialWear:init,path:[msg]});
+// Continue archives the earlier DRAW with explicit drawIndex before
+// obtaining the previous snapshot; references must use that exact moment.
+const archived=structuredClone(msg);
+archived.swipes[0].stateEvents[0].drawIndex=0;
+const prior=TR.fold({mode:"messenger",initialWear:init,path:[archived]});
 const newOpts={...opts,draw:nextDraw,draws:[{prompt:nextDraw}],
   references:TR.references(prior,"char",["remove","adjust","add"])};
 const newId=ES.catalog(newOpts).find(x=>x.text.includes("снова надела")).id;
