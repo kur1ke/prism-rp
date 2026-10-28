@@ -194,7 +194,42 @@
     // ONE swipe. A draw never becomes a hidden instruction or a separate store:
     // replay must prove the exact quoted fragment is still in its source shot.
     const drawn = e.evidenceType === "draw";
-    if (e.evidenceType != null && !drawn) return "неизвестный источник цитаты";
+    const inquiry = e.evidenceType === "wear-inquiry";
+    if (e.evidenceType != null && !drawn && !inquiry) return "неизвестный источник цитаты";
+    // An RP-model clarification is a bound self-report about its own authored
+    // DRAW. It is never an unanchored invisible garment or a second outfit.
+    // Every event must replay against the ORIGINAL stored answer on this swipe.
+    if (inquiry) {
+      if (!source || source.role !== "assistant" || e.actor !== "char" ||
+          e.field !== "wear" || e.certainty !== "reported" ||
+          !Number.isInteger(e.drawIndex) || e.drawIndex < 0 ||
+          e.drawIndex >= (Array.isArray(source.draws) ? source.draws.length : 0) ||
+          e.reference || e.placement) return "неверный источник уточнения одежды";
+      const note = (Array.isArray(source.wearInquiries) ? source.wearInquiries : [])
+        .find(n => n && n.schema === 1 && n.drawIndex === e.drawIndex);
+      const draw = source.draws[e.drawIndex];
+      if (!note || !draw || note.sourceDraw !== String(draw.prompt || "") ||
+          typeof note.sourceText !== "string" || !String(source.text || "").startsWith(note.sourceText) ||
+          !["yes","no","unknown"].includes(note.changed)) return "уточнение не принадлежит авторскому draw";
+      if (e.action === "invalidate" && note.changed === "yes" && e.evidence === "changed")
+        return null;
+      const values = Array.isArray(e.value) ? e.value : [];
+      if (!values.length || values.length > 3) return "некорректный результат уточнения";
+      if (e.action === "remove" && values.length === 1 && e.evidence === values[0] &&
+          note.changed !== "yes" && Array.isArray(note.previous) &&
+          note.previous.some(x => x && x.item === values[0] && x.status === "not_worn"))
+        return null;
+      if (e.action === "add" && values.length === 1 && !e.wearSlot && e.evidence === values[0] &&
+          note.changed === "yes" && Array.isArray(note.previous) &&
+          note.previous.some(x => x && x.item === values[0] && x.status === "worn"))
+        return null;
+      if (e.action === "add" && typeof e.wearSlot === "string" && e.evidence === e.wearSlot &&
+          Array.isArray(note.hidden) && note.hidden.some(x => x && x.slot === e.wearSlot &&
+            x.status === "worn" && Array.isArray(x.items) &&
+            JSON.stringify(x.items) === JSON.stringify(values)))
+        return null;
+      return "событие не подтверждается ответом RP-модели";
+    }
     // A frame alone is not an exhaustive outfit. A current authored DRAW may
     // explicitly assert the complete outfit (including what is NOT worn).
     // Require an exact source-local claim rather than a model's bare boolean:
@@ -218,7 +253,7 @@
     if (drawn && e.drawIndex != null &&
         (!Number.isInteger(e.drawIndex) || e.drawIndex < 0 || e.drawIndex >= drawList.length))
       return "недопустимый индекс авторского draw";
-    if (!drawn && e.drawIndex != null) return "индекс draw указан без draw-события";
+    if (!drawn && !inquiry && e.drawIndex != null) return "индекс draw указан без draw-события";
     const currentDraw = drawList.length
       ? drawList[e.drawIndex == null ? drawList.length - 1 : e.drawIndex] : null;
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
@@ -284,7 +319,9 @@
       value: ["clear", "invalidate"].includes(e.action) ? null : (LIST.has(e.field) ? e.value.map(str) : str(e.value)),
       evidence: str(e.evidence),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
-        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}),
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
+        e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
+          ...(e.wearSlot ? { wearSlot: str(e.wearSlot) } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
       ...(e.reference ? { reference: clone(e.reference) } : {}),
     } };
@@ -302,7 +339,9 @@
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
       ...(source && source.kind ? { kind: source.kind } : {}),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
-        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } : {}) };
+        ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
+        e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
+          ...(e.wearSlot ? { wearSlot: e.wearSlot } : {}) } : {}) };
     if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
@@ -414,7 +453,8 @@
           { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
       }
       for (const e of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
-        st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+        st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
+          wearInquiries: sw.wearInquiries || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.
