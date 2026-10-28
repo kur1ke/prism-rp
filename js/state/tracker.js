@@ -10,6 +10,7 @@
   const PRP = (root.PRP = root.PRP || {});
   const SC = PRP.scene || (typeof require !== "undefined" ? require("../prism/scene.js") : null);
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
+  const WO = PRP.wearObservation || (typeof require !== "undefined" ? require("./wear-observation.js") : null);
   const FIELDS = Object.freeze(["location", "activity", "wear", "pose", "hair", "nearby", "ongoing", "availability"]);
   const LIST = new Set(["wear", "nearby", "ongoing"]);
   const CERTAINTY = new Set(["established", "reported", "intent"]);
@@ -275,6 +276,14 @@
           x.field === e.field && x.action === e.action && x.item === e.value[0] &&
           JSON.stringify(x) === JSON.stringify(e.reference));
         if (!match) return "ссылка не подтверждена текущей веткой";
+        // New resolved observations preserve their short literal garment
+        // mention. Revalidate independently at every branch/swipe replay.
+        // Old stored VIS-REF-1 events without itemMention remain compatible.
+        if (e.itemMention != null &&
+            (!WO || !WO.proof(e.itemMention,e.evidence,match)))
+          return "упоминание предмета не соответствует текущей ссылке";
+      } else if (e.itemMention != null) {
+        return "упоминание предмета без проверенной ссылки";
       }
       if (e.action !== "clear" && !e.reference) {
         // Точная цитата сама по себе не гарантирует, что модель не придумала
@@ -323,7 +332,8 @@
         e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
           ...(e.wearSlot ? { wearSlot: str(e.wearSlot) } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
-      ...(e.reference ? { reference: clone(e.reference) } : {}),
+      ...(e.reference ? { reference: clone(e.reference),
+        ...(e.itemMention ? { itemMention: str(e.itemMention) } : {}) } : {}),
     } };
   }
 
