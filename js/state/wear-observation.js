@@ -73,7 +73,10 @@
     if(list.length!==1)return {event:e,skipped:true};
     const named=str(list[0]),refs=(Array.isArray(o.references)?o.references:[])
       .filter(x=>x&&x.actor===e.actor&&x.field==="wear"&&x.action===e.action);
-    if(!refs.length)return {event:e,skipped:true};
+    if(!refs.length){
+      const plain={...e};delete plain.itemMention;
+      return {event:plain,skipped:true};
+    }
     // Do not rewrite a new garment into an old identity. The model's value
     // must either be literally quoted or exactly name a branch-local item.
     const exactValue=evidence.includes(named);
