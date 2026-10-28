@@ -5258,6 +5258,18 @@ async function foundationH() {
     const notSourced=await ICP.compile(draw,{...options,wearState:unbound.wear,visualPlan:unbound},
       async()=>JSON.stringify(mapped));
     assert.equal(notSourced.compiled,false,"model alone cannot assert off-body visibility");
+    // The actual live D2 mentions removal and remaining lingerie, not a
+    // blouse on a bed. The translator's invented bed must not create a
+    // legitimate offBody role or reach the image backend.
+    const liveDraw="Она полностью сняла белую блузку, оставаясь в белом кружевном белье, которое подчеркивает её грудь.";
+    const unsupported=VP.create({owner:true,shotAuthored:true,draw:liveDraw,
+      wearFacts:facts,frameObjects:[role]});
+    assert.deepStrictEqual(unsupported.offBodyVisible,[],"source cannot attest invented bed");
+    ICP.clear();
+    const hallucinated=await ICP.compile(liveDraw,
+      {...options,wearState:unsupported.wear,visualPlan:unsupported},
+      async()=>JSON.stringify(mapped));
+    assert.equal(hallucinated.compiled,false,"translator's bed is not source evidence");
     ICP.clear();
     const renamed=await ICP.compile(draw,options,async()=>JSON.stringify({
       ...mapped,offBody:[{index:0,tag:"white cotton skirt"}]}));
