@@ -6908,6 +6908,46 @@ async function unifiedTracker() {
     } finally {globalThis.PRP.llm=old;}
     console.log("PASS: Observer and next Prism honor a clothing transition without resetting origin");
   });
+  await ta("STATE-CONTINUITY-1: authored DRAW alone updates Observer, swipe and next Prism",async()=>{
+    const h=fbHarness({name:"Орихимэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",
+      event:{actor:"char",field:"wear",action:"set",value:["бежевая юбка","белая блузка"],
+        certainty:"reported",evidence:""}};
+    const current="Селфи перед зеркалом. На ней только белая блузка и белые трусики.";
+    const reply=h.chat.newMsg("assistant",null,"Смотри! ♡");
+    reply.swipes[0].draws=[{prompt:current}];
+    await h.chat.commitMessage(reply,reply.id);
+    const previous=globalThis.PRP.llm;
+    let instruction;
+    try{
+      globalThis.PRP.llm={simple:async(_provider,prompt)=>{
+        instruction=prompt;
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"set",
+          value:["белая блузка","белые трусики"],certainty:"reported",
+          evidence:"На ней только белая блузка и белые трусики.",
+          evidenceType:"draw",visualScope:"current-self"}],frameObjects:[],unresolved:[]});
+      }};
+      const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"});
+      assert.strictEqual(result.status,"ok",JSON.stringify(result));
+      assert.ok(instruction.includes("ТЕКУЩИЙ АВТОРСКИЙ DRAW"));
+      const seen=h.chat.path().at(-1).swipes[0].stateEvents;
+      assert.strictEqual(seen.length,1);
+      assert.strictEqual(seen[0].evidenceType,"draw");
+      assert.strictEqual(seen[0].action,"set");
+      assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.worn.map(x=>x.item),
+        ["белая блузка","белые трусики"]);
+      const prism=h.prism.build(h.chat.path());
+      const body=allText(prism.messages);
+      assert.ok(body.includes("полный текущий комплект по авторскому DRAW"),body);
+      assert.ok(!body.includes("ПОЛНЫЙ перечень надетой сейчас одежды: бежевая юбка"),
+        "next Prism must not reconstruct original outfit");
+      assert.ok(!body.includes("ранее установленный полный комплект: бежевая юбка"),
+        "historical outfit must not be reasserted as today's outfit");
+    }finally{globalThis.PRP.llm=previous;}
+    console.log("PASS: complete self-authored DRAW updates persistent selected swipe and next Prism");
+  });
   await ta("WEAR-LIVE-2: never guess a matching garment if multiple names or qualifiers conflict", async () => {
     const T=globalThis.PRP.stateTracker;
     const first={id:"start",role:"assistant",swipeIdx:0,swipes:[{text:"На мне красная юбка и синяя юбка.",
