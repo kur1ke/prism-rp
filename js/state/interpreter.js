@@ -180,11 +180,24 @@
       // application, not the model, materializes exact evidence, short garment
       // mentions and placement. The legacy quoted-event path remains valid.
       let pinned=candidate;
+      // Numeric spans are assigned only by the application. The model may
+      // choose an ID, but cannot provide offsets or contradict its kind.
+      if(candidate && candidate.sourceSpan!=null){
+        issues.push("Событие " + (index + 1) + ": координаты источника задаёт приложение");
+        continue;
+      }
       if(candidate && candidate.sourceId!=null){
         const hit=ES && ES.resolve(candidate.sourceId,o);
         if(!hit || hit.error){
           issues.push("Событие " + (index + 1) + ": неверный sourceId (" +
             (hit&&hit.error||"unavailable") + ")");
+          continue;
+        }
+        if ((candidate.evidenceType != null && candidate.evidenceType !==
+              (hit.span.kind==="draw" ? "draw" : "text")) ||
+            (candidate.visualScope != null && candidate.visualScope !==
+              (hit.span.kind==="draw" ? "current-self" : "text"))) {
+          issues.push("Событие " + (index + 1) + ": sourceId противоречит указанному источнику");
           continue;
         }
         if(hit.span.kind==="draw"){
