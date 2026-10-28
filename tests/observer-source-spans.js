@@ -82,6 +82,13 @@ const doubleOpts={...realOpts,references:TR.references(doubleState,"char",["remo
 const ambiguous=parse([{...base,value:[title],sourceId:realSourceId}],doubleOpts);
 assert.equal(ambiguous.events.length,0,JSON.stringify(ambiguous));
 assert.equal(ambiguous.rejectedObservations[0].reason,"ambiguous-garment");
+// Generic noun anchors also work with hyphenated colours and garment
+// descriptors; no fixed dictionary of character-specific garments.
+const WO=require("../js/state/wear-observation.js");
+assert.equal(WO.phrase("Она сняла светло-бежевую юбку-плиссе.",
+  {item:"светло-бежевая юбка-плиссе"}),"светло-бежевую юбку");
+assert.equal(WO.phrase("На ней светло-розовые балетки.",
+  {item:"светло-розовые балетки"}),"светло-розовые балетки");
 
 const msg={id:"m-source",role:"assistant",swipeIdx:0,
   swipes:[{text:caption,draws:[{prompt:draw}],stateEvents:p.events}]};
