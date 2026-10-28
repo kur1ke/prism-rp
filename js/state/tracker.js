@@ -488,6 +488,11 @@
       const last = draws.length ? draws[draws.length - 1] : null;
       if (last && typeof last.prompt === "string" && last.prompt.trim())
         return { text: last.prompt.trim().slice(0, 440), messageId: m.id, swipeIdx: m.swipeIdx || 0 };
+      // A subsequent confirmed clothing change supersedes the earlier shot.
+      // Otherwise a stale 8-turn hint can resurrect it in the next Prism.
+      if (sw && ([...(sw.stateEvents || []), ...(sw.stateCorrections || [])]
+        .some(e => e && e.actor === "char" && e.field === "wear" &&
+          e.certainty !== "intent"))) return null;
     }
     return null;
   }
