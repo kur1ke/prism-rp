@@ -340,7 +340,8 @@
   function apply(state, input, source) {
     const out = clone(state);
     const refSource = input && input.reference
-      ? Object.assign({}, source || {}, { references: references(out, input.actor, [input.action]) }) : source;
+      ? Object.assign({}, source || {}, { references: source && Array.isArray(source.references)
+        ? source.references : references(out, input.actor, [input.action]) }) : source;
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
     const e = n.event, actor = out.actors[e.actor];
@@ -462,9 +463,24 @@
           { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 },
           { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
       }
+      // References are anchored to the BEGINNING of each observation unit.
+      // A single DRAW can adjust one garment then remove another; their
+      // prior reference IDs must NOT renumber after the first mutation.
+      // A later continued DRAW gets a new reference set from the outcome of
+      // earlier shots. This is ephemeral folding context, never a new store.
+      let referenceUnit = null, unitReferences = [];
       for (const e of Array.isArray(sw.stateEvents) ? sw.stateEvents : []) {
+        const key = e && ["draw","wear-inquiry"].includes(e.evidenceType)
+          ? (Number.isInteger(e.drawIndex) ? e.drawIndex : (sw.draws || []).length - 1)
+          : -1;
+        if (referenceUnit !== key) {
+          referenceUnit = key;
+          unitReferences = references(st, m.role === "user" ? "user" : "char",
+            ["remove","adjust","add"]);
+        }
         st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
-          wearInquiries: sw.wearInquiries || [], messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+          references: unitReferences, wearInquiries: sw.wearInquiries || [],
+          messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.
