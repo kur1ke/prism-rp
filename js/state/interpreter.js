@@ -176,7 +176,44 @@
       // A language model often writes the current speaker's name or "assistant"
       // instead of PRISM's internal actor id. Resolve ONLY the current speaker;
       // another person's name must never gain permission to alter their state.
-      let canonical = bindAuthoredDrawEvidence(scalarListCandidate(speakerEvent(candidate, o)), o);
+      // New API: model chooses an immutable source fragment ID. The
+      // application, not the model, materializes exact evidence, short garment
+      // mentions and placement. The legacy quoted-event path remains valid.
+      let pinned=candidate;
+      if(candidate && candidate.sourceId!=null){
+        const hit=ES && ES.resolve(candidate.sourceId,o);
+        if(!hit || hit.error){
+          issues.push("Событие " + (index + 1) + ": неверный sourceId (" +
+            (hit&&hit.error||"unavailable") + ")");
+          continue;
+        }
+        if(hit.span.kind==="draw"){
+          // Do not turn an old photo, someone else's picture or a screen
+          // capture into current self state. This check uses the same
+          // conservative framing proof as the legacy DRAW path, but the
+          // model cannot override it by claiming visualScope=current-self.
+          const scope=bindAuthoredDrawEvidence({
+            actor:"char",field:"wear",evidence:hit.evidence
+          },o);
+          if(o.role!=="assistant" || candidate.field!=="wear" ||
+             scope.evidenceType!=="draw" || scope.visualScope!=="current-self"){
+            issues.push("Событие " + (index + 1) + ": sourceId не доказывает актуальный селфи-кадр");
+            continue;
+          }
+        }
+        pinned={...candidate,evidence:hit.evidence,sourceSpan:hit.span,
+          ...(hit.span.kind==="draw"
+            ? {evidenceType:"draw",visualScope:"current-self"}
+            : {evidenceType:undefined,visualScope:undefined})};
+        delete pinned.sourceId;
+        // Neither literal itemMention nor placement from the untrusted model
+        // is used. The reference resolver reconstructs itemMention from the
+        // original fragment, while placement uses a source-local excerpt.
+        delete pinned.itemMention;
+        if(pinned.field==="wear" && pinned.action==="adjust")
+          pinned.placement=hit.evidence.slice(0,160);
+      }
+      let canonical = bindAuthoredDrawEvidence(scalarListCandidate(speakerEvent(pinned, o)), o);
       // Model-side certainty is sometimes too strong for a remote report.
       // Downcast only, never upgrade intent or bypass provenance validation.
       if (o && o.mode === "messenger" && canonical && canonical.certainty === "established")
@@ -233,8 +270,12 @@
         if (!candidate || candidate.role !== "offBody") {
           frameRejected.role++; continue;
         }
-        if (typeof candidate.evidence !== "string" || !candidate.evidence.trim() ||
-            candidate.evidence.length > 300 || !o.draw.includes(candidate.evidence)) {
+        const frameHit = candidate.sourceId!=null && ES
+          ? ES.resolve(candidate.sourceId,o) : null;
+        const frameEvidence=frameHit && frameHit.span && frameHit.span.kind==="draw"
+          ? frameHit.evidence : candidate.evidence;
+        if(typeof frameEvidence!=="string" || !frameEvidence.trim() ||
+           frameEvidence.length > 420 || !o.draw.includes(frameEvidence)){
           frameRejected.evidence++; continue;
         }
         let item = null;
@@ -250,7 +291,7 @@
         }
         if (!item) { frameRejected.link++; continue; }
         if (!frameObjects.some(x => x.item === item))
-          frameObjects.push({ role: "offBody", item, evidence: candidate.evidence });
+          frameObjects.push({ role: "offBody", item, evidence: frameEvidence });
       }
     }
     const diagnostic = [
