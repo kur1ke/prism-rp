@@ -163,10 +163,13 @@
       let raw = "", reasoning = "", error = null;
       const rpT0 = now();
       try {
+        const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
+        const imageDataUrl = imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null;
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
           signal: ctrl.signal, onDelta, continueFrom: prefix || null,
           outputFormat: ms ? "message-body" : null,
+          imageDataUrl,
         });
         raw = res.text; reasoning = res.reasoning;
       } catch (e) {
