@@ -7063,6 +7063,36 @@ async function unifiedTracker() {
         "second shot cannot rewrite first shot's hidden garments");
     }finally{globalThis.PRP.llm=old;}
   });
+  await ta("WEAR-INQUIRY-4: generation processes a DRAW-only Messenger reply",async()=>{
+    const h=fbHarness({name:"Орихимэ"});
+    h.ctx.env.perchanceImages=()=>true;
+    h.S.settings.images.autoDraw=false;
+    await h.chat.createChat("messenger","c1");
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const u=h.chat.newMsg("user",null,"Покажи фото");
+    await h.chat.commitMessage(u,u.id);
+    const before=globalThis.PRP.llm.simple,oldLLM=fbLLM;
+    const draw="Селфи Орихимэ в белом платье";
+    fbLLM=async()=>({text:"[draw: "+draw+"]",reasoning:""});
+    globalThis.PRP.llm.simple=async(_p,ins)=>{
+      if(ins.startsWith("Ты — наблюдатель"))
+        return JSON.stringify({events:[{actor:"char",field:"wear",action:"add",
+          value:["белом платье"],evidence:"белом платье",
+          certainty:"reported",evidenceType:"draw",visualScope:"current-self"}]});
+      return JSON.stringify({changed:"unknown",previous:[],hidden:[]});
+    };
+    try{
+      const generated=await h.gen.generate(null,"new");
+      assert.ok(generated && generated.msgId,"DRAW-only message must be committed");
+      await generated.post;
+      const out=h.chat.path().at(-1),sw=out.swipes[out.swipeIdx||0];
+      assert.equal(sw.text,"");
+      assert.equal(sw.draws.length,1);
+      assert.deepStrictEqual(sw.stateEvents.filter(e=>e.field==="wear").flatMap(e=>e.value||[]),["белом платье"]);
+      assert.equal(sw.stateStatus.status,"ok");
+      assert.ok(sw.messengerAt,"photo-only reply gets proper Messenger time");
+    }finally{globalThis.PRP.llm.simple=before;fbLLM=oldLLM;}
+  });
   await ta("WEAR-INQUIRY-2: partial existing outfit and invalid model reply never invent clothes",async()=>{
     const W=globalThis.PRP.wearInquiry;
     const previous={known:true,worn:[{item:"белая блузка"}]};
