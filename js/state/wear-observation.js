@@ -21,7 +21,14 @@
   // becomes an instruction, selected garment or new inventory.
   const candidates=refs=>(refs||[]).slice(0,6)
     .filter(ref=>ref&&typeof ref.id==="string"&&typeof ref.item==="string")
-    .map(ref=>({id:ref.id.slice(0,48),item:ref.item.slice(0,160)}));
+    .map(ref=>({id:ref.id.slice(0,48),item:ref.item.slice(0,160),
+      // Origin of the existing branch fact, not a new identity claim.
+      ...(ref.source ? {origin:{
+        kind:String(ref.source.kind||"").slice(0,32),
+        messageId:String(ref.source.messageId||"").slice(0,64),
+        swipeIdx:Number.isInteger(ref.source.swipeIdx)?ref.source.swipeIdx:0,
+      }} : {}),
+    }));
   // The short noun phrase must match a SINGLE current garment, including
   // all stated attributes. One matching colour alone is never a garment.
   function match(mention,refs) {
