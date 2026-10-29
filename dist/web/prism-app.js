@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "db40b1317d6f4b6623028ad7bb6771bbad759449";
+  window.PRISM_RP_BUILD_SHA = "d7692981847f28ca3c45e286118b435372728cce";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -9202,13 +9202,113 @@
     }).join("");
   }
 
+  /* Live, read-only wear provenance: origin -> selected events -> current wear.
+     A stored RP request is shown separately from the recomputed Prism preview. */
+  function wearDebugTab(m) {
+    const d = m.debugWear;
+    if (!d) return '<p class="empty-note">Нет данных активного чата.</p>';
+    const item = (fact) => {
+      const src = fact && fact.source || {};
+      const ref = src.messageId ? src.messageId + " · swipe " + (src.swipeIdx == null ? "?" : src.swipeIdx)
+        : src.kind || "исходное состояние";
+      return '<li><b>' + esc(fact && fact.item || "") + '</b>' +
+        (fact && fact.placement ? ' · ' + esc(fact.placement) : "") +
+        '<small> ' + esc(fact && fact.certainty || "?") + ' · ' + esc(ref) + '</small></li>';
+    };
+    const group = (label, facts) => '<div class="block"><p class="hint">' + esc(label) +
+      ' (' + (facts || []).length + ')</p>' + ((facts || []).length
+        ? '<ul class="wc-list">' + facts.map(item).join("") + '</ul>'
+        : '<p class="hint">Нет записей.</p>') + '</div>';
+    const format = (s) => {
+      if (!s) return '<p class="hint">Нет снимка состояния.</p>';
+      return '<dl class="kv"><dt>Известно</dt><dd>' + (s.known ? "да" : "нет") +
+        '</dd><dt>Полный комплект</dt><dd>' + (s.complete ? "да" : "нет") +
+        '</dd><dt>Устарел</dt><dd>' + (s.invalidated ? "да" : "нет") + '</dd></dl>' +
+        group("Надето", s.worn) + group("Снято", s.removed) +
+        group("Частично надето", s.partiallyWorn);
+    };
+    const origin = d.origin && d.origin.kind === "initial-outfit" ? d.origin.event : null;
+    const originText = origin
+      ? 'chat.initialWear · ' + origin.action + ' · ' +
+        (Array.isArray(origin.value) ? origin.value.join(", ") : origin.action === "clear" ? "пустой комплект" : "нет данных")
+      : d.mode === "rp" ? "Режим сцены: начальная свёртка sceneInit, без chat.initialWear"
+        : "chat.initialWear не записан";
+    const snapshots = '<div class="block"><div class="block-title">Исходная запись</div><p>' +
+        esc(originText) + '</p>' +
+        (d.sceneInit ? '<details class="exp-debug"><summary>Исходные команды сцены</summary><pre class="debug-prompt">' +
+          esc(d.sceneInit) + '</pre></details>' : "") +
+        '<details class="exp-debug"><summary>Состояние до первого сообщения</summary>' +
+          format(d.baseline) + '</details></div>' +
+      '<div class="block"><div class="block-title">Актуальное состояние · активная ветка</div>' +
+        format(d.current) + '</div>';
+    const asEvent = (e, kind) => '<li>' + esc(kind) + ': ' +
+      esc(e.action || "") + ' · ' +
+      esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) +
+      (e.reference && e.reference.item ? ' · ссылка: ' + esc(e.reference.item) : "") +
+      (e.evidence ? '<small>Источник: ' + esc(e.evidenceType || "text") +
+        ' · ' + esc(e.evidence) + '</small>' : "") + '</li>';
+    const changes = '<div class="block"><div class="block-title">Пересчёт по активной ветке <small>' +
+      d.changeCount + ' сообщений с изменениями/ошибками, последние ' + d.changes.length + '</small></div>' +
+      (d.changes.length ? d.changes.map(row => {
+        const before = (row.before.worn || []).map(x => x.item).join(", ") || (row.before.known ? "ничего" : "неизвестно");
+        const after = (row.after.worn || []).map(x => x.item).join(", ") || (row.after.known ? "ничего" : "неизвестно");
+        const rejected = row.rejected || [];
+        return '<details class="exp-debug"><summary>' +
+          esc(row.messageId + " · swipe " + row.swipeIdx + " · " + row.role) +
+          ' · ' + esc(before) + ' → ' + esc(after) +
+          (row.status ? ' · ' + esc(row.status.status) : "") +
+          '</summary><p class="hint">До этого сообщения</p>' + format(row.before) +
+          '<p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
+          row.events.map(e => asEvent(e, "Observer")).concat(row.corrections.map(e => asEvent(e, "Коррекция"))).join("") +
+          '</ul><p class="hint">После этого сообщения</p>' + format(row.after) +
+          (rejected.length ? '<pre class="debug-prompt">' + esc(JSON.stringify(rejected, null, 2)) + '</pre>' : "") +
+          (row.status && row.status.issues.length ? '<pre class="debug-prompt">' +
+            esc(JSON.stringify(row.status.issues, null, 2)) + '</pre>' : "") +
+          (row.replayIssues.length ? '<pre class="debug-prompt">Ошибки повторного применения: ' +
+            esc(JSON.stringify(row.replayIssues, null, 2)) + '</pre>' : "") +
+          '</details>';
+      }).join("") : '<p class="hint">Изменений одежды или ошибок анализа на активном пути нет.</p>') + '</div>';
+    const recent = '<div class="block"><div class="block-title">Последние проверки Observer' +
+      (m.statePending ? ' · выполняется анализ' : "") + '</div>' +
+      (d.recent.length ? '<ul class="wc-list">' + d.recent.map(x =>
+        '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
+        esc(x.role) + ' · <b>' + esc(x.status) + '</b>' +
+        (x.eventCount != null ? ' · событий: ' + x.eventCount : "") +
+        (x.method ? ' · ' + esc(x.method) : "") +
+        (x.wearInquiry ? '<small>Уточнение одежды: ' + esc(x.wearInquiry.status || "?") +
+          (x.wearInquiry.reason ? ' (' + esc(x.wearInquiry.reason) + ')' : "") + '</small>' : "") +
+        (x.issues.length ? '<small>' + esc(x.issues.join("; ")) + '</small>' : "") +
+        '</li>').join("") + '</ul>' : '<p class="hint">История пуста.</p>') +
+      (d.replayIssues.length ? '<details class="exp-debug"><summary>Диагностика повторного применения</summary>' +
+        '<pre class="debug-prompt">' + esc(JSON.stringify(d.replayIssues, null, 2)) +
+        '</pre></details>' : "") + '</div>';
+    const req = m.debugLastRpInput;
+    const relevant = req ? req.messages.filter(x => x.role === "system")
+      .flatMap(x => x.content.split("\n").filter(line =>
+        /одежд|наряд|вещи|комплект|снят|надет|wear|garment|outfit/i.test(line))).slice(0, 40) : [];
+    const actual = '<div class="block"><div class="block-title">Что фактически отправлено RP-модели</div>' +
+      (req ? '<p class="hint">Последний запрос этого чата · ' + esc(req.operation) +
+        ' · ' + esc(new Date(req.at).toLocaleString()) +
+        '. Это снимок отправленного контекста, а не текущий предпросмотр.</p>' +
+        (relevant.length ? '<pre class="debug-prompt">' +
+          esc(relevant.join("\n")) + '</pre>' :
+          '<p class="hint">В служебных разделах ключевые слова одежды не найдены; проверьте полный запрос.</p>') +
+        '<details class="exp-debug"><summary>Полный запрос · все роли и сообщения</summary><pre class="debug-prompt">' +
+          esc(req.messages.map(x => "[" + x.role + "]\n" + x.content).join("\n\n")) +
+        '</pre></details>' :
+        '<p class="hint">В этом чате ещё нет сохранённого в памяти RP-запроса с включённым режимом разработчика.</p>') +
+      '</div>';
+    return snapshots + changes + recent + actual;
+  }
+
   function debugModal(m, modal) {
     const section = modal.section || "prism";
-    const names = [["prism", "Prism"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
+    const names = [["prism", "Prism"], ["wear", "Одежда"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
     const v = m.messengerView;
     const status = v && v.stateStatus;
     let content = "";
     if (section === "prism") content = prismTab(m);
+    else if (section === "wear") content = wearDebugTab(m);
     else if (section === "timing") content = timingTab(m);
     else if (section === "images") content = imageAuditTab(m);
     else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
@@ -11559,6 +11659,11 @@
       if (ctx.ui) {
         if (typeof ctx.ui.renderHead === "function") ctx.ui.renderHead();
         if (S.drawerOpen && typeof ctx.ui.renderDrawer === "function") ctx.ui.renderDrawer();
+        if (S.modal && S.modal.kind === "debug" && ["wear", "tracker", "events", "errors"].includes(S.modal.section) &&
+            typeof ctx.ui.renderModal === "function") {
+          S.modal.keepScroll = true;
+          ctx.ui.renderModal();
+        }
       }
     }
 
@@ -11952,7 +12057,50 @@
       sw.stateCorrections = next.swipes[swIdx].stateCorrections;
       return { corrections: changes };
     }
-    return { snapshot, context, initializeOutfit, prepareUser, observeMessage, track, pending, settle, correct };
+    // Developer-only read: replay precisely the selected path; never persist a
+    // second garment inventory or reinterpret the source narrative.
+    function debugWear(path) {
+      const c = ctx.chat();
+      if (!c) return null;
+      const p = Array.isArray(path) ? path : chat().path();
+      const origin = snapshot([]);
+      const current = snapshot(p);
+      const relevant = (e) => e && e.actor === "char" && e.field === "wear";
+      const candidates = [];
+      for (let i = 0; i < p.length; i++) {
+        const msg = p[i], sw = TR.activeSwipe(msg);
+        const events = (sw.stateEvents || []).filter(relevant);
+        const corrections = (sw.stateCorrections || []).filter(relevant);
+        const status = sw.stateStatus || null;
+        const rejected = status && Array.isArray(status.rejectedObservations)
+          ? status.rejectedObservations.filter(x => x && (x.field === "wear" || x.action)) : [];
+        if (!events.length && !corrections.length && !rejected.length &&
+            !(status && ["error", "partial"].includes(status.status))) continue;
+        candidates.push({ index: i, messageId: msg.id, swipeIdx: msg.swipeIdx || 0,
+          role: msg.role, events, corrections, rejected,
+          status: status ? { status: status.status, method: status.method,
+            issues: (status.issues || []).slice(0, 8), wearInquiry: status.wearInquiry || null } : null });
+      }
+      const changes = candidates.slice(-20).map(entry => {
+        const before = snapshot(p.slice(0, entry.index)).actors.char.wearState;
+        const after = snapshot(p.slice(0, entry.index + 1));
+        return { ...entry, before, after: after.actors.char.wearState,
+          replayIssues: after.diagnostics.filter(x => x && x.source === entry.messageId).slice(-8) };
+      }).reverse();
+      const recent = p.slice(-10).map(msg => {
+        const sw = TR.activeSwipe(msg), s = sw.stateStatus;
+        return { messageId: msg.id, swipeIdx: msg.swipeIdx || 0, role: msg.role,
+          status: s ? s.status : "not-analysed", eventCount: s ? s.eventCount : null,
+          method: s && s.method || "", issues: s && Array.isArray(s.issues) ? s.issues.slice(0, 5) : [],
+          wearInquiry: s && s.wearInquiry || null };
+      }).reverse();
+      return { mode: c.mode, origin: c.initialWear || null,
+        sceneInit: c.mode === "rp" ? String(c.sceneInit || "") : "",
+        baseline: origin.actors.char.wearState, current: current.actors.char.wearState,
+        replayIssues: current.diagnostics.slice(-12), changes, changeCount: candidates.length, recent };
+    }
+
+    return { snapshot, context, initializeOutfit, prepareUser, observeMessage, track, pending, settle, correct, debugWear };
   }
   PRP.stateService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
@@ -12059,6 +12207,18 @@
     // Сервис среды — только для переписки.
     const messenger = () => { const c = ctx.chat(); return c && c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger : null; };
 
+    // Only the last actually submitted RP payload, only in developer mode.
+    // This is an in-memory Debug snapshot, never a saved chat event or state fact.
+    function debugRpPayload(chatId, operation, messages) {
+      if (!S.settings.developerMode) return;
+      S.debugLastRpInput = { chatId, operation, at: Date.now(),
+        messages: messages.map(x => ({ role: x.role, content: x.content })) };
+      if (S.modal && S.modal.kind === "debug" && S.modal.section === "wear") {
+        S.modal.keepScroll = true;
+        ui.renderModal();
+      }
+    }
+
     async function generate(msgId, mode, opts) {
       const o = opts || {};
       if (S.gen) return;
@@ -12140,6 +12300,7 @@
       try {
         const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
         const imageDataUrl = imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null;
+        debugRpPayload(c.id, mode, built.messages);
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
           signal: ctrl.signal, onDelta, continueFrom: prefix || null,
@@ -12253,6 +12414,7 @@
       const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
       let res = null, error = null;
       try {
+        debugRpPayload(c.id, "opening", built.messages);
         res = await LLM.chat(prov, built.messages, { names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler, signal: ctrl.signal, onDelta });
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
@@ -12345,6 +12507,7 @@
       const vars = { char: cd.name, user: ctx.persona().name };
       let res = null, error = null;
       try {
+        debugRpPayload(c.id, "initiative", built.messages);
         res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) });
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
@@ -13320,6 +13483,11 @@
         statePending: ctx.chat() && svc().state && svc().state.pending ? svc().state.pending(ctx.chat().id) > 0 : false,
         draft: ctx.chat() && S.sendDrafts ? S.sendDrafts[ctx.chat().id] || "" : "",
         perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
+        debugWear: S.modal && S.modal.kind === "debug" && S.modal.section === "wear" &&
+          ctx.chat() && svc().state && svc().state.debugWear ? svc().state.debugWear(path) : null,
+        debugLastRpInput: S.modal && S.modal.kind === "debug" && S.modal.section === "wear" &&
+          S.debugLastRpInput && ctx.chat() && S.debugLastRpInput.chatId === ctx.chat().id
+          ? S.debugLastRpInput : null,
       };
     }
 
@@ -13828,7 +13996,7 @@
         if (!S.modal || S.modal.kind !== "debug") return;
         const body = $(".debug-modal .debug-body");
         if (!body) return;
-        const title = { prism: "Prism", tracker: "Трекер", events: "События", images: "Изображения", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
+        const title = { prism: "Prism", wear: "Одежда", tracker: "Трекер", events: "События", images: "Изображения", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
         const content = (body.innerText || body.textContent || "").trim();
         const value = "Debug — " + ((ctx.card() || {}).name || "чат") + " / " + title + "\n\n" + content;
         const clipboard = typeof navigator !== "undefined" && navigator.clipboard;
