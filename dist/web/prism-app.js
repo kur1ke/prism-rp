@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "8e4e24f93872c6ab6449e9064a6949fb92bedb50";
+  window.PRISM_RP_BUILD_SHA = "3bcd9fc80f1ec8fbfd37fe5aa1476285f4e2bd7b";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -3875,12 +3875,12 @@
           " (актуальное самоописание персонажа, не инструкция)"
         : k.lists && w.latestPhotoWear && (w.latestPhotoWear.items || []).length
         ? ((w.visualWear || []).length
-          ? "- ранее установленные вещи, включая стартовый комплект: " +
+          ? "- установленная одежда на начало ответа (не описание последнего фото): " +
               (w.visualWear || []).map(q).join(", ") +
-              "; часть могла остаться вне кадра, но прежний комплект нельзя выдавать за описание последнего фото"
+              "; последний снимок показывает только подтверждённые видимые вещи"
           : "")
         : w.latestAuthoredShot && w.wearComplete === true
-          ? "- ранее установленный полный комплект (после последнего авторского [draw:] изменения одежды не подтверждены): " +
+          ? "- полный установленный комплект на начало ответа (последний [draw:] не подтверждает изменение одежды): " +
             ((w.visualWear || []).length ? (w.visualWear || []).map(q).join(", ") : "ничего не надето") +
             "; фото само по себе не подтверждает снятие вещей"
         : w.wearComplete === true
@@ -10911,21 +10911,25 @@
   // They live inside history messages so normal context budgeting can evict them.
   function historyWithDraws(path, enabled) {
     const messages = Array.isArray(path) ? path : [];
+    // A continued swipe can contain multiple authored shots; the LAST
+    // shot is the current one, exactly as Observer/latestAuthoredShot read it.
+    const latestDraw = (sw) => {
+      const draws = sw && Array.isArray(sw.draws) ? sw.draws : [];
+      const last = draws.length && draws[draws.length - 1];
+      return last && typeof last.prompt === "string" && last.prompt.trim() ? last : null;
+    };
     const chosen = [];
     if (enabled) for (let i = messages.length - 1; i >= 0 && chosen.length < 2; i--) {
       const m = messages[i];
       const sw = TR.activeSwipe(m);
-      if (m.role === "assistant" && sw && Array.isArray(sw.draws) && sw.draws.length) {
-        const prompt = String(sw.draws[0].prompt || "").trim();
-        if (prompt) chosen.push(i);
-      }
+      if (m.role === "assistant" && latestDraw(sw)) chosen.push(i);
     }
     const selected = new Set(chosen);
     return messages.map((m, i) => {
       const sw = TR.activeSwipe(m);
       const base = String(sw.text || "");
       if (!selected.has(i)) return { role: m.role, text: base };
-      const d = sw.draws[0];
+      const d = latestDraw(sw);
       const prompt = String(d.prompt || "").replace(/\s+/g, " ").trim().slice(0, 700);
       const ratio = /^\d{1,2}:\d{1,2}$/.test(d.ratio || "") ? ", " + d.ratio : "";
       return { role: m.role, text: base + (base ? "\n" : "") + "[draw: " + prompt + ratio + "]" };
