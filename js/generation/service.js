@@ -105,7 +105,7 @@
       if (!S.settings.developerMode) return;
       S.debugLastRpInput = { chatId, operation, at: Date.now(),
         messages: messages.map(x => ({ role: x.role, content: x.content })) };
-      if (S.modal && S.modal.kind === "debug" && S.modal.section === "wear") {
+      if (S.modal && S.modal.kind === "debug" && S.modal.section === "prism") {
         S.modal.keepScroll = true;
         ui.renderModal();
       }
