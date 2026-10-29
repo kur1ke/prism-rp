@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "78d08625a584a1ab911b924a80b7d85f8eee8457";
+  window.PRISM_RP_BUILD_SHA = "165f3f4b65fc17feb919a3cb7dee5f915705ecd6";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6008,7 +6008,8 @@
         "wear.set разрешён ТОЛЬКО при явно полном текущем наряде (например «На ней только...» / «wearing only...»). Укажи sourceId фрагмента, содержащего признак полноты и ВСЕ перечисленные вещи. Отдельный ракурс или список только видимого не доказывают полный комплект.",
         "Если DRAW подтверждает совершённое переодевание без нового полного комплекта, разрешён invalidate по sourceId подтверждающего фрагмента. Не делай вывода о снятых вещах из одного лишь кадра.",
         "Старое фото, чужой портрет, изображение товара, скриншот, рисунок, сон, фантазия, гипотетическое или явно неактуальное изображение НЕ утверждают текущее состояние одежды говорящего. При сомнении — unresolved, а не событие.",
-        "Все события из DRAW выбирают sourceId вида D0, D1, ... ; только актуальный кадр самого персонажа даёт wear-факт. Приложение самостоятельно назначит evidenceType=draw, visualScope=current-self и точную цитату, не доверяя копированию модели. Для текста выбирай T0, T1, ...",
+        "Все события из DRAW выбирают sourceId вида D0, D1, ... ; приложение извлекает дословную цитату и проверяет происхождение. Оно не классифицирует актуальность кадра ключевыми словами. Для текста выбирай T0, T1, ...",
+      "Для события wear из DRAW обязательно указывай visualScope=current-self, только если контекст разговора подтверждает актуальное изображение самого персонажа. Не делай вывод об актуальности из слов «селфи», «фотография», «зеркало», имени или ракурса. Для старого, чужого, вымышленного или неопределённого кадра НЕ создавай событие нынешней одежды; запиши сомнение в unresolved. Для текстового sourceId visualScope не нужен.",
         "Для DRAW в Messenger certainty=reported: это визуальное самоописание, а не внешняя независимая проверка реальной камеры. Никогда не подменяй им сцену другого актёра.",
         "Если снятая вещь ЯВНО видна отдельно от тела в кадре, добавь frameObjects:[{role:\"offBody\",eventIndex:0,sourceId:\"D0\"}] — конкретный существующий фрагмент, в котором вещь показана отдельно. Не создавай frameObjects, если вещь только упомянута как снятая, но её не видно; без подтверждённого wear.remove или снятой вещи из REFERENCES всегда верни [].",
         "Используй REFERENCES для снятия/смещения уже известной вещи, если она однозначна; не изобретай новый item и не подменяй неопределённость новым предметом.",
@@ -6095,34 +6096,18 @@
     return Object.assign({}, candidate, { value: [value] });
   }
 
-  // The model sometimes quotes a current authored DRAW correctly but omits
-  // the source annotation. Recover only the source *binding*, never missing
-  // clothing, activity, or authority. Draw-specific scope must be explicit or
-  // unambiguous from a named current selfie; historical/other photos fail shut.
+  // Legacy literal-citation compatibility: the observer assesses who and
+  // when; the application binds the exact source, without vocabulary gates.
   function bindAuthoredDrawEvidence(candidate, opts) {
     const e = candidate, o = opts || {};
     if (!e || e.evidenceType != null || e.actor !== "char" ||
-        e.field !== "wear" || o.role !== "assistant" ||
+        e.field !== "wear" || e.visualScope !== "current-self" ||
+        o.role !== "assistant" ||
+        (o.otherName && o.speakerName &&
+         String(o.otherName).trim().toLowerCase() === String(o.speakerName).trim().toLowerCase()) ||
         typeof e.evidence !== "string" || !e.evidence.trim() ||
         typeof o.draw !== "string" || !o.draw.includes(e.evidence) ||
-        String(o.text || "").includes(e.evidence) ||
-        (e.visualScope != null && e.visualScope !== "current-self")) return e;
-    if (e.visualScope == null) {
-      const draw = o.draw.toLowerCase().replace(/ё/g, "е");
-      const name = String(o.speakerName || "").trim().toLowerCase().replace(/ё/g, "е");
-      // A named present-time mirror photograph can be an authored self-shot
-      // without the literal word "селфи" (e.g. "Фотография в зеркале.
-      // Орихимэ ... На ней надета пижама"). A random named portrait still
-      // cannot establish current wear.
-      const selfieAt = draw.search(/селфи|selfie/iu);
-      const mirrorPhotoAt = draw.search(/(?:фотографи[яиюе]|фото|снимок|photo(?:graph)?|picture)[^.!?\n]{0,70}(?:зеркал|mirror)/iu);
-      const frameAt = selfieAt >= 0 ? selfieAt : mirrorPhotoAt;
-      const nameAt = name.length >= 4 ? draw.indexOf(name) : -1;
-      if (frameAt < 0 || nameAt < 0 || Math.abs(frameAt - nameAt) > 100 ||
-          /(?:стар(?:ое|ый|ом)|архив|вчера|прошл(?:ое|ого|ом)|флешбэк|(?:^|[.!?]\\s*)(?:рисунок|иллюстраци[яиюе])|скриншот|галере[ияею]|фантази|воображ|сон\b|сновиден|old\s+selfie|past\s+selfie|screenshot|gallery|flashback)/iu.test(draw) ||
-          (o.otherName && draw.toLowerCase().includes(String(o.otherName).toLowerCase())))
-        return e;
-    }
+        String(o.text || "").includes(e.evidence)) return e;
     return Object.assign({}, e, { evidenceType: "draw", visualScope: "current-self" });
   }
 
@@ -6153,26 +6138,34 @@
             (hit&&hit.error||"unavailable") + ")");
           continue;
         }
-        if ((candidate.evidenceType != null && candidate.evidenceType !==
-              (hit.span.kind==="draw" ? "draw" : "text")) ||
-            (candidate.visualScope != null && candidate.visualScope !==
-              (hit.span.kind==="draw" ? "current-self" : "text"))) {
+        if (candidate.evidenceType != null && candidate.evidenceType !==
+            (hit.span.kind==="draw" ? "draw" : "text")) {
           issues.push("Событие " + (index + 1) + ": sourceId противоречит указанному источнику");
           continue;
         }
-        if(hit.span.kind==="draw"){
-          // Do not turn an old photo, someone else's picture or a screen
-          // capture into current self state. This check uses the same
-          // conservative framing proof as the legacy DRAW path, but the
-          // model cannot override it by claiming visualScope=current-self.
-          const scope=bindAuthoredDrawEvidence({
-            actor:"char",field:"wear",evidence:hit.evidence
-          },o);
-          if(o.role!=="assistant" || candidate.field!=="wear" ||
-             scope.evidenceType!=="draw" || scope.visualScope!=="current-self"){
-            issues.push("Событие " + (index + 1) + ": sourceId не доказывает актуальный селфи-кадр");
+        // Source fragments prove only where the wording came from. The
+        // observer has to assess temporal and actor meaning in context.
+        if (hit.span.kind==="draw") {
+          const otherIsSpeaker = o.otherName && o.speakerName &&
+            String(o.otherName).trim().toLowerCase() === String(o.speakerName).trim().toLowerCase();
+          if (o.role!=="assistant" || candidate.field!=="wear" ||
+              candidate.visualScope!=="current-self" || otherIsSpeaker) {
+            issues.push("Событие " + (index + 1) +
+              ": DRAW не подтверждён наблюдателем как текущий снимок персонажа");
+            if(candidate.field==="wear" && rejectedObservations.length<MAX)
+              rejectedObservations.push({
+                index, sourceId:String(candidate.sourceId).slice(0,16),
+                kind:"draw", action:String(candidate.action||"").slice(0,24),
+                value:Array.isArray(candidate.value)?candidate.value.slice(0,3).map(x=>String(x).slice(0,160)):[],
+                fragment:String(hit.evidence||"").slice(0,420),
+                reason:"visual-scope-not-current",
+                scope:String(candidate.visualScope||"unknown").slice(0,30),
+              });
             continue;
           }
+        } else if(candidate.visualScope != null && candidate.visualScope!=="text") {
+          issues.push("Событие " + (index + 1) + ": visualScope указан для текстового источника");
+          continue;
         }
         pinned={...candidate,evidence:hit.evidence,sourceSpan:hit.span,
           ...(hit.span.kind==="draw"
