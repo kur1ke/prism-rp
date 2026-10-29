@@ -187,10 +187,10 @@
       const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
       if (S.modal.kind === "image") {
         const im = S.modal.im, url = S.imgUrls[im.id];
-        rootEl.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${url}" alt="">
+        rootEl.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${R.safeImageSrc(url)}" alt="">
         <figcaption><span>${R.esc(im.draw || "")}</span><span class="lb-tools">
           <button class="btn btn-sm" data-act="img-modal-regen">${R.icon("regen")}Заново</button>
-          <button class="btn btn-sm" data-act="img-dl" data-mid="${S.modal.mid}" data-sw="${S.modal.sw}" data-img="${im.id}">${R.icon("download")}Скачать</button>
+          <button class="btn btn-sm" data-act="img-dl" data-mid="${R.esc(S.modal.mid)}" data-sw="${R.esc(S.modal.sw)}" data-img="${R.esc(im.id)}">${R.icon("download")}Скачать</button>
           <button class="icon-btn" data-act="modal-close" title="Закрыть">${R.icon("x")}</button></span></figcaption></figure></div>`;
         return;
       }
