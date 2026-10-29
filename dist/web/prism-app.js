@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "236ac40d58fe7a606acd346953a2a351df39eb60";
+  window.PRISM_RP_BUILD_SHA = "5d8d833a291e00894d4a05c40bb8c0bf5a14050c";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6110,10 +6110,16 @@
     if (e.visualScope == null) {
       const draw = o.draw.toLowerCase().replace(/ё/g, "е");
       const name = String(o.speakerName || "").trim().toLowerCase().replace(/ё/g, "е");
+      // A named present-time mirror photograph can be an authored self-shot
+      // without the literal word "селфи" (e.g. "Фотография в зеркале.
+      // Орихимэ ... На ней надета пижама"). A random named portrait still
+      // cannot establish current wear.
       const selfieAt = draw.search(/селфи|selfie/iu);
+      const mirrorPhotoAt = draw.search(/(?:фотографи[яиюе]|фото|снимок|photo(?:graph)?|picture)[^.!?\n]{0,70}(?:зеркал|mirror)/iu);
+      const frameAt = selfieAt >= 0 ? selfieAt : mirrorPhotoAt;
       const nameAt = name.length >= 4 ? draw.indexOf(name) : -1;
-      if (selfieAt < 0 || nameAt < 0 || Math.abs(selfieAt - nameAt) > 80 ||
-          /(?:стар(?:ое|ый|ом)|архив|вчера|прошл(?:ое|ого|ом)|флешбэк|рисун|скриншот|фантази|воображ|сон\b|сновиден|old\s+selfie|past\s+selfie|screenshot|flashback)/iu.test(draw) ||
+      if (frameAt < 0 || nameAt < 0 || Math.abs(frameAt - nameAt) > 100 ||
+          /(?:стар(?:ое|ый|ом)|архив|вчера|прошл(?:ое|ого|ом)|флешбэк|(?:^|[.!?]\\s*)(?:рисунок|иллюстраци[яиюе])|скриншот|галере[ияею]|фантази|воображ|сон\b|сновиден|old\s+selfie|past\s+selfie|screenshot|gallery|flashback)/iu.test(draw) ||
           (o.otherName && draw.toLowerCase().includes(String(o.otherName).toLowerCase())))
         return e;
     }
