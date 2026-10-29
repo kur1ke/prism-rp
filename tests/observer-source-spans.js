@@ -184,14 +184,22 @@ assert.equal(mismatch.rejectedObservations[0].reason,"source-has-no-matching-gar
 assert.ok(mismatch.rejectedObservations[0].fragment.includes("сняла белую блузку"));
 // The Debug panel explains which source was chosen without copying raw model
 // instructions or silently treating a rejected observation as an event.
-const debug=globalThis.PRP.views.debugModal({
-  card:{name:"Орихимэ Иноуэ"},
-  chat:{initialWear:init},
-  path:[],
-  messengerView:{stateStatus:{status:"partial",eventCount:0,
-    issues:mismatch.issues,rejectedObservations:mismatch.rejectedObservations}}
-},{section:"errors"});
+const emptyWear={known:false,complete:false,invalidated:false,
+  worn:[],removed:[],partiallyWorn:[]};
+const model={
+  card:{name:"Орихимэ Иноуэ"},chat:{initialWear:init},path:[],
+  messengerView:{stateStatus:{status:"partial",eventCount:0,issues:mismatch.issues}},
+  debugWear:{mode:"messenger",origin:init,current:emptyWear,changes:[{
+    messageId:"test-observation",swipeIdx:0,role:"assistant",
+    before:emptyWear,after:emptyWear,events:[],corrections:[],
+    rejected:mismatch.rejectedObservations,
+    status:{status:"partial",issues:mismatch.issues},replayIssues:[]
+  }],changeCount:1,recent:[],replayIssues:[]}
+};
+const debug=globalThis.PRP.views.debugModal(model,{section:"wear"});
 assert.ok(debug.includes("Отклонённые наблюдения"));
 assert.ok(debug.includes("зелёный свитер"));
 assert.ok(debug.includes("сняла белую блузку"));
+assert.ok(!globalThis.PRP.views.debugModal(model,{section:"errors"}).includes("зелёный свитер"),
+  "rejected wardrobe observations live only in Clothing Debug");
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
