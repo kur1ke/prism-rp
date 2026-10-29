@@ -245,43 +245,71 @@
       // Object identity is resolved AFTER quoted action/source and speaker
       // have been established. This is a read-only lookup in REFERENCES
       // from the active path; Tracker remains the sole state transition.
-      const resolved = WO ? WO.resolve(canonical, o) : { event: canonical };
-      if (resolved.unresolved) {
-        issues.push("Событие " + (index + 1) + " [wear]: " + resolved.unresolved);
-        // Diagnostic data, never canonical state or model instructions:
-        // the ONLY selected fragment, the model's short claim and a reason.
-        // A generic error alone hid a broken Unicode lexer in sourcePhrase.
-        if (canonical && canonical.field === "wear" && rejectedObservations.length < MAX) {
-          rejectedObservations.push({
-            index, sourceId: String(candidate && candidate.sourceId || "legacy").slice(0,16),
-            kind: canonical.evidenceType === "draw" ? "draw" : "text",
-            action: String(canonical.action || "").slice(0,24),
-            value: (Array.isArray(canonical.value) ? canonical.value : [])
-              .slice(0,3).map(x => String(x).slice(0,160)),
-            fragment: String(canonical.evidence || "").slice(0,420),
-            reason: String(resolved.reason || "unknown").slice(0,60),
-          });
+      // A model may report several completed removals in one source
+      // fragment. Resolve each identity independently against the SAME
+      // active-path references. Without this, a multi-value remove bypasses
+      // WearObservationResolver and can lose the whole event on abbreviated
+      // names. Full outfit set remains atomic: never invent its missing items.
+      const splitRemovals = canonical && canonical.field === "wear" &&
+        canonical.action === "remove" && !canonical.reference && !canonical.referenceId &&
+        Array.isArray(canonical.value) && canonical.value.length > 1 &&
+        canonical.value.length <= 12;
+      const portions = splitRemovals
+        ? canonical.value.map(item => ({ ...canonical, value: [item] }))
+        : [canonical];
+      for (const portion of portions) {
+        const resolved = WO ? WO.resolve(portion, o) : { event: portion };
+        if (resolved.unresolved) {
+          issues.push("Событие " + (index + 1) + " [wear]: " + resolved.unresolved);
+          if (portion && portion.field === "wear" && rejectedObservations.length < MAX) {
+            rejectedObservations.push({
+              index, sourceId: String(candidate && candidate.sourceId || "legacy").slice(0,16),
+              kind: portion.evidenceType === "draw" ? "draw" : "text",
+              action: String(portion.action || "").slice(0,24),
+              value: (Array.isArray(portion.value) ? portion.value : [])
+                .slice(0,3).map(x => String(x).slice(0,160)),
+              fragment: String(portion.evidence || "").slice(0,420),
+              reason: String(resolved.reason || "unknown").slice(0,60),
+            });
+          }
+          continue;
         }
-        continue;
+        const bound = resolved.event;
+        const r = ST.normalize(bound, o);
+        if (r.error) {
+          // Legacy partial recovery is retained ONLY for wear.add. A full
+          // outfit set is indivisible and must never be partially accepted.
+          if (r.error === "элемент списка не подтверждается цитатой" &&
+              bound && bound.field === "wear" && bound.action === "add" &&
+              Array.isArray(bound.value) && bound.value.length > 1) {
+            const safe = bound.value.map(item =>
+              ST.normalize(Object.assign({}, bound, { value: [item] }), o))
+              .filter(item => item.event).map(item => item.event.value[0]);
+            if (safe.length && events.length < MAX)
+              events.push(Object.assign({}, bound, { value: safe }));
+          }
+          const label = candidate && typeof candidate.actor === "string" ? candidate.actor.trim().slice(0, 65) : "не задан";
+          const field = candidate && typeof candidate.field === "string" ? candidate.field.slice(0, 30) : "?";
+          const detail = r.error === "неизвестный участник" ? r.error + " (actor: " + JSON.stringify(label) + ")" : r.error;
+          issues.push("Событие " + (index + 1) + " [" + field + "]: " + detail);
+          if (bound && bound.field === "wear" && rejectedObservations.length < MAX) {
+            rejectedObservations.push({
+              index, sourceId: String(candidate && candidate.sourceId || "legacy").slice(0,16),
+              kind: bound.evidenceType === "draw" ? "draw" : "text",
+              action: String(bound.action || "").slice(0,24),
+              value: (Array.isArray(bound.value) ? bound.value : [])
+                .slice(0,3).map(x => String(x).slice(0,160)),
+              fragment: String(bound.evidence || "").slice(0,420),
+              reason: "validation-error", detail: String(r.error).slice(0,120),
+            });
+          }
+        } else if (events.length < MAX) {
+          // frameObjects eventIndex can identify a garment ONLY if the
+          // model's event was singular; a multi-removal is not a unique link.
+          if (!splitRemovals) indexedEvents.set(index, r.event);
+          events.push(r.event);
+        }
       }
-      canonical = resolved.event;
-      const r = ST.normalize(canonical, o);
-      if (r.error) {
-        // В wear.add допускаем частичное восстановление только явно
-        // подтверждённых предметов. Нельзя восстанавливать wear.set — оно
-        // объявляет ПОЛНЫЙ комплект и его неполная запись исказит состояние.
-        if (r.error === "элемент списка не подтверждается цитатой" &&
-            canonical && canonical.field === "wear" && canonical.action === "add" &&
-            Array.isArray(canonical.value) && canonical.value.length > 1) {
-          const safe = canonical.value.map((item) => ST.normalize(Object.assign({}, canonical, { value: [item] }), o))
-            .filter((item) => item.event).map((item) => item.event.value[0]);
-          if (safe.length) events.push(Object.assign({}, canonical, { value: safe }));
-        }
-        const label = candidate && typeof candidate.actor === "string" ? candidate.actor.trim().slice(0, 65) : "не задан";
-        const field = candidate && typeof candidate.field === "string" ? candidate.field.slice(0, 30) : "?";
-        const detail = r.error === "неизвестный участник" ? r.error + " (actor: " + JSON.stringify(label) + ")" : r.error;
-        issues.push("Событие " + (index + 1) + " [" + field + "]: " + detail);
-      } else { indexedEvents.set(index, r.event); events.push(r.event); }
     }
     // VC-02: typed shot-local object roles are observational metadata only.
     // Bind them to a validated removal in THIS draw or a branch-local removed

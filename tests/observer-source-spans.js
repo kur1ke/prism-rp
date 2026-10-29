@@ -202,4 +202,50 @@ assert.ok(debug.includes("зелёный свитер"));
 assert.ok(debug.includes("сняла белую блузку"));
 assert.ok(!globalThis.PRP.views.debugModal(model,{section:"errors"}).includes("зелёный свитер"),
   "rejected wardrobe observations live only in Clothing Debug");
+// One Observer report may remove multiple previously known garments in ONE
+// verified fragment; short names are resolved separately, not dropped whole.
+const multiText="Я сняла белую блузку и бежевую юбку.";
+const multiOpts={...opts,text:multiText,draw:"",draws:[]};
+const multiSource=ES.catalog(multiOpts).find(x=>x.text.includes("сняла белую блузку")).id;
+const multi=parse([{
+  actor:"char",field:"wear",action:"remove",certainty:"reported",
+  value:[title,skirt],sourceId:multiSource
+}],multiOpts);
+assert.equal(multi.events.length,2,JSON.stringify(multi));
+assert.deepEqual(multi.events.map(e=>e.value[0]),[title,skirt]);
+assert.ok(multi.events.every(e=>e.sourceSpan.kind==="text" && e.reference &&
+  e.itemMention && multiText.includes(e.itemMention)));
+const multiMsg={id:"multi",role:"assistant",swipeIdx:0,swipes:[{
+  text:multiText,draws:[],stateEvents:multi.events,stateCorrections:[],sceneOps:[]
+}]};
+const multiState=TR.fold({mode:"messenger",initialWear:init,path:[multiMsg]});
+assert.deepEqual(multiState.actors.char.wearState.worn,[]);
+assert.deepEqual(multiState.actors.char.wearState.removed.map(e=>e.item),[title,skirt]);
+assert.deepEqual(multiState.diagnostics,[]);
+const partialRemove=parse([{
+  actor:"char",field:"wear",action:"remove",certainty:"reported",
+  value:[title,"зелёный свитер"],sourceId:multiSource
+}],multiOpts);
+assert.deepEqual(partialRemove.events.map(e=>e.value[0]),[title],
+  "a fabricated second item does not erase the confirmed removal");
+assert.ok(partialRemove.issues.length && partialRemove.rejectedObservations.length,
+  "rejected item remains visible in read-only diagnostics");
+const alteredMulti=structuredClone(multiMsg);
+alteredMulti.swipes[0].text="Я сняла зелёный свитер.";
+assert.deepEqual(TR.fold({mode:"messenger",initialWear:init,path:[alteredMulti]})
+  .actors.char.wearState.removed,[],"tampered source rejects both persisted removals");
+const alternateMulti=structuredClone(multiMsg);
+alternateMulti.swipes.push({text:"Я не переодевалась",draws:[],stateEvents:[]});
+alternateMulti.swipeIdx=1;
+assert.deepEqual(TR.fold({mode:"messenger",initialWear:init,path:[alternateMulti]})
+  .actors.char.wearState.worn.map(e=>e.item),[title,skirt],
+  "sibling swipe cannot inherit removed garments");
+const fullText="На мне только белая блузка.";
+const fullOpts={...multiOpts,text:fullText};
+const full=parse([{
+  actor:"char",field:"wear",action:"set",certainty:"reported",
+  value:["белая блузка","зелёный свитер"],sourceId:ES.catalog(fullOpts)[0].id
+}],fullOpts);
+assert.equal(full.events.length,0,"full replacement is atomic: invalid second item cannot be silently lost");
+
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
