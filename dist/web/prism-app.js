@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "b9cab32d9da384d1e4af036edc622cbdec9cf288";
+  window.PRISM_RP_BUILD_SHA = "db40b1317d6f4b6623028ad7bb6771bbad759449";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -217,6 +217,36 @@
             req.onerror = () => { failure = failure || req.error; };
           }
         } catch (e) { failure = e; try { t.abort(); } catch (_) { /* уже прервана */ } }
+      });
+    },
+    // Atomically mix deletions and writes across stores. All IndexedDB requests
+    // are enqueued synchronously; no await occurs inside the active transaction.
+    async mutateBatch(batch) {
+      const puts = (batch && batch.puts || []).filter(x => x && x[0] && x[1]);
+      const deletes = (batch && batch.deletes || []).filter(x => x && x[0] && x[1] != null);
+      const names = [...new Set(puts.concat(deletes).map(x => x[0]))];
+      if (!names.length) return;
+      const db = await open();
+      return new Promise((ok, fail) => {
+        let t, failure = null;
+        try { t = db.transaction(names, "readwrite"); } catch (e) { fail(e); return; }
+        t.oncomplete = () => ok();
+        t.onerror = () => { if (!failure) failure = t.error; };
+        t.onabort = () => fail(failure || t.error || new Error("Пакетная операция отменена"));
+        try {
+          for (const [store, id] of deletes) {
+            const req = t.objectStore(store).delete(id);
+            req.onerror = () => { failure = failure || req.error; };
+          }
+          for (const [store, obj] of puts) {
+            if (store !== "settings") obj.updatedAt = Date.now();
+            const req = t.objectStore(store).put(obj);
+            req.onerror = () => { failure = failure || req.error; };
+          }
+        } catch (e) {
+          failure = e;
+          try { t.abort(); } catch (_) { /* already aborted */ }
+        }
       });
     },
     del: (store, id) => tx(store, "readwrite", (s) => wrap(s.delete(id))),
@@ -8214,6 +8244,18 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const esc = (s) => PRP.util.escapeHtml(s);
+  // Image sources from cards and backups are untrusted. Only allow safe URLs,
+  // and escape attributes before interpolating them into rendered HTML.
+  function safeImageSrc(value) {
+    const src = typeof value === "string" ? value.trim() : "";
+    if (!src || /[\u0000-\u001f\u007f]/.test(src)) return "";
+    if (/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(src)) return esc(src);
+    try {
+      const url = new URL(src, typeof document !== "undefined" ? document.baseURI : "https://example.invalid/");
+      if (/^(https?:|blob:)$/.test(url.protocol) && !/^\s*(?:javascript|data):/i.test(src)) return esc(src);
+    } catch (_) { /* invalid URL */ }
+    return "";
+  }
 
   // Иконки: тонкий штрих 1.6, currentColor.
   const P = {
@@ -8281,12 +8323,12 @@
   function avatar(card, size, extra) {
     const name = (card && card.name) || "?";
     const cls = `av av-${size || 40} ${extra || ""}`;
-    if (card && card.avatar) return `<div class="${cls}"><img src="${card.avatar}" alt=""></div>`;
+    if (card && safeImageSrc(card.avatar)) return `<div class="${cls}"><img src="${safeImageSrc(card.avatar)}" alt=""></div>`;
     if (card && card.me) return `<div class="${cls} av-me">${initial(name)}</div>`;
     return `<div class="${cls}" style="${artBg(name)}">${initial(name)}</div>`;
   }
   function art(card) {
-    if (card.avatar) return `<div class="tile-art"><img src="${card.avatar}" alt="" loading="lazy"></div>`;
+    if (safeImageSrc(card.avatar)) return `<div class="tile-art"><img src="${safeImageSrc(card.avatar)}" alt="" loading="lazy"></div>`;
     return `<div class="tile-art" style="${artBg(card.name)}">${initial(card.name)}</div>`;
   }
 
@@ -8376,7 +8418,7 @@
     return many;
   }
 
-  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
+  PRP.render = { esc, safeImageSrc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/ui/files.js */
@@ -8509,7 +8551,7 @@
           const exact = date && Number.isFinite(date.getTime())
             ? date.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
           const time = exact ? R.ago(when) + " · " + date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "Время неизвестно";
-          return `<div class="rail-chat ${m.chat && m.chat.id === c.id && m.view === "chat" ? "active" : ""}" data-act="open-chat" data-id="${c.id}" role="button" tabindex="0">
+          return `<div class="rail-chat ${m.chat && m.chat.id === c.id && m.view === "chat" ? "active" : ""}" data-act="open-chat" data-id="${esc(c.id)}" role="button" tabindex="0">
             ${R.avatar(cd, 34)}
             <div style="min-width:0"><div class="t1" title="${esc(cd.name)}">${esc(cd.name)}</div><div class="t2" title="${esc(exact)}">${esc(time)}</div></div>
             <span class="kind" title="${c.mode === "messenger" ? "Переписка" : "Сцена"}" aria-label="${c.mode === "messenger" ? "Переписка" : "Сцена"}">${icon(c.mode === "messenger" ? "bubble" : "book")}</span>
@@ -8563,13 +8605,13 @@
           const last = m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
           const at = last && last.updatedAt ? new Date(last.updatedAt) : null;
           const dateLabel = at && Number.isFinite(at.getTime()) ? at.toLocaleString("ru-RU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-          return `<div class="tile" data-act="open-card" data-id="${cd.id}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
+          return `<div class="tile" data-act="open-card" data-id="${esc(cd.id)}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
             ${R.art(cd)}<div class="tile-shade"></div>
             <div class="tile-actions" role="group" aria-label="Новый чат с ${esc(cd.name)}">
-              <button class="tile-action" data-act="new-card-chat" data-id="${cd.id}" data-mode="rp" title="Новая сцена">Сцена</button>
-              <button class="tile-action" data-act="new-card-chat" data-id="${cd.id}" data-mode="messenger" title="Новая переписка">Переписка</button>
+              <button class="tile-action" data-act="new-card-chat" data-id="${esc(cd.id)}" data-mode="rp" title="Новая сцена">Сцена</button>
+              <button class="tile-action" data-act="new-card-chat" data-id="${esc(cd.id)}" data-mode="messenger" title="Новая переписка">Переписка</button>
             </div>
-            <button class="tile-edit" data-act="edit-card" data-id="${cd.id}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
+            <button class="tile-edit" data-act="edit-card" data-id="${esc(cd.id)}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
             <div class="tile-body"><div class="tile-name">${esc(cd.name)}</div><div class="tile-tags">${esc((cd.tags || []).slice(0, 4).join(", ") || cd.creator || " ")}</div>
               <div class="tile-last"><span>Последнее взаимодействие</span>
                 ${dateLabel ? `<time title="${esc(dateLabel)}" datetime="${at.toISOString()}">${esc(R.ago(last.updatedAt))} · ${esc(at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }))}</time>` : '<span class="tile-last-none">Ещё не было</span>'}
@@ -8667,22 +8709,22 @@
     if (msg.role !== "assistant") return "";
     const n = msg.swipes.length, i = (msg.swipeIdx || 0) + 1;
     if (n < 2 && !isLast) return "";
-    return `<span class="swipes"><button class="tool" data-act="swipe" data-dir="-1" data-id="${msg.id}" title="Предыдущий вариант" ${i === 1 ? "disabled" : ""}>${icon("left")}</button>${i}/${n}<button class="tool" data-act="swipe" data-dir="1" data-id="${msg.id}" title="${isLast && i === n ? "Новый вариант" : "Следующий вариант"}">${icon("right")}</button></span>`;
+    return `<span class="swipes"><button class="tool" data-act="swipe" data-dir="-1" data-id="${esc(msg.id)}" title="Предыдущий вариант" ${i === 1 ? "disabled" : ""}>${icon("left")}</button>${i}/${n}<button class="tool" data-act="swipe" data-dir="1" data-id="${esc(msg.id)}" title="${isLast && i === n ? "Новый вариант" : "Следующий вариант"}">${icon("right")}</button></span>`;
   }
 
   function tools(msg, isLast) {
     return `<div class="tools">${swipeNav(msg, isLast)}
-      ${msg.role === "assistant" && isLast ? `<button class="tool" data-act="regen" data-id="${msg.id}">${icon("regen")}Другой вариант</button>
-        <button class="tool" data-act="continue" data-id="${msg.id}">${icon("cont")}Продолжить</button>` : ""}
-      ${msg.role === "assistant" ? `<button class="tool" data-act="draw" data-id="${msg.id}" title="Нарисовать этот момент">${icon("brush")}Нарисовать</button>` : ""}
-      <button class="tool" data-act="edit" data-id="${msg.id}">${icon("edit")}Править</button>
-      <button class="tool" data-act="delete" data-id="${msg.id}" title="Удалить с этого места">${icon("trash")}</button></div>`;
+      ${msg.role === "assistant" && isLast ? `<button class="tool" data-act="regen" data-id="${esc(msg.id)}">${icon("regen")}Другой вариант</button>
+        <button class="tool" data-act="continue" data-id="${esc(msg.id)}">${icon("cont")}Продолжить</button>` : ""}
+      ${msg.role === "assistant" ? `<button class="tool" data-act="draw" data-id="${esc(msg.id)}" title="Нарисовать этот момент">${icon("brush")}Нарисовать</button>` : ""}
+      <button class="tool" data-act="edit" data-id="${esc(msg.id)}">${icon("edit")}Править</button>
+      <button class="tool" data-act="delete" data-id="${esc(msg.id)}" title="Удалить с этого места">${icon("trash")}</button></div>`;
   }
 
   function editor(msg, sw) {
     const raw = sw.text + (msg.role === "assistant" && sw.sceneOps && sw.sceneOps.length ? "\n\n[scene: " + sw.sceneOps.map((o) => o.raw).join("; ") + "]" : "");
     return `<textarea class="editor" id="edit-${msg.id}">${esc(raw)}</textarea>
-      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${msg.id}">Сохранить</button>
+      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${esc(msg.id)}">Сохранить</button>
       <button class="btn btn-sm btn-ghost" data-act="cancel-edit">Отмена</button></div>`;
   }
 
@@ -8705,7 +8747,7 @@
     const idx = msg.swipes.indexOf(sw);
     return `<div class="shots ${bubble ? "in-bubble" : ""}">${list.map((im) => {
       const ar = im.w && im.h ? `${im.w}/${im.h}` : (im.ratio || "1:1").replace(":", "/");
-      const base = `data-mid="${msg.id}" data-sw="${idx}" data-img="${im.id}"`;
+      const base = `data-mid="${esc(msg.id)}" data-sw="${idx}" data-img="${esc(im.id)}"`;
       if (im.status === "pending") {
         return `<figure class="shot wait" style="aspect-ratio:${ar}"><div class="shot-wait"><span>${esc(im.stage || "Рисую…")}</span></div>
           <figcaption class="shot-cap">${esc(im.draw || "")}</figcaption></figure>`;
@@ -8716,7 +8758,7 @@
       }
       const url = m.imgUrls && m.imgUrls[im.id];
       return `<figure class="shot" style="aspect-ratio:${ar}">
-        ${url ? `<img src="${url}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
+        ${R.safeImageSrc(url) ? `<img src="${R.safeImageSrc(url)}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
         <div class="shot-tools">
           <button class="icon-btn" data-act="img-regen" ${base} title="Нарисовать заново, другой seed">${icon("regen")}</button>
           <button class="icon-btn" data-act="img-pin" ${base} title="Закрепить seed ${im.seed != null ? im.seed : ""} за персонажем">${icon("pin")}</button>
@@ -8772,7 +8814,7 @@
           ${!live ? deltas(sw) : ""}
           ${live ? "" : tools(msg, isLast)}`;
       }
-      return `<article class="turn ${msg.role} ${isLast ? "last" : ""}" data-mid="${msg.id}">${R.avatar(who, 40)}<div style="min-width:0">
+      return `<article class="turn ${esc(msg.role)} ${isLast ? "last" : ""}" data-mid="${esc(msg.id)}">${R.avatar(who, 40)}<div style="min-width:0">
         <div class="turn-head"><span class="turn-name">${esc(who.name)}</span><span class="turn-time">${R.time(sw.createdAt || msg.createdAt)}</span></div>${body}</div></article>`;
     }).join("");
   }
@@ -8803,7 +8845,7 @@
       }
       const parts = R.bubbles(sw.text);
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
-      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${sw.imageDataUrl ? `<div class="bub"><img src="${esc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
+      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${esc(msg.id)}">${R.safeImageSrc(sw.imageDataUrl) ? `<div class="bub"><img src="${R.safeImageSrc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
         <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
@@ -8850,11 +8892,11 @@
     const act = m.provider;
     const edit = act && act.kind === "openai" ? m.settings.providers.find((x) => x.id === act.id) : null;
     return `<div class="pop-title">Модель</div>
-      ${m.providers.map((p) => `<button class="pop-item ${act && act.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${p.id}">${icon(p.kind === "perchance" ? "star" : "cpu")}<span><span>${esc(p.name)}</span><small>${esc(p.kind === "perchance" ? "бесплатно, без ключа" : (p.model || "модель не выбрана"))}</small></span></button>`).join("")}
+      ${m.providers.map((p) => `<button class="pop-item ${act && act.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${esc(p.id)}">${icon(p.kind === "perchance" ? "star" : "cpu")}<span><span>${esc(p.name)}</span><small>${esc(p.kind === "perchance" ? "бесплатно, без ключа" : (p.model || "модель не выбрана"))}</small></span></button>`).join("")}
       ${edit && edit.models && edit.models.length ? `<div class="pop-sep"></div><div class="pop-title">Модели ${esc(edit.name)}</div>
         ${edit.models.slice(0, 30).map((md) => `<button class="pop-item ${md === edit.model ? "on" : ""}" data-act="pick-model" data-model="${esc(md)}">${esc(md)}</button>`).join("")}` : ""}
       ${act && act.kind !== "perchance" ? `<div class="pop-sep"></div><div class="pop-title">Стиль генерации</div>
-        ${SAMPLER_PRESETS.map((s) => `<button class="pop-item ${m.settings.samplerPreset === s.id ? "on" : ""}" data-act="pick-preset" data-id="${s.id}"><span><span>${s.name}</span><small>${s.hint}</small></span></button>`).join("")}` : ""}
+        ${SAMPLER_PRESETS.map((s) => `<button class="pop-item ${m.settings.samplerPreset === s.id ? "on" : ""}" data-act="pick-preset" data-id="${esc(s.id)}"><span><span>${s.name}</span><small>${s.hint}</small></span></button>`).join("")}` : ""}
       <div class="pop-sep"></div>
       <button class="pop-item" data-act="settings" data-section="models">${icon("settings")}Все настройки моделей</button>`;
   }
@@ -9352,9 +9394,9 @@
     if (section === "models") {
       const editing = m.settings.providers.find((p) => p.id === m.editProviderId);
       body = `<h3>Модели</h3><p class="lead">Какая модель пишет за персонажей. Можно держать несколько и переключать прямо в чате.</p>
-        ${m.providers.map((p) => `<div class="prov ${m.provider && m.provider.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${p.id}" role="radio" tabindex="0" aria-checked="${m.provider && m.provider.id === p.id}">
+        ${m.providers.map((p) => `<div class="prov ${m.provider && m.provider.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${esc(p.id)}" role="radio" tabindex="0" aria-checked="${m.provider && m.provider.id === p.id}">
           <span class="radio"></span><div style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="ds">${esc(p.kind === "perchance" ? "Бесплатная модель Perchance, ключ не нужен" : `${p.baseUrl || "адрес не задан"}${p.model ? " · " + p.model : ""}`)}</div></div>
-          ${p.kind === "openai" ? `<button class="btn btn-sm btn-ghost" data-act="prov-edit" data-id="${p.id}">Изменить</button>` : ""}</div>`).join("")}
+          ${p.kind === "openai" ? `<button class="btn btn-sm btn-ghost" data-act="prov-edit" data-id="${esc(p.id)}">Изменить</button>` : ""}</div>`).join("")}
         ${!m.providers.some((p) => p.kind === "perchance") ? `<p class="hint">Бесплатная модель Perchance появится здесь, когда приложение запущено как генератор на Perchance.</p>` : ""}
         <div class="block-title" style="margin-top:20px">Модель обработки (Processing Provider)</div>
         <p class="hint">StateTracker и подготовка промптов изображений. Отыгрыш персонажа остаётся на выбранной выше модели. По умолчанию используется та же модель — как и раньше. Разделение само по себе не делает запросы параллельными.</p>
@@ -9369,7 +9411,7 @@
       const sm = s.sampler;
       const num = (k, label, step, help) => `<div class="field"><label>${label}</label><input type="number" step="${step}" data-sampler="${k}" value="${sm[k] != null ? sm[k] : ""}">${help ? `<span class="help">${help}</span>` : ""}</div>`;
       body = `<h3>Генерация</h3><p class="lead">Стиль, длина ответа и объём памяти. Для бесплатной модели Perchance параметры сэмплирования не применяются.</p>
-        <div class="presets">${SAMPLER_PRESETS.map((p) => `<button class="preset ${s.samplerPreset === p.id ? "on" : ""}" data-act="pick-preset" data-id="${p.id}"><b>${p.name}</b><small>${p.hint}</small></button>`).join("")}
+        <div class="presets">${SAMPLER_PRESETS.map((p) => `<button class="preset ${s.samplerPreset === p.id ? "on" : ""}" data-act="pick-preset" data-id="${esc(p.id)}"><b>${p.name}</b><small>${p.hint}</small></button>`).join("")}
           <button class="preset ${s.samplerPreset === "custom" ? "on" : ""}" data-act="pick-preset" data-id="custom"><b>Свой</b><small>значения ниже</small></button></div>
         <div class="row">${num("temperature", "Температура", "0.05", "выше — смелее")}${num("top_p", "Top P", "0.01")}${num("min_p", "Min P", "0.01")}</div>
         <div class="row">${num("top_k", "Top K", "1", "0 — выключено")}${num("repetition_penalty", "Штраф за повторы", "0.01")}${num("max_tokens", "Длина ответа", "50", "в токенах")}</div>
@@ -9505,7 +9547,7 @@
     const state = m.modal || {};
     let body = "";
     if (section === "main") {
-      body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
+      body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${R.safeImageSrc(d.avatar) ? "" : R.artBg(d.name)}">${R.safeImageSrc(d.avatar) ? `<img src="${R.safeImageSrc(d.avatar)}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div>
           <div class="card-identity-name">${f("cf-name", "Имя", "name", d.name)}</div></div>
         <div class="card-fields">
@@ -9768,7 +9810,7 @@
       <div class="world-layout">
         <div class="world-list">${packs.length ? packs.map((p) => {
           const u = users(p.id);
-          return `<button class="world-item ${d && d.id === p.id ? "on" : ""}" data-act="world-open" data-id="${p.id}">
+          return `<button class="world-item ${d && d.id === p.id ? "on" : ""}" data-act="world-open" data-id="${esc(p.id)}">
             <b>${esc(p.name || "Без названия")}</b><small>${p.facts.length} ${R.plural(p.facts.length, "факт", "факта", "фактов")}${u.length ? ` · персонажей: ${u.length}` : ""}</small></button>`;
         }).join("") : `<p class="empty-note">Паков мира пока нет.</p>`}</div>
         <div class="world-editor">${d ? packEditor(d, users(d.id)) : `<p class="hint">Выберите мир слева или создайте новый. Факт мира — утверждение о мире («Университет находится в Каракуре»), а не указание модели и не черта характера.</p>`}</div>
@@ -9809,7 +9851,7 @@
     const lens = m.modal && m.modal.lens;
     const pv = m.lensPreview;
     const sel = `<div class="field"><label for="lens-pack">Общий пак мира</label><select id="lens-pack" data-lens-pack>
-      <option value="">— без мира —</option>${packs.map((p) => `<option value="${p.id}" ${lens && lens.packId === p.id ? "selected" : ""}>${esc(p.name || "Без названия")}</option>`).join("")}</select>
+      <option value="">— без мира —</option>${packs.map((p) => `<option value="${esc(p.id)}" ${lens && lens.packId === p.id ? "selected" : ""}>${esc(p.name || "Без названия")}</option>`).join("")}</select>
       <span class="help">Пак общий для многих персонажей; здесь хранится только то, что у ${esc(d.name || "персонажа")} иначе. Сам пак отсюда не меняется.${packs.length ? "" : " Паков пока нет — создайте их в разделе «Миры»."}</span></div>`;
     if (!lens || !lens.packId) return `<p class="lead">Мир персонажа</p>${sel}`;
     if (!pv || !pv.pack) return `<p class="lead">Мир персонажа</p>${sel}<p class="err">${icon("alert")}<span>Пак мира не найден.</span></p>`;
@@ -10031,14 +10073,14 @@
       const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
       const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
         : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
-      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${msg.id}">
+      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${esc(msg.id)}">
         ${body}
         ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
         ${live ? "" : `<div class="tools">
-          <button class="tool" data-act="assist-copy" data-id="${msg.id}">${icon("copy")}Скопировать</button>
-          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${msg.id}">${icon("regen")}Другой ответ</button>` : ""}
-          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${msg.id}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
-          <button class="tool" data-act="assist-msg-del" data-id="${msg.id}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
+          <button class="tool" data-act="assist-copy" data-id="${esc(msg.id)}">${icon("copy")}Скопировать</button>
+          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${esc(msg.id)}">${icon("regen")}Другой ответ</button>` : ""}
+          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${esc(msg.id)}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
+          <button class="tool" data-act="assist-msg-del" data-id="${esc(msg.id)}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
       </article>`;
     }).join("");
     const p = m.provider;
@@ -10057,10 +10099,10 @@
     const chats = cd ? m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 12) : [];
     return `<div class="pop-title">Персонаж для разговора</div>
       <button class="pop-item ${!cd ? "on" : ""}" data-act="assist-pick-card" data-id="">${icon("x")}<span>Без персонажа</span></button>
-      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${c.id}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
+      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${esc(c.id)}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
       ${cd ? `<div class="pop-sep"></div><div class="pop-title">Показать ассистенту чат</div>
         <button class="pop-item ${!m.assistChat ? "on" : ""}" data-act="assist-pick-chat" data-id="">${icon("x")}<span>Не показывать</span></button>
-        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${c.id}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
+        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${esc(c.id)}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
   }
 
   function assistListPop(m) {
@@ -10068,7 +10110,7 @@
     return `<div class="pop-title">Разговоры с ассистентом</div>
       <button class="pop-item" data-act="assist-new">${icon("plus")}<span>Новый разговор</span></button>
       ${list.length ? `<div class="pop-sep"></div>` : ""}
-      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${a.id}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
+      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${esc(a.id)}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
   }
 
   Object.assign((PRP.views = PRP.views || {}), { assist, assistCtxPop, assistListPop });
@@ -10170,20 +10212,23 @@
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
       const c = { id: U.uid("chat"), cardId: cd.id, mode, title: mode === "messenger" ? "Переписка" : "Сцена", sceneInit: "", leafId: null, createdAt: Date.now() };
-      S.chatId = c.id; S.cardId = cd.id; S.messages = [];
+      let first = null;
       if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
         const vars = { char: cd.name, user: ctx.persona().name };
-        const m = newMsg("assistant", null, "");
-        m.opening = "authored";
-        m.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
+        first = newMsg("assistant", null, "");
+        first.chatId = c.id; // newMsg normally uses the currently selected chat
+        first.opening = "authored";
+        first.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
           const parsed = SC.parse(U.macros(g, vars));
           return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };
         });
-        await putMsg(m);
-        c.leafId = m.id;
-        c.preview = m.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
+        c.leafId = first.id;
+        c.preview = first.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
       }
-      await putChat(c);
+      // Failure cannot leave an orphan opening or a chat without its root.
+      await DB.putAll([["chats", c]].concat(first ? [["messages", first]] : []));
+      S.chats.push(c);
+      S.chatId = c.id; S.cardId = cd.id; S.messages = first ? [first] : [];
       return c.id;
     }
     function latestForCard(cardId) {
@@ -10191,40 +10236,61 @@
     }
     // Удалить чат целиком: сообщения, картинки, опыт, наложение мира и среду переписки этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
-      // Retire synchronously, before the first IndexedDB await. In-flight
-      // Memory/Reflection writes then compensate instead of resurrecting data.
+      if (S.gen) throw new Error("Нельзя удалять чат во время незавершённого хода.");
+      // Retire before awaiting any database operation: late Memory jobs may no
+      // longer commit evidence to a chat that is being removed.
       if (ctx.svc.memory) ctx.svc.memory.retireChat(c.id);
+      try {
       const ms = await DB.byIndex("messages", "chatId", c.id);
-      await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
-      await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
-      await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
-      await DB.delMany("memorySources", (await DB.byIndex("memorySources", "chatId", c.id)).map((x) => x.id));
-      await DB.delMany("messages", ms.map((m) => m.id));
-      await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
-      await DB.del("worldOverlays", c.id);
-      if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
-      await DB.del("messengerEnvironments", c.id);
-      if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
-      await DB.del("chats", c.id);
+      const ex = (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id);
+      const memories = await DB.byIndex("memories", "chatId", c.id);
+      const reflections = await DB.byIndex("reflections", "chatId", c.id);
+      const sources = await DB.byIndex("memorySources", "chatId", c.id);
+      const images = await DB.byIndex("images", "chatId", c.id);
+      const deletes = [
+        ...ms.map(x => ["messages", x.id]), ...ex.map(x => ["experience", x.id]),
+        ...memories.map(x => ["memories", x.id]), ...reflections.map(x => ["reflections", x.id]),
+        ...sources.map(x => ["memorySources", x.id]), ...images.map(x => ["images", x.id]),
+        ["worldOverlays", c.id], ["messengerEnvironments", c.id], ["chats", c.id]
+      ];
+      await DB.mutateBatch({ deletes });
+      } catch (e) {
+        if (ctx.svc.memory && ctx.svc.memory.restoreChat) ctx.svc.memory.restoreChat(c.id);
+        throw e;
+      }
       S.chats = S.chats.filter((x) => x.id !== c.id);
-      S.chatId = null; S.messages = [];
+      if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
+      if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
+      if (S.chatId === c.id) { S.chatId = null; S.messages = []; }
     }
 
     /* ── Правки ветки ──────────────────────────────────────────────────── */
-    // Удалить сообщение и всех его потомков; активной становится последняя оставшаяся ветка.
+    // Delete the selected node and its descendants as one transaction with
+    // the new chat leaf and preview. On abort S and IndexedDB remain unchanged.
     async function deleteFrom(msgId) {
+      if (S.gen) throw new Error("Нельзя удалять ветку во время незавершённого хода.");
       const m = S.messages.find((x) => x.id === msgId);
       if (!m) return false;
       const ids = [msgId].concat(TR.descendants(S.messages, msgId));
+      const removed = new Set(ids);
       const imgIds = [];
-      S.messages.filter((x) => ids.includes(x.id)).forEach((x) => x.swipes.forEach((sw) => (sw.images || []).forEach((im) => imgIds.push(im.id))));
-      await DB.delMany("images", imgIds);
-      await DB.delMany("messages", ids);
-      S.messages = S.messages.filter((x) => !ids.includes(x.id));
+      S.messages.filter(x => removed.has(x.id)).forEach(x =>
+        x.swipes.forEach(sw => (sw.images || []).forEach(im => imgIds.push(im.id))));
+      const remaining = S.messages.filter(x => !removed.has(x.id));
       const c = ctx.chat();
-      const lastRoot = TR.children(S.messages, null).slice(-1)[0];
-      c.leafId = m.parentId ? TR.latestLeaf(S.messages, m.parentId) : lastRoot ? TR.latestLeaf(S.messages, lastRoot.id) : null;
-      await touch();
+      const next = JSON.parse(JSON.stringify(c));
+      const lastRoot = TR.children(remaining, null).slice(-1)[0];
+      next.leafId = m.parentId ? TR.latestLeaf(remaining, m.parentId) :
+        lastRoot ? TR.latestLeaf(remaining, lastRoot.id) : null;
+      const leaf = TR.path(TR.index(remaining), next.leafId).slice(-1)[0];
+      const text = leaf ? TR.activeSwipe(leaf).text : "";
+      next.preview = (leaf && leaf.role === "user" ? "Вы: " : "") +
+        String(text || "").replace(/\s+/g, " ").slice(0, 90);
+      await DB.mutateBatch({ deletes: [
+        ...imgIds.map(id => ["images", id]), ...ids.map(id => ["messages", id])
+      ], puts: [["chats", next]] });
+      S.messages = remaining;
+      Object.assign(c, next);
       return true;
     }
     async function saveEdit(msgId, text) {
@@ -10267,10 +10333,7 @@
       const c = ctx.chat();
       const m = newMsg("user", c.leafId, text);
       if (swipeExtra) Object.assign(m.swipes[0], swipeExtra);
-      await putMsg(m);
-      c.leafId = m.id;
-      await touch();
-      return m;
+      return commitMessage(m, m.id);
     }
 
     /* ── Сцена из форм ─────────────────────────────────────────────────── */
@@ -10456,6 +10519,9 @@
       // An old request must not block a subsequently restored chat with the same ID.
       pendingByChat.delete(chatId);
     }
+    // A failed deletion leaves the chat intact. Restore eligibility for NEW
+    // cycles; in-flight cycles remain invalidated by the bumped revision.
+    function restoreChat(chatId) { retiredChats.delete(chatId); }
     async function load(chatId) {
       const [memories, reflections] = await Promise.all([
         DB.byIndex("memories", "chatId", chatId),
@@ -10751,7 +10817,7 @@
       task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
       return task;
     }
-    return { load, visibleMemories, experience, timeline, observe, retireChat };
+    return { load, visibleMemories, experience, timeline, observe, retireChat, restoreChat };
   }
   PRP.memoryService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
@@ -12019,9 +12085,16 @@
 
       // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
       // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
-      let path = full;
-      if (mode === "regen") path = full.slice(0, full.findIndex((m) => m.id === msgId));
       const target0 = msgId ? S.messages.find((m) => m.id === msgId) : null;
+      // Never build a replacement for a sibling/off-path message: findIndex(-1)
+      // would otherwise produce an unrelated history ending one turn early.
+      if ((mode === "regen" || mode === "continue") &&
+          (!target0 || target0.role !== "assistant" || !full.includes(target0))) {
+        ui.toast("Сообщение не принадлежит активной ветке персонажа. Действие отменено.", true);
+        return;
+      }
+      let path = full;
+      if (mode === "regen") path = full.slice(0, full.indexOf(target0));
       // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
       const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
@@ -12031,24 +12104,32 @@
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
-      let target, prefix = "";
-      if (mode === "regen") {
-        target = S.messages.find((m) => m.id === msgId);
-        target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
-        target.swipeIdx = target.swipes.length - 1;
-      } else if (mode === "continue") {
-        target = S.messages.find((m) => m.id === msgId);
-        prefix = TR.activeSwipe(target).text;
-      } else {
-        target = chat().newMsg("assistant", c.leafId, "");
-        c.leafId = target.id;
-        await chat().putChat(c);
-      }
-      await chat().putMsg(target);
-
-      const sw = TR.activeSwipe(target);
+      // Reserve the lock BEFORE the first asynchronous IndexedDB write.
+      // Without this, another click may switch chats while a pending root is
+      // being committed but S.gen still reports idle.
       const ctrl = new AbortController();
-      S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
+      const lock = S.gen = { ctrl, msgId: msgId || "pending", raw: "", reasoning: "", prefix: "" };
+      let target, prefix = "";
+      try {
+        if (mode === "regen") {
+          target = S.messages.find((m) => m.id === msgId);
+          target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
+          target.swipeIdx = target.swipes.length - 1;
+        } else if (mode === "continue") {
+          target = S.messages.find((m) => m.id === msgId);
+          prefix = TR.activeSwipe(target).text;
+        } else {
+          const draft = chat().newMsg("assistant", c.leafId, "");
+          target = await chat().commitMessage(draft, draft.id);
+        }
+        if (mode !== "new") await chat().putMsg(target);
+      } catch (e) {
+        if (S.gen === lock) S.gen = null;
+        throw e;
+      }
+      lock.msgId = target.id;
+      lock.prefix = prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "";
+      const sw = TR.activeSwipe(target);
       ui.renderFeed();
       if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
       ui.scrollBottom();
@@ -12102,9 +12183,14 @@
         const snap = ms.snapshot(mode === "new" ? full : path, msNow);
         if (snap) sw.messengerAt = snap;
       }
-      S.gen = null;
-      await chat().putMsg(target);
-      await chat().touch();
+      // Do not release the generation lock until the final message and preview
+      // have reached IndexedDB. Otherwise a second operation can interleave.
+      try {
+        await chat().putMsg(target);
+        await chat().touch();
+      } finally {
+        S.gen = null;
+      }
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();
@@ -12172,7 +12258,6 @@
         if (e.name !== "AbortError") error = e.message || String(e);
       }
       const aborted = ctrl.signal.aborted;
-      S.gen = null;
       let th = null, parsed = null, dr = null;
       if (!aborted && !error) {
         th = OA.splitThink((res && res.text) || "");
@@ -12183,6 +12268,7 @@
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
       }
       if (aborted || error || S.chatId !== chatId) {
+        S.gen = null;
         if (error) ui.toast(`Не удалось начать сцену: ${error}. Можно попробовать ещё раз.`, true);
         prism().refresh();
         ui.renderFeed();
@@ -12194,9 +12280,8 @@
       m.opening = "generated";
       m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
-      await chat().putMsg(m);
-      c.leafId = m.id;
-      await chat().touch();
+      try { await chat().commitMessage(m, m.id); }
+      finally { S.gen = null; }
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();
@@ -12491,28 +12576,41 @@
 
     // Удалить персонажа вместе со всеми его чатами (с их сообщениями, картинками и наложением мира) и опытом.
     async function remove(cd) {
+      if (S.gen) throw new Error("Нельзя удалять персонажа во время незавершённого хода.");
       const ownedChats = S.chats.filter((x) => x.cardId === cd.id);
-      // A card delete retires *all* child chats before any async deletion.
-      if (ctx.svc.memory) ownedChats.forEach((c) => ctx.svc.memory.retireChat(c.id));
+      if (ctx.svc.memory) ownedChats.forEach(c => ctx.svc.memory.retireChat(c.id));
+      try {
+      const deletes = [["cards", cd.id]];
       for (const c of ownedChats) {
-        const ms = await DB.byIndex("messages", "chatId", c.id);
-        await DB.delMany("messages", ms.map((m) => m.id));
-        await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
-        await DB.del("worldOverlays", c.id); // наложение мира принадлежит чату и уходит вместе с ним
-        await DB.del("messengerEnvironments", c.id); // как и среда переписки
-        await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
-        await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
-        await DB.delMany("memorySources", (await DB.byIndex("memorySources", "chatId", c.id)).map((x) => x.id));
-        await DB.del("chats", c.id);
+        for (const [store, index, value] of [
+          ["messages", "chatId", c.id], ["images", "chatId", c.id],
+          ["memories", "chatId", c.id], ["reflections", "chatId", c.id],
+          ["memorySources", "chatId", c.id]
+        ]) {
+          const rows = await DB.byIndex(store, index, value);
+          rows.forEach(row => deletes.push([store, row.id]));
+        }
+        deletes.push(["chats", c.id], ["worldOverlays", c.id],
+          ["messengerEnvironments", c.id]);
       }
-      const xs = await DB.byIndex("experience", "owner", cd.id);
-      await DB.delMany("experience", xs.map((x) => x.id));
-      // Линза мира принадлежит персонажу и удаляется с ним; общий пак остаётся (world/service).
-      if (ctx.svc && ctx.svc.world) await ctx.svc.world.removeForCard(cd.id);
-      await DB.del("cards", cd.id);
-      S.cards = S.cards.filter((c) => c.id !== cd.id);
-      S.chats = S.chats.filter((c) => c.cardId !== cd.id);
-      if (S.cardId === cd.id) { S.cardId = null; S.chatId = null; S.messages = []; S.view = "home"; }
+      const experiences = await DB.byIndex("experience", "owner", cd.id);
+      experiences.forEach(x => deletes.push(["experience", x.id]));
+      const lenses = await DB.byIndex("worldLenses", "cardId", cd.id);
+      lenses.forEach(x => deletes.push(["worldLenses", x.id]));
+      // A failed request aborts the complete cascade, including the Card row.
+      await DB.mutateBatch({ deletes });
+      } catch (e) {
+        if (ctx.svc.memory && ctx.svc.memory.restoreChat)
+          ownedChats.forEach(c => ctx.svc.memory.restoreChat(c.id));
+        throw e;
+      }
+      S.worldLenses = (S.worldLenses || []).filter(l => l.cardId !== cd.id);
+      S.cards = S.cards.filter(c => c.id !== cd.id);
+      S.chats = S.chats.filter(c => c.cardId !== cd.id);
+      if (S.cardId === cd.id) {
+        S.cardId = null; S.chatId = null; S.messages = [];
+        S.worldOverlay = null; S.messengerEnv = null; S.view = "home";
+      }
     }
 
     function exportJson(d) {
@@ -13353,10 +13451,10 @@
       const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
       if (S.modal.kind === "image") {
         const im = S.modal.im, url = S.imgUrls[im.id];
-        rootEl.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${url}" alt="">
+        rootEl.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${R.safeImageSrc(url)}" alt="">
         <figcaption><span>${R.esc(im.draw || "")}</span><span class="lb-tools">
           <button class="btn btn-sm" data-act="img-modal-regen">${R.icon("regen")}Заново</button>
-          <button class="btn btn-sm" data-act="img-dl" data-mid="${S.modal.mid}" data-sw="${S.modal.sw}" data-img="${im.id}">${R.icon("download")}Скачать</button>
+          <button class="btn btn-sm" data-act="img-dl" data-mid="${R.esc(S.modal.mid)}" data-sw="${R.esc(S.modal.sw)}" data-img="${R.esc(im.id)}">${R.icon("download")}Скачать</button>
           <button class="icon-btn" data-act="modal-close" title="Закрыть">${R.icon("x")}</button></span></figcaption></figure></div>`;
         return;
       }
@@ -14676,11 +14774,20 @@
   }
 
   /* ── Навигация ───────────────────────────────────────────────────── */
-  async function openChat(chatId, quiet) {
+  // Services load into shared S. Serialize activations: a slower load of chat A
+  // must never finish after chat B and overwrite B's messages, memory or world.
+  let navigationQueue = Promise.resolve();
+  let navigationIntent = 0;
+  function enqueueNavigation(job) {
+    const ticket = ++navigationIntent;
+    const result = navigationQueue.then(() => job(ticket));
+    navigationQueue = result.catch(() => {});
+    return result;
+  }
+  async function activateChat(chatId, quiet, ticket) {
+    if (ticket !== navigationIntent) return;
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
-    // Timings describe one opened chat, not the whole app. Keep the array
-    // identity so the recorder and Debug view keep using the same log.
     PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
     S.chatId = chatId;
     S.memoryStatus = "";
@@ -14693,12 +14800,22 @@
     await svc.worldChat.load(chatId);
     await svc.messenger.load(chatId);
     await svc.images.loadForChat(chatId);
+    if (ticket !== navigationIntent || S.chatId !== chatId || S.view !== "chat") return;
     S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); }
     $("#rail").classList.remove("open");
     ui.syncScrim();
+  }
+  function openChat(chatId, quiet) {
+    // Generation currently commits through active S: preserve the original chat
+    // while a model response or queued send is still in flight.
+    if (S.gen || S.turn) {
+      ui.toast("Дождитесь окончания ответа или отмените текущую операцию перед переключением чата.", true);
+      return Promise.resolve();
+    }
+    return enqueueNavigation((ticket) => activateChat(chatId, quiet, ticket));
   }
   async function goHome() {
     // «Главная» is the selected dialogue, not a duplicate catalog.
@@ -14708,6 +14825,7 @@
       if (S.view === "chat" && S.chatId === activeId) return;
       return openChat(activeId);
     }
+    ++navigationIntent;
     S.view = "home";
     S.find = null;
     ui.rememberUi();
@@ -14715,6 +14833,7 @@
     ui.renderAll();
   }
   function goCharacters() {
+    ++navigationIntent;
     S.view = "characters";
     S.find = null;
     ui.rememberUi();
@@ -14723,11 +14842,17 @@
   }
   /* Новый чат. Режим выбирается здесь и потом не меняется. Для переписки — явная настройка времени (setup:
      { timeZone, timeMode, manualNow }); она проверяется до создания чата. */
-  async function newChat(mode, cardId, setup) {
+  function newChat(mode, cardId, setup) {
+    if (S.gen || S.turn) {
+      ui.toast("Завершите или отмените текущий ход перед созданием другого чата.", true);
+      return Promise.resolve(null);
+    }
+    return enqueueNavigation(async (ticket) => {
     if (mode === "messenger") {
       const err = svc.messenger.checkSetup(setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" });
       if (err) { ui.toast(err, true); return null; }
     }
+    if (ticket !== navigationIntent) return null;
     const id = await svc.chat.createChat(mode, cardId);
     if (id && mode === "messenger") {
       const chosenSetup = setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" };
@@ -14754,8 +14879,9 @@
     }
     // Another new-chat/navigation action may have replaced this request while
     // the initial RP model was thinking. Do not steal focus back to an old chat.
-    if (id && S.chatId === id) await openChat(id);
+    if (id && S.chatId === id && ticket === navigationIntent) await activateChat(id, false, ticket);
     return id;
+    });
   }
   async function openCard(cardId) {
     const latest = svc.chat.latestForCard(cardId);
@@ -14764,6 +14890,7 @@
   }
   function openAssist(id, base, quiet) {
     if (S.gen) { ui.toast("Дождитесь окончания ответа или остановите его.", true); return; }
+    ++navigationIntent;
     svc.assist.pick(id, base);
     S.view = "assist";
     S.find = null;
@@ -14774,6 +14901,7 @@
   }
   // Библиотека миров. keepDraft — оставить открытым текущий черновик пака (например, после импорта).
   function openWorld(keepDraft) {
+    ++navigationIntent;
     if (!keepDraft) S.worldDraft = null;
     S.view = "world";
     S.find = null;
