@@ -80,7 +80,7 @@
 
     // Удалить персонажа вместе со всеми его чатами (с их сообщениями, картинками и наложением мира) и опытом.
     async function remove(cd) {
-      if (S.gen || S.turn) throw new Error("Нельзя удалять персонажа во время незавершённого хода.");
+      if (S.gen) throw new Error("Нельзя удалять персонажа во время незавершённого хода.");
       const ownedChats = S.chats.filter((x) => x.cardId === cd.id);
       if (ctx.svc.memory) ownedChats.forEach(c => ctx.svc.memory.retireChat(c.id));
       const deletes = [["cards", cd.id]];
