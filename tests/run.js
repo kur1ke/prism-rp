@@ -8281,12 +8281,13 @@ async function unifiedTracker() {
       {metric:"imageFinalAuditMs",ms:3,chatId:"c1",outcome:"rejected"},
       {metric:"imageBackendMs",ms:99,chatId:"c1",outcome:"ok"},
       {metric:"imageTotalMs",ms:201,chatId:"c1",outcome:"done"},
+      {metric:"imageDeliveryMs",ms:501,chatId:"c1",outcome:"done"},
     ];
     const html = globalThis.PRP.views.debugModal({card:{name:"Test"},perfLog,
       perfSummary:globalThis.PRP.perfLog.summary(perfLog)}, {section:"timing"});
     for(const item of ["Инициализация одежды","Observer · вызов модели",
       "Уточнение невидимой одежды","Image Compiler","FinalAudit",
-      "Генерация изображения","Изображение · от подготовки","Не складывайте"])
+      "Генерация изображения","Изображение · от подготовки","Автофото","Не складывайте"])
       assert.ok(html.includes(item), item);
     assert.ok(html.includes("timeout") && html.includes("rejected"),
       "failure outcomes remain distinct from fast successes");
@@ -9191,6 +9192,12 @@ async function perfTurn() {
       sims[2].res(ok());
       assert.strictEqual((await p2).outcome, "sent");
       assert.ok(h.S.perf.some((x) => x.metric === "imagePrepareMs"));
+      for(const metric of ["observerModelMs","imageCompileMs","imageFinalAuditMs",
+        "imageBackendMs","imageTotalMs","imageDeliveryMs"])
+        assert.ok(h.S.perf.some(x => x.metric === metric), metric);
+      assert.ok(h.S.perf.find(x => x.metric === "imageDeliveryMs").ms >=
+        h.S.perf.find(x => x.metric === "imageTotalMs").ms,
+        "auto-photo delivery includes state wait and backend");
     });
     await ta("PERF-10: тайминги — только числа и id, без текста; есть все этапы хода", async () => {
       const h = await mk("rp");

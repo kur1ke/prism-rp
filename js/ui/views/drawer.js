@@ -244,6 +244,7 @@
     imageFinalAuditMs: "FinalAudit · проверка итогового промпта",
     imageBackendMs: "Генерация изображения · backend",
     imageTotalMs: "Изображение · от подготовки до сохранения",
+    imageDeliveryMs: "Автофото · от ответа до завершения (включая Observer)",
     imagePrepareMs: "Подготовка изображения · до backend",
     readyAfterReplyMs: "Ответ показан → можно писать",
     sendToRoleplayMs: "«Отправить» → запрос к модели",
@@ -252,7 +253,7 @@
   function timingTab(m) {
     const sum = m.perfSummary || [];
     const rows = (m.perfLog || []).slice(-30).reverse();
-    return '<p class="hint">Вложенные замеры пересекаются: перевод входит в компиляцию, компиляция — в подготовку, а подготовка — в общее время изображения. Не складывайте эти значения.</p>' +
+    return '<p class="hint">Вложенные замеры пересекаются: перевод входит в компиляцию, компиляция — в подготовку, подготовка — в общее время изображения. Доставка автофото также включает ожидание Observer. Не складывайте эти значения.</p>' +
       '<div class="block"><div class="block-title">Сводка <small>в памяти, последние ' + (m.perfLog || []).length + '</small></div>'
       + (sum.length ? '<dl class="kv">' + sum.map((x) => '<dt>' + esc(TIMING[x.metric] || x.metric) + ' <small>' + esc(x.metric) + '</small></dt><dd>' + x.last + ' мс · медиана ' + x.median + ' мс · ' + x.count + '×</dd>').join("") + '</dl>'
         : '<p class="empty-note">Замеров пока нет: отправьте сообщение.</p>') + '</div>'

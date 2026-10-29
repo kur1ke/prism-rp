@@ -46,6 +46,10 @@
        Возвращается Promise, который никогда не отклоняется. */
     function afterReply(msg, prov, draw) {
       const st = state();
+      // Entire automatic image delivery, including waiting for Observer.
+      const deliveryStarted = now();
+      const autoImage = !!draw && ST.imagesOn(S.settings, ctx.env.perchanceImages()) &&
+        !!S.settings.images.autoDraw;
       /* Источник картинки фиксируется в момент ответа: этот вариант (объект свайпа), его номер и текст.
          Директива [draw:] принадлежит ИМЕННО этому варианту: если за время разбора выбран другой свайп,
          вариант изменён, изменился путь до него или сообщение ушло с активной ветки — авто-картинка не рисуется. */
@@ -74,7 +78,14 @@
         if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: res && res.skipped === "stale-branch" ? "analysis-stale" : "source-changed" }); return null; }
         if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
         return images().draw(msg, sw, draw);
-      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, chatId: msg && msg.chatId, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
+      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, chatId: msg && msg.chatId, outcome: String(e && e.message || e).slice(0, 120) }); return null; })
+        .finally(() => {
+          if (!autoImage) return;
+          const entries = sw && Array.isArray(sw.images) ? sw.images : [];
+          const image = entries.slice().reverse().find(im => im && im.draw === draw.prompt);
+          perf("imageDeliveryMs", now() - deliveryStarted,
+            { msgId: msg.id, chatId: msg.chatId, outcome: image ? image.status : "skipped" });
+        });
     }
 
     /* PERF-01: операция, которой нужно полное состояние чата, ждёт незавершённых разборов этого чата —
