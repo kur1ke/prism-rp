@@ -125,9 +125,16 @@
 
       // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
       // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
-      let path = full;
-      if (mode === "regen") path = full.slice(0, full.findIndex((m) => m.id === msgId));
       const target0 = msgId ? S.messages.find((m) => m.id === msgId) : null;
+      // Never build a replacement for a sibling/off-path message: findIndex(-1)
+      // would otherwise produce an unrelated history ending one turn early.
+      if ((mode === "regen" || mode === "continue") &&
+          (!target0 || target0.role !== "assistant" || !full.includes(target0))) {
+        ui.toast("Сообщение не принадлежит активной ветке персонажа. Действие отменено.", true);
+        return;
+      }
+      let path = full;
+      if (mode === "regen") path = full.slice(0, full.indexOf(target0));
       // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
       const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
