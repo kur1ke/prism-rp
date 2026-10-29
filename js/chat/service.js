@@ -117,7 +117,7 @@
     }
     // Удалить чат целиком: сообщения, картинки, опыт, наложение мира и среду переписки этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
-      if (S.gen || S.turn) throw new Error("Нельзя удалять чат во время незавершённого хода.");
+      if (S.gen) throw new Error("Нельзя удалять чат во время незавершённого хода.");
       // Retire before awaiting any database operation: late Memory jobs may no
       // longer commit evidence to a chat that is being removed.
       if (ctx.svc.memory) ctx.svc.memory.retireChat(c.id);
@@ -144,7 +144,7 @@
     // Delete the selected node and its descendants as one transaction with
     // the new chat leaf and preview. On abort S and IndexedDB remain unchanged.
     async function deleteFrom(msgId) {
-      if (S.gen || S.turn) throw new Error("Нельзя удалять ветку во время незавершённого хода.");
+      if (S.gen) throw new Error("Нельзя удалять ветку во время незавершённого хода.");
       const m = S.messages.find((x) => x.id === msgId);
       if (!m) return false;
       const ids = [msgId].concat(TR.descendants(S.messages, msgId));
