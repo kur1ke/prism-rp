@@ -83,6 +83,11 @@
   function create(ctx) {
     const { S, DB, ui } = ctx;
     const chat = () => ctx.svc.chat;
+    const clock = () => typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const perf = (metric, started, origin, outcome) => {
+      if (typeof ctx.perf === "function") ctx.perf(metric, clock() - started,
+        { chatId: origin.chatId, msgId: origin.messageId, outcome });
+    };
 
     function textGen(instruction) { return LLM.simple(ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), instruction); }
 
@@ -108,7 +113,7 @@
     // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
     async function draw(msg, sw, d, reuse, opts) {
       const o = opts || {};
-      const prepT0 = Date.now(); // PERF-01: длительность подготовки промпта (только число)
+      const prepT0 = clock(); // PERF-03: covers completed and failed preparation
       const currentChat = ctx.chat();
       const origin = currentChat && imageOrigin(S.messages, msg, sw, currentChat.id);
       if (!origin) { ui.toast("Исходное сообщение или свайп недоступны для изображения.", true); return; }
@@ -116,7 +121,23 @@
       const pers = JSON.parse(JSON.stringify(ctx.persona()));
       // Snapshot the processing provider for the whole image operation; RP model remains independent.
       const provider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
-      const generateText = (instruction) => LLM.simple(provider, instruction);
+      const generateText = async (instruction) => {
+        const started = clock();
+        let outcome = "ok";
+        try { return await LLM.simple(provider, instruction); }
+        catch (e) { outcome = "error"; throw e; }
+        finally { perf("imageTranslateMs", started, origin, outcome); }
+      };
+      const measuredCompile = async (scene, options) => {
+        const started = clock();
+        let outcome = "error";
+        try {
+          const result = await ICP.compile(scene, options, generateText);
+          outcome = result.compiled ? result.cached ? "cached" : "compiled"
+            : result.error ? "error" : "bypass";
+          return result;
+        } finally { perf("imageCompileMs", started, origin, outcome); }
+      };
       if (!cfg.enabled) { ui.toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
       if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
@@ -206,6 +227,12 @@
       await DB.put("messages", msg);
       repaint();
       let finalPatch, imageData, translationFailure;
+      let preparationRecorded = false;
+      const finishPreparation = (outcome) => {
+        if (preparationRecorded) return;
+        preparationRecorded = true;
+        perf("imagePrepareMs", prepT0, origin, outcome);
+      };
       let shotOnlyGate = drawAuthored;
       try {
         const intent = !!entry.intentMode;
@@ -252,11 +279,11 @@
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: hybrid ? "hybrid" : cfg.format,
           qualityPinned: ST.qualityPinned(S.settings) });
-        const firstPass = intent ? await ICP.compile(shot,
+        const firstPass = intent ? await measuredCompile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
             qualityPinned: ST.qualityPinned(S.settings),
             wearState: visualPlan.wear, visualPlan, subjectScope: shotScope,
-            promptPlan, debug: !!S.settings.developerMode }, generateText) : null;
+            promptPlan, debug: !!S.settings.developerMode }) : null;
         if (intent && (!firstPass || !firstPass.compiled)) {
           // Surface the compiler's actual failure; the previous generic text
           // hid whether the model timed out, returned tags, JSON or bad wear.
@@ -302,11 +329,11 @@
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: cfg.format, qualityPinned: ST.qualityPinned(S.settings) });
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
-          await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate,
+          await measuredCompile(imageScene, { format: cfg.format, translate: cfg.translate,
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             frame: composed.subjects, stateContext,
             wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
-            promptPlan: finalPromptPlan, subjectScope }, generateText);
+            promptPlan: finalPromptPlan, subjectScope });
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.
@@ -333,13 +360,21 @@
         if (mirrorSingle && (IC.subjectCount(fin.prompt) > 1 ||
             /\b(?:another|second)\s+(?:person|girl|boy|woman|man)\b|\b(?:two|three)\s+(?:women|men|people|persons)\b/i.test(fin.prompt)))
           throw new Error("Зеркальное фото описывает одного человека, но итоговый prompt добавил второго.");
-        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
+        const auditStarted = clock();
+        let finalAudit;
+        try {
+          finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
+        } finally {
+          perf("imageFinalAuditMs", auditStarted, origin,
+            finalAudit && finalAudit.issues && finalAudit.issues.length ? "rejected"
+              : finalAudit ? "accepted" : "error");
+        }
         if (finalAudit.issues.length)
           throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
-        if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
+        finishPreparation("ready");
         // A VisualPlan derived from canonical wear is invalid if the source's
         // selected-path garment events/corrections change while compiling.
         // Shot-only equality is safe ONLY for authored images whose rendered
@@ -350,7 +385,12 @@
         if (!(await sourceStillCurrent(DB, origin, shotOnlyGate)) ||
             !(await imageOriginStillCurrent(DB, origin, shotOnlyGate)))
           throw new Error("Исходная ветка или сообщение изменились во время подготовки изображения. Повторите рисование.");
-        const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
+        const backendStarted = clock();
+        let res, backendOutcome = "error";
+        try {
+          res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
+          backendOutcome = "ok";
+        } finally { perf("imageBackendMs", backendStarted, origin, backendOutcome); }
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
@@ -370,6 +410,7 @@
                 negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
+        finishPreparation("error");
         finalPatch = { status: "error", error: e.message || String(e),
           ...(translationFailure ? { translationFailure } : {}) };
       }
@@ -415,6 +456,7 @@
           }
         }
       } finally {
+        perf("imageTotalMs", prepT0, origin, finalPatch && finalPatch.status || "error");
         S.drawing.delete(entry.id);
         repaint();
       }

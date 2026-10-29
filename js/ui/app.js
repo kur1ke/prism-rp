@@ -36,6 +36,7 @@
   /* ── Контекст зависимостей ───────────────────────────────────────────
      Передаётся явно в сервисы и контроллеры. Сервисы не трогают DOM: перерисовку
      просят через ctx.ui; контроллеры читают DOM и вызывают сервисы. */
+  const perfRecorder = PRP.perfLog.create(S.perf, { activeChatId: () => S.chatId });
   const ctx = {
     S, DB,
     files: PRP.files,
@@ -51,7 +52,14 @@
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
     // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
-    perf: PRP.perfLog.create(S.perf, { activeChatId: () => S.chatId }),
+    perf: (metric, ms, meta) => {
+      perfRecorder(metric, ms, meta);
+      if (S.modal && S.modal.kind === "debug" && S.modal.section === "timing" &&
+          ctx.ui && typeof ctx.ui.renderModal === "function") {
+        S.modal.keepScroll = true;
+        ctx.ui.renderModal();
+      }
+    },
     svc: {},
     nav: {},
   };

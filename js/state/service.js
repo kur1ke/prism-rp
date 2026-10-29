@@ -10,6 +10,11 @@
   function create(ctx) {
     const { S } = ctx;
     const chat = () => ctx.svc.chat;
+    const clock = () => typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const measure = (metric, since, chatId, msgId, outcome) => {
+      if (typeof ctx.perf === "function") ctx.perf(metric, clock() - since,
+        { chatId, msgId, outcome });
+    };
 
     function snapshot(path, opts) {
       const c = ctx.chat(), cd = ctx.card();
@@ -66,6 +71,7 @@
         ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
       if (tokens + 650 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
         return Promise.resolve({ status: "overflow" });
+      const started = clock();
       const task = (async () => {
         let raw;
         try { raw = await simpleWithLimit(provider, instruction); }
@@ -100,7 +106,13 @@
         Object.assign(current, next);
         if (ctx.svc.prism && typeof ctx.svc.prism.refresh === "function") ctx.svc.prism.refresh();
         return { status: "ok", worn: parsed.worn.length };
-      })().finally(() => { if (initializing.get(id) === task) initializing.delete(id); });
+      })().then((result) => {
+        measure("initialOutfitMs", started, id, "", result && result.status || "error");
+        return result;
+      }, (error) => {
+        measure("initialOutfitMs", started, id, "", "error");
+        throw error;
+      }).finally(() => { if (initializing.get(id) === task) initializing.delete(id); });
       initializing.set(id, task);
       return task;
     }
@@ -187,12 +199,17 @@
     async function analyse(options, provider) {
       let result = { valid: false, events: [], issues: ["Текстовая модель недоступна"] };
       if (provider) {
+        const chatId = (ctx.chat() || {}).id;
+        const started = clock();
         try {
           const instruction = INT.instruction(options);
           const raw = await simpleWithLimit(provider, instruction, OBSERVER_DEFAULT_MS);
           result = INT.parse(raw, options);
         } catch (e) {
           result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
+        } finally {
+          measure("observerModelMs", started, chatId, options && options.messageId || "",
+            result.valid ? "accepted" : "error");
         }
       }
       return result;
@@ -210,15 +227,24 @@
         ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
       if (tokens + 450 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
         return { skipped: "budget" };
-      let timer;
+      let timer, outcome = "error";
+      const started = clock(), chatId = (ctx.chat() || {}).id;
       try {
         const raw = await Promise.race([
           PRP.llm.simple(roleProvider, instruction, { maxTokens: 450 }),
           new Promise((_,reject) => { timer=setTimeout(() => reject(new Error("timeout")), 10000); })
         ]);
-        return WI.parse(raw, o);
-      } catch(e) { return { error: String(e && e.message || e).slice(0,100) }; }
-      finally { clearTimeout(timer); }
+        const parsed = WI.parse(raw, o);
+        outcome = parsed.answer ? "accepted" : parsed.error || "invalid";
+        return parsed;
+      } catch(e) {
+        const error = String(e && e.message || e).slice(0,100);
+        outcome = error === "timeout" ? "timeout" : "error";
+        return { error };
+      } finally {
+        clearTimeout(timer);
+        measure("wearInquiryMs", started, chatId, o && o.messageId || "", outcome);
+      }
     }
     function prepareUser(text, provider) {
       const c = ctx.chat(), source = String(text || "");
@@ -374,7 +400,7 @@
         const previousWear = (priorDrawState ||
           snapshot(initialPath.slice(0,index))).actors.char.wearState;
         const probe = await inquireWear({
-          mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
+          messageId: msg.id, mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
           drawIndex: latestIndex, text: sourceText.slice(0,400),
           sourceText, character: (ctx.card()||{}).name,
           previous: previousWear,

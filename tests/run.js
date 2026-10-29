@@ -8271,6 +8271,26 @@ async function unifiedTracker() {
     assert.ok(actual.includes("Последний фактически отправленный RP-запрос"));
     assert.ok(actual.includes("Одежда: бежевая юбка"));
   });
+  await ta("PERF-DETAIL-1: Debug Timing displays individual, overlapping instrumented stages", async () => {
+    const perfLog = [
+      {metric:"initialOutfitMs",ms:101,chatId:"c1",outcome:"ok"},
+      {metric:"observerModelMs",ms:300,chatId:"c1",outcome:"accepted"},
+      {metric:"wearInquiryMs",ms:42,chatId:"c1",outcome:"timeout"},
+      {metric:"imageTranslateMs",ms:66,chatId:"c1",outcome:"ok"},
+      {metric:"imageCompileMs",ms:77,chatId:"c1",outcome:"compiled"},
+      {metric:"imageFinalAuditMs",ms:3,chatId:"c1",outcome:"rejected"},
+      {metric:"imageBackendMs",ms:99,chatId:"c1",outcome:"ok"},
+      {metric:"imageTotalMs",ms:201,chatId:"c1",outcome:"done"},
+    ];
+    const html = globalThis.PRP.views.debugModal({card:{name:"Test"},perfLog,
+      perfSummary:globalThis.PRP.perfLog.summary(perfLog)}, {section:"timing"});
+    for(const item of ["Инициализация одежды","Observer · вызов модели",
+      "Уточнение невидимой одежды","Image Compiler","FinalAudit",
+      "Генерация изображения","Изображение · от подготовки","Не складывайте"])
+      assert.ok(html.includes(item), item);
+    assert.ok(html.includes("timeout") && html.includes("rejected"),
+      "failure outcomes remain distinct from fast successes");
+  });
   await ta("DEBUG-NODUP-1: wear provenance only in Wear and submitted payload only in Prism", async () => {
     const item = {item:"уникальная-красная-куртка",certainty:"reported",
       source:{messageId:"source-one",swipeIdx:0,evidence:"Я сняла куртку"}};

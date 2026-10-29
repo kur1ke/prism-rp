@@ -235,13 +235,25 @@
 
   /* PERF-01: длительности этапов хода (в памяти, только числа). readyAfterReplyMs — от показа ответа до того,
      как переписка снова принимает ввод; sendToRoleplayMs — от нажатия «Отправить» до запроса к модели. */
-  const TIMING = { userStateMs: "Разбор реплики пользователя", roleplayMs: "Запрос к RP-модели", assistantStateMs: "Разбор ответа персонажа",
-    imagePrepareMs: "Подготовка промпта изображения", readyAfterReplyMs: "Ответ показан → можно писать", sendToRoleplayMs: "«Отправить» → запрос к модели",
-    stateWaitTimeout: "Ожидание разбора прервано по времени", postReplyError: "Ошибка обработки после ответа" };
+  const TIMING = { userStateMs: "Обработка реплики пользователя", roleplayMs: "Запрос к RP-модели", assistantStateMs: "Обработка ответа персонажа",
+    initialOutfitMs: "Инициализация одежды · запрос и сохранение",
+    observerModelMs: "Observer · вызов модели и разбор",
+    wearInquiryMs: "Уточнение невидимой одежды · RP-модель",
+    imageTranslateMs: "Перевод изображения · вызов модели",
+    imageCompileMs: "Image Compiler · весь вызов (включая перевод)",
+    imageFinalAuditMs: "FinalAudit · проверка итогового промпта",
+    imageBackendMs: "Генерация изображения · backend",
+    imageTotalMs: "Изображение · от подготовки до сохранения",
+    imagePrepareMs: "Подготовка изображения · до backend",
+    readyAfterReplyMs: "Ответ показан → можно писать",
+    sendToRoleplayMs: "«Отправить» → запрос к модели",
+    stateWaitTimeout: "Ожидание разбора прервано по времени",
+    postReplyError: "Ошибка обработки после ответа" };
   function timingTab(m) {
     const sum = m.perfSummary || [];
     const rows = (m.perfLog || []).slice(-30).reverse();
-    return '<div class="block"><div class="block-title">Сводка <small>в памяти, последние ' + (m.perfLog || []).length + '</small></div>'
+    return '<p class="hint">Вложенные замеры пересекаются: перевод входит в компиляцию, компиляция — в подготовку, а подготовка — в общее время изображения. Не складывайте эти значения.</p>' +
+      '<div class="block"><div class="block-title">Сводка <small>в памяти, последние ' + (m.perfLog || []).length + '</small></div>'
       + (sum.length ? '<dl class="kv">' + sum.map((x) => '<dt>' + esc(TIMING[x.metric] || x.metric) + ' <small>' + esc(x.metric) + '</small></dt><dd>' + x.last + ' мс · медиана ' + x.median + ' мс · ' + x.count + '×</dd>').join("") + '</dl>'
         : '<p class="empty-note">Замеров пока нет: отправьте сообщение.</p>') + '</div>'
       + (rows.length ? '<div class="block"><div class="block-title">Последние замеры</div><ul class="wc-list">' + rows.map((r) =>
