@@ -9892,8 +9892,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   }
   const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт (legacy)", "#ff9ec7"], ["reflection", "Experience", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
+    const req = m.debugLastRpInput;
+    const actual = '<div class="block"><div class="block-title">Последний фактически отправленный RP-запрос</div>' +
+      (req ? '<p class="hint">' + esc(req.operation) + ' · ' + esc(new Date(req.at).toLocaleString()) +
+        ' · только в памяти текущего чата</p>' +
+        '<details class="exp-debug"><summary>Полный запрос · все роли</summary><pre class="debug-prompt">' +
+        esc(req.messages.map(x => "[" + x.role + "]\\n" + x.content).join("\\n\\n")) +
+        '</pre></details>' :
+        '<p class="hint">Нет зафиксированного запроса (снимки создаются при включённом режиме разработчика).</p>') + '</div>';
     const p = m.lastPrism;
-    if (!p) return `<p class="hint">Здесь видно, что получает модель: указания отдельно, а карточку, опыт, сцену и мир — как данные с пометками.</p>
+    if (!p) return actual + `<p class="hint">Здесь можно собрать контекст для следующего хода.</p>
       <button class="btn btn-sm" data-act="prism-preview">${icon("prism")}Собрать для следующего хода</button>`;
     const r = p.report;
     const total = Object.values(r.layers).reduce((a, b) => a + b, 0) || 1;
@@ -9923,8 +9931,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <table><thead><tr><th>Факт</th><th>почему</th><th>итог</th></tr></thead><tbody>
         ${r.world.rows.map((x) => { const kept = (r.worldIds || []).includes(x.id); return `<tr class="${kept ? "sel" : ""}"><td>${esc((x.text || "").slice(0, 60))}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${kept ? "в контексте" : x.selected ? "не поместилось" : x.omitted === "limit" ? "сверх лимита" : "не относится"}</td></tr>`; }).join("")}
         </tbody></table></details>` : ""}
-      <div class="block"><div class="block-title">Что ушло в модель <button class="btn btn-sm btn-ghost" data-act="prism-preview">${icon("regen")}Обновить</button></div>
-        <div class="code">${p.messages.map((x) => `<span class="role">${esc(x.role)}</span>\n${esc(x.content)}`).join("\n\n")}</div></div>`;
+      <div class="block"><div class="block-title">Предпросмотр контекста <button class="btn btn-sm btn-ghost" data-act="prism-preview">${icon("regen")}Обновить</button></div>
+        <div class="code">${p.messages.map((x) => `<span class="role">${esc(x.role)}</span>\n${esc(x.content)}`).join("\n\n")}</div></div>` + actual;
   }
 
   /* PERF-01: длительности этапов хода (в памяти, только числа). readyAfterReplyMs — от показа ответа до того,
@@ -9984,141 +9992,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }).join("");
   }
 
-  /* Live, read-only wear provenance: origin -> selected events -> current wear.
-     A stored RP request is shown separately from the recomputed Prism preview. */
-  function wearDebugTab(m) {
-    const d = m.debugWear;
-    if (!d) return '<p class="empty-note">Нет данных активного чата.</p>';
-    const item = (fact) => {
-      const src = fact && fact.source || {};
-      const ref = src.messageId ? src.messageId + " · swipe " + (src.swipeIdx == null ? "?" : src.swipeIdx)
-        : src.kind || "исходное состояние";
-      return '<li><b>' + esc(fact && fact.item || "") + '</b>' +
-        (fact && fact.placement ? ' · ' + esc(fact.placement) : "") +
-        '<small> ' + esc(fact && fact.certainty || "?") + ' · ' + esc(ref) + '</small></li>';
-    };
-    const group = (label, facts) => '<div class="block"><p class="hint">' + esc(label) +
-      ' (' + (facts || []).length + ')</p>' + ((facts || []).length
-        ? '<ul class="wc-list">' + facts.map(item).join("") + '</ul>'
-        : '<p class="hint">Нет записей.</p>') + '</div>';
-    const format = (s) => {
-      if (!s) return '<p class="hint">Нет снимка состояния.</p>';
-      return '<dl class="kv"><dt>Известно</dt><dd>' + (s.known ? "да" : "нет") +
-        '</dd><dt>Полный комплект</dt><dd>' + (s.complete ? "да" : "нет") +
-        '</dd><dt>Устарел</dt><dd>' + (s.invalidated ? "да" : "нет") + '</dd></dl>' +
-        group("Надето", s.worn) + group("Снято", s.removed) +
-        group("Частично надето", s.partiallyWorn);
-    };
-    const origin = d.origin && d.origin.kind === "initial-outfit" ? d.origin.event : null;
-    const originText = origin
-      ? 'chat.initialWear · ' + origin.action + ' · ' +
-        (Array.isArray(origin.value) ? origin.value.join(", ") : origin.action === "clear" ? "пустой комплект" : "нет данных")
-      : d.mode === "rp" ? "Режим сцены: начальная свёртка sceneInit, без chat.initialWear"
-        : "chat.initialWear не записан";
-    const snapshots = '<div class="block"><div class="block-title">Исходная запись</div><p>' +
-        esc(originText) + '</p>' +
-        (d.sceneInit ? '<details class="exp-debug"><summary>Исходные команды сцены</summary><pre class="debug-prompt">' +
-          esc(d.sceneInit) + '</pre></details>' : "") +
-        '<details class="exp-debug"><summary>Состояние до первого сообщения</summary>' +
-          format(d.baseline) + '</details></div>' +
-      '<div class="block"><div class="block-title">Актуальное состояние · активная ветка</div>' +
-        format(d.current) + '</div>';
-    const asEvent = (e, kind) => '<li>' + esc(kind) + ': ' +
-      esc(e.action || "") + ' · ' +
-      esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) +
-      (e.reference && e.reference.item ? ' · ссылка: ' + esc(e.reference.item) : "") +
-      (e.evidence ? '<small>Источник: ' + esc(e.evidenceType || "text") +
-        ' · ' + esc(e.evidence) + '</small>' : "") + '</li>';
-    const changes = '<div class="block"><div class="block-title">Пересчёт по активной ветке <small>' +
-      d.changeCount + ' сообщений с изменениями/ошибками, последние ' + d.changes.length + '</small></div>' +
-      (d.changes.length ? d.changes.map(row => {
-        const before = (row.before.worn || []).map(x => x.item).join(", ") || (row.before.known ? "ничего" : "неизвестно");
-        const after = (row.after.worn || []).map(x => x.item).join(", ") || (row.after.known ? "ничего" : "неизвестно");
-        const rejected = row.rejected || [];
-        return '<details class="exp-debug"><summary>' +
-          esc(row.messageId + " · swipe " + row.swipeIdx + " · " + row.role) +
-          ' · ' + esc(before) + ' → ' + esc(after) +
-          (row.status ? ' · ' + esc(row.status.status) : "") +
-          '</summary><p class="hint">До этого сообщения</p>' + format(row.before) +
-          '<p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
-          row.events.map(e => asEvent(e, "Observer")).concat(row.corrections.map(e => asEvent(e, "Коррекция"))).join("") +
-          '</ul><p class="hint">После этого сообщения</p>' + format(row.after) +
-          (rejected.length ? '<pre class="debug-prompt">' + esc(JSON.stringify(rejected, null, 2)) + '</pre>' : "") +
-          (row.status && row.status.issues.length ? '<pre class="debug-prompt">' +
-            esc(JSON.stringify(row.status.issues, null, 2)) + '</pre>' : "") +
-          (row.replayIssues.length ? '<pre class="debug-prompt">Ошибки повторного применения: ' +
-            esc(JSON.stringify(row.replayIssues, null, 2)) + '</pre>' : "") +
-          '</details>';
-      }).join("") : '<p class="hint">Изменений одежды или ошибок анализа на активном пути нет.</p>') + '</div>';
-    const recent = '<div class="block"><div class="block-title">Последние проверки Observer' +
-      (m.statePending ? ' · выполняется анализ' : "") + '</div>' +
-      (d.recent.length ? '<ul class="wc-list">' + d.recent.map(x =>
-        '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
-        esc(x.role) + ' · <b>' + esc(x.status) + '</b>' +
-        (x.eventCount != null ? ' · событий: ' + x.eventCount : "") +
-        (x.method ? ' · ' + esc(x.method) : "") +
-        (x.wearInquiry ? '<small>Уточнение одежды: ' + esc(x.wearInquiry.status || "?") +
-          (x.wearInquiry.reason ? ' (' + esc(x.wearInquiry.reason) + ')' : "") + '</small>' : "") +
-        (x.issues.length ? '<small>' + esc(x.issues.join("; ")) + '</small>' : "") +
-        '</li>').join("") + '</ul>' : '<p class="hint">История пуста.</p>') +
-      (d.replayIssues.length ? '<details class="exp-debug"><summary>Диагностика повторного применения</summary>' +
-        '<pre class="debug-prompt">' + esc(JSON.stringify(d.replayIssues, null, 2)) +
-        '</pre></details>' : "") + '</div>';
-    const req = m.debugLastRpInput;
-    const relevant = req ? req.messages.filter(x => x.role === "system")
-      .flatMap(x => x.content.split("\n").filter(line =>
-        /одежд|наряд|вещи|комплект|снят|надет|wear|garment|outfit/i.test(line))).slice(0, 40) : [];
-    const actual = '<div class="block"><div class="block-title">Что фактически отправлено RP-модели</div>' +
-      (req ? '<p class="hint">Последний запрос этого чата · ' + esc(req.operation) +
-        ' · ' + esc(new Date(req.at).toLocaleString()) +
-        '. Это снимок отправленного контекста, а не текущий предпросмотр.</p>' +
-        (relevant.length ? '<pre class="debug-prompt">' +
-          esc(relevant.join("\n")) + '</pre>' :
-          '<p class="hint">В служебных разделах ключевые слова одежды не найдены; проверьте полный запрос.</p>') +
-        '<details class="exp-debug"><summary>Полный запрос · все роли и сообщения</summary><pre class="debug-prompt">' +
-          esc(req.messages.map(x => "[" + x.role + "]\n" + x.content).join("\n\n")) +
-        '</pre></details>' :
-        '<p class="hint">В этом чате ещё нет сохранённого в памяти RP-запроса с включённым режимом разработчика.</p>') +
-      '</div>';
-    return snapshots + changes + recent + actual;
-  }
-
-  function debugModal(m, modal) {
-    const section = modal.section || "prism";
-    const names = [["prism", "Prism"], ["wear", "Одежда"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
-    const v = m.messengerView;
-    const status = v && v.stateStatus;
-    let content = "";
-    if (section === "prism") content = prismTab(m);
-    else if (section === "wear") content = wearDebugTab(m);
-    else if (section === "timing") content = timingTab(m);
-    else if (section === "images") content = imageAuditTab(m);
-    else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
-    else if (section === "tracker") {
-      const w = v.world || {};
-      const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Одежда", (w.visualWear || []).join(", ")], ["Комплект", w.wearComplete === true ? "полный: неуказанная одежда отсутствует" : "неполный/неизвестный"], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
-      const removed = Array.isArray(w.visualWearRemoved) ? w.visualWearRemoved : [];
-      content = '<div class="block"><div class="block-title">Текущее состояние</div><dl class="kv">' + pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>'
-        + '<div class="block"><div class="block-title">Снятые вещи <small>' + removed.length + '</small></div>'
-        + (removed.length ? '<ul class="wc-list">' + removed.map(x => '<li><b>' + esc(x.item || "") + '</b>'
-          + '<div class="hint">' + esc(x.certainty === "established" ? "установлено" : "со слов") + ' · '
-          + esc(x.source && x.source.messageId || "ручной/старый источник")
-          + ' · swipe ' + esc(x.source && x.source.swipeIdx != null ? String(x.source.swipeIdx) : "?") + '</div>'
-          + (x.source && x.source.evidence ? '<small>' + esc(x.source.evidence) + '</small>' : "")
-          + '</li>').join("") + '</ul>' : '<p class="hint">Нет подтверждённых снятых вещей. Остальной наряд может быть неизвестен.</p>') + '</div>';
-    } else if (section === "events") {
-      const active = (m.path || []).flatMap(msg => {
-        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
-        return (sw && sw.stateEvents || []).map(e => ({ e, msg }));
-      });
-      const corrections = (m.path || []).flatMap(msg => {
-        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
-        return (sw && sw.stateCorrections || []).map(e => ({ e, msg }));
-      });
-      const rows = active.concat(corrections);
-      // WearInquiry is a source-bound RP-model self-report, not a hidden
-      // instruction and not a second canonical wardrobe. Debug reads ONLY
-      // the selected path/swipes, never alternative swipe or chat data.
+  // Accepted RP wardrobe clarification and last DRAW diagnostics, active swipes only.
+  function wearInquiryTab(m) {
       const reported = (m.path || []).flatMap(msg => {
         const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
         return (sw && Array.isArray(sw.wearInquiries) ? sw.wearInquiries : [])
@@ -10174,14 +10049,124 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
               esc(JSON.stringify(answer, null, 2)) + '</pre></details>';
           }).join("")
           : '<p class="hint">Принятых уточнений в активной ветке нет.</p>') + '</div>';
-      const origin = m.chat && m.chat.initialWear;
-      const originContent = origin && origin.kind === "initial-outfit" && origin.event
-        ? '<div class="block"><div class="block-title">Начальный комплект (до сообщений)</div>'
-          + '<p class="hint">Источник: скрытый запрос к RP Provider; полный перечень, отсутствующие вещи не подразумеваются.</p>'
-          + '<p>' + esc(origin.event.action === "clear" ? "ничего не надето"
-            : (origin.event.value || []).join(", ")) + '</p></div>'
-        : '';
-      content = originContent + inquiryContent + '<div class="block"><div class="block-title">События активной ветки <small>' + rows.length + '</small></div>'
+      return inquiryContent;
+  }
+
+  /* Live, read-only wear provenance: origin -> selected events -> current wear.
+     A stored RP request is shown separately from the recomputed Prism preview. */
+  function wearDebugTab(m) {
+    const d = m.debugWear;
+    if (!d) return '<p class="empty-note">Нет данных активного чата.</p>';
+    const item = (fact) => {
+      const src = fact && fact.source || {};
+      const ref = src.messageId ? src.messageId + " · swipe " + (src.swipeIdx == null ? "?" : src.swipeIdx)
+        : src.kind || "исходное состояние";
+      return '<li><b>' + esc(fact && fact.item || "") + '</b>' +
+        (fact && fact.placement ? ' · ' + esc(fact.placement) : "") +
+        '<small> ' + esc(fact && fact.certainty || "?") + ' · ' + esc(ref) + '</small>' +
+        (src.evidence ? '<small>Источник: ' + esc(src.evidence) + '</small>' : "") + '</li>';
+    };
+    const group = (label, facts) => '<div class="block"><p class="hint">' + esc(label) +
+      ' (' + (facts || []).length + ')</p>' + ((facts || []).length
+        ? '<ul class="wc-list">' + facts.map(item).join("") + '</ul>'
+        : '<p class="hint">Нет записей.</p>') + '</div>';
+    const format = (s) => {
+      if (!s) return '<p class="hint">Нет снимка состояния.</p>';
+      return '<dl class="kv"><dt>Известно</dt><dd>' + (s.known ? "да" : "нет") +
+        '</dd><dt>Полный комплект</dt><dd>' + (s.complete ? "да" : "нет") +
+        '</dd><dt>Устарел</dt><dd>' + (s.invalidated ? "да" : "нет") + '</dd></dl>' +
+        group("Надето", s.worn) + group("Снято", s.removed) +
+        group("Частично надето", s.partiallyWorn);
+    };
+    const origin = d.origin && d.origin.kind === "initial-outfit" ? d.origin.event : null;
+    const originText = origin
+      ? 'chat.initialWear · ' + origin.action + ' · ' +
+        (Array.isArray(origin.value) ? origin.value.join(", ") : origin.action === "clear" ? "пустой комплект" : "нет данных")
+      : d.mode === "rp" ? "Режим сцены: начальная свёртка sceneInit, без chat.initialWear"
+        : "chat.initialWear не записан";
+    const snapshots = '<div class="block"><div class="block-title">Исходная запись</div><p>' +
+        esc(originText) + '</p>' +
+        (d.sceneInit ? '<details class="exp-debug"><summary>Исходные команды сцены</summary><pre class="debug-prompt">' +
+          esc(d.sceneInit) + '</pre></details>' : "") +
+        '</div>' +
+      '<div class="block"><div class="block-title">Актуальное состояние · активная ветка</div>' +
+        format(d.current) + '</div>';
+    const asEvent = (e, kind) => '<li>' + esc(kind) + ': ' +
+      esc(e.action || "") + ' · ' +
+      esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) +
+      (e.itemMention ? ' · названо: ' + esc(e.itemMention) : "") +
+      (e.reference && e.reference.item ? ' · привязано к: ' + esc(e.reference.item) : "") +
+      (e.evidence ? '<small>Источник: ' + esc(e.evidenceType || "text") +
+        ' · ' + esc(e.evidence) + '</small>' : "") + '</li>';
+    const changes = '<div class="block"><div class="block-title">Пересчёт по активной ветке <small>' +
+      d.changeCount + ' сообщений с изменениями/ошибками, последние ' + d.changes.length + '</small></div>' +
+      (d.changes.length ? d.changes.map(row => {
+        const before = (row.before.worn || []).map(x => x.item).join(", ") || (row.before.known ? "ничего" : "неизвестно");
+        const after = (row.after.worn || []).map(x => x.item).join(", ") || (row.after.known ? "ничего" : "неизвестно");
+        const rejected = row.rejected || [];
+        return '<details class="exp-debug"><summary>' +
+          esc(row.messageId + " · swipe " + row.swipeIdx + " · " + row.role) +
+          ' · ' + esc(before) + ' → ' + esc(after) +
+          (row.status ? ' · ' + esc(row.status.status) : "") +
+          '</summary><p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
+          row.events.map(e => asEvent(e, "Observer")).concat(row.corrections.map(e => asEvent(e, "Коррекция"))).join("") +
+          '</ul>' +
+          (rejected.length ? '<details class="exp-debug"><summary>Отклонённые наблюдения одежды (' +
+            rejected.length + ')</summary><pre class="debug-prompt">' + esc(JSON.stringify(rejected, null, 2)) +
+            '</pre></details>' : "") +
+          (row.status && row.status.issues.some(isWearIssue) ? '<pre class="debug-prompt">' +
+            esc(JSON.stringify(row.status.issues.filter(isWearIssue), null, 2)) + '</pre>' : "") +
+          (row.replayIssues.length ? '<pre class="debug-prompt">Ошибки повторного применения: ' +
+            esc(JSON.stringify(row.replayIssues, null, 2)) + '</pre>' : "") +
+          '</details>';
+      }).join("") : '<p class="hint">Изменений одежды или ошибок анализа на активном пути нет.</p>') + '</div>';
+    const recent = '<div class="block"><div class="block-title">Последние проверки Observer' +
+      (m.statePending ? ' · выполняется анализ' : "") + '</div>' +
+      (d.recent.length ? '<ul class="wc-list">' + d.recent.map(x =>
+        '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
+        esc(x.role) + ' · <b>' + esc(x.status) + '</b>' +
+        (x.eventCount != null ? ' · событий: ' + x.eventCount : "") +
+        (x.method ? ' · ' + esc(x.method) : "") +
+        (x.wearInquiry ? '<small>Уточнение одежды: ' + esc(x.wearInquiry.status || "?") +
+          (x.wearInquiry.reason ? ' (' + esc(x.wearInquiry.reason) + ')' : "") + '</small>' : "") +
+        '</li>').join("") + '</ul>' : '<p class="hint">История пуста.</p>') +
+      (d.replayIssues.length ? '<details class="exp-debug"><summary>Диагностика повторного применения</summary>' +
+        '<pre class="debug-prompt">' + esc(JSON.stringify(d.replayIssues, null, 2)) +
+        '</pre></details>' : "") + '</div>';
+    const initError = m.chat && m.chat.initialOutfitCheck && m.chat.initialOutfitCheck.status === "error"
+      ? '<div class="block"><div class="block-title">Ошибка начального комплекта</div><p>' +
+        esc(m.chat.initialOutfitCheck.reason || "неизвестно") + '</p></div>' : "";
+    return snapshots + initError + changes + wearInquiryTab(m) + recent;
+  }
+
+  const isWearIssue = (issue) => /\[wear\]|уточнение одежды|одежд|вещи|предмета одежды|гардероб/i.test(String(issue || ""));
+  function debugModal(m, modal) {
+    const section = modal.section || "prism";
+    const names = [["prism", "Prism"], ["wear", "Одежда"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
+    const v = m.messengerView;
+    const status = v && v.stateStatus;
+    let content = "";
+    if (section === "prism") content = prismTab(m);
+    else if (section === "wear") content = wearDebugTab(m);
+    else if (section === "timing") content = timingTab(m);
+    else if (section === "images") content = imageAuditTab(m);
+    else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
+    else if (section === "tracker") {
+      const w = v.world || {};
+      const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
+      content = '<div class="block"><div class="block-title">Текущее состояние (кроме одежды)</div><dl class="kv">' +
+        pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>';
+    } else if (section === "events") {
+      const active = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return (sw && sw.stateEvents || []).filter(e => e.field !== "wear").map(e => ({ e, msg }));
+      });
+      const corrections = (m.path || []).flatMap(msg => {
+        const sw = msg.swipes && msg.swipes[msg.swipeIdx || 0];
+        return (sw && sw.stateCorrections || []).filter(e => e.field !== "wear").map(e => ({ e, msg }));
+      });
+      const rows = active.concat(corrections);
+      content ='<div class="block"><div class="block-title">События остальных полей <small>' + rows.length + '</small></div>'
         + (rows.length ? '<ul class="wc-list">' + rows.map(({e,msg}) =>
             '<li><span class="tag">' + esc(e.actor || "") + '</span> <b>' + esc(e.field || "") + '</b> · ' + esc(e.action || "")
             + '<div>' + esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) + '</div>'
@@ -10214,39 +10199,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           + (diagnostic.responsePreview ? '<div class="hint">Ответ переводчика (до 600 символов; только данные)</div>'
             + '<pre class="debug-prompt">' + esc(diagnostic.responsePreview) + '</pre>' : '') + '</div>'
         : '';
-      const init = m.chat && m.chat.initialOutfitCheck;
-      const initIssue = init && init.status === "error"
-        ? '<div class="block"><div class="block-title">Начальная одежда: ошибка инициализации</div>'
-          + '<p class="hint">Начальный комплект не был записан. Одежда осталась неизвестной; это не означает отсутствие одежды.</p>'
-          + '<p>Причина: ' + esc(init.reason || "неизвестна") + '</p></div>'
-        : '';
-      const rejected = status && Array.isArray(status.rejectedObservations)
-        ? status.rejectedObservations.slice(0,6) : [];
-      const rejectCodes = {
-        "unrecognized-garment-in-source": "Не удалось извлечь название новой вещи из выбранного фрагмента",
-        "garment-not-in-current-references": "Вещь найдена в источнике, но отсутствует среди известных вещей для действия",
-        "source-has-no-matching-garment": "Слова модели не соответствуют вещи в выбранном фрагменте",
-        "ambiguous-reference": "Несколько известных вещей подходят одинаково",
-        "ambiguous-garment": "Невозможно однозначно выбрать известную вещь",
-        "unknown-garment": "Соответствующей вещи нет в активном комплекте",
-      };
-      const rejectDetails = rejected.length
-        ? '<details class="block exp-debug"><summary>Отклонённые наблюдения — источник и причина (' +
-            rejected.length + ')</summary>'
-          + '<p class="hint">Это диагностические данные, не события Tracker. Показывается только текущий выбранный свайп.</p>'
-          + rejected.map(x => '<div class="block">'
-            + '<p><b>Событие ' + esc(String((x.index || 0) + 1))
-            + '</b> · ' + esc(x.action || "?") + ' · ' + esc(x.sourceId || "?")
-            + ' (' + esc(x.kind || "?") + ')</p>'
-            + '<p class="hint">Модель назвала: ' + esc((x.value || []).join(", ") || "неизвестно") + '</p>'
-            + '<p class="hint">Причина: ' + esc(rejectCodes[x.reason] || x.reason || "неизвестно") + '</p>'
-            + '<p class="hint">Выбранный фрагмент источника:</p>'
-            + '<pre class="debug-prompt">' + esc(x.fragment || "") + '</pre></div>').join("")
-          + '</details>' : '';
-      content = initIssue + '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
-        + (status && status.issues ? '<ul class="wc-list">' + status.issues.map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
+      content = '<div class="block"><div class="block-title">Анализ последнего сообщения</div><p class="hint">' + (v.statePending ? "Анализ выполняется…" : status ? esc(status.status) + " · событий: " + (Number(status.eventCount) || 0) : "Анализ ещё не выполнялся") + '</p>'
+        + (status && status.issues ? '<ul class="wc-list">' + status.issues.filter(x => !isWearIssue(x)).map(x => '<li>' + esc(x) + '</li>').join("") + '</ul>' : "")
         + '<button class="btn btn-sm" data-act="state-retry">Повторить анализ</button></div>'
-        + rejectDetails + imageIssue
+        + imageIssue
         + (v.warnings || []).map(x => '<p class="hint">' + esc(x.message || "") + '</p>').join("");
     }
     return `<div class="modal-wrap" data-act="modal-bg"><div class="modal debug-modal" role="dialog" aria-modal="true" aria-label="Debug">
@@ -13008,7 +12964,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!S.settings.developerMode) return;
       S.debugLastRpInput = { chatId, operation, at: Date.now(),
         messages: messages.map(x => ({ role: x.role, content: x.content })) };
-      if (S.modal && S.modal.kind === "debug" && S.modal.section === "wear") {
+      if (S.modal && S.modal.kind === "debug" && S.modal.section === "prism") {
         S.modal.keepScroll = true;
         ui.renderModal();
       }
@@ -14286,7 +14242,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
         debugWear: S.modal && S.modal.kind === "debug" && S.modal.section === "wear" &&
           ctx.chat() && svc().state && svc().state.debugWear ? svc().state.debugWear(path) : null,
-        debugLastRpInput: S.modal && S.modal.kind === "debug" && S.modal.section === "wear" &&
+        debugLastRpInput: S.modal && S.modal.kind === "debug" && S.modal.section === "prism" &&
           S.debugLastRpInput && ctx.chat() && S.debugLastRpInput.chatId === ctx.chat().id
           ? S.debugLastRpInput : null,
       };
