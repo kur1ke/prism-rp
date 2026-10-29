@@ -2216,6 +2216,10 @@ function fbHarness(card, opts) {
     put: async (st, x) => { (store[st] = store[st] || new Map()).set(st === "worldOverlays" || st === "messengerEnvironments" ? x.chatId : x.id, JSON.parse(JSON.stringify(x))); },
     // Как одна транзакция: все записи или ни одной (настоящая атомарность IndexedDB проверяется в E2E).
     putAll: async (entries) => { for (const [st, x] of entries) await DB.put(st, x); },
+    mutateBatch: async (batch) => {
+      for (const [st, id] of (batch.deletes || [])) (store[st] || new Map()).delete(id);
+      for (const [st, x] of (batch.puts || [])) await DB.put(st, x);
+    },
     get: async (st, id) => { const v = (store[st] || new Map()).get(id); return v ? JSON.parse(JSON.stringify(v)) : undefined; },
     byIndex: async (st, idx, v) => [...((store[st] || new Map()).values())].filter((x) => x[idx] === v),
     all: async (st) => [...((store[st] || new Map()).values())].map((x) => JSON.parse(JSON.stringify(x))),
