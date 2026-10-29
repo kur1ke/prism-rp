@@ -248,4 +248,55 @@ const full=parse([{
 }],fullOpts);
 assert.equal(full.events.length,0,"full replacement is atomic: invalid second item cannot be silently lost");
 
+// Real Messenger regression: current mirror portrait was rejected solely for
+// lacking the literal "селфи", even with the character named in the DRAW.
+const pajamaDraw="Фотография в зеркале. Орихимэ Иноуэ счастливо улыбается, прижимая телефон к щеке. На ней надета светлая пижама с маленькими рисунками. Фон — её уютная комната, где на кровати лежат подушки.";
+const pajamaText="Готово! Теперь мне гораздо уютнее 🌸";
+const pajamaInit={schema:1,kind:"initial-outfit",event:{
+  actor:"char",field:"wear",action:"set",
+  value:["белая школьная блузка","синий школьный сарафан","белые гольфы","коричневые туфли","белое хлопковое нижнее белье"],
+  certainty:"reported",evidence:""
+}};
+const pajamaState=TR.fold({mode:"messenger",initialWear:pajamaInit,path:[]});
+const pajamaOpts={mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
+  text:pajamaText,draw:pajamaDraw,draws:[{prompt:pajamaDraw}],
+  references:TR.references(pajamaState,"char",["remove","adjust","add"])};
+const pajamaFragment=ES.catalog(pajamaOpts).find(x=>x.text.includes("На ней надета светлая пижама"));
+assert.ok(pajamaFragment,JSON.stringify(ES.catalog(pajamaOpts)));
+const pajamaCandidate={actor:"char",field:"wear",action:"add",value:["светлая пижама"],
+  certainty:"reported",sourceId:pajamaFragment.id};
+const pajamaReport=parse([pajamaCandidate],pajamaOpts);
+assert.equal(pajamaReport.events.length,1,JSON.stringify(pajamaReport));
+assert.equal(pajamaReport.events[0].evidenceType,"draw");
+assert.deepEqual(pajamaReport.events[0].value,["светлая пижама"]);
+const wearing=TR.fold({mode:"messenger",initialWear:pajamaInit,path:[{
+  id:"photo-pajamas",role:"assistant",swipeIdx:0,
+  swipes:[{text:pajamaText,draws:[{prompt:pajamaDraw}],sceneOps:[],stateCorrections:[],
+    stateEvents:[{actor:"char",field:"wear",action:"invalidate",value:null,
+      certainty:"reported",evidence:"Готово!"}, ...pajamaReport.events]}]
+}]});
+assert.deepEqual(wearing.actors.char.wearState.worn.map(x=>x.item),["светлая пижама"]);
+assert.equal(wearing.actors.char.wearState.complete,false,"a visible pajama does not prove unseen layers");
+assert.ok(!wearing.actors.char.wearState.worn.some(x=>x.item.includes("сарафан")));
+const forbidden=[
+  "Архивная фотография в зеркале. "+pajamaDraw,
+  "Скриншот. "+pajamaDraw,
+  "Фото из галереи: зеркало. Орихимэ Иноуэ в пижаме.",
+  "Фотография в зеркале. Другая девушка в пижаме."
+];
+for(const shot of forbidden){
+  const other={...pajamaOpts,draw:shot,draws:[{prompt:shot}]};
+  const fragment=ES.catalog(other).find(x=>x.text.includes("пижам"));
+  if(!fragment)continue;
+  const blocked=parse([{...pajamaCandidate,sourceId:fragment.id}],other);
+  assert.equal(blocked.events.length,0,"not a current owner mirror shot: "+shot);
+}
+const sibling=TR.fold({mode:"messenger",initialWear:pajamaInit,path:[{
+  id:"photo-pajamas",role:"assistant",swipeIdx:1,
+  swipes:[{text:pajamaText,draws:[{prompt:pajamaDraw}],stateEvents:pajamaReport.events},
+    {text:"Я ещё не переоделась.",draws:[],stateEvents:[]}]
+}]});
+assert.deepEqual(sibling.actors.char.wearState.worn.map(x=>x.item),pajamaInit.event.value,
+  "sibling swipe cannot inherit the mirror photo's garment");
+
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
