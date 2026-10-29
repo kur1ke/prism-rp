@@ -58,7 +58,7 @@
         perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
         debugWear: S.modal && S.modal.kind === "debug" && S.modal.section === "wear" &&
           ctx.chat() && svc().state && svc().state.debugWear ? svc().state.debugWear(path) : null,
-        debugLastRpInput: S.modal && S.modal.kind === "debug" && S.modal.section === "wear" &&
+        debugLastRpInput: S.modal && S.modal.kind === "debug" && S.modal.section === "prism" &&
           S.debugLastRpInput && ctx.chat() && S.debugLastRpInput.chatId === ctx.chat().id
           ? S.debugLastRpInput : null,
       };
