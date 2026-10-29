@@ -37,14 +37,14 @@
       const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
       const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
         : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
-      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${msg.id}">
+      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${esc(msg.id)}">
         ${body}
         ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
         ${live ? "" : `<div class="tools">
-          <button class="tool" data-act="assist-copy" data-id="${msg.id}">${icon("copy")}Скопировать</button>
-          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${msg.id}">${icon("regen")}Другой ответ</button>` : ""}
-          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${msg.id}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
-          <button class="tool" data-act="assist-msg-del" data-id="${msg.id}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
+          <button class="tool" data-act="assist-copy" data-id="${esc(msg.id)}">${icon("copy")}Скопировать</button>
+          ${msg.role === "assistant" && last ? `<button class="tool" data-act="assist-regen" data-id="${esc(msg.id)}">${icon("regen")}Другой ответ</button>` : ""}
+          ${msg.role === "user" ? `<button class="tool" data-act="assist-edit" data-id="${esc(msg.id)}" title="Вернуть в поле ввода и переспросить">${icon("edit")}Изменить</button>` : ""}
+          <button class="tool" data-act="assist-msg-del" data-id="${esc(msg.id)}" title="Удалить это и всё после">${icon("trash")}</button></div>`}
       </article>`;
     }).join("");
     const p = m.provider;
@@ -63,10 +63,10 @@
     const chats = cd ? m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 12) : [];
     return `<div class="pop-title">Персонаж для разговора</div>
       <button class="pop-item ${!cd ? "on" : ""}" data-act="assist-pick-card" data-id="">${icon("x")}<span>Без персонажа</span></button>
-      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${c.id}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
+      ${m.cards.map((c) => `<button class="pop-item ${cd && cd.id === c.id ? "on" : ""}" data-act="assist-pick-card" data-id="${esc(c.id)}">${R.avatar(c, 22)}<span>${esc(c.name)}</span></button>`).join("")}
       ${cd ? `<div class="pop-sep"></div><div class="pop-title">Показать ассистенту чат</div>
         <button class="pop-item ${!m.assistChat ? "on" : ""}" data-act="assist-pick-chat" data-id="">${icon("x")}<span>Не показывать</span></button>
-        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${c.id}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
+        ${chats.map((c) => `<button class="pop-item ${m.assistChat && m.assistChat.id === c.id ? "on" : ""}" data-act="assist-pick-chat" data-id="${esc(c.id)}">${icon(c.mode === "messenger" ? "bubble" : "book")}<span><span>${esc(c.title || (c.mode === "messenger" ? "Переписка" : "Сцена"))}</span><small>${esc(R.ago(c.updatedAt))}${c.preview ? " · " + esc(c.preview.slice(0, 40)) : ""}</small></span></button>`).join("") || `<p class="hint" style="padding:4px 10px">У персонажа пока нет чатов.</p>`}` : ""}`;
   }
 
   function assistListPop(m) {
@@ -74,7 +74,7 @@
     return `<div class="pop-title">Разговоры с ассистентом</div>
       <button class="pop-item" data-act="assist-new">${icon("plus")}<span>Новый разговор</span></button>
       ${list.length ? `<div class="pop-sep"></div>` : ""}
-      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${a.id}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
+      ${list.map((a) => `<button class="pop-item ${m.assist && m.assist.id === a.id ? "on" : ""}" data-act="assist-open" data-id="${esc(a.id)}">${icon("assist")}<span><span>${esc(a.title)}</span><small>${esc(R.ago(a.updatedAt))} · ${a.messages.length} ${R.plural(a.messages.length, "сообщение", "сообщения", "сообщений")}</small></span></button>`).join("")}`;
   }
 
   Object.assign((PRP.views = PRP.views || {}), { assist, assistCtxPop, assistListPop });
