@@ -25,7 +25,7 @@
     const state = m.modal || {};
     let body = "";
     if (section === "main") {
-      body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${d.avatar ? "" : R.artBg(d.name)}">${d.avatar ? `<img src="${d.avatar}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
+      body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${R.safeImageSrc(d.avatar) ? "" : R.artBg(d.name)}">${R.safeImageSrc(d.avatar) ? `<img src="${R.safeImageSrc(d.avatar)}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div>
           <div class="card-identity-name">${f("cf-name", "Имя", "name", d.name)}</div></div>
         <div class="card-fields">

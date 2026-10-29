@@ -125,9 +125,16 @@
 
       // Предварительная проверка: контекст собирается ДО любых изменений дерева сообщений.
       // Если он не помещается, запрос не уходит и история не получает ни узла, ни варианта.
-      let path = full;
-      if (mode === "regen") path = full.slice(0, full.findIndex((m) => m.id === msgId));
       const target0 = msgId ? S.messages.find((m) => m.id === msgId) : null;
+      // Never build a replacement for a sibling/off-path message: findIndex(-1)
+      // would otherwise produce an unrelated history ending one turn early.
+      if ((mode === "regen" || mode === "continue") &&
+          (!target0 || target0.role !== "assistant" || !full.includes(target0))) {
+        ui.toast("Сообщение не принадлежит активной ветке персонажа. Действие отменено.", true);
+        return;
+      }
+      let path = full;
+      if (mode === "regen") path = full.slice(0, full.indexOf(target0));
       // Другой вариант первого сообщения персонажа (корень ветки) — это снова начало сцены.
       const rootOpening = mode === "regen" && target0 && !target0.parentId && target0.role === "assistant";
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
@@ -137,24 +144,32 @@
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
-      let target, prefix = "";
-      if (mode === "regen") {
-        target = S.messages.find((m) => m.id === msgId);
-        target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
-        target.swipeIdx = target.swipes.length - 1;
-      } else if (mode === "continue") {
-        target = S.messages.find((m) => m.id === msgId);
-        prefix = TR.activeSwipe(target).text;
-      } else {
-        target = chat().newMsg("assistant", c.leafId, "");
-        c.leafId = target.id;
-        await chat().putChat(c);
-      }
-      await chat().putMsg(target);
-
-      const sw = TR.activeSwipe(target);
+      // Reserve the lock BEFORE the first asynchronous IndexedDB write.
+      // Without this, another click may switch chats while a pending root is
+      // being committed but S.gen still reports idle.
       const ctrl = new AbortController();
-      S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
+      const lock = S.gen = { ctrl, msgId: msgId || "pending", raw: "", reasoning: "", prefix: "" };
+      let target, prefix = "";
+      try {
+        if (mode === "regen") {
+          target = S.messages.find((m) => m.id === msgId);
+          target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
+          target.swipeIdx = target.swipes.length - 1;
+        } else if (mode === "continue") {
+          target = S.messages.find((m) => m.id === msgId);
+          prefix = TR.activeSwipe(target).text;
+        } else {
+          const draft = chat().newMsg("assistant", c.leafId, "");
+          target = await chat().commitMessage(draft, draft.id);
+        }
+        if (mode !== "new") await chat().putMsg(target);
+      } catch (e) {
+        if (S.gen === lock) S.gen = null;
+        throw e;
+      }
+      lock.msgId = target.id;
+      lock.prefix = prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "";
+      const sw = TR.activeSwipe(target);
       ui.renderFeed();
       if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
       ui.scrollBottom();
@@ -208,9 +223,14 @@
         const snap = ms.snapshot(mode === "new" ? full : path, msNow);
         if (snap) sw.messengerAt = snap;
       }
-      S.gen = null;
-      await chat().putMsg(target);
-      await chat().touch();
+      // Do not release the generation lock until the final message and preview
+      // have reached IndexedDB. Otherwise a second operation can interleave.
+      try {
+        await chat().putMsg(target);
+        await chat().touch();
+      } finally {
+        S.gen = null;
+      }
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();
@@ -278,7 +298,6 @@
         if (e.name !== "AbortError") error = e.message || String(e);
       }
       const aborted = ctrl.signal.aborted;
-      S.gen = null;
       let th = null, parsed = null, dr = null;
       if (!aborted && !error) {
         th = OA.splitThink((res && res.text) || "");
@@ -289,6 +308,7 @@
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
       }
       if (aborted || error || S.chatId !== chatId) {
+        S.gen = null;
         if (error) ui.toast(`Не удалось начать сцену: ${error}. Можно попробовать ещё раз.`, true);
         prism().refresh();
         ui.renderFeed();
@@ -300,9 +320,8 @@
       m.opening = "generated";
       m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
-      await chat().putMsg(m);
-      c.leafId = m.id;
-      await chat().touch();
+      try { await chat().commitMessage(m, m.id); }
+      finally { S.gen = null; }
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();

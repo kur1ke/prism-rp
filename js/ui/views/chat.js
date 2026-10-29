@@ -67,22 +67,22 @@
     if (msg.role !== "assistant") return "";
     const n = msg.swipes.length, i = (msg.swipeIdx || 0) + 1;
     if (n < 2 && !isLast) return "";
-    return `<span class="swipes"><button class="tool" data-act="swipe" data-dir="-1" data-id="${msg.id}" title="Предыдущий вариант" ${i === 1 ? "disabled" : ""}>${icon("left")}</button>${i}/${n}<button class="tool" data-act="swipe" data-dir="1" data-id="${msg.id}" title="${isLast && i === n ? "Новый вариант" : "Следующий вариант"}">${icon("right")}</button></span>`;
+    return `<span class="swipes"><button class="tool" data-act="swipe" data-dir="-1" data-id="${esc(msg.id)}" title="Предыдущий вариант" ${i === 1 ? "disabled" : ""}>${icon("left")}</button>${i}/${n}<button class="tool" data-act="swipe" data-dir="1" data-id="${esc(msg.id)}" title="${isLast && i === n ? "Новый вариант" : "Следующий вариант"}">${icon("right")}</button></span>`;
   }
 
   function tools(msg, isLast) {
     return `<div class="tools">${swipeNav(msg, isLast)}
-      ${msg.role === "assistant" && isLast ? `<button class="tool" data-act="regen" data-id="${msg.id}">${icon("regen")}Другой вариант</button>
-        <button class="tool" data-act="continue" data-id="${msg.id}">${icon("cont")}Продолжить</button>` : ""}
-      ${msg.role === "assistant" ? `<button class="tool" data-act="draw" data-id="${msg.id}" title="Нарисовать этот момент">${icon("brush")}Нарисовать</button>` : ""}
-      <button class="tool" data-act="edit" data-id="${msg.id}">${icon("edit")}Править</button>
-      <button class="tool" data-act="delete" data-id="${msg.id}" title="Удалить с этого места">${icon("trash")}</button></div>`;
+      ${msg.role === "assistant" && isLast ? `<button class="tool" data-act="regen" data-id="${esc(msg.id)}">${icon("regen")}Другой вариант</button>
+        <button class="tool" data-act="continue" data-id="${esc(msg.id)}">${icon("cont")}Продолжить</button>` : ""}
+      ${msg.role === "assistant" ? `<button class="tool" data-act="draw" data-id="${esc(msg.id)}" title="Нарисовать этот момент">${icon("brush")}Нарисовать</button>` : ""}
+      <button class="tool" data-act="edit" data-id="${esc(msg.id)}">${icon("edit")}Править</button>
+      <button class="tool" data-act="delete" data-id="${esc(msg.id)}" title="Удалить с этого места">${icon("trash")}</button></div>`;
   }
 
   function editor(msg, sw) {
     const raw = sw.text + (msg.role === "assistant" && sw.sceneOps && sw.sceneOps.length ? "\n\n[scene: " + sw.sceneOps.map((o) => o.raw).join("; ") + "]" : "");
     return `<textarea class="editor" id="edit-${msg.id}">${esc(raw)}</textarea>
-      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${msg.id}">Сохранить</button>
+      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${esc(msg.id)}">Сохранить</button>
       <button class="btn btn-sm btn-ghost" data-act="cancel-edit">Отмена</button></div>`;
   }
 
@@ -105,7 +105,7 @@
     const idx = msg.swipes.indexOf(sw);
     return `<div class="shots ${bubble ? "in-bubble" : ""}">${list.map((im) => {
       const ar = im.w && im.h ? `${im.w}/${im.h}` : (im.ratio || "1:1").replace(":", "/");
-      const base = `data-mid="${msg.id}" data-sw="${idx}" data-img="${im.id}"`;
+      const base = `data-mid="${esc(msg.id)}" data-sw="${idx}" data-img="${esc(im.id)}"`;
       if (im.status === "pending") {
         return `<figure class="shot wait" style="aspect-ratio:${ar}"><div class="shot-wait"><span>${esc(im.stage || "Рисую…")}</span></div>
           <figcaption class="shot-cap">${esc(im.draw || "")}</figcaption></figure>`;
@@ -116,7 +116,7 @@
       }
       const url = m.imgUrls && m.imgUrls[im.id];
       return `<figure class="shot" style="aspect-ratio:${ar}">
-        ${url ? `<img src="${url}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
+        ${R.safeImageSrc(url) ? `<img src="${R.safeImageSrc(url)}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
         <div class="shot-tools">
           <button class="icon-btn" data-act="img-regen" ${base} title="Нарисовать заново, другой seed">${icon("regen")}</button>
           <button class="icon-btn" data-act="img-pin" ${base} title="Закрепить seed ${im.seed != null ? im.seed : ""} за персонажем">${icon("pin")}</button>
@@ -172,7 +172,7 @@
           ${!live ? deltas(sw) : ""}
           ${live ? "" : tools(msg, isLast)}`;
       }
-      return `<article class="turn ${msg.role} ${isLast ? "last" : ""}" data-mid="${msg.id}">${R.avatar(who, 40)}<div style="min-width:0">
+      return `<article class="turn ${esc(msg.role)} ${isLast ? "last" : ""}" data-mid="${esc(msg.id)}">${R.avatar(who, 40)}<div style="min-width:0">
         <div class="turn-head"><span class="turn-name">${esc(who.name)}</span><span class="turn-time">${R.time(sw.createdAt || msg.createdAt)}</span></div>${body}</div></article>`;
     }).join("");
   }
@@ -203,7 +203,7 @@
       }
       const parts = R.bubbles(sw.text);
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
-      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${sw.imageDataUrl ? `<div class="bub"><img src="${esc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
+      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${esc(msg.id)}">${R.safeImageSrc(sw.imageDataUrl) ? `<div class="bub"><img src="${R.safeImageSrc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
         <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
@@ -250,11 +250,11 @@
     const act = m.provider;
     const edit = act && act.kind === "openai" ? m.settings.providers.find((x) => x.id === act.id) : null;
     return `<div class="pop-title">Модель</div>
-      ${m.providers.map((p) => `<button class="pop-item ${act && act.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${p.id}">${icon(p.kind === "perchance" ? "star" : "cpu")}<span><span>${esc(p.name)}</span><small>${esc(p.kind === "perchance" ? "бесплатно, без ключа" : (p.model || "модель не выбрана"))}</small></span></button>`).join("")}
+      ${m.providers.map((p) => `<button class="pop-item ${act && act.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${esc(p.id)}">${icon(p.kind === "perchance" ? "star" : "cpu")}<span><span>${esc(p.name)}</span><small>${esc(p.kind === "perchance" ? "бесплатно, без ключа" : (p.model || "модель не выбрана"))}</small></span></button>`).join("")}
       ${edit && edit.models && edit.models.length ? `<div class="pop-sep"></div><div class="pop-title">Модели ${esc(edit.name)}</div>
         ${edit.models.slice(0, 30).map((md) => `<button class="pop-item ${md === edit.model ? "on" : ""}" data-act="pick-model" data-model="${esc(md)}">${esc(md)}</button>`).join("")}` : ""}
       ${act && act.kind !== "perchance" ? `<div class="pop-sep"></div><div class="pop-title">Стиль генерации</div>
-        ${SAMPLER_PRESETS.map((s) => `<button class="pop-item ${m.settings.samplerPreset === s.id ? "on" : ""}" data-act="pick-preset" data-id="${s.id}"><span><span>${s.name}</span><small>${s.hint}</small></span></button>`).join("")}` : ""}
+        ${SAMPLER_PRESETS.map((s) => `<button class="pop-item ${m.settings.samplerPreset === s.id ? "on" : ""}" data-act="pick-preset" data-id="${esc(s.id)}"><span><span>${s.name}</span><small>${s.hint}</small></span></button>`).join("")}` : ""}
       <div class="pop-sep"></div>
       <button class="pop-item" data-act="settings" data-section="models">${icon("settings")}Все настройки моделей</button>`;
   }

@@ -145,6 +145,36 @@
         } catch (e) { failure = e; try { t.abort(); } catch (_) { /* уже прервана */ } }
       });
     },
+    // Atomically mix deletions and writes across stores. All IndexedDB requests
+    // are enqueued synchronously; no await occurs inside the active transaction.
+    async mutateBatch(batch) {
+      const puts = (batch && batch.puts || []).filter(x => x && x[0] && x[1]);
+      const deletes = (batch && batch.deletes || []).filter(x => x && x[0] && x[1] != null);
+      const names = [...new Set(puts.concat(deletes).map(x => x[0]))];
+      if (!names.length) return;
+      const db = await open();
+      return new Promise((ok, fail) => {
+        let t, failure = null;
+        try { t = db.transaction(names, "readwrite"); } catch (e) { fail(e); return; }
+        t.oncomplete = () => ok();
+        t.onerror = () => { if (!failure) failure = t.error; };
+        t.onabort = () => fail(failure || t.error || new Error("Пакетная операция отменена"));
+        try {
+          for (const [store, id] of deletes) {
+            const req = t.objectStore(store).delete(id);
+            req.onerror = () => { failure = failure || req.error; };
+          }
+          for (const [store, obj] of puts) {
+            if (store !== "settings") obj.updatedAt = Date.now();
+            const req = t.objectStore(store).put(obj);
+            req.onerror = () => { failure = failure || req.error; };
+          }
+        } catch (e) {
+          failure = e;
+          try { t.abort(); } catch (_) { /* already aborted */ }
+        }
+      });
+    },
     del: (store, id) => tx(store, "readwrite", (s) => wrap(s.delete(id))),
     delMany: (store, ids) => tx(store, "readwrite", (s) => Promise.all(ids.map((id) => wrap(s.delete(id))))),
 

@@ -93,20 +93,23 @@
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
       const c = { id: U.uid("chat"), cardId: cd.id, mode, title: mode === "messenger" ? "Переписка" : "Сцена", sceneInit: "", leafId: null, createdAt: Date.now() };
-      S.chatId = c.id; S.cardId = cd.id; S.messages = [];
+      let first = null;
       if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
         const vars = { char: cd.name, user: ctx.persona().name };
-        const m = newMsg("assistant", null, "");
-        m.opening = "authored";
-        m.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
+        first = newMsg("assistant", null, "");
+        first.chatId = c.id; // newMsg normally uses the currently selected chat
+        first.opening = "authored";
+        first.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
           const parsed = SC.parse(U.macros(g, vars));
           return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };
         });
-        await putMsg(m);
-        c.leafId = m.id;
-        c.preview = m.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
+        c.leafId = first.id;
+        c.preview = first.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
       }
-      await putChat(c);
+      // Failure cannot leave an orphan opening or a chat without its root.
+      await DB.putAll([["chats", c]].concat(first ? [["messages", first]] : []));
+      S.chats.push(c);
+      S.chatId = c.id; S.cardId = cd.id; S.messages = first ? [first] : [];
       return c.id;
     }
     function latestForCard(cardId) {
@@ -114,40 +117,61 @@
     }
     // Удалить чат целиком: сообщения, картинки, опыт, наложение мира и среду переписки этого чата. Состояние сбрасывается на «нет чата».
     async function deleteChat(c) {
-      // Retire synchronously, before the first IndexedDB await. In-flight
-      // Memory/Reflection writes then compensate instead of resurrecting data.
+      if (S.gen) throw new Error("Нельзя удалять чат во время незавершённого хода.");
+      // Retire before awaiting any database operation: late Memory jobs may no
+      // longer commit evidence to a chat that is being removed.
       if (ctx.svc.memory) ctx.svc.memory.retireChat(c.id);
+      try {
       const ms = await DB.byIndex("messages", "chatId", c.id);
-      await DB.delMany("experience", (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id).map((x) => x.id));
-      await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
-      await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
-      await DB.delMany("memorySources", (await DB.byIndex("memorySources", "chatId", c.id)).map((x) => x.id));
-      await DB.delMany("messages", ms.map((m) => m.id));
-      await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
-      await DB.del("worldOverlays", c.id);
-      if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
-      await DB.del("messengerEnvironments", c.id);
-      if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
-      await DB.del("chats", c.id);
+      const ex = (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id);
+      const memories = await DB.byIndex("memories", "chatId", c.id);
+      const reflections = await DB.byIndex("reflections", "chatId", c.id);
+      const sources = await DB.byIndex("memorySources", "chatId", c.id);
+      const images = await DB.byIndex("images", "chatId", c.id);
+      const deletes = [
+        ...ms.map(x => ["messages", x.id]), ...ex.map(x => ["experience", x.id]),
+        ...memories.map(x => ["memories", x.id]), ...reflections.map(x => ["reflections", x.id]),
+        ...sources.map(x => ["memorySources", x.id]), ...images.map(x => ["images", x.id]),
+        ["worldOverlays", c.id], ["messengerEnvironments", c.id], ["chats", c.id]
+      ];
+      await DB.mutateBatch({ deletes });
+      } catch (e) {
+        if (ctx.svc.memory && ctx.svc.memory.restoreChat) ctx.svc.memory.restoreChat(c.id);
+        throw e;
+      }
       S.chats = S.chats.filter((x) => x.id !== c.id);
-      S.chatId = null; S.messages = [];
+      if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
+      if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
+      if (S.chatId === c.id) { S.chatId = null; S.messages = []; }
     }
 
     /* ── Правки ветки ──────────────────────────────────────────────────── */
-    // Удалить сообщение и всех его потомков; активной становится последняя оставшаяся ветка.
+    // Delete the selected node and its descendants as one transaction with
+    // the new chat leaf and preview. On abort S and IndexedDB remain unchanged.
     async function deleteFrom(msgId) {
+      if (S.gen) throw new Error("Нельзя удалять ветку во время незавершённого хода.");
       const m = S.messages.find((x) => x.id === msgId);
       if (!m) return false;
       const ids = [msgId].concat(TR.descendants(S.messages, msgId));
+      const removed = new Set(ids);
       const imgIds = [];
-      S.messages.filter((x) => ids.includes(x.id)).forEach((x) => x.swipes.forEach((sw) => (sw.images || []).forEach((im) => imgIds.push(im.id))));
-      await DB.delMany("images", imgIds);
-      await DB.delMany("messages", ids);
-      S.messages = S.messages.filter((x) => !ids.includes(x.id));
+      S.messages.filter(x => removed.has(x.id)).forEach(x =>
+        x.swipes.forEach(sw => (sw.images || []).forEach(im => imgIds.push(im.id))));
+      const remaining = S.messages.filter(x => !removed.has(x.id));
       const c = ctx.chat();
-      const lastRoot = TR.children(S.messages, null).slice(-1)[0];
-      c.leafId = m.parentId ? TR.latestLeaf(S.messages, m.parentId) : lastRoot ? TR.latestLeaf(S.messages, lastRoot.id) : null;
-      await touch();
+      const next = JSON.parse(JSON.stringify(c));
+      const lastRoot = TR.children(remaining, null).slice(-1)[0];
+      next.leafId = m.parentId ? TR.latestLeaf(remaining, m.parentId) :
+        lastRoot ? TR.latestLeaf(remaining, lastRoot.id) : null;
+      const leaf = TR.path(TR.index(remaining), next.leafId).slice(-1)[0];
+      const text = leaf ? TR.activeSwipe(leaf).text : "";
+      next.preview = (leaf && leaf.role === "user" ? "Вы: " : "") +
+        String(text || "").replace(/\s+/g, " ").slice(0, 90);
+      await DB.mutateBatch({ deletes: [
+        ...imgIds.map(id => ["images", id]), ...ids.map(id => ["messages", id])
+      ], puts: [["chats", next]] });
+      S.messages = remaining;
+      Object.assign(c, next);
       return true;
     }
     async function saveEdit(msgId, text) {
@@ -190,10 +214,7 @@
       const c = ctx.chat();
       const m = newMsg("user", c.leafId, text);
       if (swipeExtra) Object.assign(m.swipes[0], swipeExtra);
-      await putMsg(m);
-      c.leafId = m.id;
-      await touch();
-      return m;
+      return commitMessage(m, m.id);
     }
 
     /* ── Сцена из форм ─────────────────────────────────────────────────── */

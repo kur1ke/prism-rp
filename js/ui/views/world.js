@@ -23,7 +23,7 @@
       <div class="world-layout">
         <div class="world-list">${packs.length ? packs.map((p) => {
           const u = users(p.id);
-          return `<button class="world-item ${d && d.id === p.id ? "on" : ""}" data-act="world-open" data-id="${p.id}">
+          return `<button class="world-item ${d && d.id === p.id ? "on" : ""}" data-act="world-open" data-id="${esc(p.id)}">
             <b>${esc(p.name || "Без названия")}</b><small>${p.facts.length} ${R.plural(p.facts.length, "факт", "факта", "фактов")}${u.length ? ` · персонажей: ${u.length}` : ""}</small></button>`;
         }).join("") : `<p class="empty-note">Паков мира пока нет.</p>`}</div>
         <div class="world-editor">${d ? packEditor(d, users(d.id)) : `<p class="hint">Выберите мир слева или создайте новый. Факт мира — утверждение о мире («Университет находится в Каракуре»), а не указание модели и не черта характера.</p>`}</div>
@@ -64,7 +64,7 @@
     const lens = m.modal && m.modal.lens;
     const pv = m.lensPreview;
     const sel = `<div class="field"><label for="lens-pack">Общий пак мира</label><select id="lens-pack" data-lens-pack>
-      <option value="">— без мира —</option>${packs.map((p) => `<option value="${p.id}" ${lens && lens.packId === p.id ? "selected" : ""}>${esc(p.name || "Без названия")}</option>`).join("")}</select>
+      <option value="">— без мира —</option>${packs.map((p) => `<option value="${esc(p.id)}" ${lens && lens.packId === p.id ? "selected" : ""}>${esc(p.name || "Без названия")}</option>`).join("")}</select>
       <span class="help">Пак общий для многих персонажей; здесь хранится только то, что у ${esc(d.name || "персонажа")} иначе. Сам пак отсюда не меняется.${packs.length ? "" : " Паков пока нет — создайте их в разделе «Миры»."}</span></div>`;
     if (!lens || !lens.packId) return `<p class="lead">Мир персонажа</p>${sel}`;
     if (!pv || !pv.pack) return `<p class="lead">Мир персонажа</p>${sel}<p class="err">${icon("alert")}<span>Пак мира не найден.</span></p>`;

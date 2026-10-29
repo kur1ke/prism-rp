@@ -80,28 +80,41 @@
 
     // Удалить персонажа вместе со всеми его чатами (с их сообщениями, картинками и наложением мира) и опытом.
     async function remove(cd) {
+      if (S.gen) throw new Error("Нельзя удалять персонажа во время незавершённого хода.");
       const ownedChats = S.chats.filter((x) => x.cardId === cd.id);
-      // A card delete retires *all* child chats before any async deletion.
-      if (ctx.svc.memory) ownedChats.forEach((c) => ctx.svc.memory.retireChat(c.id));
+      if (ctx.svc.memory) ownedChats.forEach(c => ctx.svc.memory.retireChat(c.id));
+      try {
+      const deletes = [["cards", cd.id]];
       for (const c of ownedChats) {
-        const ms = await DB.byIndex("messages", "chatId", c.id);
-        await DB.delMany("messages", ms.map((m) => m.id));
-        await DB.delMany("images", (await DB.byIndex("images", "chatId", c.id)).map((x) => x.id));
-        await DB.del("worldOverlays", c.id); // наложение мира принадлежит чату и уходит вместе с ним
-        await DB.del("messengerEnvironments", c.id); // как и среда переписки
-        await DB.delMany("memories", (await DB.byIndex("memories", "chatId", c.id)).map((x) => x.id));
-        await DB.delMany("reflections", (await DB.byIndex("reflections", "chatId", c.id)).map((x) => x.id));
-        await DB.delMany("memorySources", (await DB.byIndex("memorySources", "chatId", c.id)).map((x) => x.id));
-        await DB.del("chats", c.id);
+        for (const [store, index, value] of [
+          ["messages", "chatId", c.id], ["images", "chatId", c.id],
+          ["memories", "chatId", c.id], ["reflections", "chatId", c.id],
+          ["memorySources", "chatId", c.id]
+        ]) {
+          const rows = await DB.byIndex(store, index, value);
+          rows.forEach(row => deletes.push([store, row.id]));
+        }
+        deletes.push(["chats", c.id], ["worldOverlays", c.id],
+          ["messengerEnvironments", c.id]);
       }
-      const xs = await DB.byIndex("experience", "owner", cd.id);
-      await DB.delMany("experience", xs.map((x) => x.id));
-      // Линза мира принадлежит персонажу и удаляется с ним; общий пак остаётся (world/service).
-      if (ctx.svc && ctx.svc.world) await ctx.svc.world.removeForCard(cd.id);
-      await DB.del("cards", cd.id);
-      S.cards = S.cards.filter((c) => c.id !== cd.id);
-      S.chats = S.chats.filter((c) => c.cardId !== cd.id);
-      if (S.cardId === cd.id) { S.cardId = null; S.chatId = null; S.messages = []; S.view = "home"; }
+      const experiences = await DB.byIndex("experience", "owner", cd.id);
+      experiences.forEach(x => deletes.push(["experience", x.id]));
+      const lenses = await DB.byIndex("worldLenses", "cardId", cd.id);
+      lenses.forEach(x => deletes.push(["worldLenses", x.id]));
+      // A failed request aborts the complete cascade, including the Card row.
+      await DB.mutateBatch({ deletes });
+      } catch (e) {
+        if (ctx.svc.memory && ctx.svc.memory.restoreChat)
+          ownedChats.forEach(c => ctx.svc.memory.restoreChat(c.id));
+        throw e;
+      }
+      S.worldLenses = (S.worldLenses || []).filter(l => l.cardId !== cd.id);
+      S.cards = S.cards.filter(c => c.id !== cd.id);
+      S.chats = S.chats.filter(c => c.cardId !== cd.id);
+      if (S.cardId === cd.id) {
+        S.cardId = null; S.chatId = null; S.messages = [];
+        S.worldOverlay = null; S.messengerEnv = null; S.view = "home";
+      }
     }
 
     function exportJson(d) {

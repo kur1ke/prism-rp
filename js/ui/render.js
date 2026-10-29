@@ -3,6 +3,18 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const esc = (s) => PRP.util.escapeHtml(s);
+  // Image sources from cards and backups are untrusted. Only allow safe URLs,
+  // and escape attributes before interpolating them into rendered HTML.
+  function safeImageSrc(value) {
+    const src = typeof value === "string" ? value.trim() : "";
+    if (!src || /[\u0000-\u001f\u007f]/.test(src)) return "";
+    if (/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(src)) return esc(src);
+    try {
+      const url = new URL(src, typeof document !== "undefined" ? document.baseURI : "https://example.invalid/");
+      if (/^(https?:|blob:)$/.test(url.protocol) && !/^\s*(?:javascript|data):/i.test(src)) return esc(src);
+    } catch (_) { /* invalid URL */ }
+    return "";
+  }
 
   // Иконки: тонкий штрих 1.6, currentColor.
   const P = {
@@ -70,12 +82,12 @@
   function avatar(card, size, extra) {
     const name = (card && card.name) || "?";
     const cls = `av av-${size || 40} ${extra || ""}`;
-    if (card && card.avatar) return `<div class="${cls}"><img src="${card.avatar}" alt=""></div>`;
+    if (card && safeImageSrc(card.avatar)) return `<div class="${cls}"><img src="${safeImageSrc(card.avatar)}" alt=""></div>`;
     if (card && card.me) return `<div class="${cls} av-me">${initial(name)}</div>`;
     return `<div class="${cls}" style="${artBg(name)}">${initial(name)}</div>`;
   }
   function art(card) {
-    if (card.avatar) return `<div class="tile-art"><img src="${card.avatar}" alt="" loading="lazy"></div>`;
+    if (safeImageSrc(card.avatar)) return `<div class="tile-art"><img src="${safeImageSrc(card.avatar)}" alt="" loading="lazy"></div>`;
     return `<div class="tile-art" style="${artBg(card.name)}">${initial(card.name)}</div>`;
   }
 
@@ -165,5 +177,5 @@
     return many;
   }
 
-  PRP.render = { esc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
+  PRP.render = { esc, safeImageSrc, icon, GLYPH, avatar, art, artBg, rpText, md, bubbles, time, day, ago, plural, hue };
 })(typeof window !== "undefined" ? window : globalThis);

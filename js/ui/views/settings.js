@@ -14,9 +14,9 @@
     if (section === "models") {
       const editing = m.settings.providers.find((p) => p.id === m.editProviderId);
       body = `<h3>Модели</h3><p class="lead">Какая модель пишет за персонажей. Можно держать несколько и переключать прямо в чате.</p>
-        ${m.providers.map((p) => `<div class="prov ${m.provider && m.provider.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${p.id}" role="radio" tabindex="0" aria-checked="${m.provider && m.provider.id === p.id}">
+        ${m.providers.map((p) => `<div class="prov ${m.provider && m.provider.id === p.id ? "on" : ""}" data-act="pick-provider" data-id="${esc(p.id)}" role="radio" tabindex="0" aria-checked="${m.provider && m.provider.id === p.id}">
           <span class="radio"></span><div style="min-width:0"><div class="nm">${esc(p.name)}</div><div class="ds">${esc(p.kind === "perchance" ? "Бесплатная модель Perchance, ключ не нужен" : `${p.baseUrl || "адрес не задан"}${p.model ? " · " + p.model : ""}`)}</div></div>
-          ${p.kind === "openai" ? `<button class="btn btn-sm btn-ghost" data-act="prov-edit" data-id="${p.id}">Изменить</button>` : ""}</div>`).join("")}
+          ${p.kind === "openai" ? `<button class="btn btn-sm btn-ghost" data-act="prov-edit" data-id="${esc(p.id)}">Изменить</button>` : ""}</div>`).join("")}
         ${!m.providers.some((p) => p.kind === "perchance") ? `<p class="hint">Бесплатная модель Perchance появится здесь, когда приложение запущено как генератор на Perchance.</p>` : ""}
         <div class="block-title" style="margin-top:20px">Модель обработки (Processing Provider)</div>
         <p class="hint">StateTracker и подготовка промптов изображений. Отыгрыш персонажа остаётся на выбранной выше модели. По умолчанию используется та же модель — как и раньше. Разделение само по себе не делает запросы параллельными.</p>
@@ -31,7 +31,7 @@
       const sm = s.sampler;
       const num = (k, label, step, help) => `<div class="field"><label>${label}</label><input type="number" step="${step}" data-sampler="${k}" value="${sm[k] != null ? sm[k] : ""}">${help ? `<span class="help">${help}</span>` : ""}</div>`;
       body = `<h3>Генерация</h3><p class="lead">Стиль, длина ответа и объём памяти. Для бесплатной модели Perchance параметры сэмплирования не применяются.</p>
-        <div class="presets">${SAMPLER_PRESETS.map((p) => `<button class="preset ${s.samplerPreset === p.id ? "on" : ""}" data-act="pick-preset" data-id="${p.id}"><b>${p.name}</b><small>${p.hint}</small></button>`).join("")}
+        <div class="presets">${SAMPLER_PRESETS.map((p) => `<button class="preset ${s.samplerPreset === p.id ? "on" : ""}" data-act="pick-preset" data-id="${esc(p.id)}"><b>${p.name}</b><small>${p.hint}</small></button>`).join("")}
           <button class="preset ${s.samplerPreset === "custom" ? "on" : ""}" data-act="pick-preset" data-id="custom"><b>Свой</b><small>значения ниже</small></button></div>
         <div class="row">${num("temperature", "Температура", "0.05", "выше — смелее")}${num("top_p", "Top P", "0.01")}${num("min_p", "Min P", "0.01")}</div>
         <div class="row">${num("top_k", "Top K", "1", "0 — выключено")}${num("repetition_penalty", "Штраф за повторы", "0.01")}${num("max_tokens", "Длина ответа", "50", "в токенах")}</div>

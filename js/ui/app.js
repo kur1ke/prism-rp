@@ -92,11 +92,20 @@
   }
 
   /* ── Навигация ───────────────────────────────────────────────────── */
-  async function openChat(chatId, quiet) {
+  // Services load into shared S. Serialize activations: a slower load of chat A
+  // must never finish after chat B and overwrite B's messages, memory or world.
+  let navigationQueue = Promise.resolve();
+  let navigationIntent = 0;
+  function enqueueNavigation(job) {
+    const ticket = ++navigationIntent;
+    const result = navigationQueue.then(() => job(ticket));
+    navigationQueue = result.catch(() => {});
+    return result;
+  }
+  async function activateChat(chatId, quiet, ticket) {
+    if (ticket !== navigationIntent) return;
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
-    // Timings describe one opened chat, not the whole app. Keep the array
-    // identity so the recorder and Debug view keep using the same log.
     PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
     S.chatId = chatId;
     S.memoryStatus = "";
@@ -109,12 +118,22 @@
     await svc.worldChat.load(chatId);
     await svc.messenger.load(chatId);
     await svc.images.loadForChat(chatId);
+    if (ticket !== navigationIntent || S.chatId !== chatId || S.view !== "chat") return;
     S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); }
     $("#rail").classList.remove("open");
     ui.syncScrim();
+  }
+  function openChat(chatId, quiet) {
+    // Generation currently commits through active S: preserve the original chat
+    // while a model response or queued send is still in flight.
+    if (S.gen || S.turn) {
+      ui.toast("Дождитесь окончания ответа или отмените текущую операцию перед переключением чата.", true);
+      return Promise.resolve();
+    }
+    return enqueueNavigation((ticket) => activateChat(chatId, quiet, ticket));
   }
   async function goHome() {
     // «Главная» is the selected dialogue, not a duplicate catalog.
@@ -124,6 +143,7 @@
       if (S.view === "chat" && S.chatId === activeId) return;
       return openChat(activeId);
     }
+    ++navigationIntent;
     S.view = "home";
     S.find = null;
     ui.rememberUi();
@@ -131,6 +151,7 @@
     ui.renderAll();
   }
   function goCharacters() {
+    ++navigationIntent;
     S.view = "characters";
     S.find = null;
     ui.rememberUi();
@@ -139,11 +160,17 @@
   }
   /* Новый чат. Режим выбирается здесь и потом не меняется. Для переписки — явная настройка времени (setup:
      { timeZone, timeMode, manualNow }); она проверяется до создания чата. */
-  async function newChat(mode, cardId, setup) {
+  function newChat(mode, cardId, setup) {
+    if (S.gen || S.turn) {
+      ui.toast("Завершите или отмените текущий ход перед созданием другого чата.", true);
+      return Promise.resolve(null);
+    }
+    return enqueueNavigation(async (ticket) => {
     if (mode === "messenger") {
       const err = svc.messenger.checkSetup(setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" });
       if (err) { ui.toast(err, true); return null; }
     }
+    if (ticket !== navigationIntent) return null;
     const id = await svc.chat.createChat(mode, cardId);
     if (id && mode === "messenger") {
       const chosenSetup = setup || { timeZone: PRP.messengerTime.systemTimeZone(), timeMode: "live" };
@@ -170,8 +197,9 @@
     }
     // Another new-chat/navigation action may have replaced this request while
     // the initial RP model was thinking. Do not steal focus back to an old chat.
-    if (id && S.chatId === id) await openChat(id);
+    if (id && S.chatId === id && ticket === navigationIntent) await activateChat(id, false, ticket);
     return id;
+    });
   }
   async function openCard(cardId) {
     const latest = svc.chat.latestForCard(cardId);
@@ -180,6 +208,7 @@
   }
   function openAssist(id, base, quiet) {
     if (S.gen) { ui.toast("Дождитесь окончания ответа или остановите его.", true); return; }
+    ++navigationIntent;
     svc.assist.pick(id, base);
     S.view = "assist";
     S.find = null;
@@ -190,6 +219,7 @@
   }
   // Библиотека миров. keepDraft — оставить открытым текущий черновик пака (например, после импорта).
   function openWorld(keepDraft) {
+    ++navigationIntent;
     if (!keepDraft) S.worldDraft = null;
     S.view = "world";
     S.find = null;

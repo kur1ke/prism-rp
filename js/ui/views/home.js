@@ -27,7 +27,7 @@
           const exact = date && Number.isFinite(date.getTime())
             ? date.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
           const time = exact ? R.ago(when) + " · " + date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "Время неизвестно";
-          return `<div class="rail-chat ${m.chat && m.chat.id === c.id && m.view === "chat" ? "active" : ""}" data-act="open-chat" data-id="${c.id}" role="button" tabindex="0">
+          return `<div class="rail-chat ${m.chat && m.chat.id === c.id && m.view === "chat" ? "active" : ""}" data-act="open-chat" data-id="${esc(c.id)}" role="button" tabindex="0">
             ${R.avatar(cd, 34)}
             <div style="min-width:0"><div class="t1" title="${esc(cd.name)}">${esc(cd.name)}</div><div class="t2" title="${esc(exact)}">${esc(time)}</div></div>
             <span class="kind" title="${c.mode === "messenger" ? "Переписка" : "Сцена"}" aria-label="${c.mode === "messenger" ? "Переписка" : "Сцена"}">${icon(c.mode === "messenger" ? "bubble" : "book")}</span>
@@ -81,13 +81,13 @@
           const last = m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
           const at = last && last.updatedAt ? new Date(last.updatedAt) : null;
           const dateLabel = at && Number.isFinite(at.getTime()) ? at.toLocaleString("ru-RU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-          return `<div class="tile" data-act="open-card" data-id="${cd.id}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
+          return `<div class="tile" data-act="open-card" data-id="${esc(cd.id)}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
             ${R.art(cd)}<div class="tile-shade"></div>
             <div class="tile-actions" role="group" aria-label="Новый чат с ${esc(cd.name)}">
-              <button class="tile-action" data-act="new-card-chat" data-id="${cd.id}" data-mode="rp" title="Новая сцена">Сцена</button>
-              <button class="tile-action" data-act="new-card-chat" data-id="${cd.id}" data-mode="messenger" title="Новая переписка">Переписка</button>
+              <button class="tile-action" data-act="new-card-chat" data-id="${esc(cd.id)}" data-mode="rp" title="Новая сцена">Сцена</button>
+              <button class="tile-action" data-act="new-card-chat" data-id="${esc(cd.id)}" data-mode="messenger" title="Новая переписка">Переписка</button>
             </div>
-            <button class="tile-edit" data-act="edit-card" data-id="${cd.id}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
+            <button class="tile-edit" data-act="edit-card" data-id="${esc(cd.id)}" title="Редактировать карточку">${icon("edit")}<span>Изменить</span></button>
             <div class="tile-body"><div class="tile-name">${esc(cd.name)}</div><div class="tile-tags">${esc((cd.tags || []).slice(0, 4).join(", ") || cd.creator || " ")}</div>
               <div class="tile-last"><span>Последнее взаимодействие</span>
                 ${dateLabel ? `<time title="${esc(dateLabel)}" datetime="${at.toISOString()}">${esc(R.ago(last.updatedAt))} · ${esc(at.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }))}</time>` : '<span class="tile-last-none">Ещё не было</span>'}

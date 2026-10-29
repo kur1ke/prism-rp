@@ -22,6 +22,8 @@ jobs:
           node-version: '22'
       - name: Run regression tests
         run: node tests/run.js
+      - name: Check chat navigation, persistence and imported URL safety
+        run: node tests/critical-integrity.js
       - name: Check StateTracker photographed outfit continuity
         run: node tests/state-photo-continuity.js
       - name: Check Messenger temporal freshness and completed activities
