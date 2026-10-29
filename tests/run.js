@@ -119,7 +119,7 @@ t("DRAW-SOURCE-BIND-1: current selfie removal without evidenceType reaches Track
   const text="Хи-хи, я знала, что тебе понравится!";
   const candidate={actor:"char",field:"wear",action:"remove",
     value:["белую хлопковую блузку"],certainty:"reported",
-    evidence:"полностью сняла белую хлопковую блузку"};
+    evidence:"полностью сняла белую хлопковую блузку",visualScope:"current-self"};
   const opts={mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
     text,draw,draws:[{prompt:draw}],references:[]};
   const parsed=I.parse(JSON.stringify({events:[candidate]}),opts);
@@ -141,7 +141,8 @@ t("DRAW-SOURCE-BIND-2: lifted blouse is adjusted, not removed", () => {
   const draw="Селфи в зеркале. Орихимэ Иноуэ полностью подняла белую хлопковую блузку вверх, открывая кружевное бельё.";
   const quote="полностью подняла белую хлопковую блузку вверх";
   const event={actor:"char",field:"wear",action:"adjust",
-    value:["белую хлопковую блузку"],certainty:"reported",evidence:quote,placement:quote};
+    value:["белую хлопковую блузку"],certainty:"reported",evidence:quote,placement:quote,
+    visualScope:"current-self"};
   const parsed=I.parse(JSON.stringify({events:[event]}),{mode:"messenger",role:"assistant",
     speakerName:"Орихимэ Иноуэ",text:"Держи фото!",draw,draws:[{prompt:draw}]});
   assert.strictEqual(parsed.events.length,1,JSON.stringify(parsed));
@@ -157,11 +158,11 @@ t("DRAW-SOURCE-BIND-3: no promotion from old photos, other actor, explicit text 
   const text="Смотри";
   const draw="Селфи в зеркале. Орихимэ Иноуэ полностью сняла белую блузку.";
   const event={actor:"char",field:"wear",action:"remove",value:["белую блузку"],
-    certainty:"reported",evidence:"полностью сняла белую блузку"};
+    certainty:"reported",evidence:"полностью сняла белую блузку",visualScope:"current-self"};
   const opts={mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
     text,draw,draws:[{prompt:draw}]};
   const rejected=[
-    [{...opts,draw:"Старое "+draw,draws:[{prompt:"Старое "+draw}]},event],
+    [{...opts,draw:"Старое "+draw,draws:[{prompt:"Старое "+draw}]},{...event,visualScope:"past-self"}],
     [{...opts,otherName:"Орихимэ Иноуэ"},event],
     [opts,{...event,evidenceType:"text"}],
     [opts,{...event,visualScope:"past-self"}],

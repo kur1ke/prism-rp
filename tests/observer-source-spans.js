@@ -26,7 +26,7 @@ function parse(events,o=opts,frameObjects=[]){
   return INT.parse(JSON.stringify({events,frameObjects,unresolved:[]}),o);
 }
 const base={actor:"char",field:"wear",action:"remove",value:["белая блузка"],
-  certainty:"reported",sourceId};
+  certainty:"reported",sourceId,visualScope:"current-self"};
 // The model supplies no quote, no itemMention, no byte offset.
 const p=parse([base]);
 assert.equal(p.events.length,1,JSON.stringify(p));
@@ -113,7 +113,7 @@ assert.equal(parse([{...base,sourceId,visualScope:"past-self"}]).events.length,0
 const old="Старое фото. "+draw;
 const oldOptions={...opts,draw:old,draws:[{prompt:old}]};
 const oldId=ES.catalog(oldOptions).find(x=>x.text.includes("сняла белую блузку")).id;
-assert.equal(parse([{...base,sourceId:oldId}],oldOptions).events.length,0,
+assert.equal(parse([{...base,sourceId:oldId,visualScope:"past-self"}],oldOptions).events.length,0,
   "historical old-photo must not be promoted to the present");
 const modified=structuredClone(msg);
 modified.swipes[0].draws=[{prompt:draw.replace("белую","красную")}];
@@ -158,7 +158,7 @@ const newOpts={...opts,draw:nextDraw,draws:[{prompt:nextDraw}],
   references:TR.references(prior,"char",["remove","adjust","add"])};
 const newId=ES.catalog(newOpts).find(x=>x.text.includes("снова надела")).id;
 const again=parse([{actor:"char",field:"wear",action:"add",value:["белая блузка"],
-  certainty:"reported",sourceId:newId}],newOpts);
+  certainty:"reported",sourceId:newId,visualScope:"current-self"}],newOpts);
 assert.equal(again.events.length,1,JSON.stringify(again));
 continued.swipes[0].stateEvents.push({...again.events[0],drawIndex:1});
 const finalState=TR.fold({mode:"messenger",initialWear:init,path:[continued]});
@@ -171,7 +171,7 @@ const newGarmentOpts={...opts,draw:newGarmentDraw,draws:[{prompt:newGarmentDraw}
   references:opts.references.filter(r=>r.item!==title)};
 const freshId=ES.catalog(newGarmentOpts).find(x=>x.text.includes("красном кардигане")).id;
 const novel=parse([{actor:"char",field:"wear",action:"add",
-  certainty:"reported",value:["красный кардиган"],sourceId:freshId}],newGarmentOpts);
+  certainty:"reported",value:["красный кардиган"],sourceId:freshId,visualScope:"current-self"}],newGarmentOpts);
 assert.equal(novel.events.length,1,JSON.stringify(novel));
 assert.deepEqual(novel.events[0].value,["красном кардигане"]);
 assert.equal(novel.events[0].reference,undefined);
@@ -264,10 +264,18 @@ const pajamaOpts={mode:"messenger",role:"assistant",speakerName:"Орихимэ 
 const pajamaFragment=ES.catalog(pajamaOpts).find(x=>x.text.includes("На ней надета светлая пижама"));
 assert.ok(pajamaFragment,JSON.stringify(ES.catalog(pajamaOpts)));
 const pajamaCandidate={actor:"char",field:"wear",action:"add",value:["светлая пижама"],
-  certainty:"reported",sourceId:pajamaFragment.id};
+  certainty:"reported",sourceId:pajamaFragment.id,visualScope:"current-self"};
 const pajamaReport=parse([pajamaCandidate],pajamaOpts);
 assert.equal(pajamaReport.events.length,1,JSON.stringify(pajamaReport));
 assert.equal(pajamaReport.events[0].evidenceType,"draw");
+const unspecified=parse([{...pajamaCandidate,visualScope:undefined}],pajamaOpts);
+assert.equal(unspecified.events.length,0);
+assert.equal(unspecified.rejectedObservations[0].reason,"visual-scope-not-current");
+const arbitraryDraw="Авторский кадр. Орихимэ Иноуэ в светлой пижаме.";
+const arbitrary={...pajamaOpts,draw:arbitraryDraw,draws:[{prompt:arbitraryDraw}]};
+const arbitraryId=ES.catalog(arbitrary).find(x=>x.text.includes("в светлой пижаме")).id;
+assert.equal(parse([{...pajamaCandidate,sourceId:arbitraryId}],arbitrary).events.length,1,
+  "verified source does not depend on photographic vocabulary");
 assert.deepEqual(pajamaReport.events[0].value,["светлая пижама"]);
 const wearing=TR.fold({mode:"messenger",initialWear:pajamaInit,path:[{
   id:"photo-pajamas",role:"assistant",swipeIdx:0,
@@ -288,7 +296,7 @@ for(const shot of forbidden){
   const other={...pajamaOpts,draw:shot,draws:[{prompt:shot}]};
   const fragment=ES.catalog(other).find(x=>x.text.includes("пижам"));
   if(!fragment)continue;
-  const blocked=parse([{...pajamaCandidate,sourceId:fragment.id}],other);
+  const blocked=parse([{...pajamaCandidate,sourceId:fragment.id,visualScope:"past-self"}],other);
   assert.equal(blocked.events.length,0,"not a current owner mirror shot: "+shot);
 }
 const pajamaSibling=TR.fold({mode:"messenger",initialWear:pajamaInit,path:[{
