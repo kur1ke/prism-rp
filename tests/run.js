@@ -7365,7 +7365,7 @@ async function unifiedTracker() {
         if(instruction.startsWith("Ты — наблюдатель"))
           return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
             value:["белую хлопковую блузку"],certainty:"reported",
-            evidence:"полностью сняла белую хлопковую блузку"}]});
+            evidence:"полностью сняла белую хлопковую блузку",visualScope:"current-self"}]});
         assert.ok(instruction.includes("Техническое уточнение"));
         return JSON.stringify({changed:"no",
           previous:initial.map(item=>({item,status:item==="белая хлопковая блузка"?"not_worn":"worn"})),
@@ -7403,7 +7403,7 @@ async function unifiedTracker() {
       calls++;
       if(instruction.startsWith("Ты — наблюдатель"))return JSON.stringify({events:[
         {actor:"char",field:"wear",action:"remove",value:[original],
-          certainty:"reported",evidence:"полностью сняла белую блузку"}],
+          certainty:"reported",evidence:"полностью сняла белую блузку",visualScope:"current-self"}],
         frameObjects:[],unresolved:[]});
       assert.ok(instruction.includes("Техническое уточнение"));
       return JSON.stringify({changed:"no",previous:initial.map(item=>({
@@ -7458,7 +7458,7 @@ async function unifiedTracker() {
         const sourceId=globalThis.PRP.evidenceSpans.catalog({
           text:"Держи фото!",draw}).find(x=>x.text.includes("сняла белую блузку")).id;
         return JSON.stringify({events:[{actor:"char",field:"wear",action:"remove",
-          value:["зелёный свитер"],certainty:"reported",sourceId}],frameObjects:[]});
+          value:["зелёный свитер"],certainty:"reported",sourceId,visualScope:"current-self"}],frameObjects:[]});
       }};
       const result=await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"observer"});
       assert.strictEqual(result.status,"partial",JSON.stringify(result));
@@ -7506,7 +7506,7 @@ async function unifiedTracker() {
             text:"Ну как тебе? ♡",draw}).find(x=>x.text.includes("сняла белую блузку")).id;
           return JSON.stringify({events:[{actor:"char",field:"wear",
             action:"remove",value:["белая блузка"],certainty:"reported",
-            sourceId:id}],frameObjects:[],unresolved:[]});
+            sourceId:id,visualScope:"current-self"}],frameObjects:[],unresolved:[]});
         }
         assert.ok(instruction.includes("Техническое уточнение"));
         return JSON.stringify({changed:"no",previous:initial.map(item=>({
