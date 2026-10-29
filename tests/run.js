@@ -8337,12 +8337,13 @@ async function unifiedTracker() {
     const prompt = allText(built.messages);
     assert.ok(prompt.includes("second frame, blue jacket"),"actual outgoing context includes latest selected shot");
     assert.ok(!prompt.includes("first frame, red jacket"),"outgoing context cannot resurrect older shot");
-    reply.swipes.push({text:"Альтернативный ответ",draws:[{prompt:"alternate frame, green jacket",ratio:"1:1"}]});
-    reply.swipeIdx = 1;
+    const liveReply = h.chat.path().at(-1);
+    liveReply.swipes.push({text:"Альтернативный ответ",draws:[{prompt:"alternate frame, green jacket",ratio:"1:1"}]});
+    liveReply.swipeIdx = 1;
     const alternate = allText(h.prism.build(h.chat.path()).messages);
     assert.ok(alternate.includes("alternate frame, green jacket"));
     assert.ok(!alternate.includes("second frame, blue jacket"),"sibling swipe must be isolated");
-    reply.swipeIdx = 0;
+    liveReply.swipeIdx = 0;
     assert.ok(!globalThis.PRP.prismService.historyWithDraws(chosen,false)[0].text.includes("[draw:"),
       "disabled image directive cannot restore shot");
   });
@@ -8369,8 +8370,9 @@ async function unifiedTracker() {
     assert.ok(!after.includes("белая блузка")&&!after.includes("бежевая юбка"),
       "initial garments must not be injected again after full replacement");
     assert.ok(!after.includes("стартовый комплект"),"current outfit must not be described as origin");
-    change.swipes.push({text:"Я осталась в прежней одежде.",stateEvents:[],sceneOps:[],draws:[]});
-    change.swipeIdx=1;
+    const liveChange = h.chat.path().at(-1);
+    liveChange.swipes.push({text:"Я осталась в прежней одежде.",stateEvents:[],sceneOps:[],draws:[]});
+    liveChange.swipeIdx=1;
     const sibling=allText(h.prism.build(h.chat.path()).messages);
     assert.ok(sibling.includes("белая блузка") && sibling.includes("бежевая юбка"),
       "other swipe without the change still derives original outfit");
