@@ -392,7 +392,8 @@
     const asEvent = (e, kind) => '<li>' + esc(kind) + ': ' +
       esc(e.action || "") + ' · ' +
       esc(Array.isArray(e.value) ? e.value.join(", ") : e.value == null ? "" : String(e.value)) +
-      (e.reference && e.reference.item ? ' · ссылка: ' + esc(e.reference.item) : "") +
+      (e.itemMention ? ' · названо: ' + esc(e.itemMention) : "") +
+      (e.reference && e.reference.item ? ' · привязано к: ' + esc(e.reference.item) : "") +
       (e.evidence ? '<small>Источник: ' + esc(e.evidenceType || "text") +
         ' · ' + esc(e.evidence) + '</small>' : "") + '</li>';
     const changes = '<div class="block"><div class="block-title">Пересчёт по активной ветке <small>' +
@@ -408,7 +409,9 @@
           '</summary><p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
           row.events.map(e => asEvent(e, "Observer")).concat(row.corrections.map(e => asEvent(e, "Коррекция"))).join("") +
           '</ul>' +
-          (rejected.length ? '<pre class="debug-prompt">' + esc(JSON.stringify(rejected, null, 2)) + '</pre>' : "") +
+          (rejected.length ? '<details class="exp-debug"><summary>Отклонённые наблюдения одежды (' +
+            rejected.length + ')</summary><pre class="debug-prompt">' + esc(JSON.stringify(rejected, null, 2)) +
+            '</pre></details>' : "") +
           (row.status && row.status.issues.some(isWearIssue) ? '<pre class="debug-prompt">' +
             esc(JSON.stringify(row.status.issues.filter(isWearIssue), null, 2)) + '</pre>' : "") +
           (row.replayIssues.length ? '<pre class="debug-prompt">Ошибки повторного применения: ' +
