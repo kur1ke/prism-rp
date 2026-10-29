@@ -8242,9 +8242,9 @@ async function unifiedTracker() {
     assert.strictEqual(init.baseline.complete, true);
     assert.deepStrictEqual(init.current.worn.map(x => x.item), ["белая блузка", "бежевая юбка"]);
     assert.strictEqual(init.changes.length, 0);
-    const msg = h.chat.newMsg("assistant", null, "Я сняла блузку.");
+    const msg = h.chat.newMsg("assistant", null, "Я сняла белую блузку.");
     msg.swipes[0].stateEvents = [{ actor: "char", field: "wear", action: "remove",
-      value: ["белая блузка"], certainty: "reported", evidence: "сняла блузку" }];
+      value: ["белая блузка"], certainty: "reported", evidence: "сняла белую блузку" }];
     await h.chat.commitMessage(msg, msg.id);
     const trace = h.ctx.svc.state.debugWear(h.chat.path());
     assert.strictEqual(trace.changes.length, 1);
