@@ -93,20 +93,23 @@
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
       const c = { id: U.uid("chat"), cardId: cd.id, mode, title: mode === "messenger" ? "Переписка" : "Сцена", sceneInit: "", leafId: null, createdAt: Date.now() };
-      S.chatId = c.id; S.cardId = cd.id; S.messages = [];
+      let first = null;
       if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
         const vars = { char: cd.name, user: ctx.persona().name };
-        const m = newMsg("assistant", null, "");
-        m.opening = "authored";
-        m.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
+        first = newMsg("assistant", null, "");
+        first.chatId = c.id; // newMsg normally uses the currently selected chat
+        first.opening = "authored";
+        first.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
           const parsed = SC.parse(U.macros(g, vars));
           return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };
         });
-        await putMsg(m);
-        c.leafId = m.id;
-        c.preview = m.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
+        c.leafId = first.id;
+        c.preview = first.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
       }
-      await putChat(c);
+      // Failure cannot leave an orphan opening or a chat without its root.
+      await DB.putAll([["chats", c]].concat(first ? [["messages", first]] : []));
+      S.chats.push(c);
+      S.chatId = c.id; S.cardId = cd.id; S.messages = first ? [first] : [];
       return c.id;
     }
     function latestForCard(cardId) {
@@ -190,10 +193,7 @@
       const c = ctx.chat();
       const m = newMsg("user", c.leafId, text);
       if (swipeExtra) Object.assign(m.swipes[0], swipeExtra);
-      await putMsg(m);
-      c.leafId = m.id;
-      await touch();
-      return m;
+      return commitMessage(m, m.id);
     }
 
     /* ── Сцена из форм ─────────────────────────────────────────────────── */
