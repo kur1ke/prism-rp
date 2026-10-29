@@ -1278,14 +1278,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 </script>
 <script>/* js/core/perf.js */
 /* Prism RP — PERF-01: журнал длительностей этапов хода (только в памяти, только числа).
-   Метрики: userStateMs, roleplayMs, assistantStateMs, imagePrepareMs, readyAfterReplyMs,
-   sendToRoleplayMs, stateWaitTimeout, postReplyError. Никаких текстов сообщений, ключей,
+   Метрики: время входного/выходного Observer, инициализации одежды,
+   уточнения невидимых вещей, перевода/компиляции/финального аудита,
+   генерации изображения и всего времени до сохранения, а также этапы хода. Никаких текстов сообщений, ключей,
    данных карточки и памяти: запись — имя метрики, число, id сообщения/чата и короткий исход.
    Не сохраняется в IndexedDB и не попадает в бэкап. Показ — Debug → «Тайминги» (режим разработчика). */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const MAX = 80;
+  const MAX = 200;
   const clean = (v, n) => (v == null ? "" : String(v).replace(/[^\w:.\-а-яё ]/gi, "").slice(0, n));
 
   // list — массив, в который пишутся записи (S.perf); возвращается функция записи.
@@ -9930,13 +9931,25 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   /* PERF-01: длительности этапов хода (в памяти, только числа). readyAfterReplyMs — от показа ответа до того,
      как переписка снова принимает ввод; sendToRoleplayMs — от нажатия «Отправить» до запроса к модели. */
-  const TIMING = { userStateMs: "Разбор реплики пользователя", roleplayMs: "Запрос к RP-модели", assistantStateMs: "Разбор ответа персонажа",
-    imagePrepareMs: "Подготовка промпта изображения", readyAfterReplyMs: "Ответ показан → можно писать", sendToRoleplayMs: "«Отправить» → запрос к модели",
-    stateWaitTimeout: "Ожидание разбора прервано по времени", postReplyError: "Ошибка обработки после ответа" };
+  const TIMING = { userStateMs: "Обработка реплики пользователя", roleplayMs: "Запрос к RP-модели", assistantStateMs: "Обработка ответа персонажа",
+    initialOutfitMs: "Инициализация одежды · запрос и сохранение",
+    observerModelMs: "Observer · вызов модели и разбор",
+    wearInquiryMs: "Уточнение невидимой одежды · RP-модель",
+    imageTranslateMs: "Перевод изображения · вызов модели",
+    imageCompileMs: "Image Compiler · весь вызов (включая перевод)",
+    imageFinalAuditMs: "FinalAudit · проверка итогового промпта",
+    imageBackendMs: "Генерация изображения · backend",
+    imageTotalMs: "Изображение · от подготовки до сохранения",
+    imagePrepareMs: "Подготовка изображения · до backend",
+    readyAfterReplyMs: "Ответ показан → можно писать",
+    sendToRoleplayMs: "«Отправить» → запрос к модели",
+    stateWaitTimeout: "Ожидание разбора прервано по времени",
+    postReplyError: "Ошибка обработки после ответа" };
   function timingTab(m) {
     const sum = m.perfSummary || [];
     const rows = (m.perfLog || []).slice(-30).reverse();
-    return '<div class="block"><div class="block-title">Сводка <small>в памяти, последние ' + (m.perfLog || []).length + '</small></div>'
+    return '<p class="hint">Вложенные замеры пересекаются: перевод входит в компиляцию, компиляция — в подготовку, а подготовка — в общее время изображения. Не складывайте эти значения.</p>' +
+      '<div class="block"><div class="block-title">Сводка <small>в памяти, последние ' + (m.perfLog || []).length + '</small></div>'
       + (sum.length ? '<dl class="kv">' + sum.map((x) => '<dt>' + esc(TIMING[x.metric] || x.metric) + ' <small>' + esc(x.metric) + '</small></dt><dd>' + x.last + ' мс · медиана ' + x.median + ' мс · ' + x.count + '×</dd>').join("") + '</dl>'
         : '<p class="empty-note">Замеров пока нет: отправьте сообщение.</p>') + '</div>'
       + (rows.length ? '<div class="block"><div class="block-title">Последние замеры</div><ul class="wc-list">' + rows.map((r) =>
@@ -11864,6 +11877,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   function create(ctx) {
     const { S, DB, ui } = ctx;
     const chat = () => ctx.svc.chat;
+    const clock = () => typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const perf = (metric, started, origin, outcome) => {
+      if (typeof ctx.perf === "function") ctx.perf(metric, clock() - started,
+        { chatId: origin.chatId, msgId: origin.messageId, outcome });
+    };
 
     function textGen(instruction) { return LLM.simple(ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), instruction); }
 
@@ -11889,7 +11907,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
     async function draw(msg, sw, d, reuse, opts) {
       const o = opts || {};
-      const prepT0 = Date.now(); // PERF-01: длительность подготовки промпта (только число)
+      const prepT0 = clock(); // PERF-03: covers completed and failed preparation
       const currentChat = ctx.chat();
       const origin = currentChat && imageOrigin(S.messages, msg, sw, currentChat.id);
       if (!origin) { ui.toast("Исходное сообщение или свайп недоступны для изображения.", true); return; }
@@ -11897,7 +11915,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const pers = JSON.parse(JSON.stringify(ctx.persona()));
       // Snapshot the processing provider for the whole image operation; RP model remains independent.
       const provider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
-      const generateText = (instruction) => LLM.simple(provider, instruction);
+      const generateText = async (instruction) => {
+        const started = clock();
+        let outcome = "ok";
+        try { return await LLM.simple(provider, instruction); }
+        catch (e) { outcome = "error"; throw e; }
+        finally { perf("imageTranslateMs", started, origin, outcome); }
+      };
+      const measuredCompile = async (scene, options) => {
+        const started = clock();
+        let outcome = "error";
+        try {
+          const result = await ICP.compile(scene, options, generateText);
+          outcome = result.compiled ? result.cached ? "cached" : "compiled"
+            : result.error ? "error" : "bypass";
+          return result;
+        } finally { perf("imageCompileMs", started, origin, outcome); }
+      };
       if (!cfg.enabled) { ui.toast("Картинки выключены. Включите их в «Настройки → Изображения».", true); return; }
       if (cfg.backend === "perchance" && !IB.available("perchance")) { ui.toast("Рисование через Perchance доступно только в генераторе на Perchance. Выберите Forge/A1111 или API.", true); ui.openSettings("images"); return; }
       if (cfg.backend !== "perchance" && !String(cfg.url || "").trim()) { ui.toast("Укажите адрес сервера изображений.", true); ui.openSettings("images"); return; }
@@ -11987,6 +12021,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       await DB.put("messages", msg);
       repaint();
       let finalPatch, imageData, translationFailure;
+      let preparationRecorded = false;
+      const finishPreparation = (outcome) => {
+        if (preparationRecorded) return;
+        preparationRecorded = true;
+        perf("imagePrepareMs", prepT0, origin, outcome);
+      };
       let shotOnlyGate = drawAuthored;
       try {
         const intent = !!entry.intentMode;
@@ -12033,11 +12073,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: hybrid ? "hybrid" : cfg.format,
           qualityPinned: ST.qualityPinned(S.settings) });
-        const firstPass = intent ? await ICP.compile(shot,
+        const firstPass = intent ? await measuredCompile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
             qualityPinned: ST.qualityPinned(S.settings),
             wearState: visualPlan.wear, visualPlan, subjectScope: shotScope,
-            promptPlan, debug: !!S.settings.developerMode }, generateText) : null;
+            promptPlan, debug: !!S.settings.developerMode }) : null;
         if (intent && (!firstPass || !firstPass.compiled)) {
           // Surface the compiler's actual failure; the previous generic text
           // hid whether the model timed out, returned tags, JSON or bad wear.
@@ -12083,11 +12123,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           shotAuthored: drawAuthored, messenger: currentChat.mode === "messenger",
           format: cfg.format, qualityPinned: ST.qualityPinned(S.settings) });
         const comp = intent && drawAuthored ? firstPass : intent && !stateContext && !changes ? { text: imageScene, compiled: true } :
-          await ICP.compile(imageScene, { format: cfg.format, translate: cfg.translate,
+          await measuredCompile(imageScene, { format: cfg.format, translate: cfg.translate,
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             frame: composed.subjects, stateContext,
             wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
-            promptPlan: finalPromptPlan, subjectScope }, generateText);
+            promptPlan: finalPromptPlan, subjectScope });
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
         // contradictory unverified image to the backend.
@@ -12114,13 +12154,21 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (mirrorSingle && (IC.subjectCount(fin.prompt) > 1 ||
             /\b(?:another|second)\s+(?:person|girl|boy|woman|man)\b|\b(?:two|three)\s+(?:women|men|people|persons)\b/i.test(fin.prompt)))
           throw new Error("Зеркальное фото описывает одного человека, но итоговый prompt добавил второго.");
-        const finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
+        const auditStarted = clock();
+        let finalAudit;
+        try {
+          finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
+        } finally {
+          perf("imageFinalAuditMs", auditStarted, origin,
+            finalAudit && finalAudit.issues && finalAudit.issues.length ? "rejected"
+              : finalAudit ? "accepted" : "error");
+        }
         if (finalAudit.issues.length)
           throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
-        if (typeof ctx.perf === "function") ctx.perf("imagePrepareMs", Date.now() - prepT0, { msgId: origin.messageId, chatId: origin.chatId });
+        finishPreparation("ready");
         // A VisualPlan derived from canonical wear is invalid if the source's
         // selected-path garment events/corrections change while compiling.
         // Shot-only equality is safe ONLY for authored images whose rendered
@@ -12131,7 +12179,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (!(await sourceStillCurrent(DB, origin, shotOnlyGate)) ||
             !(await imageOriginStillCurrent(DB, origin, shotOnlyGate)))
           throw new Error("Исходная ветка или сообщение изменились во время подготовки изображения. Повторите рисование.");
-        const res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
+        const backendStarted = clock();
+        let res, backendOutcome = "error";
+        try {
+          res = await IB.generate(cfg, { prompt: fin.prompt, negative: fin.negative, ratio: entry.ratio, seed });
+          backendOutcome = "ok";
+        } finally { perf("imageBackendMs", backendStarted, origin, backendOutcome); }
         imageData = { id: entry.id, chatId: origin.chatId, msgId: origin.messageId, dataUrl: res.dataUrl };
         const dims = res.info && res.info.width ? [res.info.width, res.info.height]
           : res.info && (res.info.resolution || res.info.size) ? String(res.info.resolution || res.info.size).split("x").map(Number) : null;
@@ -12151,6 +12204,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
                 negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
+        finishPreparation("error");
         finalPatch = { status: "error", error: e.message || String(e),
           ...(translationFailure ? { translationFailure } : {}) };
       }
@@ -12196,6 +12250,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           }
         }
       } finally {
+        perf("imageTotalMs", prepT0, origin, finalPatch && finalPatch.status || "error");
         S.drawing.delete(entry.id);
         repaint();
       }
@@ -12258,6 +12313,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   function create(ctx) {
     const { S } = ctx;
     const chat = () => ctx.svc.chat;
+    const clock = () => typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const measure = (metric, since, chatId, msgId, outcome) => {
+      if (typeof ctx.perf === "function") ctx.perf(metric, clock() - since,
+        { chatId, msgId, outcome });
+    };
 
     function snapshot(path, opts) {
       const c = ctx.chat(), cd = ctx.card();
@@ -12314,6 +12374,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
       if (tokens + 650 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
         return Promise.resolve({ status: "overflow" });
+      const started = clock();
       const task = (async () => {
         let raw;
         try { raw = await simpleWithLimit(provider, instruction); }
@@ -12348,7 +12409,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         Object.assign(current, next);
         if (ctx.svc.prism && typeof ctx.svc.prism.refresh === "function") ctx.svc.prism.refresh();
         return { status: "ok", worn: parsed.worn.length };
-      })().finally(() => { if (initializing.get(id) === task) initializing.delete(id); });
+      })().then((result) => {
+        measure("initialOutfitMs", started, id, "", result && result.status || "error");
+        return result;
+      }, (error) => {
+        measure("initialOutfitMs", started, id, "", "error");
+        throw error;
+      }).finally(() => { if (initializing.get(id) === task) initializing.delete(id); });
       initializing.set(id, task);
       return task;
     }
@@ -12435,12 +12502,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     async function analyse(options, provider) {
       let result = { valid: false, events: [], issues: ["Текстовая модель недоступна"] };
       if (provider) {
+        const chatId = (ctx.chat() || {}).id;
+        const started = clock();
         try {
           const instruction = INT.instruction(options);
           const raw = await simpleWithLimit(provider, instruction, OBSERVER_DEFAULT_MS);
           result = INT.parse(raw, options);
         } catch (e) {
           result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
+        } finally {
+          measure("observerModelMs", started, chatId, options && options.messageId || "",
+            result.valid ? "accepted" : "error");
         }
       }
       return result;
@@ -12458,15 +12530,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
       if (tokens + 450 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
         return { skipped: "budget" };
-      let timer;
+      let timer, outcome = "error";
+      const started = clock(), chatId = (ctx.chat() || {}).id;
       try {
         const raw = await Promise.race([
           PRP.llm.simple(roleProvider, instruction, { maxTokens: 450 }),
           new Promise((_,reject) => { timer=setTimeout(() => reject(new Error("timeout")), 10000); })
         ]);
-        return WI.parse(raw, o);
-      } catch(e) { return { error: String(e && e.message || e).slice(0,100) }; }
-      finally { clearTimeout(timer); }
+        const parsed = WI.parse(raw, o);
+        outcome = parsed.answer ? "accepted" : parsed.error || "invalid";
+        return parsed;
+      } catch(e) {
+        const error = String(e && e.message || e).slice(0,100);
+        outcome = error === "timeout" ? "timeout" : "error";
+        return { error };
+      } finally {
+        clearTimeout(timer);
+        measure("wearInquiryMs", started, chatId, o && o.messageId || "", outcome);
+      }
     }
     function prepareUser(text, provider) {
       const c = ctx.chat(), source = String(text || "");
@@ -12622,7 +12703,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         const previousWear = (priorDrawState ||
           snapshot(initialPath.slice(0,index))).actors.char.wearState;
         const probe = await inquireWear({
-          mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
+          messageId: msg.id, mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
           drawIndex: latestIndex, text: sourceText.slice(0,400),
           sourceText, character: (ctx.card()||{}).name,
           previous: previousWear,
@@ -15645,6 +15726,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   /* ── Контекст зависимостей ───────────────────────────────────────────
      Передаётся явно в сервисы и контроллеры. Сервисы не трогают DOM: перерисовку
      просят через ctx.ui; контроллеры читают DOM и вызывают сервисы. */
+  const perfRecorder = PRP.perfLog.create(S.perf, { activeChatId: () => S.chatId });
   const ctx = {
     S, DB,
     files: PRP.files,
@@ -15660,7 +15742,14 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
     // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
-    perf: PRP.perfLog.create(S.perf, { activeChatId: () => S.chatId }),
+    perf: (metric, ms, meta) => {
+      perfRecorder(metric, ms, meta);
+      if (S.modal && S.modal.kind === "debug" && S.modal.section === "timing" &&
+          ctx.ui && typeof ctx.ui.renderModal === "function") {
+        S.modal.keepScroll = true;
+        ctx.ui.renderModal();
+      }
+    },
     svc: {},
     nav: {},
   };
