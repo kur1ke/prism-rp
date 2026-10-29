@@ -2264,6 +2264,61 @@ async function foundationB() {
   const CARD_FIRST = { name: "Хана", description: "Весёлая.", scenario: "SCEN-FEST: фестиваль, полдень.", firstMes: "Она стоит у входа.\n\n[scene: loc=Ворота]", altGreetings: ["Она машет рукой.\n\n[scene: loc=Сцена]"] };
   const reply = (text) => async (prov, messages, o) => { reply.last = messages; if (o.onDelta) o.onDelta({ text }); return { text, reasoning: "" }; };
 
+  await ta("INTEGRITY-D1: aborted branch deletion does not remove messages or change leaf", async () => {
+    const h = fbHarness(CARD_FIRST);
+    await h.chat.createChat("rp");
+    const leaf = await h.chat.addUserMessage("Тест удаления");
+    const before = JSON.stringify(h.S.messages);
+    const old = h.ctx.DB.mutateBatch;
+    h.ctx.DB.mutateBatch = async () => { throw new Error("forced transaction abort"); };
+    try {
+      await assert.rejects(h.chat.deleteFrom(leaf.id), /forced transaction abort/);
+      assert.strictEqual(JSON.stringify(h.S.messages), before);
+      assert.strictEqual(h.ctx.chat().leafId, leaf.id);
+      assert.strictEqual(h.store.messages.size, 2);
+    } finally { h.ctx.DB.mutateBatch = old; }
+    assert.strictEqual(await h.chat.deleteFrom(leaf.id), true);
+    assert.strictEqual(h.ctx.chat().leafId, h.S.messages[0].id);
+    assert.strictEqual(h.store.messages.size, 1);
+  });
+  await ta("INTEGRITY-D2: aborted chat and card cascades preserve source records", async () => {
+    const h = fbHarness(CARD_FIRST);
+    const id = await h.chat.createChat("rp");
+    const old = h.ctx.DB.mutateBatch;
+    h.ctx.DB.mutateBatch = async () => { throw new Error("forced transaction abort"); };
+    try {
+      await assert.rejects(h.chat.deleteChat(h.ctx.chat()), /forced transaction abort/);
+      assert.strictEqual(h.S.chats.length, 1);
+      assert.strictEqual(h.store.chats.has(id), true);
+      await assert.rejects(h.ctx.svc.cards.remove(h.S.cards[0]), /forced transaction abort/);
+      assert.strictEqual(h.S.cards.length, 1);
+      assert.strictEqual(h.store.messages.size, 1);
+    } finally { h.ctx.DB.mutateBatch = old; }
+    await h.ctx.svc.cards.remove(h.S.cards[0]);
+    assert.strictEqual(h.S.cards.length, 0);
+    assert.strictEqual(h.store.chats.size, 0);
+    assert.strictEqual(h.store.messages.size, 0);
+  });
+  await ta("INTEGRITY-G1: pending assistant root holds lock until initial atomic write", async () => {
+    const h = fbHarness(CARD_NOFIRST);
+    await h.chat.createChat("rp");
+    await h.chat.addUserMessage("Привет.");
+    const original = h.ctx.DB.putAll;
+    let release;
+    const gate = new Promise(ok => { release = ok; });
+    h.ctx.DB.putAll = async entries => {
+      if (entries.some(([store, obj]) => store === "messages" && obj.role === "assistant")) await gate;
+      return original(entries);
+    };
+    fbLLM = reply("Привет!");
+    const pending = h.gen.generate();
+    await Promise.resolve();
+    assert.ok(h.S.gen, "generator must lock while its pending message is in storage");
+    release();
+    await pending;
+    assert.strictEqual(h.S.gen, null);
+    h.ctx.DB.putAll = original;
+  });
   await ta("B-21/B-22/B-23: первое сообщение — корень без вызова модели, приветствия — варианты, сцена по активному варианту", async () => {
     const h = fbHarness(CARD_FIRST);
     let called = 0; fbLLM = async () => { called++; return { text: "x" }; };
