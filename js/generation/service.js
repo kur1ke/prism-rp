@@ -146,11 +146,10 @@
         target = S.messages.find((m) => m.id === msgId);
         prefix = TR.activeSwipe(target).text;
       } else {
-        target = chat().newMsg("assistant", c.leafId, "");
-        c.leafId = target.id;
-        await chat().putChat(c);
+        const draft = chat().newMsg("assistant", c.leafId, "");
+        target = await chat().commitMessage(draft, draft.id);
       }
-      await chat().putMsg(target);
+      if (mode !== "new") await chat().putMsg(target);
 
       const sw = TR.activeSwipe(target);
       const ctrl = new AbortController();
@@ -208,9 +207,14 @@
         const snap = ms.snapshot(mode === "new" ? full : path, msNow);
         if (snap) sw.messengerAt = snap;
       }
-      S.gen = null;
-      await chat().putMsg(target);
-      await chat().touch();
+      // Do not release the generation lock until the final message and preview
+      // have reached IndexedDB. Otherwise a second operation can interleave.
+      try {
+        await chat().putMsg(target);
+        await chat().touch();
+      } finally {
+        S.gen = null;
+      }
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();
@@ -300,9 +304,7 @@
       m.opening = "generated";
       m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
-      await chat().putMsg(m);
-      c.leafId = m.id;
-      await chat().touch();
+      await chat().commitMessage(m, m.id);
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();
