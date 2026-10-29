@@ -92,8 +92,10 @@ t("WI-DEBUG-1: show RP answer and request status without leaking sibling swipes"
     hidden:[{slot:"underwear_bottom",status:"worn",items:["НЕ ДОЛЖНО ПОЯВИТЬСЯ"]}]}]};
   const msg={id:"msg-1",role:"assistant",swipeIdx:0,swipes:[valid,sibling]};
   const model={chat:{mode:"messenger"},messengerView:{world:{},events:[]},
+    debugWear:{mode:"messenger",origin:null,sceneInit:"",current:{known:false,complete:false,invalidated:false,
+      worn:[],removed:[],partiallyWorn:[]},changes:[],changeCount:0,recent:[],replayIssues:[]},
     path:[msg]};
-  const render=()=>globalThis.PRP.views.debugModal(model,{section:"events"});
+  const render=()=>globalThis.PRP.views.debugModal(model,{section:"wear"});
   const html=render();
   assert.ok(html.includes("Уточнение невидимой одежды (RP-модель)"));
   assert.ok(html.includes("RP-модели отправлено уточнение"));
@@ -322,7 +324,7 @@ t("DRAW-SOURCE-BIND-4: removal/adjustment opens narrow inquiry without whole-out
     require(J("ui/views/kit.js"));
     require(J("ui/views/drawer.js"));
     const render = globalThis.PRP.views.debugModal;
-    for (const section of ["prism", "tracker", "events", "errors", "timing"]) {
+    for (const section of ["prism", "wear", "tracker", "events", "errors", "timing"]) {
       const html = render({ card: { name: "Sample" }, path: [], perfLog: [], perfSummary: [], messengerView: null }, { section });
       assert.strictEqual((html.match(/data-act="debug-copy"/g) || []).length, 1, section);
       assert.ok(html.indexOf('data-act="debug-copy"') < html.indexOf('class="modal-body debug-body"'), section);
@@ -7421,10 +7423,11 @@ async function unifiedTracker() {
       assert.deepStrictEqual(w.worn.map(x=>x.item),[skirt]);
       assert.deepStrictEqual(w.removed.map(x=>x.item),[original]);
       const html=globalThis.PRP.views.debugModal({
-        chat:h.ctx.chat(),path:h.chat.path(),messengerView:{world:{},events:[]}
-      },{section:"events"});
-      assert.ok(html.includes("Названо:")&&html.includes("белую блузку"));
-      assert.ok(html.includes("Привязано к:")&&html.includes(original));
+        chat:h.ctx.chat(),path:h.chat.path(),messengerView:{world:{},events:[]},
+        debugWear:h.ctx.svc.state.debugWear(h.chat.path())
+      },{section:"wear"});
+      assert.ok(html.includes("белую блузку"));
+      assert.ok(html.includes(original));
       assert.ok(allText(h.prism.build(h.chat.path()).messages).includes(skirt));
       const different=structuredClone(h.chat.path().at(-1));
       different.swipes.push({text:"Ничего не снимала",draws:[],stateEvents:[],sceneOps:[]});
@@ -7711,15 +7714,19 @@ async function unifiedTracker() {
   });
   await ta("VIS-REF-7: Debug Tracker shows removed items and per-swipe source without leaking HTML", async () => {
     const view = globalThis.PRP.views;
-    const html = view.debugModal({ card: { name: "Орихимэ" }, messengerView: {
-      world: { visualWear: ["шорты"], visualWearRemoved: [{
-        item: "<куртка>", certainty: "reported",
-        source: { messageId: "m_ref", swipeIdx: 2, evidence: "Я сняла её" }
-      }] }
-    }, path: [] }, { section: "tracker" });
-    assert.ok(html.includes("Снятые вещи") && html.includes("m_ref") && html.includes("swipe 2"));
+    const removed = {item: "<куртка>", certainty: "reported",
+      source: { messageId: "m_ref", swipeIdx: 2, evidence: "Я сняла её" }};
+    const html = view.debugModal({ card: { name: "Орихимэ" },
+      debugWear: {mode:"messenger",origin:null,current:{known:true,complete:false,invalidated:false,
+        worn:[],removed:[removed],partiallyWorn:[]},changes:[],recent:[],changeCount:0,replayIssues:[]},
+      path:[] }, { section: "wear" });
+    assert.ok(html.includes("Снято") && html.includes("m_ref") && html.includes("swipe 2"));
     assert.ok(html.includes("&lt;куртка&gt;") && !html.includes("<куртка>"), "show escaped data only");
     assert.ok(html.includes("Я сняла её"));
+    const other = view.debugModal({card:{name:"Орихимэ"},messengerView:{world:{
+      visualWear:["шорты"], visualWearRemoved:[removed]}},path:[]}, {section:"tracker"});
+    assert.ok(!other.includes("&lt;куртка&gt;") && !other.includes("Снятые вещи"),
+      "Tracker does not duplicate wear details");
   });
   await ta("UT-4: модель не может править пользователя; пользователь не правит персонажа", async () => {
     const e = Evt("user", "wear", "set", ["кимоно"], "established", "Я надела кимоно");
@@ -8254,13 +8261,41 @@ async function unifiedTracker() {
     assert.deepStrictEqual(h.ctx.chat().initialWear.event.value, ["белая блузка", "бежевая юбка"],
       "Debug must not change the canonical origin");
     const html = globalThis.PRP.views.debugModal({ card: {name:"Орихимэ"}, chat: h.ctx.chat(),
-      debugWear: trace, statePending: false,
-      debugLastRpInput: {chatId:h.ctx.chat().id,operation:"new",at:0,
-        messages:[{role:"system",content:"Одежда: бежевая юбка"}]} }, {section:"wear"});
+      debugWear: trace, statePending: false }, {section:"wear"});
     assert.ok(html.includes("Актуальное состояние"));
     assert.ok(html.includes("бежевая юбка"));
-    assert.ok(html.includes("Что фактически отправлено RP-модели"));
-    assert.ok(html.includes("Полный запрос"));
+    assert.ok(!html.includes("Последний фактически отправленный RP-запрос"));
+    const actual = globalThis.PRP.views.debugModal({card:{name:"Орихимэ"},
+      debugLastRpInput:{chatId:h.ctx.chat().id,operation:"new",at:0,
+        messages:[{role:"system",content:"Одежда: бежевая юбка"}]}}, {section:"prism"});
+    assert.ok(actual.includes("Последний фактически отправленный RP-запрос"));
+    assert.ok(actual.includes("Одежда: бежевая юбка"));
+  });
+  await ta("DEBUG-NODUP-1: wear provenance only in Wear and submitted payload only in Prism", async () => {
+    const item = {item:"уникальная-красная-куртка",certainty:"reported",
+      source:{messageId:"source-one",swipeIdx:0,evidence:"Я сняла куртку"}};
+    const event = {actor:"char",field:"wear",action:"remove",certainty:"reported",
+      value:["уникальная-красная-куртка"],evidence:"Я сняла куртку"};
+    const msg = {id:"source-one",role:"assistant",swipeIdx:0,swipes:[{
+      text:"Я сняла куртку",stateEvents:[event],stateCorrections:[],draws:[],
+      stateStatus:{status:"ok",eventCount:1,issues:[]}}]};
+    const m = {chat:{mode:"messenger",initialOutfitCheck:{status:"error",reason:"initial-test-error"}},
+      card:{name:"Sample"},path:[msg],statePending:false,
+      messengerView:{world:{visualWear:["уникальная-красная-куртка"],visualWearRemoved:[item]},
+        stateStatus:{status:"ok",eventCount:1,issues:[]},events:[],warnings:[]},
+      debugWear:{mode:"messenger",origin:null,current:{known:true,complete:false,invalidated:false,
+        worn:[],removed:[item],partiallyWorn:[]},changes:[],recent:[],
+        changeCount:0,replayIssues:[]},
+      debugLastRpInput:{operation:"new",at:0,messages:[{role:"system",content:"rp-unique-secret"}]}};
+    const render = section => globalThis.PRP.views.debugModal(m,{section});
+    assert.ok(render("wear").includes("уникальная-красная-куртка"));
+    assert.ok(render("wear").includes("initial-test-error"));
+    assert.ok(!render("wear").includes("rp-unique-secret"));
+    assert.ok(!render("tracker").includes("уникальная-красная-куртка"));
+    assert.ok(!render("events").includes("уникальная-красная-куртка"));
+    assert.ok(!render("errors").includes("initial-test-error"));
+    assert.ok(!render("errors").includes("уникальная-красная-куртка"));
+    assert.ok(render("prism").includes("rp-unique-secret"));
   });
   await ta("VIS-HISTORY-1: последние два draw активной ветки возвращаются модели", async () => {
     const makeDraw = (role, text, prompt) => ({ role, swipeIdx: 0, swipes: [{ text, draws: prompt ? [{ prompt, ratio: "9:16" }] : [] }] });
