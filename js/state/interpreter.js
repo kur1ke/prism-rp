@@ -165,7 +165,7 @@
       const frameAt = selfieAt >= 0 ? selfieAt : mirrorPhotoAt;
       const nameAt = name.length >= 4 ? draw.indexOf(name) : -1;
       if (frameAt < 0 || nameAt < 0 || Math.abs(frameAt - nameAt) > 100 ||
-          /(?:стар(?:ое|ый|ом)|архив|вчера|прошл(?:ое|ого|ом)|флешбэк|рисун|скриншот|галере[ияею]|фантази|воображ|сон\b|сновиден|old\s+selfie|past\s+selfie|screenshot|gallery|flashback)/iu.test(draw) ||
+          /(?:стар(?:ое|ый|ом)|архив|вчера|прошл(?:ое|ого|ом)|флешбэк|(?:^|[.!?]\\s*)(?:рисунок|иллюстраци[яиюе])|скриншот|галере[ияею]|фантази|воображ|сон\b|сновиден|old\s+selfie|past\s+selfie|screenshot|gallery|flashback)/iu.test(draw) ||
           (o.otherName && draw.toLowerCase().includes(String(o.otherName).toLowerCase())))
         return e;
     }
