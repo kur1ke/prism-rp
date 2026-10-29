@@ -282,7 +282,6 @@
         if (e.name !== "AbortError") error = e.message || String(e);
       }
       const aborted = ctrl.signal.aborted;
-      S.gen = null;
       let th = null, parsed = null, dr = null;
       if (!aborted && !error) {
         th = OA.splitThink((res && res.text) || "");
@@ -293,6 +292,7 @@
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
       }
       if (aborted || error || S.chatId !== chatId) {
+        S.gen = null;
         if (error) ui.toast(`Не удалось начать сцену: ${error}. Можно попробовать ещё раз.`, true);
         prism().refresh();
         ui.renderFeed();
@@ -304,7 +304,8 @@
       m.opening = "generated";
       m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
-      await chat().commitMessage(m, m.id);
+      try { await chat().commitMessage(m, m.id); }
+      finally { S.gen = null; }
       prism().refresh();
       ui.renderFeed();
       ui.renderRail();
