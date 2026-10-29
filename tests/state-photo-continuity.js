@@ -57,7 +57,8 @@ function assertCurrentPhoto() {
   const text = M.messengerSections({ world, temporal: {}, conversation: {} }).place;
   assert.ok(text.includes("на последнем подтверждённом снимке"), text);
   assert.ok(text.includes("белое кружевное белье"), text);
-  assert.ok(text.includes("ранее установленные вещи"), text);
+  assert.ok(text.includes("установленная одежда на начало ответа"), text);
+  assert.ok(!text.includes("стартовый комплект"), "prompt names current computed wear, not the origin");
   assert.ok(!text.includes("ПОЛНЫЙ перечень надетой сейчас одежды"),
     "the complete origin must not masquerade as the new shot");
   const lowBudget = M.messengerSections({ world, temporal: {}, conversation: {} }, { lists: false, plans: 0 }).place;

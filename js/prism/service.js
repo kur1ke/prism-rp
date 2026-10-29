@@ -16,21 +16,25 @@
   // They live inside history messages so normal context budgeting can evict them.
   function historyWithDraws(path, enabled) {
     const messages = Array.isArray(path) ? path : [];
+    // A continued swipe can contain multiple authored shots; the LAST
+    // shot is the current one, exactly as Observer/latestAuthoredShot read it.
+    const latestDraw = (sw) => {
+      const draws = sw && Array.isArray(sw.draws) ? sw.draws : [];
+      const last = draws.length && draws[draws.length - 1];
+      return last && typeof last.prompt === "string" && last.prompt.trim() ? last : null;
+    };
     const chosen = [];
     if (enabled) for (let i = messages.length - 1; i >= 0 && chosen.length < 2; i--) {
       const m = messages[i];
       const sw = TR.activeSwipe(m);
-      if (m.role === "assistant" && sw && Array.isArray(sw.draws) && sw.draws.length) {
-        const prompt = String(sw.draws[0].prompt || "").trim();
-        if (prompt) chosen.push(i);
-      }
+      if (m.role === "assistant" && latestDraw(sw)) chosen.push(i);
     }
     const selected = new Set(chosen);
     return messages.map((m, i) => {
       const sw = TR.activeSwipe(m);
       const base = String(sw.text || "");
       if (!selected.has(i)) return { role: m.role, text: base };
-      const d = sw.draws[0];
+      const d = latestDraw(sw);
       const prompt = String(d.prompt || "").replace(/\s+/g, " ").trim().slice(0, 700);
       const ratio = /^\d{1,2}:\d{1,2}$/.test(d.ratio || "") ? ", " + d.ratio : "";
       return { role: m.role, text: base + (base ? "\n" : "") + "[draw: " + prompt + ratio + "]" };

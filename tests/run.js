@@ -8318,6 +8318,64 @@ async function unifiedTracker() {
     assert.ok(!render("errors").includes("уникальная-красная-куртка"));
     assert.ok(render("prism").includes("rp-unique-secret"));
   });
+  await ta("VIS-HISTORY-2: continued swipe uses latest authored draw in selected history and built RP context", async () => {
+    const h = fbHarness({name:"Орихимэ",description:"Персонаж."});
+    await h.chat.createChat("rp","c1");
+    h.ctx.env.perchanceImages = () => true;
+    h.S.settings.images.modelDrawPolicy = "contextual";
+    const reply = h.chat.newMsg("assistant",null,"Первый ответ. Продолжение ответа.");
+    reply.swipes[0].draws = [
+      {prompt:"first frame, red jacket",ratio:"1:1"},
+      {prompt:"second frame, blue jacket",ratio:"9:16"}
+    ];
+    await h.chat.commitMessage(reply,reply.id);
+    const chosen = h.chat.path();
+    const history = globalThis.PRP.prismService.historyWithDraws(chosen,true);
+    assert.ok(history[0].text.includes("[draw: second frame, blue jacket, 9:16]"),history[0].text);
+    assert.ok(!history[0].text.includes("first frame"),"older shot in same swipe must not stand for current one");
+    const built = h.prism.build(chosen);
+    const prompt = allText(built.messages);
+    assert.ok(prompt.includes("second frame, blue jacket"),"actual outgoing context includes latest selected shot");
+    assert.ok(!prompt.includes("first frame, red jacket"),"outgoing context cannot resurrect older shot");
+    reply.swipes.push({text:"Альтернативный ответ",draws:[{prompt:"alternate frame, green jacket",ratio:"1:1"}]});
+    reply.swipeIdx = 1;
+    const alternate = allText(h.prism.build(h.chat.path()).messages);
+    assert.ok(alternate.includes("alternate frame, green jacket"));
+    assert.ok(!alternate.includes("second frame, blue jacket"),"sibling swipe must be isolated");
+    reply.swipeIdx = 0;
+    assert.ok(!globalThis.PRP.prismService.historyWithDraws(chosen,false)[0].text.includes("[draw:"),
+      "disabled image directive cannot restore shot");
+  });
+  await ta("PRISM-WEAR-ACCESS-1: current clothing replaces origin in actual next RP context", async () => {
+    const h = fbHarness({name:"Орихимэ",description:"Персонаж."});
+    await h.chat.createChat("messenger","c1");
+    await h.ctx.svc.messenger.createFor(h.ctx.chat().id,{timeZone:"UTC",timeMode:"live"});
+    h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    const initial=["белая блузка","бежевая юбка"];
+    h.ctx.chat().initialWear={schema:1,kind:"initial-outfit",event:{
+      actor:"char",field:"wear",action:"set",value:initial,certainty:"reported",evidence:""}};
+    const baseline=allText(h.prism.build([]).messages);
+    assert.ok(baseline.includes("белая блузка") && baseline.includes("бежевая юбка"),
+      "the model receives initial established clothing before any change");
+    const change=h.chat.newMsg("assistant",null,"Я переоделась в синее платье.");
+    change.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"set",value:["синее платье"],
+      certainty:"reported",evidence:"переоделась в синее платье"}];
+    await h.chat.commitMessage(change,change.id);
+    const snap=h.ctx.svc.state.snapshot(h.chat.path());
+    assert.deepStrictEqual(snap.actors.char.wearState.worn.map(x=>x.item),["синее платье"],
+      JSON.stringify(snap.diagnostics));
+    const after=allText(h.prism.build(h.chat.path()).messages);
+    assert.ok(after.includes("синее платье"),"latest wear must be present in outbound context");
+    assert.ok(!after.includes("белая блузка")&&!after.includes("бежевая юбка"),
+      "initial garments must not be injected again after full replacement");
+    assert.ok(!after.includes("стартовый комплект"),"current outfit must not be described as origin");
+    change.swipes.push({text:"Я осталась в прежней одежде.",stateEvents:[],sceneOps:[],draws:[]});
+    change.swipeIdx=1;
+    const sibling=allText(h.prism.build(h.chat.path()).messages);
+    assert.ok(sibling.includes("белая блузка") && sibling.includes("бежевая юбка"),
+      "other swipe without the change still derives original outfit");
+    assert.ok(!sibling.includes("синее платье"),"state from inactive swipe must not leak");
+  });
   await ta("VIS-HISTORY-1: последние два draw активной ветки возвращаются модели", async () => {
     const makeDraw = (role, text, prompt) => ({ role, swipeIdx: 0, swipes: [{ text, draws: prompt ? [{ prompt, ratio: "9:16" }] : [] }] });
     const a = makeDraw("assistant", "Первый кадр", "1girl, red dress");
