@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "a6db890004e488b9405ba7d54ba84ab89eeafbb5";
+  window.PRISM_RP_BUILD_SHA = "8e4e24f93872c6ab6449e9064a6949fb92bedb50";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -9165,6 +9165,7 @@
     imageFinalAuditMs: "FinalAudit · проверка итогового промпта",
     imageBackendMs: "Генерация изображения · backend",
     imageTotalMs: "Изображение · от подготовки до сохранения",
+    imageDeliveryMs: "Автофото · от ответа до завершения (включая Observer)",
     imagePrepareMs: "Подготовка изображения · до backend",
     readyAfterReplyMs: "Ответ показан → можно писать",
     sendToRoleplayMs: "«Отправить» → запрос к модели",
@@ -9173,7 +9174,7 @@
   function timingTab(m) {
     const sum = m.perfSummary || [];
     const rows = (m.perfLog || []).slice(-30).reverse();
-    return '<p class="hint">Вложенные замеры пересекаются: перевод входит в компиляцию, компиляция — в подготовку, а подготовка — в общее время изображения. Не складывайте эти значения.</p>' +
+    return '<p class="hint">Вложенные замеры пересекаются: перевод входит в компиляцию, компиляция — в подготовку, подготовка — в общее время изображения. Доставка автофото также включает ожидание Observer. Не складывайте эти значения.</p>' +
       '<div class="block"><div class="block-title">Сводка <small>в памяти, последние ' + (m.perfLog || []).length + '</small></div>'
       + (sum.length ? '<dl class="kv">' + sum.map((x) => '<dt>' + esc(TIMING[x.metric] || x.metric) + ' <small>' + esc(x.metric) + '</small></dt><dd>' + x.last + ' мс · медиана ' + x.median + ' мс · ' + x.count + '×</dd>').join("") + '</dl>'
         : '<p class="empty-note">Замеров пока нет: отправьте сообщение.</p>') + '</div>'
@@ -12191,6 +12192,10 @@
        Возвращается Promise, который никогда не отклоняется. */
     function afterReply(msg, prov, draw) {
       const st = state();
+      // Entire automatic image delivery, including waiting for Observer.
+      const deliveryStarted = now();
+      const autoImage = !!draw && ST.imagesOn(S.settings, ctx.env.perchanceImages()) &&
+        !!S.settings.images.autoDraw;
       /* Источник картинки фиксируется в момент ответа: этот вариант (объект свайпа), его номер и текст.
          Директива [draw:] принадлежит ИМЕННО этому варианту: если за время разбора выбран другой свайп,
          вариант изменён, изменился путь до него или сообщение ушло с активной ветки — авто-картинка не рисуется. */
@@ -12219,7 +12224,14 @@
         if (!same) { perf("imageSkipped", 0, { msgId: msg.id, chatId: msg.chatId, outcome: res && res.skipped === "stale-branch" ? "analysis-stale" : "source-changed" }); return null; }
         if (!ST.imagesOn(S.settings, ctx.env.perchanceImages()) || !S.settings.images.autoDraw) return null;
         return images().draw(msg, sw, draw);
-      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, chatId: msg && msg.chatId, outcome: String(e && e.message || e).slice(0, 120) }); return null; });
+      }).catch((e) => { perf("postReplyError", 0, { msgId: msg && msg.id, chatId: msg && msg.chatId, outcome: String(e && e.message || e).slice(0, 120) }); return null; })
+        .finally(() => {
+          if (!autoImage) return;
+          const entries = sw && Array.isArray(sw.images) ? sw.images : [];
+          const image = entries.slice().reverse().find(im => im && im.draw === draw.prompt);
+          perf("imageDeliveryMs", now() - deliveryStarted,
+            { msgId: msg.id, chatId: msg.chatId, outcome: image ? image.status : "skipped" });
+        });
     }
 
     /* PERF-01: операция, которой нужно полное состояние чата, ждёт незавершённых разборов этого чата —
