@@ -99,6 +99,18 @@
     // Сервис среды — только для переписки.
     const messenger = () => { const c = ctx.chat(); return c && c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger : null; };
 
+    // Only the last actually submitted RP payload, only in developer mode.
+    // This is an in-memory Debug snapshot, never a saved chat event or state fact.
+    function debugRpPayload(chatId, operation, messages) {
+      if (!S.settings.developerMode) return;
+      S.debugLastRpInput = { chatId, operation, at: Date.now(),
+        messages: messages.map(x => ({ role: x.role, content: x.content })) };
+      if (S.modal && S.modal.kind === "debug" && S.modal.section === "wear") {
+        S.modal.keepScroll = true;
+        ui.renderModal();
+      }
+    }
+
     async function generate(msgId, mode, opts) {
       const o = opts || {};
       if (S.gen) return;
@@ -180,6 +192,7 @@
       try {
         const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
         const imageDataUrl = imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null;
+        debugRpPayload(c.id, mode, built.messages);
         const res = await LLM.chat(prov, built.messages, {
           names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
           signal: ctrl.signal, onDelta, continueFrom: prefix || null,
@@ -293,6 +306,7 @@
       const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
       let res = null, error = null;
       try {
+        debugRpPayload(c.id, "opening", built.messages);
         res = await LLM.chat(prov, built.messages, { names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler, signal: ctrl.signal, onDelta });
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
@@ -385,6 +399,7 @@
       const vars = { char: cd.name, user: ctx.persona().name };
       let res = null, error = null;
       try {
+        debugRpPayload(c.id, "initiative", built.messages);
         res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) });
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);

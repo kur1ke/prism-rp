@@ -8230,6 +8230,38 @@ async function unifiedTracker() {
     assert.strictEqual(S.modelDrawAllowed(priorYes, [{ role: "user", text: "Привет" }]), true);
     assert.strictEqual(S.modelDrawAllowed(priorNo, [{ role: "user", text: "Пришли фото" }]), false);
   });
+  await ta("DEBUG-WEAR-1: read-only garment trace and last submitted RP payload stay separate", async () => {
+    const h = fbHarness({ name: "Орихимэ", description: "Девушка." });
+    await h.chat.createChat("messenger", "c1");
+    h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
+    h.ctx.chat().initialWear = { schema: 1, kind: "initial-outfit", event: {
+      actor: "char", field: "wear", action: "set", value: ["белая блузка", "бежевая юбка"],
+      certainty: "reported", evidence: ""
+    }};
+    const init = h.ctx.svc.state.debugWear([]);
+    assert.strictEqual(init.baseline.complete, true);
+    assert.deepStrictEqual(init.current.worn.map(x => x.item), ["белая блузка", "бежевая юбка"]);
+    assert.strictEqual(init.changes.length, 0);
+    const msg = h.chat.newMsg("assistant", null, "Я сняла блузку.");
+    msg.swipes[0].stateEvents = [{ actor: "char", field: "wear", action: "remove",
+      value: ["белая блузка"], certainty: "reported", evidence: "сняла блузку" }];
+    await h.chat.commitMessage(msg, msg.id);
+    const trace = h.ctx.svc.state.debugWear(h.chat.path());
+    assert.strictEqual(trace.changes.length, 1);
+    assert.strictEqual(trace.changes[0].before.worn.length, 2);
+    assert.deepStrictEqual(trace.current.worn.map(x => x.item), ["бежевая юбка"]);
+    assert.deepStrictEqual(trace.current.removed.map(x => x.item), ["белая блузка"]);
+    assert.deepStrictEqual(h.ctx.chat().initialWear.event.value, ["белая блузка", "бежевая юбка"],
+      "Debug must not change the canonical origin");
+    const html = globalThis.PRP.views.debugModal({ card: {name:"Орихимэ"}, chat: h.ctx.chat(),
+      debugWear: trace, statePending: false,
+      debugLastRpInput: {chatId:h.ctx.chat().id,operation:"new",at:0,
+        messages:[{role:"system",content:"Одежда: бежевая юбка"}]} }, {section:"wear"});
+    assert.ok(html.includes("Актуальное состояние"));
+    assert.ok(html.includes("бежевая юбка"));
+    assert.ok(html.includes("Что фактически отправлено RP-модели"));
+    assert.ok(html.includes("Полный запрос"));
+  });
   await ta("VIS-HISTORY-1: последние два draw активной ветки возвращаются модели", async () => {
     const makeDraw = (role, text, prompt) => ({ role, swipeIdx: 0, swipes: [{ text, draws: prompt ? [{ prompt, ratio: "9:16" }] : [] }] });
     const a = makeDraw("assistant", "Первый кадр", "1girl, red dress");

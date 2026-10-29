@@ -154,6 +154,11 @@
       if (ctx.ui) {
         if (typeof ctx.ui.renderHead === "function") ctx.ui.renderHead();
         if (S.drawerOpen && typeof ctx.ui.renderDrawer === "function") ctx.ui.renderDrawer();
+        if (S.modal && S.modal.kind === "debug" && ["wear", "tracker", "events", "errors"].includes(S.modal.section) &&
+            typeof ctx.ui.renderModal === "function") {
+          S.modal.keepScroll = true;
+          ctx.ui.renderModal();
+        }
       }
     }
 
@@ -547,7 +552,50 @@
       sw.stateCorrections = next.swipes[swIdx].stateCorrections;
       return { corrections: changes };
     }
-    return { snapshot, context, initializeOutfit, prepareUser, observeMessage, track, pending, settle, correct };
+    // Developer-only read: replay precisely the selected path; never persist a
+    // second garment inventory or reinterpret the source narrative.
+    function debugWear(path) {
+      const c = ctx.chat();
+      if (!c) return null;
+      const p = Array.isArray(path) ? path : chat().path();
+      const origin = snapshot([]);
+      const current = snapshot(p);
+      const relevant = (e) => e && e.actor === "char" && e.field === "wear";
+      const candidates = [];
+      for (let i = 0; i < p.length; i++) {
+        const msg = p[i], sw = TR.activeSwipe(msg);
+        const events = (sw.stateEvents || []).filter(relevant);
+        const corrections = (sw.stateCorrections || []).filter(relevant);
+        const status = sw.stateStatus || null;
+        const rejected = status && Array.isArray(status.rejectedObservations)
+          ? status.rejectedObservations.filter(x => x && (x.field === "wear" || x.action)) : [];
+        if (!events.length && !corrections.length && !rejected.length &&
+            !(status && ["error", "partial"].includes(status.status))) continue;
+        candidates.push({ index: i, messageId: msg.id, swipeIdx: msg.swipeIdx || 0,
+          role: msg.role, events, corrections, rejected,
+          status: status ? { status: status.status, method: status.method,
+            issues: (status.issues || []).slice(0, 8), wearInquiry: status.wearInquiry || null } : null });
+      }
+      const changes = candidates.slice(-20).map(entry => {
+        const before = snapshot(p.slice(0, entry.index)).actors.char.wearState;
+        const after = snapshot(p.slice(0, entry.index + 1));
+        return { ...entry, before, after: after.actors.char.wearState,
+          replayIssues: after.diagnostics.filter(x => x && x.source === entry.messageId).slice(-8) };
+      }).reverse();
+      const recent = p.slice(-10).map(msg => {
+        const sw = TR.activeSwipe(msg), s = sw.stateStatus;
+        return { messageId: msg.id, swipeIdx: msg.swipeIdx || 0, role: msg.role,
+          status: s ? s.status : "not-analysed", eventCount: s ? s.eventCount : null,
+          method: s && s.method || "", issues: s && Array.isArray(s.issues) ? s.issues.slice(0, 5) : [],
+          wearInquiry: s && s.wearInquiry || null };
+      }).reverse();
+      return { mode: c.mode, origin: c.initialWear || null,
+        sceneInit: c.mode === "rp" ? String(c.sceneInit || "") : "",
+        baseline: origin.actors.char.wearState, current: current.actors.char.wearState,
+        replayIssues: current.diagnostics.slice(-12), changes, changeCount: candidates.length, recent };
+    }
+
+    return { snapshot, context, initializeOutfit, prepareUser, observeMessage, track, pending, settle, correct, debugWear };
   }
   PRP.stateService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
