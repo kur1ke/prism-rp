@@ -83,6 +83,7 @@
       if (S.gen) throw new Error("Нельзя удалять персонажа во время незавершённого хода.");
       const ownedChats = S.chats.filter((x) => x.cardId === cd.id);
       if (ctx.svc.memory) ownedChats.forEach(c => ctx.svc.memory.retireChat(c.id));
+      try {
       const deletes = [["cards", cd.id]];
       for (const c of ownedChats) {
         for (const [store, index, value] of [
@@ -102,6 +103,11 @@
       lenses.forEach(x => deletes.push(["worldLenses", x.id]));
       // A failed request aborts the complete cascade, including the Card row.
       await DB.mutateBatch({ deletes });
+      } catch (e) {
+        if (ctx.svc.memory && ctx.svc.memory.restoreChat)
+          ownedChats.forEach(c => ctx.svc.memory.restoreChat(c.id));
+        throw e;
+      }
       S.worldLenses = (S.worldLenses || []).filter(l => l.cardId !== cd.id);
       S.cards = S.cards.filter(c => c.id !== cd.id);
       S.chats = S.chats.filter(c => c.cardId !== cd.id);
