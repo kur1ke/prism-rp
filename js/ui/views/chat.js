@@ -116,7 +116,7 @@
       }
       const url = m.imgUrls && m.imgUrls[im.id];
       return `<figure class="shot" style="aspect-ratio:${ar}">
-        ${url ? `<img src="${url}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
+        ${R.safeImageSrc(url) ? `<img src="${R.safeImageSrc(url)}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
         <div class="shot-tools">
           <button class="icon-btn" data-act="img-regen" ${base} title="Нарисовать заново, другой seed">${icon("regen")}</button>
           <button class="icon-btn" data-act="img-pin" ${base} title="Закрепить seed ${im.seed != null ? im.seed : ""} за персонажем">${icon("pin")}</button>
@@ -203,7 +203,7 @@
       }
       const parts = R.bubbles(sw.text);
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
-      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${sw.imageDataUrl ? `<div class="bub"><img src="${esc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
+      return mark + `<div class="msg-row ${side} ${isLast ? "last" : ""}" data-mid="${msg.id}">${R.safeImageSrc(sw.imageDataUrl) ? `<div class="bub"><img src="${R.safeImageSrc(sw.imageDataUrl)}" alt="Отправленная фотография" style="display:block;max-width:min(280px,65vw);max-height:300px;object-fit:contain;border-radius:8px"></div>` : ""}${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}${shots(m, msg, sw, true)}
         ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
         <div class="stamp" ${stamp.known ? "" : `title="Время переписки не записано (старое сообщение)"`}>${ini ? `<span class="ini-tag" title="Написано первым — по проверке инициативы">первым · </span>` : ""}${esc(stamp.time)}</div>${tools(msg, isLast)}</div>`;
     }).join("") + (m.gen && m.gen.initiative && m.gen.msgId === "initiative" ? initiativeLive(m) : "");
