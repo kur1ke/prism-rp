@@ -121,6 +121,7 @@
       // Retire before awaiting any database operation: late Memory jobs may no
       // longer commit evidence to a chat that is being removed.
       if (ctx.svc.memory) ctx.svc.memory.retireChat(c.id);
+      try {
       const ms = await DB.byIndex("messages", "chatId", c.id);
       const ex = (await DB.byIndex("experience", "owner", c.cardId)).filter((x) => x.chatId === c.id);
       const memories = await DB.byIndex("memories", "chatId", c.id);
@@ -134,6 +135,10 @@
         ["worldOverlays", c.id], ["messengerEnvironments", c.id], ["chats", c.id]
       ];
       await DB.mutateBatch({ deletes });
+      } catch (e) {
+        if (ctx.svc.memory && ctx.svc.memory.restoreChat) ctx.svc.memory.restoreChat(c.id);
+        throw e;
+      }
       S.chats = S.chats.filter((x) => x.id !== c.id);
       if (S.worldOverlay && S.worldOverlay.chatId === c.id) S.worldOverlay = null;
       if (S.messengerEnv && S.messengerEnv.chatId === c.id) S.messengerEnv = null;
