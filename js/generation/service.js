@@ -144,23 +144,31 @@
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
-      let target, prefix = "";
-      if (mode === "regen") {
-        target = S.messages.find((m) => m.id === msgId);
-        target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
-        target.swipeIdx = target.swipes.length - 1;
-      } else if (mode === "continue") {
-        target = S.messages.find((m) => m.id === msgId);
-        prefix = TR.activeSwipe(target).text;
-      } else {
-        const draft = chat().newMsg("assistant", c.leafId, "");
-        target = await chat().commitMessage(draft, draft.id);
-      }
-      if (mode !== "new") await chat().putMsg(target);
-
-      const sw = TR.activeSwipe(target);
+      // Reserve the lock BEFORE the first asynchronous IndexedDB write.
+      // Without this, another click may switch chats while a pending root is
+      // being committed but S.gen still reports idle.
       const ctrl = new AbortController();
-      S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", prefix: prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "" };
+      const lock = S.gen = { ctrl, msgId: msgId || "pending", raw: "", reasoning: "", prefix: "" };
+      let target, prefix = "";
+      try {
+        if (mode === "regen") {
+          target = S.messages.find((m) => m.id === msgId);
+          target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
+          target.swipeIdx = target.swipes.length - 1;
+        } else if (mode === "continue") {
+          target = S.messages.find((m) => m.id === msgId);
+          prefix = TR.activeSwipe(target).text;
+        } else {
+          const draft = chat().newMsg("assistant", c.leafId, "");
+          target = await chat().commitMessage(draft, draft.id);
+        }
+        if (mode !== "new") await chat().putMsg(target);
+      } catch (e) {
+        if (S.gen === lock) S.gen = null;
+        throw e;
+      }
+      lock.msgId = target.id;
+      lock.prefix = prefix ? prefix + (/\\s$/.test(prefix) ? "" : " ") : "";
       ui.renderFeed();
       if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
       ui.scrollBottom();
