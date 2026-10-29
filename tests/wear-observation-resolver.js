@@ -20,7 +20,7 @@ const evidence="полностью сняла белую блузку";
 const options={mode:"messenger",role:"assistant",speakerName:"Орихимэ Иноуэ",
   text:"Ну как тебе? ♡",draw,draws:[{prompt:draw}],references:base};
 const event={actor:"char",field:"wear",action:"remove",value:[old],
-  certainty:"reported",evidence};
+  certainty:"reported",evidence,visualScope:"current-self"};
 const observed=INT.parse(JSON.stringify({events:[event],frameObjects:[]}),options);
 assert.equal(observed.events.length,1,JSON.stringify(observed));
 assert.equal(observed.events[0].evidenceType,"draw");
@@ -55,7 +55,7 @@ assert.match(unresolved.issues.join(";"),/ambiguous-garment/);
 const falseCitation=INT.parse(JSON.stringify({events:[{...event,
   itemMention:"белую блузку",evidence:"полностью сняла" }]}),options);
 assert.equal(falseCitation.events.length,0);
-const historical=INT.parse(JSON.stringify({events:[event]}),{...options,
+const historical=INT.parse(JSON.stringify({events:[{...event,visualScope:"past-self"}]}),{...options,
   draw:"Старое фото: "+draw,draws:[{prompt:"Старое фото: "+draw}]});
 assert.equal(historical.events.length,0);
 const noRefs=INT.parse(JSON.stringify({events:[{...event,value:["белую блузку"],
