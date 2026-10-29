@@ -81,7 +81,7 @@
           const last = m.chats.filter((c) => c.cardId === cd.id).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
           const at = last && last.updatedAt ? new Date(last.updatedAt) : null;
           const dateLabel = at && Number.isFinite(at.getTime()) ? at.toLocaleString("ru-RU", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-          return `<div class="tile" data-act="open-card" data-id="${cd.id}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
+          return `<div class="tile" data-act="open-card" data-id="${esc(cd.id)}" title="Начать или продолжить чат с ${esc(cd.name)}" role="button" tabindex="0">
             ${R.art(cd)}<div class="tile-shade"></div>
             <div class="tile-actions" role="group" aria-label="Новый чат с ${esc(cd.name)}">
               <button class="tile-action" data-act="new-card-chat" data-id="${cd.id}" data-mode="rp" title="Новая сцена">Сцена</button>
