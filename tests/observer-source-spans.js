@@ -291,12 +291,12 @@ for(const shot of forbidden){
   const blocked=parse([{...pajamaCandidate,sourceId:fragment.id}],other);
   assert.equal(blocked.events.length,0,"not a current owner mirror shot: "+shot);
 }
-const sibling=TR.fold({mode:"messenger",initialWear:pajamaInit,path:[{
+const pajamaSibling=TR.fold({mode:"messenger",initialWear:pajamaInit,path:[{
   id:"photo-pajamas",role:"assistant",swipeIdx:1,
   swipes:[{text:pajamaText,draws:[{prompt:pajamaDraw}],stateEvents:pajamaReport.events},
     {text:"Я ещё не переоделась.",draws:[],stateEvents:[]}]
 }]});
-assert.deepEqual(sibling.actors.char.wearState.worn.map(x=>x.item),pajamaInit.event.value,
+assert.deepEqual(pajamaSibling.actors.char.wearState.worn.map(x=>x.item),pajamaInit.event.value,
   "sibling swipe cannot inherit the mirror photo's garment");
 
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
