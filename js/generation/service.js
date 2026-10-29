@@ -168,7 +168,7 @@
         throw e;
       }
       lock.msgId = target.id;
-      lock.prefix = prefix ? prefix + (/\\s$/.test(prefix) ? "" : " ") : "";
+      lock.prefix = prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "";
       ui.renderFeed();
       if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
       ui.scrollBottom();
