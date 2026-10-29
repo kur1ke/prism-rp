@@ -450,7 +450,7 @@
     return snapshots + initError + changes + wearInquiryTab(m) + recent;
   }
 
-  const isWearIssue = (issue) => /\[wear\]|уточнение одежды|одежд|вещи|предмета одежды|гардероб/i.test(String(issue || ""));
+  const isWearIssue = (issue) => /\[wear\]|уточнение одежды|одежд|вещи|предмета одежды|гардероб|селфи-кадр/i.test(String(issue || ""));
   function debugModal(m, modal) {
     const section = modal.section || "prism";
     const names = [["prism", "Prism"], ["wear", "Одежда"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"]];

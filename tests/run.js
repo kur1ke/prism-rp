@@ -8292,6 +8292,22 @@ async function unifiedTracker() {
     assert.ok(html.includes("timeout") && html.includes("rejected"),
       "failure outcomes remain distinct from fast successes");
   });
+  await ta("DEBUG-WEAR-SCOPE-1: source-bound mirror rejection appears in Clothing, not Errors", async () => {
+    const problem="Событие 1: sourceId не доказывает актуальный селфи-кадр";
+    const emptyWear={known:false,complete:false,invalidated:true,
+      worn:[],removed:[],partiallyWorn:[]};
+    const row={messageId:"mirror-shot",swipeIdx:0,role:"assistant",
+      events:[],corrections:[],rejected:[],before:emptyWear,after:emptyWear,
+      status:{status:"partial",issues:[problem]},replayIssues:[]};
+    const model={chat:{mode:"messenger"},card:{name:"Персонаж"},path:[],
+      debugWear:{mode:"messenger",origin:null,current:emptyWear,changes:[row],
+        changeCount:1,recent:[],replayIssues:[]},
+      messengerView:{world:{},stateStatus:{status:"partial",issues:[problem]},events:[]}};
+    const clothing=globalThis.PRP.views.debugModal(model,{section:"wear"});
+    const errors=globalThis.PRP.views.debugModal(model,{section:"errors"});
+    assert.ok(clothing.includes(problem));
+    assert.ok(!errors.includes(problem),"garment photo provenance error has one home");
+  });
   await ta("DEBUG-NODUP-1: wear provenance only in Wear and submitted payload only in Prism", async () => {
     const item = {item:"уникальная-красная-куртка",certainty:"reported",
       source:{messageId:"source-one",swipeIdx:0,evidence:"Я сняла куртку"}};
