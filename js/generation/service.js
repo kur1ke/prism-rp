@@ -169,6 +169,7 @@
       }
       lock.msgId = target.id;
       lock.prefix = prefix ? prefix + (/\s$/.test(prefix) ? "" : " ") : "";
+      const sw = TR.activeSwipe(target);
       ui.renderFeed();
       if (S.drawerOpen && S.tab === "prism") ui.renderDrawer();
       ui.scrollBottom();
