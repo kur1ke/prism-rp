@@ -69,13 +69,16 @@
         const chat = ctx.chat(), provider = ctx.provider();
         if (!chat || !provider) { ui.toast("Текстовый провайдер не выбран.", true); return; }
         const path = svc.chat.path().slice(-12);
-        const anchor = JSON.stringify({chatId:chat.id, path});
+        const personaDescription = String((ctx.persona()||{}).description||"");
+        const anchor = JSON.stringify({chatId:chat.id, path, personaDescription});
         const current = {chatId:chat.id, anchor, running:true, result:null, error:null};
         S.knowledgeShadow = current;
         ui.renderModal();
         try {
-          const result = await PRP.knowledgeProviderShadow.run({chatId:chat.id,path},{provider});
-          const now = JSON.stringify({chatId:S.chatId,path:svc.chat.path().slice(-12)});
+          const result = await PRP.knowledgeProviderShadow.run({chatId:chat.id,path,
+            personaDescription},{provider});
+          const now = JSON.stringify({chatId:S.chatId,path:svc.chat.path().slice(-12),
+            personaDescription:String((ctx.persona()||{}).description||"")});
           if (S.knowledgeShadow !== current) return;
           if (now !== anchor) current.error = "stale-selected-path";
           else if (result.error) current.error = result.error;

@@ -14,6 +14,21 @@ const statement=(sourceId,predicate,value,opts)=>({
 const relation=(sourceId,type,targetId,opts)=>({sourceId,type,targetId,...(opts||{})});
 let cases=0;
 function check(name,fn){fn();cases++;console.log("✓ KNOWLEDGE K1 "+name);}
+check("user profile is bounded reference data, not an assertion source",()=>{
+  const msg=m("profile-msg","Завтра встречусь с девушкой.",[],"user");
+  const rq=I.prepare({chatId:"c1",path:[msg],messageId:msg.id,
+    personaDescription:"Девушку пользователя зовут Ксения. Собираются жениться."});
+  assert.ok(!rq.error);
+  assert.ok(rq.instruction.includes("referenceContext"));
+  assert.ok(rq.instruction.includes("Ксения"));
+  assert.ok(rq.sources.every(x=>!x.quote.includes("Ксения")));
+  assert.equal(rq.lookup.T0.quote,msg.swipes[0].text);
+  const tooLong=I.prepare({chatId:"c1",path:[msg],messageId:msg.id,
+    personaDescription:"a".repeat(1801)});
+  assert.equal(tooLong.error,"persona-reference-budget-exceeded");
+  const empty=I.prepare({chatId:"c1",path:[msg],messageId:msg.id});
+  assert.ok(!empty.instruction.includes('"referenceContext":'));
+});
 check("no source or source edits are silently accepted",()=>{
   const msg=m("a","Сегодня я дома.");
   const req=I.prepare({chatId:"c1",path:[msg],messageId:"a"});
