@@ -8272,6 +8272,30 @@ async function unifiedTracker() {
     assert.ok(actual.includes("Последний фактически отправленный RP-запрос"));
     assert.ok(actual.includes("Одежда: бежевая юбка"));
   });
+  await ta("DEBUG-WEAR-DETAIL-1: partial Observer error is exposed per message without clothing keywords", async () => {
+    const wear={known:true,complete:false,invalidated:false,worn:[{item:"светлая пижама"}],
+      removed:[],partiallyWorn:[]};
+    const bad="Ответ наблюдателя не содержит корректный JSON со списком событий";
+    const trace={mode:"messenger",origin:null,current:wear,changes:[
+      {messageId:"m_observer_failure",swipeIdx:0,role:"assistant",events:[],corrections:[],
+        rejected:[],before:wear,after:wear,
+        status:{status:"partial",method:"model",issues:[bad]},replayIssues:[]},
+    ],changeCount:1,recent:[
+      {messageId:"m_observer_failure",swipeIdx:0,role:"assistant",status:"partial",eventCount:0,issues:[bad]},
+      {messageId:"m_normal",swipeIdx:0,role:"user",status:"no-changes",eventCount:0,issues:[]}
+    ],replayIssues:[]};
+    const html=globalThis.PRP.views.debugModal({card:{name:"Орихимэ"},
+      chat:{mode:"messenger"},debugWear:trace},{section:"wear"});
+    assert.ok(html.includes('data-debug-expand="wear:change:m_observer_failure:0"'),html);
+    assert.ok(html.includes("Нажмите на строку сообщения"));
+    assert.ok(html.includes(bad),"general JSON/format errors must not be silently hidden");
+    assert.ok(html.includes("Подробнее"));
+    assert.strictEqual(html.split(bad).length-1,1,
+      "Observer failure appears once rather than duplicated in recent checks");
+    assert.ok(html.includes("m_normal"),"normal recent checks remain available");
+    assert.strictEqual(html.split("m_observer_failure").length-1,1,
+      "same message is not duplicated in branch replay and recent list");
+  });
   await ta("PERF-DETAIL-1: Debug Timing displays individual, overlapping instrumented stages", async () => {
     const perfLog = [
       {metric:"initialOutfitMs",ms:101,chatId:"c1",outcome:"ok"},

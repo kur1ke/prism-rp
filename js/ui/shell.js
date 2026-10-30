@@ -190,6 +190,11 @@
       if (!S.modal) { rootEl.innerHTML = ""; return; }
       const m = vm();
       const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
+      // Repainting Debug after Observer must not close a message the user
+      // opened to read its diagnostics. Keys are source IDs, not view indices.
+      const expanded = S.modal.kind === "debug" ? new Set(
+        Array.from(rootEl.querySelectorAll("details[data-debug-expand][open]"))
+          .map(el => el.getAttribute("data-debug-expand"))) : new Set();
       if (S.modal.kind === "image") {
         const im = S.modal.im, url = S.imgUrls[im.id];
         rootEl.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${R.safeImageSrc(url)}" alt="">
@@ -205,6 +210,11 @@
         : S.modal.kind === "debug" ? V.debugModal(m, S.modal)
         : S.modal.kind === "messenger-time" ? V.messengerTimeModal(m)
         : V.cardModal(m, S.modal.draft, S.modal.section);
+      if (S.modal.kind === "debug" && expanded.size) {
+        rootEl.querySelectorAll("details[data-debug-expand]").forEach(el => {
+          if (expanded.has(el.getAttribute("data-debug-expand"))) el.open = true;
+        });
+      }
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
       // вернуть в видимую часть активный раздел (на широком экране лента вертикальная, ничего не меняется).

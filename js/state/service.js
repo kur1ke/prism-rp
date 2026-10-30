@@ -600,7 +600,7 @@
         candidates.push({ index: i, messageId: msg.id, swipeIdx: msg.swipeIdx || 0,
           role: msg.role, events, corrections, rejected,
           status: status ? { status: status.status, method: status.method,
-            issues: (status.issues || []).slice(0, 8), wearInquiry: status.wearInquiry || null } : null });
+            issues: Array.isArray(status.issues) ? status.issues.slice(0, 32) : [], wearInquiry: status.wearInquiry || null } : null });
       }
       const changes = candidates.slice(-20).map(entry => {
         const before = snapshot(p.slice(0, entry.index)).actors.char.wearState;

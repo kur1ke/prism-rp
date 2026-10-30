@@ -410,37 +410,52 @@
       (e.evidence ? '<small>Источник: ' + esc(e.evidenceType || "text") +
         ' · ' + esc(e.evidence) + '</small>' : "") + '</li>';
     const changes = '<div class="block"><div class="block-title">Пересчёт по активной ветке <small>' +
-      d.changeCount + ' сообщений с изменениями/ошибками, последние ' + d.changes.length + '</small></div>' +
+      d.changeCount + ' сообщений с изменениями/ошибками, последние ' + d.changes.length +
+      '</small></div><p class="hint">Нажмите на строку сообщения, чтобы увидеть события, причины partial/error и отклонённые наблюдения.</p>' +
       (d.changes.length ? d.changes.map(row => {
         const before = (row.before.worn || []).map(x => x.item).join(", ") || (row.before.known ? "ничего" : "неизвестно");
         const after = (row.after.worn || []).map(x => x.item).join(", ") || (row.after.known ? "ничего" : "неизвестно");
         const rejected = row.rejected || [];
-        return '<details class="exp-debug"><summary>' +
+        const issues = row.status && Array.isArray(row.status.issues) ? row.status.issues : [];
+        const hasDetails = row.events.length || row.corrections.length || rejected.length ||
+          issues.length || row.replayIssues.length;
+        return '<details class="exp-debug" data-debug-expand="' +
+          esc("wear:change:" + row.messageId + ":" + row.swipeIdx) + '"><summary>' +
           esc(row.messageId + " · swipe " + row.swipeIdx + " · " + row.role) +
           ' · ' + esc(before) + ' → ' + esc(after) +
           (row.status ? ' · ' + esc(row.status.status) : "") +
-          '</summary><p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
+          ' · Подробнее' + (issues.length ? ' (' + issues.length + ' замечаний)' : "") +
+          '</summary>' +
+          (!hasDetails ? '<p class="hint">Нет дополнительных сведений об анализе.</p>' : "") +
+          '<p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
           row.events.map(e => asEvent(e, "Observer")).concat(row.corrections.map(e => asEvent(e, "Коррекция"))).join("") +
           '</ul>' +
           (rejected.length ? '<details class="exp-debug"><summary>Отклонённые наблюдения одежды (' +
             rejected.length + ')</summary><pre class="debug-prompt">' + esc(JSON.stringify(rejected, null, 2)) +
             '</pre></details>' : "") +
-          (row.status && row.status.issues.some(isWearIssue) ? '<pre class="debug-prompt">' +
-            esc(JSON.stringify(row.status.issues.filter(isWearIssue), null, 2)) + '</pre>' : "") +
+          (issues.length ? '<p class="hint">Все замечания Observer по этому сообщению (' +
+            issues.length + ')</p><ul class="wc-list">' +
+            issues.map(issue => '<li>' + esc(String(issue)) + '</li>').join("") + '</ul>' : "") +
           (row.replayIssues.length ? '<pre class="debug-prompt">Ошибки повторного применения: ' +
             esc(JSON.stringify(row.replayIssues, null, 2)) + '</pre>' : "") +
           '</details>';
       }).join("") : '<p class="hint">Изменений одежды или ошибок анализа на активном пути нет.</p>') + '</div>';
-    const recent = '<div class="block"><div class="block-title">Последние проверки Observer' +
+    const detailedKeys = new Set(d.changes.map(row => row.messageId + ":" + row.swipeIdx));
+    const simpleChecks = d.recent.filter(row => !detailedKeys.has(row.messageId + ":" + row.swipeIdx));
+    const recent = '<div class="block"><div class="block-title">Остальные последние проверки Observer' +
       (m.statePending ? ' · выполняется анализ' : "") + '</div>' +
-      (d.recent.length ? '<ul class="wc-list">' + d.recent.map(x =>
+      (simpleChecks.length ? '<ul class="wc-list">' + simpleChecks.map(x =>
         '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
         esc(x.role) + ' · <b>' + esc(x.status) + '</b>' +
         (x.eventCount != null ? ' · событий: ' + x.eventCount : "") +
         (x.method ? ' · ' + esc(x.method) : "") +
         (x.wearInquiry ? '<small>Уточнение одежды: ' + esc(x.wearInquiry.status || "?") +
           (x.wearInquiry.reason ? ' (' + esc(x.wearInquiry.reason) + ')' : "") + '</small>' : "") +
-        '</li>').join("") + '</ul>' : '<p class="hint">История пуста.</p>') +
+        (x.issues && x.issues.length ? '<details class="exp-debug" data-debug-expand="' +
+          esc("wear:recent:" + x.messageId + ":" + x.swipeIdx) +
+          '"><summary>Подробнее · замечания (' + x.issues.length + ')</summary><ul class="wc-list">' +
+          x.issues.map(issue => '<li>' + esc(String(issue)) + '</li>').join("") + '</ul></details>' : "") +
+        '</li>').join("") + '</ul>' : '<p class="hint">Все последние проверки с событиями или ошибками показаны выше.</p>') +
       (d.replayIssues.length ? '<details class="exp-debug"><summary>Диагностика повторного применения</summary>' +
         '<pre class="debug-prompt">' + esc(JSON.stringify(d.replayIssues, null, 2)) +
         '</pre></details>' : "") + '</div>';
