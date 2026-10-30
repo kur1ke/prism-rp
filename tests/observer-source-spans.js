@@ -22,6 +22,16 @@ const prompt=INT.instruction(opts);
 assert.ok(prompt.includes("SOURCE_FRAGMENTS"));
 assert.ok(prompt.includes(sourceId));
 assert.ok(prompt.includes("не составляй evidence вручную"));
+// Live reproduction: current first-person outfit report and a same-message
+// selfie provide joint evidence. The observer must receive that relationship,
+// without treating gallery photos as a current wardrobe change.
+const currentPhotoInstruction=INT.instruction({...opts,
+  text:"Сейчас я дома в светлой уютной кофте и длинной юбке.",
+  draw:"Селфи Орихимэ. На ней бежевый кардиган поверх белой майки и длинная домашняя юбка."});
+assert.ok(currentPhotoInstruction.includes("Сопоставь ТЕКСТ и DRAW того же сообщения"));
+assert.ok(currentPhotoInstruction.includes("не оставляй scope=unknown"));
+assert.ok(currentPhotoInstruction.includes("фото из галереи"));
+
 function parse(events,o=opts,frameObjects=[]){
   return INT.parse(JSON.stringify({events,frameObjects,unresolved:[]}),o);
 }
