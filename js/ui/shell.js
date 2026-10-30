@@ -56,6 +56,7 @@
         statePending: ctx.chat() && svc().state && svc().state.pending ? svc().state.pending(ctx.chat().id) > 0 : false,
         draft: ctx.chat() && S.sendDrafts ? S.sendDrafts[ctx.chat().id] || "" : "",
         perfSummary: S.settings && S.settings.developerMode && PRP.perfLog ? PRP.perfLog.summary(S.perf) : null, perfLog: S.perf || [],
+        knowledgeShadow: S.modal && S.modal.kind === "debug" && S.modal.section === "knowledge" && S.knowledgeShadow && ctx.chat() && S.knowledgeShadow.chatId === ctx.chat().id ? S.knowledgeShadow : null,
         debugWear: S.modal && S.modal.kind === "debug" && S.modal.section === "wear" &&
           ctx.chat() && svc().state && svc().state.debugWear ? svc().state.debugWear(path) : null,
         debugLastRpInput: S.modal && S.modal.kind === "debug" && S.modal.section === "prism" &&
