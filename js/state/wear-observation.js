@@ -130,7 +130,7 @@
             // phrase may select the item; no inferred qualifiers are copied.
             match(x.mention,[x.ref]).reference));
       if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment",
-        reason:"ambiguous-reference"};
+        reason:"ambiguous-garment"};
       if(found.length===1){
         const valid=match(found[0].mention,refs);
         if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason,
