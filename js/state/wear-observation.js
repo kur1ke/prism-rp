@@ -123,7 +123,7 @@
       const namedHead=garmentHead(named);
       const found=refs.map(ref=>({ref,mention:phrase(evidence,ref)}))
         .filter(x=>x.mention&&namedHead&&
-          namedHead===garmentHead(ref.item)&&
+          namedHead===garmentHead(x.ref.item)&&
           (named===ref.item || match(named,[x.ref]).reference ||
             // The quote itself may be shorter than the canonical item,
             // while model qualifiers differ. In that case only the quoted
