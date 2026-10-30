@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "5c987da6fdfd4790b93fb4462c2b81c7fdb60000";
+  window.PRISM_RP_BUILD_SHA = "e84e5d943689434159b452630b1d4229f349b2b2";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5304,6 +5304,17 @@
 const P=root.PRP=root.PRP||{};
 const I=P.knowledgeInterpreter||(typeof require!=="undefined"?require("./interpreter.js"):null);
 const K=P.knowledgeCore||(typeof require!=="undefined"?require("./core.js"):null);
+function classify(e){
+ const m=String(e&&e.message||"").toLowerCase();
+ if(e&&e.name==="AbortError")return "generator-aborted";
+ if(/instruction-budget-exceeded/.test(m))return "instruction-budget-exceeded";
+ if(/ai-text-plugin.*недоступен/.test(m))return "plugin-unavailable";
+ if(/cors/.test(m))return "provider-cors";
+ if(/429|rate.limit/.test(m))return "provider-rate-limited";
+ if(/timeout|timed.out|время ожидания/.test(m))return "provider-timeout";
+ if(/context|token|too.long|length/.test(m))return "provider-context-rejected";
+ return "generator-failed";
+}
 function fail(error){return {status:"unprocessed",error,committable:false,assertions:[],links:[],unresolved:[],issues:[error]};}
 async function run(input,generate){
  if(!input||typeof input.chatId!=="string"||!input.chatId.trim()||
@@ -5332,7 +5343,7 @@ async function run(input,generate){
          reply&&typeof reply.text==="string"?reply.text:
          reply&&typeof reply.generatedText==="string"?reply.generatedText:null;
        result=I.interpret(req,raw);
-     }catch(_){result=fail("generator-failed");}
+     }catch(e){result=fail(classify(e));}
      elapsedMs=Date.now()-start;
      if(raw!==null)outputs[message.id+":"+req.swipeIdx]={revision:req.revision,raw};
    }
@@ -5342,6 +5353,9 @@ async function run(input,generate){
      revision:req.error?null:req.revision,status:result.status,elapsedMs,
      issues:result.issues.slice(),unresolved:result.unresolved.slice(),
      proposedAssertions:result.assertions.length,proposedLinks:result.links.length});
+   // One transport failure makes the remaining calls uninformative and costly.
+   if(result.status==="unprocessed" && result.issues.some(x=>
+      /^(generator-|plugin-unavailable|provider-|instruction-budget-exceeded)/.test(x)))break;
  }
  const projection=K.evaluate({chatId:input.chatId,path,assertions,links});
  const replay=I.replay({chatId:input.chatId,path,outputs});
