@@ -107,4 +107,29 @@ const originalPhoto=TR.historicalDrawPath([continued],0);
 assert.equal(originalPhoto.ok,true,JSON.stringify(originalPhoto));
 assert.deepEqual(TR.fold({mode:"messenger",path:originalPhoto.path})
   .actors.char.wearState.worn.map(x=>x.item),["красное платье"]);
+// A model may attach a wrong adjective, while the actual quoted garment
+// uniquely identifies the existing item. Trust the quote, not the label.
+const sourceIdQuote="Она сняла белую блузку.";
+const quoteBound=INT.parse(JSON.stringify({events:[{
+  actor:"char",field:"wear",action:"remove",value:["красная блузка"],
+  certainty:"reported",sourceId:"T0"
+}]}),{mode:"messenger",role:"assistant",text:sourceIdQuote,
+  references:base});
+assert.equal(quoteBound.events.length,1,JSON.stringify(quoteBound));
+assert.equal(quoteBound.events[0].value[0],old);
+assert.equal(quoteBound.events[0].itemMention,"белую блузку");
+// Changing the noun or creating an ambiguous reference must still fail.
+const wrongNoun=INT.parse(JSON.stringify({events:[{
+  actor:"char",field:"wear",action:"remove",value:["красная юбка"],
+  certainty:"reported",sourceId:"T0"
+}]}),{mode:"messenger",role:"assistant",text:sourceIdQuote,
+  references:base});
+assert.equal(wrongNoun.events.length,0);
+const ambiguousSource=INT.parse(JSON.stringify({events:[{
+  actor:"char",field:"wear",action:"remove",value:["красная блузка"],
+  certainty:"reported",sourceId:"T0"
+}]}),{mode:"messenger",role:"assistant",text:sourceIdQuote,
+  references:[ref(old,"a"),ref(shirt,"b")]});
+assert.equal(ambiguousSource.events.length,0);
+
 console.log("PASS: WearObservationResolver source/identity split, unique reference, ambiguity and swipe isolation");
