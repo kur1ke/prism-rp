@@ -67,3 +67,10 @@ New source file: \`js/knowledge/interpreter.js\`; tests: \`tests/knowledge-inter
 - The core verifies that links target assertions visible on the prior selected path (or assertions proposed in this batch). Later confirmations can qualify old photo assertions without inventing a garment in the confirming message. Source provenance is not semantic validation; real-model benchmarks are required before enabling any writes.
 
 **K1 acceptance here:** simulated model outputs plus source, error, intent, branch and provenance regression coverage; existing StateTracker, Memory/Reflection and RP prompts must remain untouched. **Live-model semantic quality: NOT RUN.** No DB migration. Rollback by reverting K1 source/test/doc commit. The eventual K2 journal is not authorized until measurements and a clear failure/retry policy are reviewed.
+
+
+## K1 offline shadow replay
+
+\`knowledgeInterpreter.replay({chatId,path,outputs})\` accepts a **copied** selected branch plus externally supplied model responses keyed by \`messageId:swipeIdx\`. Each entry must include \`revision\` from \`prepare(...)\` and raw output. It returns per-message statuses, a read-only projection and a count of malformed/partial/unprocessed cases. Any stale revision, unselected sibling or missing response is explicitly unprocessed. No LLM calls, no storage writes, no second active memory. Offline comparison is infrastructure, **not evidence that a real RP/Observer model produces the expected semantics**.
+
+Before K2, test actual extracted responses against selected original messages, and measure: valid structured responses, missed/misattributed claims, branch/snapshot failures, extra model latency and failures after reload. Keep legacy writing as the sole live source of truth until an explicit migration.

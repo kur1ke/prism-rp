@@ -199,6 +199,43 @@
       return interpret(req,content);
     } catch(_) {return failure("generator-failed");}
   }
-  PRP.knowledgeInterpreter={prepare,interpret,execute};
+  // Offline-only shadow evaluation of already collected model outputs.
+  // A keyed output must match the content revision of its selected swipe.
+  // Nothing here calls a provider or mutates PRISM's IndexedDB / chat tree.
+  function replay(input) {
+    const o=input||{}, path=o.path;
+    if(!string(o.chatId,100)||!Array.isArray(path)||path.length>500)
+      return {error:"invalid-shadow-path"};
+    const outputs=o.outputs||{};
+    const assertions=[], links=[], rows=[], counts={
+      ok:0,"no-changes":0,partial:0,unprocessed:0
+    };
+    for(let i=0;i<path.length;i++) {
+      const m=path[i], slice=path.slice(0,i+1);
+      const req=prepare({chatId:o.chatId,path:slice,messageId:m.id,
+        priorAssertions:assertions,priorLinks:links});
+      let result;
+      if(req.error) result=failure(req.error);
+      else {
+        const key=m.id+":"+String(m.swipeIdx||0);
+        const supplied=Object.prototype.hasOwnProperty.call(outputs,key)?outputs[key]:null;
+        result=!supplied?failure("missing-shadow-response"):
+          supplied.revision!==req.revision?failure("stale-shadow-response"):
+          interpret(req,supplied.raw);
+      }
+      counts[result.status]++;
+      rows.push({messageId:m.id,swipeIdx:m.swipeIdx||0,status:result.status,
+        issues:result.issues.slice(),unresolved:result.unresolved.slice(),
+        proposedAssertions:result.assertions.length,proposedLinks:result.links.length,
+        revision:req.error?null:req.revision});
+      if(result.committable) {
+        assertions.push(...result.assertions);
+        links.push(...result.links);
+      }
+    }
+    const projection=K.evaluate({chatId:o.chatId,path,assertions,links});
+    return {rows,counts,assertions,links,projection};
+  }
+  PRP.knowledgeInterpreter={prepare,interpret,execute,replay};
   if(typeof module!=="undefined"&&module.exports) module.exports=PRP.knowledgeInterpreter;
 })(typeof window!=="undefined"?window:globalThis);
