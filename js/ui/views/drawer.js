@@ -468,45 +468,11 @@
   const isWearIssue = (issue) => /\[wear\]|уточнение одежды|одежд|вещи|предмета одежды|гардероб|селфи-кадр/i.test(String(issue || ""));
   function debugModal(m, modal) {
     const section = modal.section || "prism";
-    const names = [["prism", "Prism"], ["wear", "Одежда"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"], ["knowledge", "K1.5"]];
+    const names = [["prism", "Prism"], ["wear", "Одежда"], ["tracker", "Трекер"], ["events", "События"], ["images", "Изображения"], ["errors", "Ошибки"], ["timing", "Тайминги"]];
     const v = m.messengerView;
     const status = v && v.stateStatus;
     let content = "";
-    if (section === "knowledge") {
-      const s = m.knowledgeShadow;
-      content = '<div class="block"><div class="block-title">K1.5 · теневой анализ</div>' +
-        '<p class="hint">Только ручной запуск. Анализируются последние 12 сообщений активной ветки; результат не записывается в память. Вызовы модели расходуют токены.</p>' +
-        '<button class="btn btn-sm" data-act="debug-knowledge-run" ' +
-          (!m.chat || !m.settings.developerMode || (s && s.running) ? 'disabled' : '') +
-          '>Запустить анализ</button>' +
-        (s && s.running ? '<p>Анализ выполняется…</p>' : '') +
-        (s && s.error ? '<p class="hint">Ошибка: ' + esc(s.error) + '</p>' : '') +
-        '</div>';
-      if (s && s.result) {
-        const r = s.result;
-        content += '<div class="block"><div class="block-title">Результаты</div>' +
-          '<p>ok: ' + r.counts.ok + ' · no-changes: ' + r.counts["no-changes"] +
-          ' · partial: ' + r.counts.partial + ' · unprocessed: ' + r.counts.unprocessed +
-          ' · replay: ' + (r.replayConsistent ? 'совпадает' : 'расхождение') + '</p>' +
-          '<details><summary>Сообщения и ошибки</summary><ul class="wc-list">' +
-          r.rows.map(x => '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
-            esc(x.status) + ' · ' + x.elapsedMs + ' мс · инструкция ' + (x.instructionChars || 0) + ' символов' +
-            (x.issues.length ? '<div>' + esc(x.issues.join('; ')) + '</div>' : '') +
-            (x.unresolved.length ? '<div>' + esc(x.unresolved.join('; ')) + '</div>' : '') +
-            '</li>').join('') + '</ul></details>' +
-          '<details><summary>Утверждения (' + r.assertions.length + ')</summary><ul class="wc-list">' +
-          r.assertions.map(x => '<li><b>' + esc(x.subject + ' / ' + x.predicate) +
-            '</b> · ' + esc(JSON.stringify(x.value)) + ' · ' + esc(x.time + ' / ' + x.modality) +
-            '<p class="hint">Источник: ' + esc(x.source.messageId) + ' / swipe ' +
-            x.source.swipeIdx + ' / ' + esc(x.source.kind) + '</p>' +
-            '<div class="code">' + esc(x.source.quote) + '</div></li>').join('') +
-          '</ul></details><details><summary>Связи (' + r.links.length + ')</summary><ul class="wc-list">' +
-          r.links.map(x => '<li>' + esc(x.type + ' → ' + x.targetId) +
-            ' · ' + esc(x.source.messageId) + '</li>').join('') +
-          '</ul></details></div>';
-      }
-    }
-    else if (section === "prism") content = prismTab(m);
+    if (section === "prism") content = prismTab(m);
     else if (section === "wear") content = wearDebugTab(m);
     else if (section === "timing") content = timingTab(m);
     else if (section === "images") content = imageAuditTab(m);
