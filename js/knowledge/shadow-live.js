@@ -4,7 +4,18 @@
 const P=root.PRP=root.PRP||{};
 const I=P.knowledgeInterpreter||(typeof require!=="undefined"?require("./interpreter.js"):null);
 const K=P.knowledgeCore||(typeof require!=="undefined"?require("./core.js"):null);
-function classify(e){\n const m=String(e&&e.message||"").toLowerCase();\n if(e&&e.name==="AbortError")return "generator-aborted";\n if(/instruction-budget-exceeded/.test(m))return "instruction-budget-exceeded";\n if(/ai-text-plugin.*недоступен/.test(m))return "plugin-unavailable";\n if(/cors/.test(m))return "provider-cors";\n if(/429|rate.limit/.test(m))return "provider-rate-limited";\n if(/timeout|timed.out|время ожидания/.test(m))return "provider-timeout";\n if(/context|token|too.long|length/.test(m))return "provider-context-rejected";\n return "generator-failed";\n}\nfunction fail(error){return {status:"unprocessed",error,committable:false,assertions:[],links:[],unresolved:[],issues:[error]};}
+function classify(e){
+ const m=String(e&&e.message||"").toLowerCase();
+ if(e&&e.name==="AbortError")return "generator-aborted";
+ if(/instruction-budget-exceeded/.test(m))return "instruction-budget-exceeded";
+ if(/ai-text-plugin.*недоступен/.test(m))return "plugin-unavailable";
+ if(/cors/.test(m))return "provider-cors";
+ if(/429|rate.limit/.test(m))return "provider-rate-limited";
+ if(/timeout|timed.out|время ожидания/.test(m))return "provider-timeout";
+ if(/context|token|too.long|length/.test(m))return "provider-context-rejected";
+ return "generator-failed";
+}
+function fail(error){return {status:"unprocessed",error,committable:false,assertions:[],links:[],unresolved:[],issues:[error]};}
 async function run(input,generate){
  if(!input||typeof input.chatId!=="string"||!input.chatId.trim()||
     !Array.isArray(input.path)||input.path.length>500||
@@ -41,7 +52,10 @@ async function run(input,generate){
    rows.push({messageId:message.id,swipeIdx:message.swipeIdx||0,
      revision:req.error?null:req.revision,status:result.status,elapsedMs,
      issues:result.issues.slice(),unresolved:result.unresolved.slice(),
-     proposedAssertions:result.assertions.length,proposedLinks:result.links.length});\n   // One transport failure makes the remaining calls uninformative and costly.\n   if(result.status==="unprocessed" && result.issues.some(x=>\n      /^(generator-|plugin-unavailable|provider-|instruction-budget-exceeded)/.test(x)))break;
+     proposedAssertions:result.assertions.length,proposedLinks:result.links.length});
+   // One transport failure makes the remaining calls uninformative and costly.
+   if(result.status==="unprocessed" && result.issues.some(x=>
+      /^(generator-|plugin-unavailable|provider-|instruction-budget-exceeded)/.test(x)))break;
  }
  const projection=K.evaluate({chatId:input.chatId,path,assertions,links});
  const replay=I.replay({chatId:input.chatId,path,outputs});
