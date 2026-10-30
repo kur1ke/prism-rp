@@ -108,7 +108,7 @@ assert.ok(T.normalize({...invalidated,certainty:"intent"},
 
 const alternate=structuredClone(transition);
 alternate.swipes.push({text:"Я всё ещё в юбке.",draws:[],stateEvents:[],sceneOps:[],stateCorrections:[]});
-alternatePlacementSwipe.swipeIdx=1;
+alternate.swipeIdx=1;
 assert.deepEqual(wear([alternate]).worn.map(x=>x.item),old,
   "alternate swipe must not inherit invalidation");
 assert.deepEqual(wear([transition]).worn,[],"returning to selected swipe replays its state");
