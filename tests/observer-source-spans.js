@@ -21,8 +21,10 @@ const sourceId=spans.find(x=>x.text.includes("сняла белую блузку
 const prompt=INT.instruction(opts);
 assert.ok(prompt.includes("SOURCE_FRAGMENTS"));
 assert.ok(prompt.includes('visualScope'));
-assert.ok(prompt.includes('current-self (только для подтверждённого актуального DRAW)'),
-  "event schema must show the visualScope field required by DRAW validation");
+assert.ok(prompt.includes('"visualScope":"current-self"'),
+  "event JSON example must contain exact validator enum");
+assert.ok(!prompt.includes('"visualScope":"current-self ('),
+  "do not place explanatory prose inside enum value");
 
 assert.ok(prompt.includes(sourceId));
 assert.ok(prompt.includes("не составляй evidence вручную"));
