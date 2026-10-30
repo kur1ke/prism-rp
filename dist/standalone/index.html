@@ -6958,6 +6958,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           pinned.placement=hit.evidence.slice(0,160);
       }
       let canonical = bindAuthoredDrawEvidence(scalarListCandidate(speakerEvent(pinned, o)), o);
+      // A current photo that lists visible garments is NOT a complete
+      // replacement outfit. Preserve the observation as additive evidence,
+      // rather than rejecting an Observer's overly strong "set" label.
+      // No scope inference: past/unknown photos never reach this boundary.
+      if (canonical && canonical.field === "wear" && canonical.action === "set" &&
+          canonical.evidenceType === "draw" && canonical.visualScope === "current-self" &&
+          canonical.sourceSpan && canonical.sourceSpan.kind === "draw" &&
+          !/(?:на\s+не[йм]\s+только|из\s+одежды\s+(?:на\s+не[йм]\s+)?только|одет[а-яё]*\s+только\s+в|wear(?:s|ing)?\s+only|only\s+wearing|nothing\s+else\s+(?:on|worn))/iu.test(String(canonical.evidence || ""))) {
+        canonical = { ...canonical, action: "add" };
+      }
       // Model-side certainty is sometimes too strong for a remote report.
       // Downcast only, never upgrade intent or bypass provenance validation.
       if (o && o.mode === "messenger" && canonical && canonical.certainty === "established")

@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "4225d81feb377c0472aca79c6c93fbef4033b739";
+  window.PRISM_RP_BUILD_SHA = "3d3858ee2143b37455e9069d96827f8550aecc7a";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6190,6 +6190,16 @@
           pinned.placement=hit.evidence.slice(0,160);
       }
       let canonical = bindAuthoredDrawEvidence(scalarListCandidate(speakerEvent(pinned, o)), o);
+      // A current photo that lists visible garments is NOT a complete
+      // replacement outfit. Preserve the observation as additive evidence,
+      // rather than rejecting an Observer's overly strong "set" label.
+      // No scope inference: past/unknown photos never reach this boundary.
+      if (canonical && canonical.field === "wear" && canonical.action === "set" &&
+          canonical.evidenceType === "draw" && canonical.visualScope === "current-self" &&
+          canonical.sourceSpan && canonical.sourceSpan.kind === "draw" &&
+          !/(?:на\s+не[йм]\s+только|из\s+одежды\s+(?:на\s+не[йм]\s+)?только|одет[а-яё]*\s+только\s+в|wear(?:s|ing)?\s+only|only\s+wearing|nothing\s+else\s+(?:on|worn))/iu.test(String(canonical.evidence || ""))) {
+        canonical = { ...canonical, action: "add" };
+      }
       // Model-side certainty is sometimes too strong for a remote report.
       // Downcast only, never upgrade intent or bypass provenance validation.
       if (o && o.mode === "messenger" && canonical && canonical.certainty === "established")
