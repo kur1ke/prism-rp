@@ -402,7 +402,7 @@
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
             actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
-              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]),
+              globallyScoped: !!singleOwner,
               plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
                 complete: !!(visualPlan.wear && visualPlan.wear.complete),
                 absentFromBody: visualPlan.absentFromBody,

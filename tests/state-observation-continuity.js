@@ -174,3 +174,31 @@ const extractedWear = extracted.find(e => e.field === "wear");
 assert.ok(extractedWear, JSON.stringify(extracted));
 assert.deepEqual(extractedWear.value, ["светлой уютной кофте", "длинной юбке"],
   "only the garment noun phrases belong to the physical wear state");
+
+
+// Regression: a confirmed clothing adjustment survives the next RP prompt.
+// Clothing identity alone ("кофта") must not erase its lifted position.
+const liftedText = "Я слегка приподняла край белой блузки.";
+const liftedEvent = {actor:"char",field:"wear",action:"adjust",
+  value:["белая блузка"],certainty:"reported",
+  evidence:"приподняла край белой блузки",
+  placement:"приподняла край белой блузки"};
+const liftedPath = [msg("lifted","Я слегка приподняла край белой блузки.",[liftedEvent])];
+const liftedSnapshot = fold(liftedPath);
+const liftedTracked = {state:liftedSnapshot,character:T.forCharacter(liftedSnapshot)};
+assert.equal(liftedTracked.character.visualWearPartial.length,1);
+const liftedWorld = R.world({visualWear:[]},liftedTracked);
+const liftedPlace = M.messengerSections({world:liftedWorld,conversation:{},temporal:{}},
+  {lists:false,plans:0}).place;
+assert.ok(liftedPlace.includes("текущее положение одежды"),liftedPlace);
+assert.ok(liftedPlace.includes("приподняла край белой блузки"),liftedPlace);
+const alternatePlacementSwipe = structuredClone(liftedPath[0]);
+alternatePlacementSwipe.swipes.push({text:"Без движения.",stateEvents:[],sceneOps:[]});
+alternatePlacementSwipe.swipeIdx=1;
+const alternateSnapshot = fold([alternatePlacementSwipe]);
+const alternatePlace = M.messengerSections({
+  world:R.world({visualWear:[]},{state:alternateSnapshot,character:T.forCharacter(alternateSnapshot)}),
+  conversation:{},temporal:{}
+}, {lists:false,plans:0}).place;
+assert.ok(!alternatePlace.includes("приподняла край белой блузки"),
+  "placement from a sibling swipe must not leak into current RP prompt");

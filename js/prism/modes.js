@@ -132,6 +132,11 @@
             "; других надетых вещей, включая скрытые слои и бельё, до следующего совершённого изменения нет"
           : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
             (w.visualWear || []).map(q).join(", ") : "",
+      (w.visualWearPartial || []).length
+        ? "- текущее положение одежды (после последней подтверждённой поправки): " +
+          w.visualWearPartial.filter(x => x && x.item && x.placement)
+            .map(x => q(x.item) + ": " + q(x.placement)).join("; ")
+        : "",
       w.visualPose ? "- установленная поза: " + q(w.visualPose) : "",
       w.visualHair ? "- установленная причёска: " + q(w.visualHair) : "",
     ].filter(Boolean).join("\n");
