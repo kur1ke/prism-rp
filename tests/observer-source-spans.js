@@ -62,6 +62,32 @@ assert.equal(uncertain.events.length,0,"unknown currentness cannot be promoted")
 const gallery = {...outfitOpts,text:"Это школьное фото из галереи."};
 assert.equal(parse([{...outfitEvent,visualScope:"past-self"}],gallery).events.length,0);
 
+// Complete state transitions are general Observer actions, not special
+// garment-name heuristics. The same current authored source can clear a
+// prior outfit; merely visible partial clothing must never clear it.
+const emptyDraw="Селфи Орихимэ. Она полностью обнажена.";
+const emptyOpts={...opts,draw:emptyDraw,draws:[{prompt:emptyDraw}]};
+const emptyId=ES.catalog(emptyOpts).find(x=>x.kind==="draw"&&x.text.includes("полностью обнажена")).id;
+const cleared=parse([{actor:"char",field:"wear",action:"clear",
+  certainty:"reported",sourceId:emptyId,visualScope:"current-self"}],emptyOpts);
+assert.equal(cleared.events.length,1,JSON.stringify(cleared));
+assert.equal(cleared.events[0].action,"clear");
+const emptyMsg={id:"cleared",role:"assistant",swipeIdx:0,
+  swipes:[{text:caption,draws:[{prompt:emptyDraw}],stateEvents:cleared.events}]};
+const clearedState=TR.fold({mode:"messenger",initialWear:init,path:[emptyMsg]});
+assert.equal(clearedState.actors.char.wearState.complete,true);
+assert.deepEqual(clearedState.actors.char.wearState.worn,[]);
+const oldPhoto=parse([{actor:"char",field:"wear",action:"clear",
+  certainty:"reported",sourceId:emptyId,visualScope:"past-self"}],emptyOpts);
+assert.equal(oldPhoto.events.length,0);
+const partialDraw="Селфи Орихимэ. Видна светлая кофта.";
+const partialOpts={...opts,draw:partialDraw,draws:[{prompt:partialDraw}]};
+const partialId=ES.catalog(partialOpts).find(x=>x.kind==="draw"&&x.text.includes("светлая кофта")).id;
+assert.equal(parse([{actor:"char",field:"wear",action:"clear",certainty:"reported",
+  sourceId:partialId,visualScope:"current-self"}],partialOpts).events.length,0);
+assert.ok(prompt.includes("clear — однозначно подтверждённое ПУСТОЕ"));
+assert.ok(prompt.includes("wear.clear — если фрагмент явно устанавливает полное отсутствие"));
+
 // The model supplies no quote, no itemMention, no byte offset.
 const p=parse([base]);
 assert.equal(p.events.length,1,JSON.stringify(p));
