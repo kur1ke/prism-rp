@@ -13,7 +13,12 @@ function classify(e){
  if(/429|rate.limit/.test(m))return "provider-rate-limited";
  if(/timeout|timed.out|время ожидания/.test(m))return "provider-timeout";
  if(/context|token|too.long|length/.test(m))return "provider-context-rejected";
- if(e&&Number.isInteger(e.status))return "provider-http-"+String(e.status);\n const n=e&&e.name;\n if(n==="TypeError")return "provider-type-error";\n if(n==="SyntaxError")return "provider-syntax-error";\n if(n==="RangeError")return "provider-range-error";\n return "generator-failed";
+ if(e&&Number.isInteger(e.status))return "provider-http-"+String(e.status);
+ const n=e&&e.name;
+ if(n==="TypeError")return "provider-type-error";
+ if(n==="SyntaxError")return "provider-syntax-error";
+ if(n==="RangeError")return "provider-range-error";
+ return "generator-failed";
 }
 function fail(error){return {status:"unprocessed",error,committable:false,assertions:[],links:[],unresolved:[],issues:[error]};}
 async function run(input,generate){
