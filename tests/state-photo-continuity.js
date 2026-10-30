@@ -162,3 +162,28 @@ function assertInvalidFrameObjectsCannotInventWear() {
   console.log("PASS: invalid frameObjects are reported once and never promoted into wear");
 }
 assertInvalidFrameObjectsCannotInventWear();
+
+
+// The optional initial outfit is timeline origin, not a permanent constraint.
+// A later self-reported complete change supersedes it on the selected swipe.
+function assertOriginIsNotWardrobeAuthority() {
+  const text = "Сейчас я дома в светлой кофте и длинной юбке.";
+  const changed = {
+    id: "later-outfit", role: "assistant", swipeIdx: 0,
+    swipes: [{ text, stateEvents: [{
+      actor: "char", field: "wear", action: "set",
+      value: ["светлая кофта", "длинная юбка"], certainty: "reported",
+      evidence: "в светлой кофте и длинной юбке"
+    }], stateCorrections: [] }]
+  };
+  const result = state([changed]);
+  assert.deepEqual(result.state.actors.char.wearState.worn.map(x => x.item),
+    ["светлая кофта", "длинная юбка"],
+    "a later complete outfit replaces the one-time initial condition");
+  const sibling = structuredClone(changed);
+  sibling.swipes.push({ text: "Другой вариант.", stateEvents: [] });
+  sibling.swipeIdx = 1;
+  assert.deepEqual(state([sibling]).state.actors.char.wearState.worn.map(x => x.item),
+    previousOutfit, "only the selected swipe can supersede the origin");
+}
+assertOriginIsNotWardrobeAuthority();
