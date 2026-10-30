@@ -66,7 +66,7 @@
         if (!S.modal || S.modal.kind !== "debug" || S.modal.section !== "knowledge" ||
             !S.settings || !S.settings.developerMode || S.gen || S.turn) return;
         if (S.knowledgeShadow && S.knowledgeShadow.running) return;
-        const chat = ctx.chat(), provider = ctx.processingProvider();
+        const chat = ctx.chat(), provider = ctx.provider();
         if (!chat || !provider) { ui.toast("Текстовый провайдер не выбран.", true); return; }
         const path = svc.chat.path().slice(-12);
         const anchor = JSON.stringify({chatId:chat.id, path});

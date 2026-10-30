@@ -39,6 +39,7 @@ async function checks(){
    async()=>{failures++;throw Error("rate limit 429");});
  assert.equal(failures,1,"transport failure must not retry remaining messages");
  assert.equal(stopped.rows.length,1);
+ assert.ok(stopped.rows[0].instructionChars>0);
  assert.equal(stopped.rows[0].issues[0],"provider-rate-limited");
  const tampered=await S.run({chatId:"c1",path:[{...message("x","Hi"),chatId:"other"}]},
    async()=>{throw Error("must not run");});

@@ -13,6 +13,11 @@ function classify(e){
  if(/429|rate.limit/.test(m))return "provider-rate-limited";
  if(/timeout|timed.out|время ожидания/.test(m))return "provider-timeout";
  if(/context|token|too.long|length/.test(m))return "provider-context-rejected";
+ if(e&&Number.isInteger(e.status))return "provider-http-"+String(e.status);
+ const n=e&&e.name;
+ if(n==="TypeError")return "provider-type-error";
+ if(n==="SyntaxError")return "provider-syntax-error";
+ if(n==="RangeError")return "provider-range-error";
  return "generator-failed";
 }
 function fail(error){return {status:"unprocessed",error,committable:false,assertions:[],links:[],unresolved:[],issues:[error]};}
@@ -32,7 +37,7 @@ async function run(input,generate){
    const message=path[i];
    const req=I.prepare({chatId:input.chatId,path:path.slice(0,i+1),
      messageId:message.id,priorAssertions:assertions,priorLinks:links});
-   let result,raw=null,elapsedMs=0;
+   let result,raw=null,elapsedMs=0,instructionChars=0;
    if(req.error)result=fail(req.error);
    else{
      const start=Date.now();
@@ -50,7 +55,7 @@ async function run(input,generate){
    counts[result.status]++;
    if(result.committable){assertions.push(...result.assertions);links.push(...result.links);}
    rows.push({messageId:message.id,swipeIdx:message.swipeIdx||0,
-     revision:req.error?null:req.revision,status:result.status,elapsedMs,
+     revision:req.error?null:req.revision,status:result.status,elapsedMs,instructionChars,
      issues:result.issues.slice(),unresolved:result.unresolved.slice(),
      proposedAssertions:result.assertions.length,proposedLinks:result.links.length});
    // One transport failure makes the remaining calls uninformative and costly.

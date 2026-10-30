@@ -490,7 +490,7 @@
           ' · replay: ' + (r.replayConsistent ? 'совпадает' : 'расхождение') + '</p>' +
           '<details><summary>Сообщения и ошибки</summary><ul class="wc-list">' +
           r.rows.map(x => '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
-            esc(x.status) + ' · ' + x.elapsedMs + ' мс' +
+            esc(x.status) + ' · ' + x.elapsedMs + ' мс · инструкция ' + (x.instructionChars || 0) + ' символов' +
             (x.issues.length ? '<div>' + esc(x.issues.join('; ')) + '</div>' : '') +
             (x.unresolved.length ? '<div>' + esc(x.unresolved.join('; ')) + '</div>' : '') +
             '</li>').join('') + '</ul></details>' +
