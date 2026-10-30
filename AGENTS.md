@@ -7,8 +7,9 @@ This file applies to repository-based AI coding agents working on PrismRP.
 1. Determine the checked-out branch and the intended PR base. **Never assume** that the current branch is `testing`.
 2. Read `docs/PRISMRP_REVIEW_PROTOCOL.md` before modifying code.
 3. If the current branch or target PR base is `testing`, also read `docs/PRISMRP_TESTING_REVIEW_PROTOCOL.md` and `docs/TEST_MIRROR.md`.
-4. Read relevant architecture documents and inspect the actual files, tests and diff affected by the task. If a required file cannot be accessed, report that instead of claiming compliance.
-5. State the task scope, expected behavior, prohibited changes and potential impacts on canon, branch/swipe provenance, persistence, prompt authority and budget.
+4. Apply `docs/EVIDENCE_DRIVEN_DEVELOPMENT.md`: fix observed issues; test requirement-derived boundary cases without inventing speculative problems.
+5. Read relevant architecture documents and inspect the actual files, tests and diff affected by the task. If a required file cannot be accessed, report that instead of claiming compliance.
+6. State the task scope, expected behavior, prohibited changes and potential impacts on canon, branch/swipe provenance, persistence, prompt authority and budget.
 
 ## During implementation
 
