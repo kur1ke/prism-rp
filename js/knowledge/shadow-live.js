@@ -36,7 +36,8 @@ async function run(input,generate){
  for(let i=0;i<path.length;i++){
    const message=path[i];
    const req=I.prepare({chatId:input.chatId,path:path.slice(0,i+1),
-     messageId:message.id,priorAssertions:assertions,priorLinks:links});
+     messageId:message.id,priorAssertions:assertions,priorLinks:links,
+     personaDescription:input.personaDescription});
    let result,raw=null,elapsedMs=0,instructionChars=0;
    if(req.error)result=fail(req.error);
    else{
