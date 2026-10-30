@@ -83,6 +83,25 @@ function t(name, fn) {
   catch (e) { failed++; console.log("✗ " + name + "\n   " + (e.message || e)); }
 }
 
+t("K1.5-DEBUG: manual controls, source provenance and escaped model data", () => {
+  const V=globalThis.PRP.views;
+  const model={card:{name:"Тест"},chat:{id:"c1"},settings:{developerMode:true},
+    knowledgeShadow:{running:false,result:{
+      counts:{ok:1,"no-changes":0,partial:0,unprocessed:0},
+      replayConsistent:true,rows:[{messageId:"m1",swipeIdx:0,status:"ok",elapsedMs:8,issues:[],unresolved:[]}],
+      assertions:[{subject:"char",predicate:"location",value:"<script>alert(1)</script>",time:"current",
+        modality:"reported",source:{messageId:"m1",swipeIdx:0,kind:"text",quote:"<script>raw</script>"}}],
+      links:[]}}};
+  const html=V.debugModal(model,{section:"knowledge"});
+  assert.ok(html.includes('data-act="debug-knowledge-run"'));
+  assert.ok(html.includes("replay:"));
+  assert.ok(html.includes("&lt;script&gt;"),"untrusted source must be escaped");
+  assert.ok(!html.includes("<script>"),"no raw source markup");
+  const stale=V.debugModal({...model,knowledgeShadow:{error:"stale-selected-path"}},{section:"knowledge"});
+  assert.ok(stale.includes("stale-selected-path"));
+  assert.ok(!stale.includes("&lt;script&gt;"),"stale assertions cannot stay on screen");
+});
+
 t("WI-DEBUG-1: show RP answer and request status without leaking sibling swipes", () => {
   const note={schema:1,drawIndex:0,sourceDraw:"На ней красное платье",
     sourceText:"Смотри!",changed:"yes",
