@@ -62,11 +62,35 @@
       tab: (t) => { collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
       "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
+      "debug-knowledge-run": async () => {
+        if (!S.modal || S.modal.kind !== "debug" || S.modal.section !== "knowledge" ||
+            !S.settings || !S.settings.developerMode || S.gen || S.turn) return;
+        if (S.knowledgeShadow && S.knowledgeShadow.running) return;
+        const chat = ctx.chat(), provider = ctx.processingProvider();
+        if (!chat || !provider) { ui.toast("Текстовый провайдер не выбран.", true); return; }
+        const path = svc.chat.path().slice(-12);
+        const anchor = JSON.stringify({chatId:chat.id, path});
+        const current = {chatId:chat.id, anchor, running:true, result:null, error:null};
+        S.knowledgeShadow = current;
+        ui.renderModal();
+        try {
+          const result = await PRP.knowledgeProviderShadow.run({chatId:chat.id,path},{provider});
+          const now = JSON.stringify({chatId:S.chatId,path:svc.chat.path().slice(-12)});
+          if (S.knowledgeShadow !== current) return;
+          if (now !== anchor) current.error = "stale-selected-path";
+          else if (result.error) current.error = result.error;
+          else current.result = result;
+        } catch (_) { if (S.knowledgeShadow === current) current.error = "shadow-run-failed"; }
+        finally { if (S.knowledgeShadow === current) {
+          current.running = false;
+          if (S.modal && S.modal.kind === "debug" && S.modal.section === "knowledge") ui.renderModal();
+        }}
+      },
       "debug-copy": async () => {
         if (!S.modal || S.modal.kind !== "debug") return;
         const body = $(".debug-modal .debug-body");
         if (!body) return;
-        const title = { prism: "Prism", wear: "Одежда", tracker: "Трекер", events: "События", images: "Изображения", errors: "Ошибки", timing: "Тайминги" }[S.modal.section || "prism"] || "Debug";
+        const title = { prism: "Prism", wear: "Одежда", tracker: "Трекер", events: "События", images: "Изображения", errors: "Ошибки", timing: "Тайминги", knowledge: "K1.5" }[S.modal.section || "prism"] || "Debug";
         const content = (body.innerText || body.textContent || "").trim();
         const value = "Debug — " + ((ctx.card() || {}).name || "чат") + " / " + title + "\n\n" + content;
         const clipboard = typeof navigator !== "undefined" && navigator.clipboard;
