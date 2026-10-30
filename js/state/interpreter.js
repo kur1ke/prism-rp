@@ -444,7 +444,13 @@
         const words = Array.from(phrase.matchAll(GARMENT_NOUN), (m) => m[0]);
         const i = words.findIndex((w) => CLOTHES.test(w));
         if (i < 0 || words.slice(0, i).some((w) => /^(?:не|нет|без|бы|буду|был|была|хочу|собираюсь|могу|кажется|возможно|наверное)$/i.test(w))) return;
-        const garment = words.slice(Math.max(0, i - 5), i + 1).join(" ");
+        // A preceding outfit summary is not part of the garment name:
+        // "в домашней одежде — в светлой уютной кофте" names only the coat.
+        const preceding = words.slice(Math.max(0, i - 5), i);
+        const lastIn = preceding.findLastIndex((word) => /^в$/i.test(word));
+        const garment = words.slice(lastIn >= 0
+          ? Math.max(0, i - 5) + lastIn + 1
+          : Math.max(0, i - 5), i + 1).join(" ");
         if (garment && !clothes.includes(garment)) clothes.push(garment);
       }
       // Explicit self-report 'На мне ...' does not require 'я' or a verb.
