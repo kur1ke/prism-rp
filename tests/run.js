@@ -8293,8 +8293,8 @@ async function unifiedTracker() {
     assert.strictEqual(html.split(bad).length-1,1,
       "Observer failure appears once rather than duplicated in recent checks");
     assert.ok(html.includes("m_normal"),"normal recent checks remain available");
-    assert.strictEqual(html.split("m_observer_failure").length-1,1,
-      "same message is not duplicated in branch replay and recent list");
+    assert.strictEqual((html.match(/<summary>m_observer_failure · swipe 0/g) || []).length,1,
+      "same message has a single diagnostic row across both sections");
   });
   await ta("PERF-DETAIL-1: Debug Timing displays individual, overlapping instrumented stages", async () => {
     const perfLog = [
