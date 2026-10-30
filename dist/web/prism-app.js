@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "165f3f4b65fc17feb919a3cb7dee5f915705ecd6";
+  window.PRISM_RP_BUILD_SHA = "d58d8cee85a0a09435d4983ca2a298ca888e5fae";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -9358,37 +9358,52 @@
       (e.evidence ? '<small>Источник: ' + esc(e.evidenceType || "text") +
         ' · ' + esc(e.evidence) + '</small>' : "") + '</li>';
     const changes = '<div class="block"><div class="block-title">Пересчёт по активной ветке <small>' +
-      d.changeCount + ' сообщений с изменениями/ошибками, последние ' + d.changes.length + '</small></div>' +
+      d.changeCount + ' сообщений с изменениями/ошибками, последние ' + d.changes.length +
+      '</small></div><p class="hint">Нажмите на строку сообщения, чтобы увидеть события, причины partial/error и отклонённые наблюдения.</p>' +
       (d.changes.length ? d.changes.map(row => {
         const before = (row.before.worn || []).map(x => x.item).join(", ") || (row.before.known ? "ничего" : "неизвестно");
         const after = (row.after.worn || []).map(x => x.item).join(", ") || (row.after.known ? "ничего" : "неизвестно");
         const rejected = row.rejected || [];
-        return '<details class="exp-debug"><summary>' +
+        const issues = row.status && Array.isArray(row.status.issues) ? row.status.issues : [];
+        const hasDetails = row.events.length || row.corrections.length || rejected.length ||
+          issues.length || row.replayIssues.length;
+        return '<details class="exp-debug" data-debug-expand="' +
+          esc("wear:change:" + row.messageId + ":" + row.swipeIdx) + '"><summary>' +
           esc(row.messageId + " · swipe " + row.swipeIdx + " · " + row.role) +
           ' · ' + esc(before) + ' → ' + esc(after) +
           (row.status ? ' · ' + esc(row.status.status) : "") +
-          '</summary><p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
+          ' · Подробнее' + (issues.length ? ' (' + issues.length + ' замечаний)' : "") +
+          '</summary>' +
+          (!hasDetails ? '<p class="hint">Нет дополнительных сведений об анализе.</p>' : "") +
+          '<p class="hint">Сохранённые события и коррекции</p><ul class="wc-list">' +
           row.events.map(e => asEvent(e, "Observer")).concat(row.corrections.map(e => asEvent(e, "Коррекция"))).join("") +
           '</ul>' +
           (rejected.length ? '<details class="exp-debug"><summary>Отклонённые наблюдения одежды (' +
             rejected.length + ')</summary><pre class="debug-prompt">' + esc(JSON.stringify(rejected, null, 2)) +
             '</pre></details>' : "") +
-          (row.status && row.status.issues.some(isWearIssue) ? '<pre class="debug-prompt">' +
-            esc(JSON.stringify(row.status.issues.filter(isWearIssue), null, 2)) + '</pre>' : "") +
+          (issues.length ? '<p class="hint">Все замечания Observer по этому сообщению (' +
+            issues.length + ')</p><ul class="wc-list">' +
+            issues.map(issue => '<li>' + esc(String(issue)) + '</li>').join("") + '</ul>' : "") +
           (row.replayIssues.length ? '<pre class="debug-prompt">Ошибки повторного применения: ' +
             esc(JSON.stringify(row.replayIssues, null, 2)) + '</pre>' : "") +
           '</details>';
       }).join("") : '<p class="hint">Изменений одежды или ошибок анализа на активном пути нет.</p>') + '</div>';
-    const recent = '<div class="block"><div class="block-title">Последние проверки Observer' +
+    const detailedKeys = new Set(d.changes.map(row => row.messageId + ":" + row.swipeIdx));
+    const simpleChecks = d.recent.filter(row => !detailedKeys.has(row.messageId + ":" + row.swipeIdx));
+    const recent = '<div class="block"><div class="block-title">Остальные последние проверки Observer' +
       (m.statePending ? ' · выполняется анализ' : "") + '</div>' +
-      (d.recent.length ? '<ul class="wc-list">' + d.recent.map(x =>
+      (simpleChecks.length ? '<ul class="wc-list">' + simpleChecks.map(x =>
         '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
         esc(x.role) + ' · <b>' + esc(x.status) + '</b>' +
         (x.eventCount != null ? ' · событий: ' + x.eventCount : "") +
         (x.method ? ' · ' + esc(x.method) : "") +
         (x.wearInquiry ? '<small>Уточнение одежды: ' + esc(x.wearInquiry.status || "?") +
           (x.wearInquiry.reason ? ' (' + esc(x.wearInquiry.reason) + ')' : "") + '</small>' : "") +
-        '</li>').join("") + '</ul>' : '<p class="hint">История пуста.</p>') +
+        (x.issues && x.issues.length ? '<details class="exp-debug" data-debug-expand="' +
+          esc("wear:recent:" + x.messageId + ":" + x.swipeIdx) +
+          '"><summary>Подробнее · замечания (' + x.issues.length + ')</summary><ul class="wc-list">' +
+          x.issues.map(issue => '<li>' + esc(String(issue)) + '</li>').join("") + '</ul></details>' : "") +
+        '</li>').join("") + '</ul>' : '<p class="hint">Все последние проверки с событиями или ошибками показаны выше.</p>') +
       (d.replayIssues.length ? '<details class="exp-debug"><summary>Диагностика повторного применения</summary>' +
         '<pre class="debug-prompt">' + esc(JSON.stringify(d.replayIssues, null, 2)) +
         '</pre></details>' : "") + '</div>';
@@ -12148,7 +12163,7 @@
         candidates.push({ index: i, messageId: msg.id, swipeIdx: msg.swipeIdx || 0,
           role: msg.role, events, corrections, rejected,
           status: status ? { status: status.status, method: status.method,
-            issues: (status.issues || []).slice(0, 8), wearInquiry: status.wearInquiry || null } : null });
+            issues: Array.isArray(status.issues) ? status.issues.slice(0, 32) : [], wearInquiry: status.wearInquiry || null } : null });
       }
       const changes = candidates.slice(-20).map(entry => {
         const before = snapshot(p.slice(0, entry.index)).actors.char.wearState;
@@ -13697,6 +13712,11 @@
       if (!S.modal) { rootEl.innerHTML = ""; return; }
       const m = vm();
       const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
+      // Repainting Debug after Observer must not close a message the user
+      // opened to read its diagnostics. Keys are source IDs, not view indices.
+      const expanded = S.modal.kind === "debug" ? new Set(
+        Array.from(rootEl.querySelectorAll("details[data-debug-expand][open]"))
+          .map(el => el.getAttribute("data-debug-expand"))) : new Set();
       if (S.modal.kind === "image") {
         const im = S.modal.im, url = S.imgUrls[im.id];
         rootEl.innerHTML = `<div class="modal-wrap lightbox" data-act="modal-bg"><figure class="lb-fig"><img src="${R.safeImageSrc(url)}" alt="">
@@ -13712,6 +13732,11 @@
         : S.modal.kind === "debug" ? V.debugModal(m, S.modal)
         : S.modal.kind === "messenger-time" ? V.messengerTimeModal(m)
         : V.cardModal(m, S.modal.draft, S.modal.section);
+      if (S.modal.kind === "debug" && expanded.size) {
+        rootEl.querySelectorAll("details[data-debug-expand]").forEach(el => {
+          if (expanded.has(el.getAttribute("data-debug-expand"))) el.open = true;
+        });
+      }
       if (S.modal.keepScroll && $(".modal-body")) $(".modal-body").scrollTop = scroll;
       // Узкий экран: лента разделов прокручивается по горизонтали и после перерисовки сбрасывается к началу —
       // вернуть в видимую часть активный раздел (на широком экране лента вертикальная, ничего не меняется).
