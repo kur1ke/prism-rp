@@ -37,6 +37,25 @@ function parse(events,o=opts,frameObjects=[]){
 }
 const base={actor:"char",field:"wear",action:"remove",value:["белая блузка"],
   certainty:"reported",sourceId,visualScope:"current-self"};
+// Live regression: Observer called a list of visible garments "set" even
+// though the authored current photo never claimed an exhaustive wardrobe.
+const outfitDraw = "Селфи Орихимэ. На ней мягкий бежевый кардиган поверх белой майки и длинная светло-голубая домашняя юбка.";
+const outfitText = "Сейчас я дома в светлой уютной кофте и длинной юбке.";
+const outfitOpts = {...opts, text:outfitText, draw:outfitDraw,
+  draws:[{prompt:outfitDraw}], references:[]};
+const outfitId = ES.catalog(outfitOpts).find(x=>x.kind==="draw"&&x.text.includes("кардиган")).id;
+const outfitEvent = {actor:"char",field:"wear",action:"set",
+  value:["мягкий бежевый кардиган","белая майка","длинная светло-голубая домашняя юбка"],
+  certainty:"reported",sourceId:outfitId,visualScope:"current-self"};
+const narrowed = parse([outfitEvent],outfitOpts);
+assert.equal(narrowed.events.length,1,JSON.stringify(narrowed));
+assert.equal(narrowed.events[0].action,"add","visible garment list is not a full outfit reset");
+assert.equal(narrowed.events[0].evidenceType,"draw");
+const uncertain = parse([{...outfitEvent,visualScope:"unknown"}],outfitOpts);
+assert.equal(uncertain.events.length,0,"unknown currentness cannot be promoted");
+const gallery = {...outfitOpts,text:"Это школьное фото из галереи."};
+assert.equal(parse([{...outfitEvent,visualScope:"past-self"}],gallery).events.length,0);
+
 // The model supplies no quote, no itemMention, no byte offset.
 const p=parse([base]);
 assert.equal(p.events.length,1,JSON.stringify(p));
