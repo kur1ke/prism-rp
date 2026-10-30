@@ -8,6 +8,7 @@ require(J("core/util.js"));
 require("./knowledge-core.js");
 require("./knowledge-interpreter.js");
 require("./knowledge-shadow-live.js");
+require("./knowledge-provider-shadow.js");
 require(J("chat/branch.js"));
 require(J("world/model.js"));
 require(J("world/lens.js"));
