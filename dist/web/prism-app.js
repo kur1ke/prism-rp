@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "19642d929dff8f5317c10a62b3b41ef5d7e5a448";
+  window.PRISM_RP_BUILD_SHA = "f06d48cf5d4e5baefed61d664833be3419ecb8f9";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5076,11 +5076,21 @@
       // Indexed evidence is already the exact substring of the current
       // authored source. Derive short literal mentions from it, not the
       // untrusted model's optional itemMention or grammatical phrasing.
+      // The quoted garment phrase is the observation. The model's value is
+      // only a hint, not a second authority over an already unique identity.
+      // Require the model's garment noun to agree with the quoted noun; do not
+      // require every descriptive adjective to be repeated in both surfaces.
+      const namedHead=garmentHead(named);
       const found=refs.map(ref=>({ref,mention:phrase(evidence,ref)}))
-        .filter(x=>x.mention&&(named===x.ref.item||
-          match(named,[x.ref]).reference));
+        .filter(x=>x.mention&&namedHead&&
+          namedHead===garmentHead(x.ref.item)&&
+          (named===x.ref.item || match(named,[x.ref]).reference ||
+            // The quote itself may be shorter than the canonical item,
+            // while model qualifiers differ. In that case only the quoted
+            // phrase may select the item; no inferred qualifiers are copied.
+            match(x.mention,[x.ref]).reference));
       if(found.length>1)return {unresolved:"Разрешение предмета: ambiguous-garment",
-        reason:"ambiguous-reference"};
+        reason:"ambiguous-garment"};
       if(found.length===1){
         const valid=match(found[0].mention,refs);
         if(!valid.reference)return {unresolved:"Разрешение предмета: "+valid.reason,
