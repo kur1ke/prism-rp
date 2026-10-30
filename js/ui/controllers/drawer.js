@@ -74,7 +74,8 @@
         S.knowledgeShadow = current;
         ui.renderModal();
         try {
-          const result = await PRP.knowledgeProviderShadow.run({chatId:chat.id,path},{provider});
+          const result = await PRP.knowledgeProviderShadow.run({chatId:chat.id,path,
+            personaDescription:String((ctx.persona()||{}).description||"")},{provider});
           const now = JSON.stringify({chatId:S.chatId,path:svc.chat.path().slice(-12)});
           if (S.knowledgeShadow !== current) return;
           if (now !== anchor) current.error = "stale-selected-path";
