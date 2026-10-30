@@ -20,6 +20,10 @@ assert.ok(spans.some(x=>x.id==="D1"&&x.text.includes("сняла белую бл
 const sourceId=spans.find(x=>x.text.includes("сняла белую блузку")).id;
 const prompt=INT.instruction(opts);
 assert.ok(prompt.includes("SOURCE_FRAGMENTS"));
+assert.ok(prompt.includes('visualScope'));
+assert.ok(prompt.includes('current-self (только для подтверждённого актуального DRAW)'),
+  "event schema must show the visualScope field required by DRAW validation");
+
 assert.ok(prompt.includes(sourceId));
 assert.ok(prompt.includes("не составляй evidence вручную"));
 // Live reproduction: current first-person outfit report and a same-message
