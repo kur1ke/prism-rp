@@ -4641,6 +4641,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
             "; других надетых вещей, включая скрытые слои и бельё, до следующего совершённого изменения нет"
           : (w.visualWear || []).length ? "- установленная одежда (остальное неизвестно): " +
             (w.visualWear || []).map(q).join(", ") : "",
+      (w.visualWearPartial || []).length
+        ? "- текущее положение одежды (после последней подтверждённой поправки): " +
+          w.visualWearPartial.filter(x => x && x.item && x.placement)
+            .map(x => q(x.item) + ": " + q(x.placement)).join("; ")
+        : "",
       w.visualPose ? "- установленная поза: " + q(w.visualPose) : "",
       w.visualHair ? "- установленная причёска: " + q(w.visualHair) : "",
     ].filter(Boolean).join("\n");
@@ -12269,7 +12274,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
             actorState: snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
-              globallyScoped: !!singleOwner, origin: origin.path.map((m) => [m.id, m.swipeIdx || 0]),
+              globallyScoped: !!singleOwner,
               plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
                 complete: !!(visualPlan.wear && visualPlan.wear.complete),
                 absentFromBody: visualPlan.absentFromBody,
