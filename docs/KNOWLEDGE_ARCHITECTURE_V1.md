@@ -54,3 +54,16 @@ It neither extracts claims from language nor writes them. The whole runtime cont
 Current outfit after change, old image, undated photo, later confirmation of an earlier photo, intended vs completed action, user corrections, swipes/branch switches, model JSON failure, two distinct same-time claims and a story where the model freely moves to another topic. Compare new and old output while observing exact source evidence and model latency. Do not accept changes based on clothing-only examples.
 
 **Rollback:** K0 is dormant. Reverting the source+test+doc commit restores the prior tree; no DB migration, user content change or saved second source of truth has occurred.
+
+
+## K1 — neutral interpreter adapter (implemented as isolated prototype)
+
+New source file: \`js/knowledge/interpreter.js\`; tests: \`tests/knowledge-interpreter.js\`.
+
+- \`prepare({chatId,path,messageId,priorAssertions,priorLinks})\` constructs one source-bound request for the **selected message and swipe**. Current text and each authored DRAW are separate source chunks, with exact quotes and generated T/D source IDs. Previous messages are *context*, never additional current source evidence.
+- The model proposes semantic assertions and links. No regex over scene wording, outfits, photo-type labels, or actor clothing. The application supplies canonical claim IDs, source quotes, selected swipe, chat ID and draw index. Additional model-supplied IDs and source coordinates have no authority.
+- \`interpret(request,raw)\` validates and returns \`status: ok|no-changes|partial|unprocessed\`, \`committable\`, candidates and issues. A malformed response is **unprocessed**, not a negative claim nor "no changes". A partial response is inspected, not automatically committed.
+- \`execute(request,generator)\` calls a generator **only when explicitly supplied**. This phase is not connected to live providers, the RP engine, or IndexedDB and performs zero automatic calls.
+- The core verifies that links target assertions visible on the prior selected path (or assertions proposed in this batch). Later confirmations can qualify old photo assertions without inventing a garment in the confirming message. Source provenance is not semantic validation; real-model benchmarks are required before enabling any writes.
+
+**K1 acceptance here:** simulated model outputs plus source, error, intent, branch and provenance regression coverage; existing StateTracker, Memory/Reflection and RP prompts must remain untouched. **Live-model semantic quality: NOT RUN.** No DB migration. Rollback by reverting K1 source/test/doc commit. The eventual K2 journal is not authorized until measurements and a clear failure/retry policy are reviewed.

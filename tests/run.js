@@ -6,6 +6,7 @@ const J = (p) => path.join(__dirname, "..", "js", p);
 require(J("core/util.js"));
 // K0: pure knowledge contract, isolated from the runtime StateTracker.
 require("./knowledge-core.js");
+require("./knowledge-interpreter.js");
 require(J("chat/branch.js"));
 require(J("world/model.js"));
 require(J("world/lens.js"));
