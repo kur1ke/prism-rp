@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "eb65ffb4a018767a710ccdcdad029527bdab8d8b";
+  window.PRISM_RP_BUILD_SHA = "4225d81feb377c0472aca79c6c93fbef4033b739";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6408,7 +6408,13 @@
         const words = Array.from(phrase.matchAll(GARMENT_NOUN), (m) => m[0]);
         const i = words.findIndex((w) => CLOTHES.test(w));
         if (i < 0 || words.slice(0, i).some((w) => /^(?:не|нет|без|бы|буду|был|была|хочу|собираюсь|могу|кажется|возможно|наверное)$/i.test(w))) return;
-        const garment = words.slice(Math.max(0, i - 5), i + 1).join(" ");
+        // A preceding outfit summary is not part of the garment name:
+        // "в домашней одежде — в светлой уютной кофте" names only the coat.
+        const preceding = words.slice(Math.max(0, i - 5), i);
+        const lastIn = preceding.findLastIndex((word) => /^в$/i.test(word));
+        const garment = words.slice(lastIn >= 0
+          ? Math.max(0, i - 5) + lastIn + 1
+          : Math.max(0, i - 5), i + 1).join(" ");
         if (garment && !clothes.includes(garment)) clothes.push(garment);
       }
       // Explicit self-report 'На мне ...' does not require 'я' or a verb.
