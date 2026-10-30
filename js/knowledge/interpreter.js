@@ -67,11 +67,13 @@
       const v=m.swipes&&m.swipes[m.swipeIdx||0]||{};
       const t=String(v.text||"");
       return {messageId:m.id,role:m.role,text:t.slice(0,650),
-        truncated:t.length>650,authoredDrawCount:(v.draws||[]).length};
+        truncated:t.length>650,authoredDrawCount:(v.draws||[]).length,
+        authoredAt:v.messengerAt&&v.messengerAt.at||null};
     });
     const known=previous.accepted.filter(x=>x.kind==="assertion").slice(-45).map(x=>({
       id:x.id,subject:x.subject,predicate:x.predicate,value:x.value,
-      time:x.time,modality:x.modality
+      time:x.time,modality:x.modality,
+      sourceRole:(prefix.find(m=>m&&m.id===x.source.messageId)||{}).role||"unknown"
     }));
     const data={speaker:message.role,messageId:message.id,sources,
       knownAssertions:known,recentHistory:history};
@@ -191,6 +193,8 @@
       assertions,links,unresolved,issues,projection};
   }
   async function execute(req,generate) {
+    if(!req||req.error||!req.lookup||!string(req.instruction,MAX.instruction))
+      return failure(req&&req.error||"invalid-request");
     if(typeof generate!=="function")return failure("no-generator");
     try {
       const raw=await generate(req.instruction);

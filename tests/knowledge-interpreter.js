@@ -195,6 +195,10 @@ check("instructions in source are inert data, not system commands",()=>{
 });
 async function asyncChecks(){
   const req=I.prepare({chatId:"c1",path:[m("a","Я дома.")],messageId:"a"});
+  let invoked=0;
+  const invalid=await I.execute({error:"source-budget-exceeded"},async()=>{invoked++;return output()});
+  assert.equal(invalid.status,"unprocessed");
+  assert.equal(invoked,0,"invalid preflight cannot call a model");
   const done=await I.execute(req,async instruction=>{
     assert.ok(instruction.includes("CONTEXT_DATA_JSON"));
     return {text:output([statement("T0","location","home")])};
