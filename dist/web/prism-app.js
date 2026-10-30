@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "e84e5d943689434159b452630b1d4229f349b2b2";
+  window.PRISM_RP_BUILD_SHA = "063584a416ce5623f24c7d6f4e60b8e0b5cc5c7f";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5313,6 +5313,11 @@ function classify(e){
  if(/429|rate.limit/.test(m))return "provider-rate-limited";
  if(/timeout|timed.out|время ожидания/.test(m))return "provider-timeout";
  if(/context|token|too.long|length/.test(m))return "provider-context-rejected";
+ if(e&&Number.isInteger(e.status))return "provider-http-"+String(e.status);
+ const n=e&&e.name;
+ if(n==="TypeError")return "provider-type-error";
+ if(n==="SyntaxError")return "provider-syntax-error";
+ if(n==="RangeError")return "provider-range-error";
  return "generator-failed";
 }
 function fail(error){return {status:"unprocessed",error,committable:false,assertions:[],links:[],unresolved:[],issues:[error]};}
@@ -5332,7 +5337,7 @@ async function run(input,generate){
    const message=path[i];
    const req=I.prepare({chatId:input.chatId,path:path.slice(0,i+1),
      messageId:message.id,priorAssertions:assertions,priorLinks:links});
-   let result,raw=null,elapsedMs=0;
+   let result,raw=null,elapsedMs=0,instructionChars=0;
    if(req.error)result=fail(req.error);
    else{
      const start=Date.now();
@@ -5350,7 +5355,7 @@ async function run(input,generate){
    counts[result.status]++;
    if(result.committable){assertions.push(...result.assertions);links.push(...result.links);}
    rows.push({messageId:message.id,swipeIdx:message.swipeIdx||0,
-     revision:req.error?null:req.revision,status:result.status,elapsedMs,
+     revision:req.error?null:req.revision,status:result.status,elapsedMs,instructionChars,
      issues:result.issues.slice(),unresolved:result.unresolved.slice(),
      proposedAssertions:result.assertions.length,proposedLinks:result.links.length});
    // One transport failure makes the remaining calls uninformative and costly.
@@ -9962,7 +9967,7 @@ if(typeof module!=="undefined"&&module.exports)module.exports=P.knowledgeProvide
           ' · replay: ' + (r.replayConsistent ? 'совпадает' : 'расхождение') + '</p>' +
           '<details><summary>Сообщения и ошибки</summary><ul class="wc-list">' +
           r.rows.map(x => '<li>' + esc(x.messageId) + ' · swipe ' + x.swipeIdx + ' · ' +
-            esc(x.status) + ' · ' + x.elapsedMs + ' мс' +
+            esc(x.status) + ' · ' + x.elapsedMs + ' мс · инструкция ' + (x.instructionChars || 0) + ' символов' +
             (x.issues.length ? '<div>' + esc(x.issues.join('; ')) + '</div>' : '') +
             (x.unresolved.length ? '<div>' + esc(x.unresolved.join('; ')) + '</div>' : '') +
             '</li>').join('') + '</ul></details>' +
@@ -14660,7 +14665,7 @@ if(typeof module!=="undefined"&&module.exports)module.exports=P.knowledgeProvide
         if (!S.modal || S.modal.kind !== "debug" || S.modal.section !== "knowledge" ||
             !S.settings || !S.settings.developerMode || S.gen || S.turn) return;
         if (S.knowledgeShadow && S.knowledgeShadow.running) return;
-        const chat = ctx.chat(), provider = ctx.processingProvider();
+        const chat = ctx.chat(), provider = ctx.provider();
         if (!chat || !provider) { ui.toast("Текстовый провайдер не выбран.", true); return; }
         const path = svc.chat.path().slice(-12);
         const anchor = JSON.stringify({chatId:chat.id, path});
