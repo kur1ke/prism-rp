@@ -232,6 +232,7 @@
       // No scope inference: past/unknown photos never reach this boundary.
       if (canonical && canonical.field === "wear" && canonical.action === "set" &&
           canonical.evidenceType === "draw" && canonical.visualScope === "current-self" &&
+          canonical.sourceSpan && canonical.sourceSpan.kind === "draw" &&
           !/(?:на\s+не[йм]\s+только|из\s+одежды\s+(?:на\s+не[йм]\s+)?только|одет[а-яё]*\s+только\s+в|wear(?:s|ing)?\s+only|only\s+wearing|nothing\s+else\s+(?:on|worn))/iu.test(String(canonical.evidence || ""))) {
         canonical = { ...canonical, action: "add" };
       }
