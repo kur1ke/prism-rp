@@ -165,3 +165,12 @@ assert.ok(fold([forgery]).diagnostics.some(d=>/уточнение/.test(d.issue)
   "altered inquiry provenance must not be replayed");
 
 console.log("PASS: STATE-CONTINUITY-1 full/partial DRAW, unknown, provenance, swipes, stale hints");
+
+
+// Live regression: a generic outfit preamble must not become part of a garment.
+const outfitText = "Сейчас я в своей любимой домашней одежде — в светлой уютной кофте и в длинной юбке.";
+const extracted = I.grounded(outfitText, { mode: "messenger", role: "assistant" });
+const extractedWear = extracted.find(e => e.field === "wear");
+assert.ok(extractedWear, JSON.stringify(extracted));
+assert.deepEqual(extractedWear.value, ["светлой уютной кофте", "длинной юбке"],
+  "only the garment noun phrases belong to the physical wear state");
