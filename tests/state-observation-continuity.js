@@ -108,7 +108,7 @@ assert.ok(T.normalize({...invalidated,certainty:"intent"},
 
 const alternate=structuredClone(transition);
 alternate.swipes.push({text:"Я всё ещё в юбке.",draws:[],stateEvents:[],sceneOps:[],stateCorrections:[]});
-alternate.swipeIdx=1;
+alternatePlacementSwipe.swipeIdx=1;
 assert.deepEqual(wear([alternate]).worn.map(x=>x.item),old,
   "alternate swipe must not inherit invalidation");
 assert.deepEqual(wear([transition]).worn,[],"returning to selected swipe replays its state");
@@ -192,10 +192,10 @@ const liftedPlace = M.messengerSections({world:liftedWorld,conversation:{},tempo
   {lists:false,plans:0}).place;
 assert.ok(liftedPlace.includes("текущее положение одежды"),liftedPlace);
 assert.ok(liftedPlace.includes("приподняла край белой блузки"),liftedPlace);
-const alternate = structuredClone(liftedPath[0]);
-alternate.swipes.push({text:"Без движения.",stateEvents:[],sceneOps:[]});
-alternate.swipeIdx=1;
-const alternateSnapshot = fold([alternate]);
+const alternatePlacementSwipe = structuredClone(liftedPath[0]);
+alternatePlacementSwipe.swipes.push({text:"Без движения.",stateEvents:[],sceneOps:[]});
+alternatePlacementSwipe.swipeIdx=1;
+const alternateSnapshot = fold([alternatePlacementSwipe]);
 const alternatePlace = M.messengerSections({
   world:R.world({visualWear:[]},{state:alternateSnapshot,character:T.forCharacter(alternateSnapshot)}),
   conversation:{},temporal:{}
