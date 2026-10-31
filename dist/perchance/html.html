@@ -6048,6 +6048,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           /^(?:белье|белья|бельем|белью|бельи|underwear|lingerie)$/u.test(word));
         const component = (value) => underwearWords(value).some(word =>
           /^(?:трусики|трусиков|трусиках|трусиками|трусы|трусов|стринги|стрингов|стрингах|стрингами|бюстгальтер|бюстгальтера|бюстгальтере|лифчик|лифчика|бра|panties|thong|thongs|bra|briefs)$/u.test(word));
+        // Removing the named underwear set must remove its already identified
+        // parts as well. Otherwise a once-expanded aggregate silently survives
+        // its own removal through its component records.
+        if (event.action === "remove" && aggregate(item)) {
+          const knownParts = wear.worn.concat(wear.partiallyWorn)
+            .filter(x => component(x.item));
+          for (const part of knownParts) {
+            drop(part.item);
+            wear.removed.push(fact(part.item, part.order || 0));
+          }
+        }
         // A later generic mention cannot restore an entire unspecified set
         // once a concrete part is already represented.
         if (event.action === "add" && aggregate(item) &&
