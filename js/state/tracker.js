@@ -124,6 +124,11 @@
           /^(?:белье|белья|бельем|белью|бельи|underwear|lingerie)$/u.test(word));
         const component = (value) => underwearWords(value).some(word =>
           /^(?:трусики|трусиков|трусиках|трусиками|трусы|трусов|стринги|стрингов|стрингах|стрингами|бюстгальтер|бюстгальтера|бюстгальтере|лифчик|лифчика|бра|panties|thong|thongs|bra|briefs)$/u.test(word));
+        // A later generic mention cannot restore an entire unspecified set
+        // once a concrete part is already represented.
+        if (event.action === "add" && aggregate(item) &&
+            wear.worn.concat(wear.partiallyWorn).some(x => component(x.item)))
+          continue;
         if (event.action === "add" && component(item)) {
           const vague = wear.worn.concat(wear.partiallyWorn).filter(x => aggregate(x.item));
           if (vague.length) {
