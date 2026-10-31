@@ -394,3 +394,21 @@ const missingMoment=INT.parse(JSON.stringify({frameMoment:"unknown",
 assert.equal(missingMoment.events.length,0,"undetermined photo moment cannot create a garment");
 assert.ok(INT.instruction(currentFrameOpts).includes("frameMoment"),
  "new frame-time contract must be supplied to Observer");
+
+
+const authoredDraws=globalThis.PRP.imgCompose.parseDraws(
+ "[draw: moment=past-self; Орихимэ в старой кофте, 1:1]");
+assert.equal(authoredDraws.draws.length,1);
+assert.equal(authoredDraws.draws[0].moment,"past-self");
+assert.equal(authoredDraws.draws[0].prompt,"Орихимэ в старой кофте");
+assert.equal(authoredDraws.text,"");
+const authorOverridesObserver=INT.parse(JSON.stringify({frameMoment:"current-self",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),
+ {...currentFrameOpts,drawMoment:"past-self"});
+assert.equal(authorOverridesObserver.events.length,0,
+ "RP-authored historical photo cannot turn current because Observer mislabels it");
+const authorCurrent=INT.parse(JSON.stringify({frameMoment:"unknown",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),
+ {...currentFrameOpts,drawMoment:"current-self"});
+assert.equal(authorCurrent.events.length,1,
+ "current RP-authored shot must not be rejected by Observer temporal uncertainty");
