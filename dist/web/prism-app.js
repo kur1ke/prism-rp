@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "37bed985673bb865238f34498dbc8ef3027db66d";
+  window.PRISM_RP_BUILD_SHA = "8a05981e314a3bf7b929b375762868c026e53ec0";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6576,7 +6576,12 @@
       !wear||!wear.known||!Array.isArray(wear.worn)||!wear.worn.length)return false;
     const events=(p.events||[]).filter(e=>e&&e.actor==="char"&&e.field==="wear"&&
       e.evidenceType==="draw"&&e.certainty!=="intent");
-    if(events.some(e=>["set","clear","invalidate"].includes(e.action)))return false;
+    if(events.some(e=>["set","clear"].includes(e.action)))return false;
+    // A confirmed replacement with only a partially described new outfit
+    // needs hidden-layer clarification most of all. invalidate removes the
+    // *old* outfit; it must not suppress inquiry about the new one.
+    const replaced=events.some(e=>e.action==="invalidate");
+    if(replaced)return events.some(e=>e.action==="add"&&Array.isArray(e.value)&&e.value.length);
     // A visible change to an already-known garment (lifted, removed) can
     // expose previously hidden layers just as a new garment can. A framed
     // crop without a garment event still cannot trigger this query.

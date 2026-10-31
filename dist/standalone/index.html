@@ -7345,7 +7345,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       !wear||!wear.known||!Array.isArray(wear.worn)||!wear.worn.length)return false;
     const events=(p.events||[]).filter(e=>e&&e.actor==="char"&&e.field==="wear"&&
       e.evidenceType==="draw"&&e.certainty!=="intent");
-    if(events.some(e=>["set","clear","invalidate"].includes(e.action)))return false;
+    if(events.some(e=>["set","clear"].includes(e.action)))return false;
+    // A confirmed replacement with only a partially described new outfit
+    // needs hidden-layer clarification most of all. invalidate removes the
+    // *old* outfit; it must not suppress inquiry about the new one.
+    const replaced=events.some(e=>e.action==="invalidate");
+    if(replaced)return events.some(e=>e.action==="add"&&Array.isArray(e.value)&&e.value.length);
     // A visible change to an already-known garment (lifted, removed) can
     // expose previously hidden layers just as a new garment can. A framed
     // crop without a garment event still cannot trigger this query.
