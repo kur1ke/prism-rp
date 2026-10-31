@@ -114,6 +114,23 @@
         wear.invalidated = false;
       }
       for (const item of event.value) {
+        // A generic underwear-set label is an umbrella description, not a
+        // second garment next to a newly identified underwear component.
+        // Retire only the vague label; do not infer that an unmentioned
+        // top/bottom was removed. A formerly closed outfit becomes partial.
+        const underwearWords = (value) => str(value).toLowerCase().replace(/ё/g, "е")
+          .match(/[а-яa-z]+/gu) || [];
+        const aggregate = (value) => underwearWords(value).some(word =>
+          /^(?:белье|белья|бельем|белью|бельи|underwear|lingerie)$/u.test(word));
+        const component = (value) => underwearWords(value).some(word =>
+          /^(?:трусики|трусиков|трусиках|трусиками|трусы|трусов|стринги|стрингов|стрингах|стрингами|бюстгальтер|бюстгальтера|бюстгальтере|лифчик|лифчика|бра|panties|thong|thongs|bra|briefs)$/u.test(word));
+        if (event.action === "add" && component(item)) {
+          const vague = wear.worn.concat(wear.partiallyWorn).filter(x => aggregate(x.item));
+          if (vague.length) {
+            for (const old of vague) drop(old.item);
+            wear.complete = false;
+          }
+        }
         const existing = canonicalWearItem(item, previous);
         const name = existing ? existing.item : item;
         // A generic "юбку" cannot mean an arbitrary one of several known
