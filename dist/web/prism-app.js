@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "b314455ce50708f638f3f5cb8fd7b9e4840c713c";
+  window.PRISM_RP_BUILD_SHA = "37bed985673bb865238f34498dbc8ef3027db66d";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -12398,6 +12398,7 @@
       if (w.timedOut) perf("stateWaitTimeout", w.waitedMs, { chatId: c.id });
       if (S.turn !== turn || turn.cancelled) return { refused: "cancelled", turn };
       if (S.chatId !== turn.chatId || !ctx.chat() || turnKey(chat().path()) !== turn.key) return { refused: "context-changed", turn };
+      if (w.timedOut) return { refused: "state-timeout", turn };
       return { turn };
     }
     const releaseTurn = (turn) => { if (turn && S.turn === turn) { S.turn = null; renderComposer(); } };
@@ -12427,7 +12428,7 @@
       // Незавершённый разбор предыдущих сообщений этого чата: сначала дождаться его (видимо, ограниченно).
       if (!o.turn && state() && state().pending(c.id)) {
         const w = await waitForState(mode || (msgId ? "regen" : "new"));
-        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат, ветка или текст истории изменились — действие отменено.", true); return; }
+        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат, ветка или текст истории изменились — действие отменено.", true); else if (w.refused === "state-timeout") ui.toast("Разбор предыдущего ответа ещё не завершён. Повторите действие после его завершения.", true); return; }
         let reply = null;
         try { reply = await generate(msgId, mode, { turn: w.turn }); return reply; }
         finally { releaseTurn(w.turn); ready(reply); }
@@ -12665,7 +12666,7 @@
       if (c0 && !o.turn && S.turn && S.turn.chatId === c0.id) return { ok: false, outcome: "ineligible", code: "busy" };
       if (c0 && !o.turn && !S.gen && state() && state().pending(c0.id)) {
         const w = await waitForState("initiative");
-        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат или ветка изменились — проверка не запущена.", true); return { ok: false, outcome: "stale" }; }
+        if (w.refused) { releaseTurn(w.turn); if (w.refused === "context-changed") ui.toast("Пока шёл разбор предыдущего ответа, чат или ветка изменились — проверка не запущена.", true); else if (w.refused === "state-timeout") ui.toast("Разбор предыдущего ответа ещё не завершён. Проверка не запущена.", true); return { ok: false, outcome: "stale" }; }
         let r = null;
         try { r = await initiative(regenId, { turn: w.turn }); return r; }
         finally { releaseTurn(w.turn); ready(r); }
@@ -12800,7 +12801,7 @@
         const w = await waitForState("send", { text: body, extra: extra || null, pressedAt });
         turn = w.turn;
         if (w.refused) {
-          if (!turn.cancelled) restore(turn, w.refused === "context-changed" ? "Пока разбирался предыдущий ответ, чат, ветка или текст истории изменились — сообщение не отправлено, текст возвращён в поле ввода." : "");
+          if (!turn.cancelled) restore(turn, w.refused === "context-changed" ? "Пока разбирался предыдущий ответ, чат, ветка или текст истории изменились — сообщение не отправлено, текст возвращён в поле ввода." : w.refused === "state-timeout" ? "Разбор предыдущего ответа ещё не завершён — сообщение не отправлено, текст возвращён в поле ввода." : "");
           releaseTurn(turn);
           return { outcome: w.refused };
         }
@@ -12816,7 +12817,7 @@
         ui.renderFeed();
         ui.scrollBottom();
         // Следующей генерации нужны события этой реплики и всего, что ещё разбирается в этом чате.
-        if (st) { await st.track(sent, observerProvider, prepared ? { prepared } : undefined); await st.settle(c.id); }
+        if (st) { await st.track(sent, observerProvider, prepared ? { prepared } : undefined); const settled = await st.settle(c.id); if (settled.timedOut) { ui.toast("Обработка состояния ещё не завершена. Сообщение сохранено, но ответ персонажа не запущен.", true); return { outcome: "state-timeout", msgId: sent.id }; } }
         // Пользователь мог уйти в другой чат или ветку, пока разбиралась его реплика: она сохранена, ответ не запускается.
         if (S.chatId !== turn.chatId || !ctx.chat() || !chat().path().includes(sent)) return { outcome: "left-chat", msgId: sent.id };
         turn.phase = "generating";
