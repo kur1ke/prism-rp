@@ -21,9 +21,9 @@ const sourceId=spans.find(x=>x.text.includes("сняла белую блузку
 const prompt=INT.instruction(opts);
 assert.ok(prompt.includes("SOURCE_FRAGMENTS"));
 assert.ok(prompt.includes('visualScope'));
-assert.ok(prompt.includes('"visualScope":"current-self"'),
-  "event JSON example must contain exact validator enum");
-assert.ok(!prompt.includes('"visualScope":"current-self ('),
+assert.ok(prompt.includes('"frameMoment"'),
+  "frame-level temporal verdict must be described");
+assert.ok(!prompt.includes('"frameMoment":"current-self ('),
   "do not place explanatory prose inside enum value");
 
 assert.ok(prompt.includes(sourceId));
@@ -35,7 +35,7 @@ const currentPhotoInstruction=INT.instruction({...opts,
   text:"Сейчас я дома в светлой уютной кофте и длинной юбке.",
   draw:"Селфи Орихимэ. На ней бежевый кардиган поверх белой майки и длинная домашняя юбка."});
 assert.ok(currentPhotoInstruction.includes("Сопоставь ТЕКСТ и DRAW того же сообщения"));
-assert.ok(currentPhotoInstruction.includes("не оставляй scope=unknown"));
+assert.ok(currentPhotoInstruction.includes("не оставляй frameMoment=unknown"));
 assert.ok(currentPhotoInstruction.includes("фото из галереи"));
 
 function parse(events,o=opts,frameObjects=[]){
