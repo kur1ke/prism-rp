@@ -202,3 +202,26 @@ const alternatePlace = M.messengerSections({
 }, {lists:false,plans:0}).place;
 assert.ok(!alternatePlace.includes("приподняла край белой блузки"),
   "placement from a sibling swipe must not leak into current RP prompt");
+
+
+const visualReplacementDraw="Селфи. На ней белая школьная блузка и короткая плиссированная юбка.";
+const oldSkirtOrigin={schema:1,kind:"initial-outfit",event:{
+  actor:"char",field:"wear",action:"set",
+  value:["длинная светлая юбка","белые носки"],certainty:"reported",evidence:""}};
+const visualReplacementEvent={actor:"char",field:"wear",action:"add",
+  value:["короткая плиссированная юбка","белая школьная блузка"],
+  certainty:"reported",evidence:"На ней белая школьная блузка и короткая плиссированная юбка.",
+  evidenceType:"draw",visualScope:"current-self"};
+const replacementMessage=msg("new-visual-clothes","Смотри.",[visualReplacementEvent],
+  [{prompt:visualReplacementDraw}]);
+const replacedWear=T.fold({mode:"messenger",initialWear:oldSkirtOrigin,
+  path:[replacementMessage]}).actors.char.wearState;
+assert.deepEqual(replacedWear.worn.map(x=>x.item).sort(),
+  ["короткая плиссированная юбка","белая школьная блузка","белые носки"].sort(),
+  "current visual observation supersedes old skirt rather than accumulating both");
+const siblingReplacement=structuredClone(replacementMessage);
+siblingReplacement.swipes.push({text:"Без фото.",draws:[],stateEvents:[]});
+siblingReplacement.swipeIdx=1;
+assert.deepEqual(T.fold({mode:"messenger",initialWear:oldSkirtOrigin,
+  path:[siblingReplacement]}).actors.char.wearState.worn.map(x=>x.item),
+  oldSkirtOrigin.event.value,"the sibling swipe retains its prior clothing");
