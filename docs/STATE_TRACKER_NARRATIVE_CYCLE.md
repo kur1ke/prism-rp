@@ -52,3 +52,28 @@ The tracker reconstructs the selected path, and the resolver sends **compact cur
 - `js/images/service.js` and `js/images/compile.js`: specific-frame rendering.
 
 This is a description of the intended responsibilities, **not** a claim that every current edge case is already correct. Investigate observed failures against the cycle.
+
+
+## Authored DRAW temporal provenance (testing)
+
+The RP provider authors both the visible image description and the depicted moment.
+New directives may include a `moment=` prefix:
+`[draw: moment=current-self; <description>]`,
+`[draw: moment=past-self; <description>]`, or
+`[draw: moment=other; <description>]`.
+The application removes this metadata from the diffusion prompt and stores it
+with the source DRAW on the selected swipe. The moment describes *when the
+pictured event took place*, not when the image was sent.
+
+Observer extracts source-ID-bound wear facts. Its one-shot `frameMoment`
+assessment covers legacy untagged DRAWs, but it may not override an explicit
+RP-authored temporal tag. The Interpreter attaches the canonical
+`visualScope=current-self` only to accepted current-owner events; the
+Tracker also checks the tagged original DRAW during replay. A past or
+other-person photo may still be generated, but does not update physical
+clothing. No secondary wardrobe registry or Memory authority is introduced.
+
+A missing author tag retains the legacy Observer temporal classification;
+it does not prove that a photograph is current. These contracts require
+real-model validation in the testing mirror: an actual outfit change and a
+retrieved historical photograph must have opposite Tracker effects.
