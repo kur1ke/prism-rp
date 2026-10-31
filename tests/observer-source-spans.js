@@ -369,3 +369,28 @@ assert.deepEqual(pajamaSibling.actors.char.wearState.worn.map(x=>x.item),pajamaI
   "sibling swipe cannot inherit the mirror photo's garment");
 
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
+
+
+const framePhoto="Селфи Орихимэ. На ней розовая пижама с облаками.";
+const currentFrameOpts={...opts,text:"Готово! Я переоделась, теперь готовлюсь ко сну.",
+ draw:framePhoto,draws:[{prompt:framePhoto}],references:[]};
+const frameId=ES.catalog(currentFrameOpts).find(x=>x.kind==="draw"&&x.text.includes("пижама")).id;
+const frameEvent={actor:"char",field:"wear",action:"add",value:["розовая пижама"],
+ certainty:"reported",sourceId:frameId};
+const currentFrame=INT.parse(JSON.stringify({frameMoment:"current-self",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
+assert.equal(currentFrame.events.length,1,JSON.stringify(currentFrame));
+assert.equal(currentFrame.events[0].visualScope,"current-self");
+const oldPhoto=INT.parse(JSON.stringify({frameMoment:"past-self",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),
+ {...currentFrameOpts,text:"Я нашла старое фото, где я в пижаме."});
+assert.equal(oldPhoto.events.length,0,"gallery photo must not rewrite current wardrobe");
+assert.ok(oldPhoto.rejectedObservations.some(x=>x.reason==="visual-scope-not-current"));
+const otherPhoto=INT.parse(JSON.stringify({frameMoment:"other",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
+assert.equal(otherPhoto.events.length,0,"other actor cannot change this wardrobe");
+const missingMoment=INT.parse(JSON.stringify({frameMoment:"unknown",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
+assert.equal(missingMoment.events.length,0,"undetermined photo moment cannot create a garment");
+assert.ok(INT.instruction(currentFrameOpts).includes("frameMoment"),
+ "new frame-time contract must be supplied to Observer");
