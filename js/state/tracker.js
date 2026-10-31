@@ -315,6 +315,10 @@
     if (!drawn && !inquiry && e.drawIndex != null) return "индекс draw указан без draw-события";
     const currentDraw = drawList.length
       ? drawList[e.drawIndex == null ? drawList.length - 1 : e.drawIndex] : null;
+    // Replay cannot resurrect a wear event from an authored historical/other
+    // shot, even if an older Observer event claimed current-self.
+    if (drawn && currentDraw && ["past-self","other"].includes(currentDraw.moment))
+      return "draw помечен автором как исторический или чужой кадр";
     if (drawn && (e.field !== "wear" || !source || source.role !== "assistant" ||
       !currentDraw || typeof currentDraw.prompt !== "string" ||
       !str(e.evidence) || !currentDraw.prompt.includes(e.evidence)))
