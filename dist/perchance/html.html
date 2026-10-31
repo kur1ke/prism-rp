@@ -1,4 +1,4 @@
-<!-- Prism RP 0.5.0 · собрано 2026-10-30 · исходники: index.html, css/, js/ -->
+<!-- Prism RP 0.5.0 · собрано 2026-10-31 · исходники: index.html, css/, js/ -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -7297,6 +7297,21 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       (e.action==="add"&&Array.isArray(e.value)&&
         e.value.some(item=>!wear.worn.some(old=>key(old.item)===key(item)))));
   }
+  // Reuse a prior response only for the exact same selected-swipe query.
+  // A different caption, DRAW, index or previous wardrobe requires new analysis.
+  function reusable(note,o){
+    const p=o||{},old=p.previous&&p.previous.worn;
+    if(!needed(p)||!note||note.schema!==1||!Array.isArray(old)||
+       note.drawIndex!==p.drawIndex||note.sourceDraw!==clean(p.draw)||
+       note.sourceText!==p.sourceText||!Array.isArray(note.previous)||
+       note.previous.length!==old.length||!Array.isArray(note.hidden)||
+       !["yes","no","unknown"].includes(note.changed))return false;
+    const items=old.map(x=>clean(x.item));
+    if(note.previous.some((x,i)=>!x||x.item!==items[i]||
+       !STATUSES.has(x.status)))return false;
+    return note.hidden.every(x=>x&&SLOTS.includes(x.slot)&&STATUSES.has(x.status)&&
+      Array.isArray(x.items)&&x.items.length<=3);
+  }
   function instruction(o){
     const p=o||{},prior=(((p.previous||{}).worn)||[])
       .slice(0,12).map(x=>clean(x.item).slice(0,120));
@@ -7375,7 +7390,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }
     return all;
   }
-  PRP.wearInquiry={needed,instruction,parse,events,SLOTS};
+  PRP.wearInquiry={needed,reusable,instruction,parse,events,SLOTS};
   if(typeof module!=="undefined"&&module.exports)module.exports=PRP.wearInquiry;
 })(typeof window!=="undefined"?window:globalThis);
 
@@ -12780,7 +12795,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           msg.role === "assistant" && result.valid && wearInquiries.length < 8) {
         const previousWear = (priorDrawState ||
           snapshot(initialPath.slice(0,index))).actors.char.wearState;
-        const probe = await inquireWear({
+        const inquiryInput = {
           messageId: msg.id, mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
           drawIndex: latestIndex, text: sourceText.slice(0,400),
           sourceText, character: (ctx.card()||{}).name,
@@ -12789,9 +12804,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
             e.evidenceType === "draw" && e.action === "add")
             .flatMap(e => e.value || []).slice(0,12),
           events: currentEvents,
-        });
+        };
+        const matching = (Array.isArray(sw.wearInquiries) ? sw.wearInquiries : [])
+          .find(note => WI.reusable(note, inquiryInput));
+        // A forced repeat of the same authored shot must not ask the RP
+        // provider the same hidden-layer question again.
+        const probe = matching ? { answer: matching } : await inquireWear(inquiryInput);
         if (probe.answer) {
-          wearInquiries.push(probe.answer);
+          if (!wearInquiries.some(note => note.drawIndex === probe.answer.drawIndex &&
+              note.sourceDraw === probe.answer.sourceDraw &&
+              note.sourceText === probe.answer.sourceText)) wearInquiries.push(probe.answer);
           wearInquiryStatus = { status: "ok", drawIndex: latestIndex };
           const newEvents = WI.events(probe.answer).filter(e =>
             !TRACK.normalize(e, { role: msg.role, mode: c.mode,

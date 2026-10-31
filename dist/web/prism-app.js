@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "1ca7751e2cec0f70c1b599b2310a1d82d5b689ca";
+  window.PRISM_RP_BUILD_SHA = "1f441e1203b2773da4367977977feb2bc4d601e7";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6535,6 +6535,21 @@
       (e.action==="add"&&Array.isArray(e.value)&&
         e.value.some(item=>!wear.worn.some(old=>key(old.item)===key(item)))));
   }
+  // Reuse a prior response only for the exact same selected-swipe query.
+  // A different caption, DRAW, index or previous wardrobe requires new analysis.
+  function reusable(note,o){
+    const p=o||{},old=p.previous&&p.previous.worn;
+    if(!needed(p)||!note||note.schema!==1||!Array.isArray(old)||
+       note.drawIndex!==p.drawIndex||note.sourceDraw!==clean(p.draw)||
+       note.sourceText!==p.sourceText||!Array.isArray(note.previous)||
+       note.previous.length!==old.length||!Array.isArray(note.hidden)||
+       !["yes","no","unknown"].includes(note.changed))return false;
+    const items=old.map(x=>clean(x.item));
+    if(note.previous.some((x,i)=>!x||x.item!==items[i]||
+       !STATUSES.has(x.status)))return false;
+    return note.hidden.every(x=>x&&SLOTS.includes(x.slot)&&STATUSES.has(x.status)&&
+      Array.isArray(x.items)&&x.items.length<=3);
+  }
   function instruction(o){
     const p=o||{},prior=(((p.previous||{}).worn)||[])
       .slice(0,12).map(x=>clean(x.item).slice(0,120));
@@ -6613,7 +6628,7 @@
     }
     return all;
   }
-  PRP.wearInquiry={needed,instruction,parse,events,SLOTS};
+  PRP.wearInquiry={needed,reusable,instruction,parse,events,SLOTS};
   if(typeof module!=="undefined"&&module.exports)module.exports=PRP.wearInquiry;
 })(typeof window!=="undefined"?window:globalThis);
 
@@ -11993,7 +12008,7 @@
           msg.role === "assistant" && result.valid && wearInquiries.length < 8) {
         const previousWear = (priorDrawState ||
           snapshot(initialPath.slice(0,index))).actors.char.wearState;
-        const probe = await inquireWear({
+        const inquiryInput = {
           messageId: msg.id, mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
           drawIndex: latestIndex, text: sourceText.slice(0,400),
           sourceText, character: (ctx.card()||{}).name,
@@ -12002,9 +12017,16 @@
             e.evidenceType === "draw" && e.action === "add")
             .flatMap(e => e.value || []).slice(0,12),
           events: currentEvents,
-        });
+        };
+        const matching = (Array.isArray(sw.wearInquiries) ? sw.wearInquiries : [])
+          .find(note => WI.reusable(note, inquiryInput));
+        // A forced repeat of the same authored shot must not ask the RP
+        // provider the same hidden-layer question again.
+        const probe = matching ? { answer: matching } : await inquireWear(inquiryInput);
         if (probe.answer) {
-          wearInquiries.push(probe.answer);
+          if (!wearInquiries.some(note => note.drawIndex === probe.answer.drawIndex &&
+              note.sourceDraw === probe.answer.sourceDraw &&
+              note.sourceText === probe.answer.sourceText)) wearInquiries.push(probe.answer);
           wearInquiryStatus = { status: "ok", drawIndex: latestIndex };
           const newEvents = WI.events(probe.answer).filter(e =>
             !TRACK.normalize(e, { role: msg.role, mode: c.mode,
