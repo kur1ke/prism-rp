@@ -22,6 +22,21 @@
       (e.action==="add"&&Array.isArray(e.value)&&
         e.value.some(item=>!wear.worn.some(old=>key(old.item)===key(item)))));
   }
+  // Reuse a prior response only for the exact same selected-swipe query.
+  // A different caption, DRAW, index or previous wardrobe requires new analysis.
+  function reusable(note,o){
+    const p=o||{},old=p.previous&&p.previous.worn;
+    if(!needed(p)||!note||note.schema!==1||!Array.isArray(old)||
+       note.drawIndex!==p.drawIndex||note.sourceDraw!==clean(p.draw)||
+       note.sourceText!==p.sourceText||!Array.isArray(note.previous)||
+       note.previous.length!==old.length||!Array.isArray(note.hidden)||
+       !["yes","no","unknown"].includes(note.changed))return false;
+    const items=old.map(x=>clean(x.item));
+    if(note.previous.some((x,i)=>!x||x.item!==items[i]||
+       !STATUSES.has(x.status)))return false;
+    return note.hidden.every(x=>x&&SLOTS.includes(x.slot)&&STATUSES.has(x.status)&&
+      Array.isArray(x.items)&&x.items.length<=3);
+  }
   function instruction(o){
     const p=o||{},prior=(((p.previous||{}).worn)||[])
       .slice(0,12).map(x=>clean(x.item).slice(0,120));
@@ -100,6 +115,6 @@
     }
     return all;
   }
-  PRP.wearInquiry={needed,instruction,parse,events,SLOTS};
+  PRP.wearInquiry={needed,reusable,instruction,parse,events,SLOTS};
   if(typeof module!=="undefined"&&module.exports)module.exports=PRP.wearInquiry;
 })(typeof window!=="undefined"?window:globalThis);
