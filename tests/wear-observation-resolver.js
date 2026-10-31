@@ -147,3 +147,19 @@ assert.equal(WI.reusable(cached,{...cacheInput,sourceText:"Иная подпис
 assert.equal(WI.reusable(cached,{...cacheInput,drawIndex:1}),false);
 assert.equal(WI.reusable(cached,{...cacheInput,previous:{known:true,worn:[{item:"другая кофта"}]}}),false);
 assert.equal(WI.reusable(cached,{...cacheInput,events:[]}),false);
+
+
+const transitionProbe={role:"assistant",mode:"messenger",draw:"Текущее селфи. Новый наряд.",
+ previous:{known:true,worn:[{item:"старая юбка"}]},
+ events:[{actor:"char",field:"wear",action:"invalidate",certainty:"reported",evidenceType:"draw"},
+   {actor:"char",field:"wear",action:"add",certainty:"reported",evidenceType:"draw",value:["новое платье"]}]};
+assert.equal(WI.needed(transitionProbe),true,
+  "confirmed replacement with partial new outfit must allow hidden-layer inquiry");
+assert.equal(WI.needed({...transitionProbe,events:[transitionProbe.events[0]]}),false,
+  "replacement without known new garments must not elicit invented hidden layers");
+assert.equal(WI.needed({...transitionProbe,events:[...transitionProbe.events,
+  {actor:"char",field:"wear",action:"clear",certainty:"reported",evidenceType:"draw"}]}),false,
+  "confirmed empty outfit must not trigger hidden-layer inquiry");
+assert.equal(WI.needed({...transitionProbe,events:[{...transitionProbe.events[0],certainty:"intent"},
+  transitionProbe.events[1]]}),true,
+  "a new visible garment can independently warrant inquiry");
