@@ -301,3 +301,23 @@ underwearSibling.swipeIdx=1;
 assert.deepEqual(T.fold({mode:"messenger",initialWear:underwearOrigin,
   path:[underwearSibling]}).actors.char.wearState.worn.map(x=>x.item),
   underwearOrigin.event.value);
+
+
+// An explicit set removal after a part was identified must not leave the
+// part worn. Only previously identified components receive removal facts.
+const removedSet=msg("remove-set","Я сняла белое кружевное бельё.",[{
+  actor:"char",field:"wear",action:"remove",value:["белое кружевное бельё"],
+  certainty:"reported",evidence:"сняла белое кружевное бельё"
+}]);
+const afterSetRemoval=T.fold({mode:"messenger",initialWear:underwearOrigin,
+  path:[underwearPart,removedSet]}).actors.char.wearState;
+assert.deepEqual(afterSetRemoval.worn.map(x=>x.item),["длинная юбка"],
+  "whole-set removal cannot leave a known component worn");
+assert.ok(afterSetRemoval.removed.some(x=>x.item==="белые кружевные трусики"),
+  "removed component is preserved as explicit absence");
+const removalSibling=structuredClone(removedSet);
+removalSibling.swipes.push({text:"Другой вариант.",stateEvents:[]});
+removalSibling.swipeIdx=1;
+assert.deepEqual(T.fold({mode:"messenger",initialWear:underwearOrigin,
+  path:[underwearPart,removalSibling]}).actors.char.wearState.worn.map(x=>x.item).sort(),
+  ["длинная юбка","белые кружевные трусики"].sort());
