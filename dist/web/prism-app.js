@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "02fa7e891ae54ba113950d19c644f82e5f008e8a";
+  window.PRISM_RP_BUILD_SHA = "2fba3001afdca729817c0fa41b7b58dd180bb58b";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5279,6 +5279,28 @@
         wear.invalidated = false;
       }
       for (const item of event.value) {
+        // A generic underwear-set label is an umbrella description, not a
+        // second garment next to a newly identified underwear component.
+        // Retire only the vague label; do not infer that an unmentioned
+        // top/bottom was removed. A formerly closed outfit becomes partial.
+        const underwearWords = (value) => str(value).toLowerCase().replace(/ё/g, "е")
+          .match(/[а-яa-z]+/gu) || [];
+        const aggregate = (value) => underwearWords(value).some(word =>
+          /^(?:белье|белья|бельем|белью|бельи|underwear|lingerie)$/u.test(word));
+        const component = (value) => underwearWords(value).some(word =>
+          /^(?:трусики|трусиков|трусиках|трусиками|трусы|трусов|стринги|стрингов|стрингах|стрингами|бюстгальтер|бюстгальтера|бюстгальтере|лифчик|лифчика|бра|panties|thong|thongs|bra|briefs)$/u.test(word));
+        // A later generic mention cannot restore an entire unspecified set
+        // once a concrete part is already represented.
+        if (event.action === "add" && aggregate(item) &&
+            wear.worn.concat(wear.partiallyWorn).some(x => component(x.item)))
+          continue;
+        if (event.action === "add" && component(item)) {
+          const vague = wear.worn.concat(wear.partiallyWorn).filter(x => aggregate(x.item));
+          if (vague.length) {
+            for (const old of vague) drop(old.item);
+            wear.complete = false;
+          }
+        }
         const existing = canonicalWearItem(item, previous);
         const name = existing ? existing.item : item;
         // A generic "юбку" cannot mean an arbitrary one of several known
