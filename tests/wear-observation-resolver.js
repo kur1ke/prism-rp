@@ -133,3 +133,17 @@ const ambiguousSource=INT.parse(JSON.stringify({events:[{
 assert.equal(ambiguousSource.events.length,0);
 
 console.log("PASS: WearObservationResolver source/identity split, unique reference, ambiguity and swipe isolation");
+
+
+const WI=require("../js/state/wear-inquiry.js");
+const cacheInput={role:"assistant",mode:"messenger",draw:"Селфи. Она подняла кофту.",
+  drawIndex:0,sourceText:"Смотри на фото.",previous:{known:true,worn:[{item:"светлая кофта"}]},
+  events:[{actor:"char",field:"wear",action:"adjust",evidenceType:"draw",certainty:"reported",value:["светлая кофта"]}]};
+const cached={schema:1,drawIndex:0,sourceDraw:cacheInput.draw,sourceText:cacheInput.sourceText,
+  changed:"no",previous:[{item:"светлая кофта",status:"worn"}],hidden:[]};
+assert.equal(WI.reusable(cached,cacheInput),true);
+assert.equal(WI.reusable(cached,{...cacheInput,draw:cacheInput.draw+" Другая сцена."}),false);
+assert.equal(WI.reusable(cached,{...cacheInput,sourceText:"Иная подпись."}),false);
+assert.equal(WI.reusable(cached,{...cacheInput,drawIndex:1}),false);
+assert.equal(WI.reusable(cached,{...cacheInput,previous:{known:true,worn:[{item:"другая кофта"}]}}),false);
+assert.equal(WI.reusable(cached,{...cacheInput,events:[]}),false);

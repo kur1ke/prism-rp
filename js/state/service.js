@@ -399,7 +399,7 @@
           msg.role === "assistant" && result.valid && wearInquiries.length < 8) {
         const previousWear = (priorDrawState ||
           snapshot(initialPath.slice(0,index))).actors.char.wearState;
-        const probe = await inquireWear({
+        const inquiryInput = {
           messageId: msg.id, mode: c.mode, role: msg.role, draw: sourceDraw.slice(0,1600),
           drawIndex: latestIndex, text: sourceText.slice(0,400),
           sourceText, character: (ctx.card()||{}).name,
@@ -408,9 +408,16 @@
             e.evidenceType === "draw" && e.action === "add")
             .flatMap(e => e.value || []).slice(0,12),
           events: currentEvents,
-        });
+        };
+        const matching = (Array.isArray(sw.wearInquiries) ? sw.wearInquiries : [])
+          .find(note => WI.reusable(note, inquiryInput));
+        // A forced repeat of the same authored shot must not ask the RP
+        // provider the same hidden-layer question again.
+        const probe = matching ? { answer: matching } : await inquireWear(inquiryInput);
         if (probe.answer) {
-          wearInquiries.push(probe.answer);
+          if (!wearInquiries.some(note => note.drawIndex === probe.answer.drawIndex &&
+              note.sourceDraw === probe.answer.sourceDraw &&
+              note.sourceText === probe.answer.sourceText)) wearInquiries.push(probe.answer);
           wearInquiryStatus = { status: "ok", drawIndex: latestIndex };
           const newEvents = WI.events(probe.answer).filter(e =>
             !TRACK.normalize(e, { role: msg.role, mode: c.mode,
