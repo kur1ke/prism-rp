@@ -265,3 +265,30 @@ const partialResult=I.parse(JSON.stringify({events:[{actor:"char",field:"wear",
   action:"set",value:["новое платье"],certainty:"reported",sourceId:partialId,
   visualScope:"current-self"}],unresolved:[],frameObjects:[]}),partialSource);
 assert.equal(partialResult.events[0].action,"add");
+
+
+// Underwear-set summary and its specific part must not survive as two
+// simultaneously worn objects. Missing top remains unknown, not "removed".
+const underwearOrigin={schema:1,kind:"initial-outfit",event:{actor:"char",
+  field:"wear",action:"set",value:["белое кружевное бельё","длинная юбка"],
+  certainty:"reported",evidence:""}};
+const underwearPart=msg("underwear-part","Вот мои белые кружевные трусики.",[{
+  actor:"char",field:"wear",action:"add",value:["белые кружевные трусики"],
+  certainty:"reported",evidence:"белые кружевные трусики",
+  evidenceType:"draw",visualScope:"current-self"}],[{
+  prompt:"Селфи. На ней белые кружевные трусики."
+}]);
+const underwearAfter=T.fold({mode:"messenger",initialWear:underwearOrigin,
+  path:[underwearPart]}).actors.char.wearState;
+assert.deepEqual(underwearAfter.worn.map(x=>x.item).sort(),
+  ["длинная юбка","белые кружевные трусики"].sort());
+assert.equal(underwearAfter.complete,false,
+  "specific part does not claim the invisible half of the set");
+assert.deepEqual(underwearAfter.removed,[],
+  "no unobserved underwear top can be assumed removed");
+const underwearSibling=structuredClone(underwearPart);
+underwearSibling.swipes.push({text:"Без фото",stateEvents:[],draws:[]});
+underwearSibling.swipeIdx=1;
+assert.deepEqual(T.fold({mode:"messenger",initialWear:underwearOrigin,
+  path:[underwearSibling]}).actors.char.wearState.worn.map(x=>x.item),
+  underwearOrigin.event.value);
