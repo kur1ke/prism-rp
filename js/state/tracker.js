@@ -130,6 +130,22 @@
               (wear.complete && event.action !== "add" && sameType && sameType.length))
             continue;
         }
+        // An authored current-frame add reports what is NOW worn; it is not
+        // an instruction to stack another garment of the same identity kind.
+        // If a uniquely matching garment kind was previously reported with
+        // different qualifiers, supersede that stale observation. This does
+        // not infer that any *other* garment has been removed.
+        if (event.action === "add" && event.evidenceType === "draw" &&
+            event.visualScope === "current-self" && !existing) {
+          const stems = garmentStems(item);
+          const noun = stems[stems.length - 1];
+          const oldOfKind = wear.worn.concat(wear.partiallyWorn)
+            .filter(x => garmentStems(x.item).slice(-1)[0] === noun);
+          const incomingOfKind = event.value.filter(x =>
+            garmentStems(x).slice(-1)[0] === noun);
+          if (noun && oldOfKind.length === 1 && incomingOfKind.length === 1)
+            drop(oldOfKind[0].item);
+        }
         const order = orderOf(name);
         // One garment, one current state. Repeated reports of the same
         // intermediate position do not create a new transition or erase its
