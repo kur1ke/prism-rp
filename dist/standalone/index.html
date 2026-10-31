@@ -7411,7 +7411,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if(!draw||draw.length>1600||!c.previous||
       !Array.isArray(c.previous.worn))return {error:"no-source"};
     let value;
-    try{value=JSON.parse(clean(raw));}catch(_e){return {error:"invalid-json"};}
+    // Allow only a single fenced JSON object; keep schema checks unchanged.
+    const response=clean(raw).slice(0,12000);
+    const fenced=response.match(/^\x60\x60\x60(?:json)?\s*\n([\s\S]*?)\n\x60\x60\x60$/i);
+    try{value=JSON.parse(fenced ? fenced[1].trim() : response);}
+    catch(_e){return {error:"invalid-json"};}
     if(!value||typeof value!=="object"||Array.isArray(value)||
        !["yes","no","unknown"].includes(value.changed)||
        !Array.isArray(value.previous)||value.previous.length>12||

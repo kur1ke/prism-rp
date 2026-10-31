@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "b8784a0d133f69cc18200a90424f90ff9d0a3dd8";
+  window.PRISM_RP_BUILD_SHA = "7bc20efc268e704124811dd7242fb3dc23156ff6";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -6642,7 +6642,11 @@
     if(!draw||draw.length>1600||!c.previous||
       !Array.isArray(c.previous.worn))return {error:"no-source"};
     let value;
-    try{value=JSON.parse(clean(raw));}catch(_e){return {error:"invalid-json"};}
+    // Allow only a single fenced JSON object; keep schema checks unchanged.
+    const response=clean(raw).slice(0,12000);
+    const fenced=response.match(/^\x60\x60\x60(?:json)?\s*\n([\s\S]*?)\n\x60\x60\x60$/i);
+    try{value=JSON.parse(fenced ? fenced[1].trim() : response);}
+    catch(_e){return {error:"invalid-json"};}
     if(!value||typeof value!=="object"||Array.isArray(value)||
        !["yes","no","unknown"].includes(value.changed)||
        !Array.isArray(value.previous)||value.previous.length>12||
