@@ -282,6 +282,15 @@ const underwearAfter=T.fold({mode:"messenger",initialWear:underwearOrigin,
   path:[underwearPart]}).actors.char.wearState;
 assert.deepEqual(underwearAfter.worn.map(x=>x.item).sort(),
   ["длинная юбка","белые кружевные трусики"].sort());
+const repeatedGeneric=msg("generic-again","На мне белое кружевное бельё.",[{
+  actor:"char",field:"wear",action:"add",value:["белое кружевное бельё"],
+  certainty:"reported",evidence:"белое кружевное бельё"
+}]);
+const afterGeneric=T.fold({mode:"messenger",initialWear:underwearOrigin,
+  path:[underwearPart,repeatedGeneric]}).actors.char.wearState;
+assert.deepEqual(afterGeneric.worn.map(x=>x.item).sort(),
+  ["длинная юбка","белые кружевные трусики"].sort(),
+  "a repeated umbrella label must not reinstate an unspecified full set");
 assert.equal(underwearAfter.complete,false,
   "specific part does not claim the invisible half of the set");
 assert.deepEqual(underwearAfter.removed,[],
