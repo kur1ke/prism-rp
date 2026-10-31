@@ -369,3 +369,16 @@ assert.deepEqual(pajamaSibling.actors.char.wearState.worn.map(x=>x.item),pajamaI
   "sibling swipe cannot inherit the mirror photo's garment");
 
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
+
+
+const completedChangePrompt=INT.instruction({...opts,
+  text:"Готово! Теперь я официально в режиме подготовки ко сну!",
+  draw:"Селфи Орихимэ в зеркале. На ней розовая пижама с белыми облаками.",
+  recent:[{role:"assistant",text:"Сейчас я переоденусь в пижаму."}]});
+assert.ok(completedChangePrompt.includes("СЛЕДУЮЩЕЙ собственной реплике"),
+  "observer must link a completed change to the current authored DRAW");
+assert.ok(completedChangePrompt.includes("wear.invalidate")&&
+  completedChangePrompt.includes("wear.add"),
+  "partial replacement must not preserve old outfit or invent a complete one");
+assert.ok(completedChangePrompt.includes("снимок старый, чужой"),
+  "prior announcement alone must never promote a historical photo");
