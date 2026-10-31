@@ -163,3 +163,19 @@ assert.equal(WI.needed({...transitionProbe,events:[...transitionProbe.events,
 assert.equal(WI.needed({...transitionProbe,events:[{...transitionProbe.events[0],certainty:"intent"},
   transitionProbe.events[1]]}),true,
   "a new visible garment can independently warrant inquiry");
+
+
+const fencedInquiryContext={draw:"Селфи. На ней белая блузка.",
+  drawIndex:0,sourceText:"Смотри!",text:"Смотри!",
+  previous:{worn:[{item:"старая юбка"}]},events:[]};
+const inquiryJson=JSON.stringify({changed:"no",
+  previous:[{item:"старая юбка",status:"unknown"}],hidden:[]});
+assert.ok(WI.parse(inquiryJson,fencedInquiryContext).answer,
+  "ordinary JSON inquiry remains valid");
+assert.ok(WI.parse("~~~json\n"+inquiryJson+"\n~~~",fencedInquiryContext).error,
+  "arbitrary delimiters must not bypass validation");
+assert.ok(WI.parse(String.fromCharCode(96,96,96)+"json\n"+inquiryJson+
+  "\n"+String.fromCharCode(96,96,96),fencedInquiryContext).answer,
+  "single markdown-fenced JSON remains subject to full schema validation");
+assert.equal(WI.parse("note: "+inquiryJson,fencedInquiryContext).error,"invalid-json",
+  "free-form prose is not a trusted model response");
