@@ -381,11 +381,11 @@ const currentFrame=INT.parse(JSON.stringify({frameMoment:"current-self",
  events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
 assert.equal(currentFrame.events.length,1,JSON.stringify(currentFrame));
 assert.equal(currentFrame.events[0].visualScope,"current-self");
-const oldPhoto=INT.parse(JSON.stringify({frameMoment:"past-self",
+const historicalFrameResult=INT.parse(JSON.stringify({frameMoment:"past-self",
  events:[frameEvent],unresolved:[],frameObjects:[]}),
  {...currentFrameOpts,text:"Я нашла старое фото, где я в пижаме."});
-assert.equal(oldPhoto.events.length,0,"gallery photo must not rewrite current wardrobe");
-assert.ok(oldPhoto.rejectedObservations.some(x=>x.reason==="visual-scope-not-current"));
+assert.equal(historicalFrameResult.events.length,0,"gallery photo must not rewrite current wardrobe");
+assert.ok(historicalFrameResult.rejectedObservations.some(x=>x.reason==="visual-scope-not-current"));
 const otherPhoto=INT.parse(JSON.stringify({frameMoment:"other",
  events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
 assert.equal(otherPhoto.events.length,0,"other actor cannot change this wardrobe");
