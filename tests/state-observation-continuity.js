@@ -225,3 +225,43 @@ siblingReplacement.swipeIdx=1;
 assert.deepEqual(T.fold({mode:"messenger",initialWear:oldSkirtOrigin,
   path:[siblingReplacement]}).actors.char.wearState.worn.map(x=>x.item),
   oldSkirtOrigin.event.value,"the sibling swipe retains its prior clothing");
+
+
+ // End-to-end contract: a complete outfit REPLACES the previous one,
+ // an explicit change with incomplete new outfit INVALIDATES old facts,
+ // while a plain current-frame observation does not claim a full wardrobe.
+const originFull={schema:1,kind:"initial-outfit",event:{actor:"char",field:"wear",
+  action:"set",value:["старая юбка","старая блузка"],certainty:"reported",evidence:""}};
+const completeDraw="Селфи. На ней только новое платье.";
+const completeSource={role:"assistant",mode:"messenger",text:"Смотри.",
+  draw:completeDraw,draws:[{prompt:completeDraw}]};
+const completeCatalog=require("../js/state/evidence-spans.js").catalog(completeSource);
+const completeId=completeCatalog.find(x=>x.kind==="draw"&&x.text.includes("только")).id;
+const completeResult=I.parse(JSON.stringify({events:[{actor:"char",field:"wear",
+  action:"set",value:["новое платье"],certainty:"reported",sourceId:completeId,
+  visualScope:"current-self"}],unresolved:[],frameObjects:[]}),completeSource);
+assert.equal(completeResult.events.length,1,JSON.stringify(completeResult));
+assert.equal(completeResult.events[0].action,"set");
+const completeState=T.fold({mode:"messenger",initialWear:originFull,path:[
+  msg("complete","Смотри.",completeResult.events,[{prompt:completeDraw}])
+]}).actors.char.wearState;
+assert.deepEqual(completeState.worn.map(x=>x.item),["новое платье"]);
+assert.equal(completeState.complete,true);
+const changeText="Я переоделась. Надела новое платье.";
+const changedPath=[msg("changed",changeText,[
+  {actor:"char",field:"wear",action:"invalidate",certainty:"reported",
+    evidence:"Я переоделась."},
+  {actor:"char",field:"wear",action:"add",value:["новое платье"],
+    certainty:"reported",evidence:"Надела новое платье."}])];
+const changedWear=T.fold({mode:"messenger",initialWear:originFull,
+  path:changedPath}).actors.char.wearState;
+assert.deepEqual(changedWear.worn.map(x=>x.item),["новое платье"]);
+assert.equal(changedWear.complete,false);
+const partialDraw="Селфи. Видно новое платье.";
+const partialSource={...completeSource,draw:partialDraw,draws:[{prompt:partialDraw}]};
+const partialId=require("../js/state/evidence-spans.js").catalog(partialSource)
+  .find(x=>x.kind==="draw"&&x.text.includes("платье")).id;
+const partialResult=I.parse(JSON.stringify({events:[{actor:"char",field:"wear",
+  action:"set",value:["новое платье"],certainty:"reported",sourceId:partialId,
+  visualScope:"current-self"}],unresolved:[],frameObjects:[]}),partialSource);
+assert.equal(partialResult.events[0].action,"add");
