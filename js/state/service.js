@@ -349,7 +349,8 @@
         contextual.references = TRACK.references(localState, "char", ["remove", "adjust", "add"]);
       }
       const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
-        ...(sourceDraw ? { draw: sourceDraw.slice(0, 1600), draws: [{ prompt: sourceDraw }] } : {}),
+        ...(sourceDraw ? { draw: sourceDraw.slice(0, 1600), draws: [{ prompt: sourceDraw }],
+          drawMoment: draws[latestIndex] && draws[latestIndex].moment || null } : {}),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name,
         ...contextual };
       // Reuse a read-only early result only when its interpretation inputs still

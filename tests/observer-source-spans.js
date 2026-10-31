@@ -21,9 +21,9 @@ const sourceId=spans.find(x=>x.text.includes("сняла белую блузку
 const prompt=INT.instruction(opts);
 assert.ok(prompt.includes("SOURCE_FRAGMENTS"));
 assert.ok(prompt.includes('visualScope'));
-assert.ok(prompt.includes('"visualScope":"current-self"'),
-  "event JSON example must contain exact validator enum");
-assert.ok(!prompt.includes('"visualScope":"current-self ('),
+assert.ok(prompt.includes('"frameMoment"'),
+  "frame-level temporal verdict must be described");
+assert.ok(!prompt.includes('"frameMoment":"current-self ('),
   "do not place explanatory prose inside enum value");
 
 assert.ok(prompt.includes(sourceId));
@@ -35,7 +35,7 @@ const currentPhotoInstruction=INT.instruction({...opts,
   text:"Сейчас я дома в светлой уютной кофте и длинной юбке.",
   draw:"Селфи Орихимэ. На ней бежевый кардиган поверх белой майки и длинная домашняя юбка."});
 assert.ok(currentPhotoInstruction.includes("Сопоставь ТЕКСТ и DRAW того же сообщения"));
-assert.ok(currentPhotoInstruction.includes("не оставляй scope=unknown"));
+assert.ok(currentPhotoInstruction.includes("не оставляй frameMoment=unknown"));
 assert.ok(currentPhotoInstruction.includes("фото из галереи"));
 
 function parse(events,o=opts,frameObjects=[]){
@@ -369,3 +369,56 @@ assert.deepEqual(pajamaSibling.actors.char.wearState.worn.map(x=>x.item),pajamaI
   "sibling swipe cannot inherit the mirror photo's garment");
 
 console.log("PASS: indexed evidence sourced from original text/DRAW, no copied citation, replay tamper checks and continue");
+
+
+const framePhoto="Селфи Орихимэ. На ней розовая пижама с облаками.";
+const currentFrameOpts={...opts,text:"Готово! Я переоделась, теперь готовлюсь ко сну.",
+ draw:framePhoto,draws:[{prompt:framePhoto}],references:[]};
+const frameId=ES.catalog(currentFrameOpts).find(x=>x.kind==="draw"&&x.text.includes("пижама")).id;
+const frameEvent={actor:"char",field:"wear",action:"add",value:["розовая пижама"],
+ certainty:"reported",sourceId:frameId};
+const currentFrame=INT.parse(JSON.stringify({frameMoment:"current-self",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
+assert.equal(currentFrame.events.length,1,JSON.stringify(currentFrame));
+assert.equal(currentFrame.events[0].visualScope,"current-self");
+const historicalFrameResult=INT.parse(JSON.stringify({frameMoment:"past-self",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),
+ {...currentFrameOpts,text:"Я нашла старое фото, где я в пижаме."});
+assert.equal(historicalFrameResult.events.length,0,"gallery photo must not rewrite current wardrobe");
+assert.ok(historicalFrameResult.rejectedObservations.some(x=>x.reason==="visual-scope-not-current"));
+const otherPhoto=INT.parse(JSON.stringify({frameMoment:"other",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
+assert.equal(otherPhoto.events.length,0,"other actor cannot change this wardrobe");
+const missingMoment=INT.parse(JSON.stringify({frameMoment:"unknown",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),currentFrameOpts);
+assert.equal(missingMoment.events.length,0,"undetermined photo moment cannot create a garment");
+assert.ok(INT.instruction(currentFrameOpts).includes("frameMoment"),
+ "new frame-time contract must be supplied to Observer");
+
+
+const authoredDraws=globalThis.PRP.imgCompose.parseDraws(
+ "[draw: moment=past-self; Орихимэ в старой кофте, 1:1]");
+assert.equal(authoredDraws.draws.length,1);
+assert.equal(authoredDraws.draws[0].moment,"past-self");
+assert.equal(authoredDraws.draws[0].prompt,"Орихимэ в старой кофте");
+assert.equal(authoredDraws.text,"");
+const authorOverridesObserver=INT.parse(JSON.stringify({frameMoment:"current-self",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),
+ {...currentFrameOpts,drawMoment:"past-self"});
+assert.equal(authorOverridesObserver.events.length,0,
+ "RP-authored historical photo cannot turn current because Observer mislabels it");
+const authorCurrent=INT.parse(JSON.stringify({frameMoment:"unknown",
+ events:[frameEvent],unresolved:[],frameObjects:[]}),
+ {...currentFrameOpts,drawMoment:"current-self"});
+assert.equal(authorCurrent.events.length,1,
+ "current RP-authored shot must not be rejected by Observer temporal uncertainty");
+
+
+const taggedHistoricalReplay=TR.fold({mode:"messenger",initialWear:init,path:[{
+  id:"archive-replay",role:"assistant",swipeIdx:0,
+  swipes:[{text:currentFrameOpts.text,
+    draws:[{prompt:framePhoto,moment:"past-self"}],
+    stateEvents:currentFrame.events}]
+}]});
+assert.ok(taggedHistoricalReplay.diagnostics.some(d=>/исторический или чужой/.test(d.issue)),
+ "historical photo label must remain authoritative on event replay");

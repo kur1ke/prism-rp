@@ -584,7 +584,12 @@
       let prompt = body.trim(), ratio = "1:1";
       const m = prompt.match(/,?\s*(\d{1,2}:\d{1,2})\s*$/);
       if (m && RATIOS[m[1]]) { ratio = m[1]; prompt = prompt.slice(0, m.index).trim(); }
-      if (prompt) draws.push({ prompt, ratio });
+      // A model-authored temporal label describes the depicted moment, not
+      // when the message was sent. Remove it from diffusion prompt text.
+      const tagged = prompt.match(/^moment=(current-self|past-self|other);\s*/i);
+      const moment = tagged ? tagged[1].toLowerCase() : null;
+      if (tagged) prompt = prompt.slice(tagged[0].length).trim();
+      if (prompt) draws.push({ prompt, ratio, ...(moment ? { moment } : {}) });
       return "";
     });
     return { text: clean.replace(/\n{3,}/g, "\n\n").trim(), draws };
@@ -603,7 +608,8 @@
   function drawInstruction(o) {
     const opts = o || {};
     if (opts.intentMode) return [
-      "Когда персонаж отправляет изображение, добавь одну директиву [draw: описание изображения].",
+      "Когда персонаж отправляет изображение, добавь одну директиву [draw: moment=current-self; описание изображения] для снимка текущего момента или [draw: moment=past-self; описание изображения] для старой фотографии. Для снимка другого человека используй moment=other.",
+      "Метка moment описывает время ИЗОБРАЖЁННОГО события, не время отправки фотографии. Найденное в галерее фото — past-self, только что снятое — current-self. Не меняй момент ради изображения.",
       "В [draw:] описывай готовый визуальный кадр, а не пересказывай происходящую сцену: тип изображения, видимых участников и объекты, их действия и расположение, окружение, ракурс и границы кадра.",
       "Указывай всю видимую в кадре одежду. Описание должно быть самостоятельным, визуально конкретным и не содержать технических параметров генерации или объяснений.",
       "Явно называй по имени только изображённых персонажей. Имя персонажа карточки: " + (opts.characterName || "персонаж") + ".",
@@ -614,7 +620,8 @@
     const tags = opts.format !== "description";
     const pinned = !!opts.qualityPinned;
     const lines = [
-      "Ты можешь показать собеседнику картинку. Для этого напиши ОДНУ директиву отдельной строкой: [draw: <prompt>]",
+      "Ты можешь показать собеседнику картинку. Для этого напиши ОДНУ директиву: [draw: moment=current-self; <prompt>] для текущего момента, [draw: moment=past-self; <prompt>] для старого снимка, [draw: moment=other; <prompt>] для чужого снимка.",
+      "Момент относится к СОДЕРЖАНИЮ фотографии: если персонаж нашёл старую фотографию в галерее, обязательно past-self, хотя отправляет её сейчас.",
       tags
         ? "- <prompt> — только то, что видит камера в этот момент, списком английских тегов в стиле danbooru через запятую (например: 1girl, long orange hair, white blouse, sitting at a table, library, soft lighting, close-up). Без предложений."
         : "- <prompt> — только то, что видит камера в этот момент, одним-двумя простыми английскими предложениями.",
