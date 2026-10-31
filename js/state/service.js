@@ -415,7 +415,9 @@
         // provider the same hidden-layer question again.
         const probe = matching ? { answer: matching } : await inquireWear(inquiryInput);
         if (probe.answer) {
-          if (!matching) wearInquiries.push(probe.answer);
+          if (!wearInquiries.some(note => note.drawIndex === probe.answer.drawIndex &&
+              note.sourceDraw === probe.answer.sourceDraw &&
+              note.sourceText === probe.answer.sourceText)) wearInquiries.push(probe.answer);
           wearInquiryStatus = { status: "ok", drawIndex: latestIndex };
           const newEvents = WI.events(probe.answer).filter(e =>
             !TRACK.normalize(e, { role: msg.role, mode: c.mode,
