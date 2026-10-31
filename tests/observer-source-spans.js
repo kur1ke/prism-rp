@@ -412,3 +412,13 @@ const authorCurrent=INT.parse(JSON.stringify({frameMoment:"unknown",
  {...currentFrameOpts,drawMoment:"current-self"});
 assert.equal(authorCurrent.events.length,1,
  "current RP-authored shot must not be rejected by Observer temporal uncertainty");
+
+
+const taggedHistoricalReplay=TR.fold({mode:"messenger",initialWear:init,path:[{
+  id:"archive-replay",role:"assistant",swipeIdx:0,
+  swipes:[{text:currentFrameOpts.text,
+    draws:[{prompt:framePhoto,moment:"past-self"}],
+    stateEvents:currentFrame.events}]
+}]});
+assert.ok(taggedHistoricalReplay.diagnostics.some(d=>/исторический или чужой/.test(d.issue)),
+ "historical photo label must remain authoritative on event replay");
