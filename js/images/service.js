@@ -200,17 +200,19 @@
         ui.toast("Для восстановления прежнего кадра необходим StateTracker.", true);
         return;
       }
-      const snap = ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
+      const snap = !drawAuthored && ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
       if (historical && snap && snap.state && (snap.state.diagnostics || []).some(x => x.source === origin.messageId)) {
         ui.toast("Историческое состояние снимка содержит неподтверждённые события. Рисование отменено.", true);
         return;
       }
       // The frozen image-origin path is authoritative. Use the same
       // projection as Prism; do not mutate the folded StateTracker snapshot.
-      const projected = SR.resolve({
-        tracked: snap, scene: snap ? snap.state.scene : chat().sceneState(upto),
-        names: { char: cd.name, user: pers.name },
-      });
+      const projected = drawAuthored
+        ? { scene: { chars: {}, present: [] }, wearFacts: [] }
+        : SR.resolve({
+          tracked: snap, scene: snap ? snap.state.scene : chat().sceneState(upto),
+          names: { char: cd.name, user: pers.name },
+        });
       const st = projected.scene;
       let visual = ms ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null })) : null;
       if (!snap && ms && visual) {
@@ -238,36 +240,23 @@
         const intent = !!entry.intentMode;
         const hybrid = intent && drawAuthored && drawMode === "hybrid";
         const shot = String(entry.draw || "");
-        // VC-01: the canonical snapshot already includes this accepted message's
-        // validated Observer events. It is END-OF-TURN, not stale pre-shot wear.
-        // The first (and only) intent translation must receive those facts.
-        // Subject scoping happens on the ORIGINAL authored shot, before a
-        // translator can hallucinate the card owner into a product screenshot.
+        // The authored DRAW is the complete image authority. The RP model has
+        // already received tracked state while composing its reply; image
+        // rendering must not resolve it again or borrow Observer frame roles.
+        // Subject attribution is locked to the original source before translation.
         const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true,
           requireNamedUser: currentChat.mode === "messenger" });
-        // A current authored selfie need not repeat the card owner's name.
-        // Do not infer the owner from a mere portrait or screenshot.
         const currentSelfie = drawAuthored &&
-          /(?:\bmy\s+selfie\b|\btaking\s+(?:a\s+)?selfie\b|\bselfie\s+of\s+myself\b|(?:^|[\s,;:])я\s+[^.!?]{0,60}селфи|(?:^|[\s,;:])сво[её]\s+селфи)/iu.test(shot) &&
-          !/(?:скриншот|screenshot|чужое\s+селфи|someone\s+else)/iu.test(shot) &&
+          /(?:\\bmy\\s+selfie\\b|\\btaking\\s+(?:a\\s+)?selfie\\b|\\bselfie\\s+of\\s+myself\\b|(?:^|[\\s,;:])я\\s+[^.!?]{0,60}селфи|(?:^|[\\s,;:])сво[её]\\s+селфи)/iu.test(shot) &&
+          !/(?:скриншот|screenshot|чужое\\s+селфи|someone\\s+else)/iu.test(shot) &&
           !shotActors.empty && !shotActors.userNamed;
-        // Use only Observer metadata tied to the exact active authored shot.
-        // Rewrites, stale statuses, manual prompts and older continued photos
-        // never supply canonical frame roles.
-        const frameStatus = sourceSwipe.stateStatus;
-        const verifiedFrameObjects = drawAuthored && frameStatus &&
-          frameStatus.sourceDraw === String(entry.draw || "") &&
-          frameStatus.sourceText === String(sourceSwipe.text || "") &&
-          Array.isArray(frameStatus.frameObjects) ? frameStatus.frameObjects : [];
-        // Lock the authored frame's subjects before translation. A self-authored
-        // selfie can show the owner without repeating the Card name.
         const resolvedActors = currentSelfie && !shotActors.owner
           ? { ...shotActors, owner: true, reason: "current-selfie" } : shotActors;
         const visualPlan = VP.create({
-          wearFacts: projected.wearFacts,
+          wearFacts: drawAuthored ? [] : projected.wearFacts,
           owner: !!resolvedActors.owner,
           shotAuthored: drawAuthored,
-          draw: shot, frameObjects: verifiedFrameObjects,
+          draw: shot,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
@@ -282,7 +271,7 @@
         const firstPass = intent ? await measuredCompile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
             qualityPinned: ST.qualityPinned(S.settings),
-            wearState: visualPlan.wear, visualPlan, subjectScope: shotScope,
+            visualPlan: drawAuthored ? undefined : visualPlan, subjectScope: shotScope,
             promptPlan, debug: !!S.settings.developerMode }) : null;
         if (intent && (!firstPass || !firstPass.compiled)) {
           // Surface the compiler's actual failure; the previous generic text
@@ -316,8 +305,8 @@
         // VC-03: BOTH authored modes consume the same END-OF-TURN facts.
         // The current authored shot may establish a new verified action;
         // no stale pre-shot rule is allowed to veto that action.
-        const canonicalWear = drawAuthored ? visualPlan.wear : composed.physicalWear;
-        const auditPlan = drawAuthored ? visualPlan : VP.create({
+        const canonicalWear = drawAuthored ? null : composed.physicalWear;
+        const auditPlan = drawAuthored ? null : VP.create({
           wearFacts: projected.wearFacts,
           owner: !!composed.ownerPresent,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
@@ -332,7 +321,7 @@
           await measuredCompile(imageScene, { format: cfg.format, translate: cfg.translate,
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             frame: composed.subjects, stateContext,
-            wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
+            wearState: canonicalWear, visualPlan: undefined,
             promptPlan: finalPromptPlan, subjectScope });
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
@@ -379,7 +368,7 @@
         // selected-path garment events/corrections change while compiling.
         // Shot-only equality is safe ONLY for authored images whose rendered
         // content did not consume tracked state.
-        shotOnlyGate = drawAuthored && !canonicalWear;
+        shotOnlyGate = drawAuthored;
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
         if (!(await sourceStillCurrent(DB, origin, shotOnlyGate)) ||
@@ -400,7 +389,7 @@
             ...(drawAuthored ? { sourceDrawIndex: authoredIndex,
               historicalDrawState: !!historical } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
-            actorState: snap ? snap.character.fieldStatus : null,
+            actorState: drawAuthored ? null : snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
               globallyScoped: !!singleOwner,
               plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
