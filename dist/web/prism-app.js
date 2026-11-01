@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "579e5d4598677351f7b3d4afc1fd8761c2a8795a";
+  window.PRISM_RP_BUILD_SHA = "9d02e76a5ecec84ae3a3a3a4c33b74602810093d";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -7399,6 +7399,7 @@
     "Полностью переоделся: [state: wear.replace(\"розовая пижама\")]. Снял отдельную вещь: [state: wear.remove(\"юбка\")]. Надел отдельную вещь: [state: wear.add(\"кофта\")].",
     "Одна директива [state: ...] = одна операция; для нескольких операций используй несколько отдельных блоков [state: ...]. Не объединяй операции запятой внутри блока.",
     "Другие поля: [state: location.set(\"спальня\")], [state: pose.set(\"сидит\")], [state: activity.set(\"читает\")], [state: hair.set(\"коса\")], [state: nearby.set(\"книга\")], [state: ongoing.set(\"дождь\")], [state: availability.set(\"busy\")]. Для сброса поля используй соответствующий clear().",
+    "Если в этом же ответе есть [draw: moment=current-self; ...] с новым состоянием персонажа, сначала сообщи изменение через [state: ...], затем опиши итоговый кадр в [draw:]. DRAW не заменяет state. Если DRAW показывает уже установленное состояние без нового изменения, повторять state не нужно.",
     "Аргументы — только JSON-строки в двойных кавычках; для списковых полей допустимы несколько строк. Если состояние не менялось, не вызывай state. Намерения, воспоминания, старые фотографии и [draw:] сами по себе не меняют состояние."
   ].join(" ");
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
