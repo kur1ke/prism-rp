@@ -33,6 +33,21 @@
   const turnKey = (p) => (p || []).map((m) => { const t = String(TR.activeSwipe(m).text || ""); return m.id + ":" + (m.swipeIdx || 0) + ":" + t.length + ":" + fnv(t); }).join(">");
 
   const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+  function recordToolStatus(swipe, issues) {
+    if (!swipe || swipe.stateProtocol !== 1) return;
+    const shots = Array.isArray(swipe.draws) ? swipe.draws : [];
+    const last = shots.length ? shots[shots.length - 1] : null;
+    const problems = Array.isArray(issues) ? issues.slice(0,8) : [];
+    swipe.stateStatus = {
+      status:problems.length ? "partial" :
+        (swipe.stateEvents || []).length ? "ok" : "no-changes",
+      method:"state-tool", issues:problems,
+      sourceText:swipe.text || "", sourceDraw:last && last.prompt || "",
+      sourceDrawIndex:shots.length-1,
+      eventCount:(swipe.stateEvents || []).length, at:Date.now(),
+    };
+  }
+
 
   function create(ctx) {
     const { S, ui } = ctx;
@@ -254,6 +269,7 @@
         sw.stateProtocol = 1;
         }
       }
+      recordToolStatus(sw, dr.stateIssues);
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
       if (error) sw.error = error; else delete sw.error;
       /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
@@ -364,6 +380,7 @@
       m.opening = "generated";
       m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}), reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      recordToolStatus(m.swipes[0], dr.stateIssues);
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       try { await chat().commitMessage(m, m.id); }
       finally { S.gen = null; }
@@ -467,6 +484,7 @@
       const sw = { text: r.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}),
         reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now(), initiative: INI.provenance(reasons) };
+      recordToolStatus(sw, dr.stateIssues);
       const snap = ms.snapshot(path, msNow);
       if (snap) sw.messengerAt = snap;
       let msg;
