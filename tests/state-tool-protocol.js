@@ -34,3 +34,19 @@ const sibling=mk("b",[],[]);
 assert.ok(folding([original]).actors.char.wearState.worn.some(x=>x.item==="розовая пижама"));
 assert.ok(folding([sibling]).actors.char.wearState.worn.some(x=>x.item==="синяя юбка"));
 console.log("PASS: RP-authored state tool and swipe-local replay");
+
+
+const settings=require("../js/core/settings.js");
+const assembler=require("../js/prism/assembler.js");
+assert.equal(settings.merge({}).stateToolEnabled,false,"experimental mode is opt-in");
+assert.equal(settings.merge({stateToolEnabled:true}).stateToolEnabled,true);
+const buildOpts={card:{name:"Орихимэ",description:"Данные"},history:[{role:"user",text:"Привет"}],
+ contextTokens:8192,reserveTokens:600};
+const legacyPrompt=assembler.build({...buildOpts,stateToolEnabled:false});
+const toolPrompt=assembler.build({...buildOpts,stateToolEnabled:true});
+const rendered=(x)=>x.messages.map(m=>m.content).join("\n");
+assert.ok(!rendered(legacyPrompt).includes("wear.replace"));
+assert.ok(rendered(toolPrompt).includes("wear.replace"));
+assert.equal(toolPrompt.report.overflow,false);
+const accidental=IC.parseStateCalls("Привет!");
+assert.deepEqual(accidental.calls,[],"ordinary conversations must not rewrite canonical state");
