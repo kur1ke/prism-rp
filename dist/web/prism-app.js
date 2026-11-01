@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "daefe8c1e7334db26df4928c00d9fc5eecb72340";
+  window.PRISM_RP_BUILD_SHA = "579e5d4598677351f7b3d4afc1fd8761c2a8795a";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -7394,7 +7394,13 @@
     });
     return { text:sanitized.replace(/\n{3,}/g, "\n\n").trim(), calls, issues, rejected };
   }
-  const stateToolInstruction = () => "Только после реального изменения состояния можешь сообщить результат через [state: wear.replace(\"пижама\")], wear.add/remove(\"вещь\"), location.set(\"место\"), pose.set(\"поза\"), activity.set(\"занятие\"), hair.set(\"причёска\"), availability.set(\"статус\"), nearby.set(\"предмет\") или ongoing.set(\"дело\"); clear() отменяет ранее установленное значение поля. Используй JSON-строки в двойных кавычках; для списков можно несколько. Не вызывай для намерений, воспоминаний, старых фото и неизменившихся фактов.";
+  const stateToolInstruction = () => [
+    "Если персонаж действительно изменил текущее состояние, ОБЯЗАТЕЛЬНО сообщи результат директивой [state: ...] в этом же ответе.",
+    "Полностью переоделся: [state: wear.replace(\"розовая пижама\")]. Снял отдельную вещь: [state: wear.remove(\"юбка\")]. Надел отдельную вещь: [state: wear.add(\"кофта\")].",
+    "Одна директива [state: ...] = одна операция; для нескольких операций используй несколько отдельных блоков [state: ...]. Не объединяй операции запятой внутри блока.",
+    "Другие поля: [state: location.set(\"спальня\")], [state: pose.set(\"сидит\")], [state: activity.set(\"читает\")], [state: hair.set(\"коса\")], [state: nearby.set(\"книга\")], [state: ongoing.set(\"дождь\")], [state: availability.set(\"busy\")]. Для сброса поля используй соответствующий clear().",
+    "Аргументы — только JSON-строки в двойных кавычках; для списковых полей допустимы несколько строк. Если состояние не менялось, не вызывай state. Намерения, воспоминания, старые фотографии и [draw:] сами по себе не меняют состояние."
+  ].join(" ");
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
 
   // Mode-specific visual contracts are injected only for the active chat.
