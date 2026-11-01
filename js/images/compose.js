@@ -632,7 +632,13 @@
     });
     return { text:sanitized.replace(/\n{3,}/g, "\n\n").trim(), calls, issues, rejected };
   }
-  const stateToolInstruction = () => "Только после реального изменения состояния можешь сообщить результат через [state: wear.replace(\"пижама\")], wear.add/remove(\"вещь\"), location.set(\"место\"), pose.set(\"поза\"), activity.set(\"занятие\"), hair.set(\"причёска\"), availability.set(\"статус\"), nearby.set(\"предмет\") или ongoing.set(\"дело\"); clear() отменяет ранее установленное значение поля. Используй JSON-строки в двойных кавычках; для списков можно несколько. Не вызывай для намерений, воспоминаний, старых фото и неизменившихся фактов.";
+  const stateToolInstruction = () => [
+    "Если персонаж действительно изменил текущее состояние, ОБЯЗАТЕЛЬНО сообщи результат директивой [state: ...] в этом же ответе.",
+    "Полностью переоделся: [state: wear.replace(\"розовая пижама\")]. Снял отдельную вещь: [state: wear.remove(\"юбка\")]. Надел отдельную вещь: [state: wear.add(\"кофта\")].",
+    "Одна директива [state: ...] = одна операция; для нескольких операций используй несколько отдельных блоков [state: ...]. Не объединяй операции запятой внутри блока.",
+    "Другие поля: [state: location.set(\"спальня\")], [state: pose.set(\"сидит\")], [state: activity.set(\"читает\")], [state: hair.set(\"коса\")], [state: nearby.set(\"книга\")], [state: ongoing.set(\"дождь\")], [state: availability.set(\"busy\")]. Для сброса поля используй соответствующий clear().",
+    "Аргументы — только JSON-строки в двойных кавычках; для списковых полей допустимы несколько строк. Если состояние не менялось, не вызывай state. Намерения, воспоминания, старые фотографии и [draw:] сами по себе не меняют состояние."
+  ].join(" ");
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
 
   // Mode-specific visual contracts are injected only for the active chat.

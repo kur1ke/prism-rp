@@ -10,6 +10,16 @@ assert.deepEqual(parse.calls[0],{field:"wear",operation:"replace",items:["роз
 assert.ok(!parse.text.includes("[state:"));
 assert.equal(IC.parseStateCalls("Фото из галереи. [draw: moment=past-self; я в кофте]").calls.length,0);
 assert.ok(IC.stateToolInstruction().includes("wear.replace"));
+const toolRules=IC.stateToolInstruction();
+assert.ok(toolRules.includes("ОБЯЗАТЕЛЬНО"),"completed state change requires a directive");
+assert.ok(toolRules.includes("Одна директива [state: ...] = одна операция"));
+assert.ok(toolRules.includes("Не объединяй операции"));
+assert.ok(toolRules.includes("старые фотографии"));
+assert.ok(toolRules.includes("Если состояние не менялось"));
+assert.ok(toolRules.includes('[state: wear.replace("розовая пижама")]'));
+assert.ok(toolRules.includes('[state: wear.remove("юбка")]'));
+assert.ok(toolRules.includes('[state: wear.add("кофта")]'));
+
 assert.equal(IC.parseStateCalls('[state: wear.add("юбка", "кофта")]').calls[0].items.length,2);
 assert.equal(IC.parseStateCalls('[state: wear.add(__proto__)]').calls.length,0);
 
