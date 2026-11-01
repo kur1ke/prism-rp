@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "91e8f57fb46cbc2fe97d52d25a05a933234f4118";
+  window.PRISM_RP_BUILD_SHA = "daefe8c1e7334db26df4928c00d9fc5eecb72340";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -7359,27 +7359,40 @@
   // The model may report a completed wardrobe transition in the same answer.
   // Syntax is intentionally tiny; arguments are JSON strings, never JS code.
   // Only successful model responses are allowed to persist parsed calls.
-  const STATE_RE = /\[state:\s*(wear|location|activity|pose|hair|nearby|ongoing|availability)\.(replace|add|remove|set|clear)\(([^)\]\r\n]{0,500})\)\s*\]/gi;
+  // A state directive is data from the RP response, never executable code.
+  // Accept a flat JSON argument list or a single JSON string array.
+  const STATE_RE = /\[state:\s*(wear|location|activity|pose|hair|nearby|ongoing|availability)\.(replace|add|remove|set|clear)\(([^)\r\n]{0,500})\)\s*\]/gi;
   const STATE_LIST = new Set(["wear", "nearby", "ongoing"]);
   function parseStateCalls(text) {
-    const calls = [], issues = [];
+    const calls = [], issues = [], rejected = [];
+    const reject = (source, reason) => {
+      if (issues.length < 8) {
+        issues.push("invalid-state-directive: " + reason + " · " + String(source).slice(0,180));
+        // Source is diagnostic data only, never replay authority.
+        rejected.push(String(source).slice(0,300));
+      }
+    };
     const clean = String(text || "").replace(STATE_RE, (full, fieldRaw, operationRaw, args) => {
       const field = fieldRaw.toLowerCase(), operation = operationRaw.toLowerCase();
       try {
         if (field === "wear" ? !["replace","add","remove"].includes(operation) :
-            !["set","clear"].includes(operation)) throw Error("invalid-operation");
-        const items = JSON.parse("[" + args + "]");
+            !["set","clear"].includes(operation)) throw Error("operation");
+        let items = JSON.parse("[" + args + "]");
+        if (items.length === 1 && Array.isArray(items[0])) items = items[0];
         if (!Array.isArray(items) || items.length > 12 ||
             items.some(x => typeof x !== "string" || !x.trim() || x.length > 240) ||
             (operation !== "clear" && (!items.length || (!STATE_LIST.has(field) && items.length !== 1))) ||
-            (operation === "clear" && items.length)) throw Error("invalid-items");
-        if (calls.length >= 8) throw Error("too-many-calls");
+            (operation === "clear" && items.length)) throw Error("arguments");
+        if (calls.length >= 8) throw Error("limit");
         calls.push({ field, operation, items:items.map(x => x.trim()) });
-      } catch (_e) { issues.push("invalid-state-directive"); }
+      } catch (e) { reject(full, e instanceof SyntaxError ? "json" : (e.message || "invalid")); }
       return "";
     });
-    const sanitized = clean.replace(/\[state:[^\]]{0,600}\]/gi, () => { issues.push("invalid-state-directive"); return ""; });
-    return { text: sanitized.replace(/\n{3,}/g, "\n\n").trim(), calls, issues };
+    const sanitized = clean.replace(/\[state:[^\r\n]{0,600}\]/gi, (source) => {
+      reject(source, "syntax");
+      return "";
+    });
+    return { text:sanitized.replace(/\n{3,}/g, "\n\n").trim(), calls, issues, rejected };
   }
   const stateToolInstruction = () => "Только после реального изменения состояния можешь сообщить результат через [state: wear.replace(\"пижама\")], wear.add/remove(\"вещь\"), location.set(\"место\"), pose.set(\"поза\"), activity.set(\"занятие\"), hair.set(\"причёска\"), availability.set(\"статус\"), nearby.set(\"предмет\") или ongoing.set(\"дело\"); clear() отменяет ранее установленное значение поля. Используй JSON-строки в двойных кавычках; для списков можно несколько. Не вызывай для намерений, воспоминаний, старых фото и неизменившихся фактов.";
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
@@ -12444,7 +12457,7 @@
   const turnKey = (p) => (p || []).map((m) => { const t = String(TR.activeSwipe(m).text || ""); return m.id + ":" + (m.swipeIdx || 0) + ":" + t.length + ":" + fnv(t); }).join(">");
 
   const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
-  function recordToolStatus(swipe, issues) {
+  function recordToolStatus(swipe, issues, rejected) {
     if (!swipe || swipe.stateProtocol !== 1) return;
     const shots = Array.isArray(swipe.draws) ? swipe.draws : [];
     const last = shots.length ? shots[shots.length - 1] : null;
@@ -12453,6 +12466,7 @@
       status:problems.length ? "partial" :
         (swipe.stateEvents || []).length ? "ok" : "no-changes",
       method:"state-tool", issues:problems,
+      rejectedStateCalls:Array.isArray(rejected) ? rejected.slice(0,8) : [],
       sourceText:swipe.text || "", sourceDraw:last && last.prompt || "",
       sourceDrawIndex:shots.length-1,
       eventCount:(swipe.stateEvents || []).length, at:Date.now(),
@@ -12649,7 +12663,7 @@
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
       const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
-      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
       // Даже если модель сама добавила [draw:] без разрешения, картинка не
       // создаётся. Служебный текст при этом всё равно удалён из ответа.
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
@@ -12680,7 +12694,7 @@
         sw.stateProtocol = 1;
         }
       }
-      recordToolStatus(sw, dr.stateIssues);
+      recordToolStatus(sw, dr.stateIssues, dr.stateRejected);
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
       if (error) sw.error = error; else delete sw.error;
       /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
@@ -12773,7 +12787,7 @@
         parsed = SC.parse(th.text);
         dr = IC.parseDraws(parsed.text);
         const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
-        dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
+        dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
         if (!built.report.imageDirectiveAllowed) dr.draws = [];
         else dr.draws = dr.draws.slice(0, 1);
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
@@ -12791,7 +12805,7 @@
       m.opening = "generated";
       m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}), reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
-      recordToolStatus(m.swipes[0], dr.stateIssues);
+      recordToolStatus(m.swipes[0], dr.stateIssues, dr.stateRejected);
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       try { await chat().commitMessage(m, m.id); }
       finally { S.gen = null; }
@@ -12882,7 +12896,7 @@
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
       const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
-      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
       const r = INI.parse(dr.text);
@@ -12895,7 +12909,7 @@
       const sw = { text: r.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}),
         reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now(), initiative: INI.provenance(reasons) };
-      recordToolStatus(sw, dr.stateIssues);
+      recordToolStatus(sw, dr.stateIssues, dr.stateRejected);
       const snap = ms.snapshot(path, msNow);
       if (snap) sw.messengerAt = snap;
       let msg;
