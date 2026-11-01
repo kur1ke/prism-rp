@@ -77,3 +77,26 @@ A missing author tag retains the legacy Observer temporal classification;
 it does not prove that a photograph is current. These contracts require
 real-model validation in the testing mirror: an actual outfit change and a
 retrieved historical photograph must have opposite Tracker effects.
+
+
+## State Tool candidate (feature branch; NOT enabled in testing)
+
+The feature branch introduces opt-in RP-authored state directives:
+`[state: wear.replace("garment")]`, `[state: wear.add("garment")]`,
+`[state: wear.remove("garment")]`. These are emitted only when a
+completed change occurs and are stripped from displayed chat text.
+`replace` is replayed as `invalidate` then `add`, so the original
+outfit is no longer authoritative; `add` does not claim completeness.
+No directive means no observed change; historical photos do not update wear.
+
+The original call and derived events are stored on the selected assistant
+swipe, never as a global garment store. On replay, Tracker verifies that
+each tool event matches the call at the same swipe-local index and actor.
+Uncommitted, aborted, stale, or rejected generations cannot write events.
+Legacy swipes without `stateProtocol` retain prior Observer behavior.
+
+**Review gate:** The candidate currently changes mandatory Observer
+semantics. Existing end-to-end tests still expect Observer calls, and
+prompt-budget fixtures fail with the added protocol. This must be
+resolved and retested before merge to testing; a passing unit-only
+fixture is not sufficient. A live Perchance model test is NOT RUN.
