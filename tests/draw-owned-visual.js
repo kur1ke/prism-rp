@@ -23,4 +23,4 @@ assert.ok(service.includes("const projected = drawAuthored"));
 assert.ok(service.includes("wearFacts: drawAuthored ? [] : projected.wearFacts"));
 assert.ok(service.includes("const canonicalWear = drawAuthored ? null"));
 assert.ok(service.includes("shotOnlyGate = drawAuthored;"));
-assert.ok(!service.includes("stateStatus.frameObjects"), "author-shot must not depend on Observer's frame roles");
+assert.ok(!service.includes("const verifiedFrameObjects ="), "author-shot must not consume Observer frame roles");
