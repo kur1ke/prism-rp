@@ -252,9 +252,24 @@
     // Text and author-generated [draw:] are distinct evidence surfaces of
     // ONE swipe. A draw never becomes a hidden instruction or a separate store:
     // replay must prove the exact quoted fragment is still in its source shot.
+    const tool = e.evidenceType === "state-tool";
+    if (tool) {
+      const calls = source && Array.isArray(source.stateCalls) ? source.stateCalls : [];
+      const index = e.stateCallIndex;
+      const call = Number.isInteger(index) && index >= 0 ? calls[index] : null;
+      const action = e.action === "invalidate" ? "replace" : e.action;
+      if (!source || source.role !== "assistant" || e.actor !== "char" ||
+          e.field !== "wear" || e.certainty !== (source.mode === "messenger" ? "reported" : "established") ||
+          !call || call.field !== "wear" || call.operation !== action ||
+          !Array.isArray(call.items) || !call.items.length ||
+          (e.action !== "invalidate" && JSON.stringify(e.value) !== JSON.stringify(call.items)) ||
+          (e.action === "invalidate" && e.value != null) ||
+          str(e.evidence) !== JSON.stringify(call))
+        return "state-tool не подтверждён вызовом модели этого свайпа";
+    }
     const drawn = e.evidenceType === "draw";
     const inquiry = e.evidenceType === "wear-inquiry";
-    if (e.evidenceType != null && !drawn && !inquiry) return "неизвестный источник цитаты";
+    if (e.evidenceType != null && !drawn && !inquiry && !tool) return "неизвестный источник цитаты";
     // An RP-model clarification is a bound self-report about its own authored
     // DRAW. It is never an unanchored invisible garment or a second outfit.
     // Every event must replay against the ORIGINAL stored answer on this swipe.
@@ -325,7 +340,7 @@
       return "нет точного подтверждения в авторском draw";
     if (e.reference && (!source || (source.text == null && !drawn)))
       return "контекстная ссылка без текста действия";
-    if (source && (source.text != null || drawn)) {
+    if (!tool && source && (source.text != null || drawn)) {
       // Current swipe's text OR authored shot proves only the quoted details.
       // Prior branch-local state may resolve an item's exact identity.
       const evidenceText = drawn ? currentDraw.prompt : String(source.text);
@@ -392,6 +407,7 @@
       ...(e.sourceSpan ? { sourceSpan: clone(e.sourceSpan) } : {}),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
         ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
+        e.evidenceType === "state-tool" ? { evidenceType: "state-tool", stateCallIndex: e.stateCallIndex } :
         e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
           ...(e.wearSlot ? { wearSlot: str(e.wearSlot) } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
@@ -543,7 +559,7 @@
             ["remove","adjust","add"]);
         }
         st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
-          references: unitReferences, wearInquiries: sw.wearInquiries || [],
+          references: unitReferences, wearInquiries: sw.wearInquiries || [], stateCalls: sw.stateCalls || [],
           messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
@@ -716,6 +732,21 @@
     view.intentions = char.intentions.slice();
     return view;
   }
-  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
+  function eventsFromStateCalls(calls, mode) {
+    const out = [];
+    (Array.isArray(calls) ? calls : []).slice(0,8).forEach((call,index) => {
+      if (!call || call.field !== "wear" || !["replace","add","remove"].includes(call.operation) ||
+          !Array.isArray(call.items) || !call.items.length || call.items.length > 12 ||
+          call.items.some(x => typeof x !== "string" || !x.trim() || x.length > 160)) return;
+      const base = { actor:"char", field:"wear", certainty:mode==="messenger" ? "reported" : "established",
+        evidence:JSON.stringify(call), evidenceType:"state-tool", stateCallIndex:index };
+      if (call.operation === "replace")
+        out.push({ ...base, action:"invalidate", value:null });
+      out.push({ ...base, action:call.operation === "replace" ? "add" : call.operation,
+        value:call.items.slice() });
+    });
+    return out;
+  }
+  PRP.stateTracker = { eventsFromStateCalls, FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);
