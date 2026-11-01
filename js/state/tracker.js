@@ -257,7 +257,7 @@
       const calls = source && Array.isArray(source.stateCalls) ? source.stateCalls : [];
       const index = e.stateCallIndex;
       const call = Number.isInteger(index) && index >= 0 ? calls[index] : null;
-      const action = e.action === "invalidate" ? "replace" : e.action;
+      const action = e.action === "invalidate" || (e.action === "add" && call && call.operation === "replace") ? "replace" : e.action;
       if (!source || source.role !== "assistant" || e.actor !== "char" ||
           e.field !== "wear" || e.certainty !== (source.mode === "messenger" ? "reported" : "established") ||
           !call || call.field !== "wear" || call.operation !== action ||
