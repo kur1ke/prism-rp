@@ -182,7 +182,8 @@
         "Не подменяй время возвращения временем последнего сообщения; не придумывай действия пользователя. " +
         "Рассказывай только то, что персонаж мог знать и решил сообщить; не обязан перечислять весь прошедший день."
       : "";
-    const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "",
+    const protocolBody = [PRP.imgCompose && PRP.imgCompose.stateToolInstruction ? PRP.imgCompose.stateToolInstruction() : "",
+      AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "",
       temporalReconciliation, o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
     const protocol = section(T.operation, protocolBody);
     const msPlansAll = (o.messenger && o.messenger.plans) || [];
