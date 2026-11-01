@@ -81,13 +81,13 @@ retrieved historical photograph must have opposite Tracker effects.
 
 ## State Tool candidate (feature branch; experimental opt-in)
 
-The feature branch introduces opt-in RP-authored state directives:
+The feature branch introduces opt-in RP-authored state directives for all existing Tracker fields:
 `[state: wear.replace("garment")]`, `[state: wear.add("garment")]`,
 `[state: wear.remove("garment")]`. These are emitted only when a
 completed change occurs and are stripped from displayed chat text.
 `replace` is replayed as `invalidate` then `add`, so the original
 outfit is no longer authoritative; `add` does not claim completeness.
-No directive means no observed change; historical photos do not update wear.
+Other fields (location, activity, pose, hair, nearby, ongoing, availability) support set or clear. No directive means no observed change; historical photos do not update wear. A malformed directive is stripped and reported as a diagnostic.
 
 The original call and derived events are stored on the selected assistant
 swipe, never as a global garment store. On replay, Tracker verifies that
