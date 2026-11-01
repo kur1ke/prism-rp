@@ -528,6 +528,10 @@
     }
     function track(msg, provider, opts) {
       if (!msg || !msg.swipes) return Promise.resolve({ skipped: "not-message" });
+      // RP-authored tool events already belong to this selected swipe. Never
+      // overwrite them with a secondary Observer pass (including Debug retry).
+      if (msg.role === "assistant" && TR.activeSwipe(msg).stateProtocol === 1)
+        return Promise.resolve({ skipped: "state-tool", status: "state-tool" });
       const k = jobKey(msg), existing = jobs.get(k);
       if (existing && !(opts && opts.force)) return existing.promise;
       const job = { key: k, chatId: msg.chatId, msgId: msg.id, role: msg.role, startedAt: now() };
