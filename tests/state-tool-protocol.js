@@ -74,3 +74,15 @@ assert.equal(malformed.issues.length,1);
 assert.equal(malformed.text,"Привет!  конец.");
 const unmatched=TR.eventsFromStateCalls([{field:"location",operation:"set",items:["дома"]}],"messenger")[0];
 assert.ok(folding([mk("noprotocol",[],[unmatched])]).diagnostics.some(d=>/state-tool/.test(d.issue)));
+
+
+const nested=IC.parseStateCalls('[state: wear.replace(["розовая пижама", "белые носки"])]');
+assert.deepEqual(nested.calls[0].items,["розовая пижама","белые носки"]);
+assert.equal(nested.issues.length,0);
+const malformed2=IC.parseStateCalls('Готово [state: wear.replace(розовая пижама)]');
+assert.equal(malformed2.calls.length,0);
+assert.ok(malformed2.issues[0].includes("json"));
+assert.ok(malformed2.rejected[0].includes("розовая пижама"));
+const unsupported=IC.parseStateCalls('[state: wear.replace{розовая пижама}]');
+assert.equal(unsupported.calls.length,0);
+assert.ok(unsupported.issues.some(x=>x.includes("syntax")));
