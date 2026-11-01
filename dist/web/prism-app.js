@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "7bc20efc268e704124811dd7242fb3dc23156ff6";
+  window.PRISM_RP_BUILD_SHA = "91e8f57fb46cbc2fe97d52d25a05a933234f4118";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -453,6 +453,7 @@
     autoContext: true,
     singleSystem: false,
     sceneProtocol: true,
+    stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,
     expLimit: 8,
@@ -4118,7 +4119,8 @@
         "Не подменяй время возвращения временем последнего сообщения; не придумывай действия пользователя. " +
         "Рассказывай только то, что персонаж мог знать и решил сообщить; не обязан перечислять весь прошедший день."
       : "";
-    const protocolBody = [AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "",
+    const protocolBody = [o.stateToolEnabled && PRP.imgCompose && PRP.imgCompose.stateToolInstruction ? PRP.imgCompose.stateToolInstruction() : "",
+      AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "",
       temporalReconciliation, o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
     const protocol = section(T.operation, protocolBody);
     const msPlansAll = (o.messenger && o.messenger.plans) || [];
@@ -5417,9 +5419,37 @@
     // Text and author-generated [draw:] are distinct evidence surfaces of
     // ONE swipe. A draw never becomes a hidden instruction or a separate store:
     // replay must prove the exact quoted fragment is still in its source shot.
+    const tool = e.evidenceType === "state-tool";
+    if (tool) {
+      const calls = source && Array.isArray(source.stateCalls) ? source.stateCalls : [];
+      const index = e.stateCallIndex;
+      const call = Number.isInteger(index) && index >= 0 ? calls[index] : null;
+      const action = e.action === "invalidate" ||
+        (e.action === "add" && call && call.operation === "replace") ? "replace" : e.action;
+      const expected = call && call.field === "wear" && call.operation === "replace"
+        ? (e.action === "invalidate" ? null : call.items)
+        : call && call.operation === "clear" ? null
+        : call && LIST.has(call.field) ? call.items
+        : call && call.items && call.items[0];
+      if (!source || source.role !== "assistant" || source.stateProtocol !== 1 ||
+          e.actor !== "char" || !call || !FIELDS.includes(call.field) ||
+          e.field !== call.field || call.operation !== action ||
+          e.certainty !== (source.mode === "messenger" ? "reported" : "established") ||
+          !Array.isArray(call.items) || call.items.length > 12 ||
+          call.items.some(x => typeof x !== "string" || !x.trim() || x.length > 240) ||
+          (call.field === "wear" && !["replace","add","remove"].includes(call.operation)) ||
+          (call.field !== "wear" && !["set","clear"].includes(call.operation)) ||
+          (call.operation !== "clear" && (!call.items.length ||
+            (!LIST.has(call.field) && call.items.length !== 1))) ||
+          (call.operation === "clear" && call.items.length) ||
+          JSON.stringify(e.value) !== JSON.stringify(expected) ||
+          str(e.evidence) !== JSON.stringify(call) ||
+          e.reference != null || e.sourceSpan != null || e.drawIndex != null)
+        return "state-tool не подтверждён вызовом модели этого свайпа";
+    }
     const drawn = e.evidenceType === "draw";
     const inquiry = e.evidenceType === "wear-inquiry";
-    if (e.evidenceType != null && !drawn && !inquiry) return "неизвестный источник цитаты";
+    if (e.evidenceType != null && !drawn && !inquiry && !tool) return "неизвестный источник цитаты";
     // An RP-model clarification is a bound self-report about its own authored
     // DRAW. It is never an unanchored invisible garment or a second outfit.
     // Every event must replay against the ORIGINAL stored answer on this swipe.
@@ -5490,7 +5520,7 @@
       return "нет точного подтверждения в авторском draw";
     if (e.reference && (!source || (source.text == null && !drawn)))
       return "контекстная ссылка без текста действия";
-    if (source && (source.text != null || drawn)) {
+    if (!tool && source && (source.text != null || drawn)) {
       // Current swipe's text OR authored shot proves only the quoted details.
       // Prior branch-local state may resolve an item's exact identity.
       const evidenceText = drawn ? currentDraw.prompt : String(source.text);
@@ -5557,6 +5587,7 @@
       ...(e.sourceSpan ? { sourceSpan: clone(e.sourceSpan) } : {}),
       ...(e.evidenceType === "draw" ? { evidenceType: "draw", visualScope: "current-self",
         ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
+        e.evidenceType === "state-tool" ? { evidenceType: "state-tool", stateCallIndex: e.stateCallIndex } :
         e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
           ...(e.wearSlot ? { wearSlot: str(e.wearSlot) } : {}) } : {}),
       ...(e.action === "adjust" ? { placement: str(e.placement) } : {}),
@@ -5709,6 +5740,7 @@
         }
         st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
           references: unitReferences, wearInquiries: sw.wearInquiries || [],
+          stateProtocol: sw.stateProtocol, stateCalls: sw.stateCalls || [],
           messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
@@ -5881,7 +5913,29 @@
     view.intentions = char.intentions.slice();
     return view;
   }
-  PRP.stateTracker = { FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
+  function eventsFromStateCalls(calls, mode) {
+    const out = [];
+    (Array.isArray(calls) ? calls : []).slice(0,8).forEach((call,index) => {
+      if (!call || !FIELDS.includes(call.field) || !Array.isArray(call.items) ||
+          call.items.length > 12 || call.items.some(x => typeof x !== "string" ||
+            !x.trim() || x.length > 240) ||
+          (call.field === "wear" ? !["replace","add","remove"].includes(call.operation) :
+            !["set","clear"].includes(call.operation)) ||
+          (call.operation !== "clear" && (!call.items.length ||
+            (!LIST.has(call.field) && call.items.length !== 1))) ||
+          (call.operation === "clear" && call.items.length)) return;
+      const base = { actor:"char", field:call.field,
+        certainty:mode==="messenger" ? "reported" : "established",
+        evidence:JSON.stringify(call), evidenceType:"state-tool", stateCallIndex:index };
+      if (call.operation === "replace")
+        out.push({ ...base, action:"invalidate", value:null });
+      out.push({ ...base, action:call.operation === "replace" ? "add" : call.operation,
+        value:call.operation === "clear" ? null :
+          LIST.has(call.field) ? call.items.slice() : call.items[0] });
+    });
+    return out;
+  }
+  PRP.stateTracker = { eventsFromStateCalls, FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -7302,6 +7356,32 @@
     });
     return { text: clean.replace(/\n{3,}/g, "\n\n").trim(), draws };
   }
+  // The model may report a completed wardrobe transition in the same answer.
+  // Syntax is intentionally tiny; arguments are JSON strings, never JS code.
+  // Only successful model responses are allowed to persist parsed calls.
+  const STATE_RE = /\[state:\s*(wear|location|activity|pose|hair|nearby|ongoing|availability)\.(replace|add|remove|set|clear)\(([^)\]\r\n]{0,500})\)\s*\]/gi;
+  const STATE_LIST = new Set(["wear", "nearby", "ongoing"]);
+  function parseStateCalls(text) {
+    const calls = [], issues = [];
+    const clean = String(text || "").replace(STATE_RE, (full, fieldRaw, operationRaw, args) => {
+      const field = fieldRaw.toLowerCase(), operation = operationRaw.toLowerCase();
+      try {
+        if (field === "wear" ? !["replace","add","remove"].includes(operation) :
+            !["set","clear"].includes(operation)) throw Error("invalid-operation");
+        const items = JSON.parse("[" + args + "]");
+        if (!Array.isArray(items) || items.length > 12 ||
+            items.some(x => typeof x !== "string" || !x.trim() || x.length > 240) ||
+            (operation !== "clear" && (!items.length || (!STATE_LIST.has(field) && items.length !== 1))) ||
+            (operation === "clear" && items.length)) throw Error("invalid-items");
+        if (calls.length >= 8) throw Error("too-many-calls");
+        calls.push({ field, operation, items:items.map(x => x.trim()) });
+      } catch (_e) { issues.push("invalid-state-directive"); }
+      return "";
+    });
+    const sanitized = clean.replace(/\[state:[^\]]{0,600}\]/gi, () => { issues.push("invalid-state-directive"); return ""; });
+    return { text: sanitized.replace(/\n{3,}/g, "\n\n").trim(), calls, issues };
+  }
+  const stateToolInstruction = () => "Только после реального изменения состояния можешь сообщить результат через [state: wear.replace(\"пижама\")], wear.add/remove(\"вещь\"), location.set(\"место\"), pose.set(\"поза\"), activity.set(\"занятие\"), hair.set(\"причёска\"), availability.set(\"статус\"), nearby.set(\"предмет\") или ongoing.set(\"дело\"); clear() отменяет ранее установленное значение поля. Используй JSON-строки в двойных кавычках; для списков можно несколько. Не вызывай для намерений, воспоминаний, старых фото и неизменившихся фактов.";
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
 
   // Mode-specific visual contracts are injected only for the active chat.
@@ -7416,7 +7496,7 @@
     words, wordFormMatch, mentions, parseMap, resolveWardrobe, resolveAppearance,
     splitTags, bareTag, normalizeTags, stripQuality, subjectCount, dropContradictorySolo, dedupe,
     wardrobeConflicts, ownerPresent, frameActors, stripIdentityAliases, enforceMessengerWardrobe, uniqueTrigger, compose, finalise, flattenMirrorShot, loraTokens, sizeFor, perchanceResolution, openaiSize,
-    parseDraws, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
+    parseDraws, parseStateCalls, stateToolInstruction, stripDrawsForDisplay, drawInstruction, rewriteRules, needsRewrite, RATIOS,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.imgCompose;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -9658,6 +9738,7 @@
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
         <label class="check"><input type="checkbox" data-set="noPostHistory" ${s.noPostHistory ? "checked" : ""}><span>Не передавать инструкции после истории<small>Касается только указаний автора карточки (post_history_instructions), не самого характера. По умолчанию выключено — для совместимости с карточками.</small></span></label>
+        <label class="check"><input type="checkbox" data-set="stateToolEnabled" ${s.stateToolEnabled ? "checked" : ""}><span>State Tool (эксперимент)<small>RP-модель сообщает изменения одежды сама, Observer не вызывается для новых реплик. Тестируйте только в TEST.</small></span></label>
         <label class="check"><input type="checkbox" data-set="sceneProtocol" ${s.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сцены<small>Время, место, одежда, настроение — короткой служебной строкой, которую приложение прячет.</small></span></label>
         <div class="block-title" style="margin-top:20px">Ассистент</div>
         <div class="field"><label for="assist-sys">Инструкция ассистента</label><textarea id="assist-sys" rows="5" data-set-text="assistSystem" placeholder="${esc(PRP.assist.SYSTEM)}">${esc(s.assistSystem || "")}</textarea>
@@ -11153,7 +11234,7 @@
         reflection: ctx.svc.memory ? ctx.svc.memory.experience(path) : null,
         worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
-        singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
+        singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
       }, extra));
       built.report.imageDirectiveAllowed = allowDraw;
@@ -12217,6 +12298,10 @@
     }
     function track(msg, provider, opts) {
       if (!msg || !msg.swipes) return Promise.resolve({ skipped: "not-message" });
+      // RP-authored tool events already belong to this selected swipe. Never
+      // overwrite them with a secondary Observer pass (including Debug retry).
+      if (msg.role === "assistant" && TR.activeSwipe(msg).stateProtocol === 1)
+        return Promise.resolve({ skipped: "state-tool", status: "state-tool" });
       const k = jobKey(msg), existing = jobs.get(k);
       if (existing && !(opts && opts.force)) return existing.promise;
       const job = { key: k, chatId: msg.chatId, msgId: msg.id, role: msg.role, startedAt: now() };
@@ -12359,6 +12444,21 @@
   const turnKey = (p) => (p || []).map((m) => { const t = String(TR.activeSwipe(m).text || ""); return m.id + ":" + (m.swipeIdx || 0) + ":" + t.length + ":" + fnv(t); }).join(">");
 
   const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+  function recordToolStatus(swipe, issues) {
+    if (!swipe || swipe.stateProtocol !== 1) return;
+    const shots = Array.isArray(swipe.draws) ? swipe.draws : [];
+    const last = shots.length ? shots[shots.length - 1] : null;
+    const problems = Array.isArray(issues) ? issues.slice(0,8) : [];
+    swipe.stateStatus = {
+      status:problems.length ? "partial" :
+        (swipe.stateEvents || []).length ? "ok" : "no-changes",
+      method:"state-tool", issues:problems,
+      sourceText:swipe.text || "", sourceDraw:last && last.prompt || "",
+      sourceDrawIndex:shots.length-1,
+      eventCount:(swipe.stateEvents || []).length, at:Date.now(),
+    };
+  }
+
 
   function create(ctx) {
     const { S, ui } = ctx;
@@ -12389,8 +12489,9 @@
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : prov;
       const hasAuthoredDraw = Array.isArray(sw.draws) && sw.draws.some(d =>
         d && typeof d.prompt === "string" && d.prompt.trim());
-      const analysed = st && msg && (text.trim() || hasAuthoredDraw)
-        ? st.track(msg, observerProvider) : Promise.resolve(null);
+      const analysed = sw.stateProtocol === 1 ? Promise.resolve({ status: "state-tool" }) :
+        st && msg && (text.trim() || hasAuthoredDraw)
+          ? st.track(msg, observerProvider) : Promise.resolve(null);
       return analysed.then((res) => {
         // Independent non-blocking Memory → Reflection cycle after a committed answer.
         // No manual interaction, no writes on failed/stale generation.
@@ -12547,6 +12648,8 @@
       const th = OA.splitThink(raw || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
+      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
       // Даже если модель сама добавила [draw:] без разрешения, картинка не
       // создаётся. Служебный текст при этом всё равно удалён из ответа.
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
@@ -12558,12 +12661,26 @@
         sw.sceneOps = (sw.sceneOps || []).concat(sf.sceneOps);
         if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = (sw.ignoredSceneOps || []).concat(sf.ignoredSceneOps);
         sw.draws = (sw.draws || []).concat(dr.draws);
+        if (S.settings.stateToolEnabled) {
+        const offset = (sw.stateCalls || []).length;
+        sw.stateCalls = (sw.stateCalls || []).concat(dr.stateCalls);
+        sw.stateEvents = (sw.stateEvents || []).concat(
+          PRP.stateTracker.eventsFromStateCalls(dr.stateCalls, c.mode)
+            .map(e => ({ ...e, stateCallIndex: e.stateCallIndex + offset })));
+        sw.stateProtocol = 1;
+        }
       } else {
         sw.text = dr.text;
         sw.sceneOps = sf.sceneOps;
         if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = sf.ignoredSceneOps; else delete sw.ignoredSceneOps;
         sw.draws = dr.draws;
+        if (S.settings.stateToolEnabled) {
+        sw.stateCalls = dr.stateCalls;
+        sw.stateEvents = PRP.stateTracker.eventsFromStateCalls(dr.stateCalls, c.mode);
+        sw.stateProtocol = 1;
+        }
       }
+      recordToolStatus(sw, dr.stateIssues);
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
       if (error) sw.error = error; else delete sw.error;
       /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
@@ -12655,6 +12772,8 @@
         th = OA.splitThink((res && res.text) || "");
         parsed = SC.parse(th.text);
         dr = IC.parseDraws(parsed.text);
+        const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+        dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
         if (!built.report.imageDirectiveAllowed) dr.draws = [];
         else dr.draws = dr.draws.slice(0, 1);
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
@@ -12670,7 +12789,9 @@
 
       const m = chat().newMsg("assistant", null, "");
       m.opening = "generated";
-      m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
+        ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}), reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      recordToolStatus(m.swipes[0], dr.stateIssues);
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       try { await chat().commitMessage(m, m.id); }
       finally { S.gen = null; }
@@ -12760,6 +12881,8 @@
       const th = OA.splitThink((res && res.text) || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
+      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
       const r = INI.parse(dr.text);
@@ -12770,7 +12893,9 @@
       if (r.kind === "malformed") return finish("malformed", "Модель вернула служебный маркер вперемешку с текстом — ответ не сохранён, можно попробовать ещё раз.", true);
 
       const sw = { text: r.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
+        ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}),
         reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now(), initiative: INI.provenance(reasons) };
+      recordToolStatus(sw, dr.stateIssues);
       const snap = ms.snapshot(path, msNow);
       if (snap) sw.messengerAt = snap;
       let msg;
