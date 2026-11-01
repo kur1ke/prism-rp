@@ -33,7 +33,7 @@
   const turnKey = (p) => (p || []).map((m) => { const t = String(TR.activeSwipe(m).text || ""); return m.id + ":" + (m.swipeIdx || 0) + ":" + t.length + ":" + fnv(t); }).join(">");
 
   const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
-  function recordToolStatus(swipe, issues) {
+  function recordToolStatus(swipe, issues, rejected) {
     if (!swipe || swipe.stateProtocol !== 1) return;
     const shots = Array.isArray(swipe.draws) ? swipe.draws : [];
     const last = shots.length ? shots[shots.length - 1] : null;
@@ -42,6 +42,7 @@
       status:problems.length ? "partial" :
         (swipe.stateEvents || []).length ? "ok" : "no-changes",
       method:"state-tool", issues:problems,
+      rejectedStateCalls:Array.isArray(rejected) ? rejected.slice(0,8) : [],
       sourceText:swipe.text || "", sourceDraw:last && last.prompt || "",
       sourceDrawIndex:shots.length-1,
       eventCount:(swipe.stateEvents || []).length, at:Date.now(),
@@ -238,7 +239,7 @@
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
       const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
-      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
       // Даже если модель сама добавила [draw:] без разрешения, картинка не
       // создаётся. Служебный текст при этом всё равно удалён из ответа.
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
@@ -269,7 +270,7 @@
         sw.stateProtocol = 1;
         }
       }
-      recordToolStatus(sw, dr.stateIssues);
+      recordToolStatus(sw, dr.stateIssues, dr.stateRejected);
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
       if (error) sw.error = error; else delete sw.error;
       /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
@@ -362,7 +363,7 @@
         parsed = SC.parse(th.text);
         dr = IC.parseDraws(parsed.text);
         const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
-        dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
+        dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
         if (!built.report.imageDirectiveAllowed) dr.draws = [];
         else dr.draws = dr.draws.slice(0, 1);
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
@@ -380,7 +381,7 @@
       m.opening = "generated";
       m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}), reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
-      recordToolStatus(m.swipes[0], dr.stateIssues);
+      recordToolStatus(m.swipes[0], dr.stateIssues, dr.stateRejected);
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       try { await chat().commitMessage(m, m.id); }
       finally { S.gen = null; }
@@ -471,7 +472,7 @@
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
       const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
-      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
       const r = INI.parse(dr.text);
@@ -484,7 +485,7 @@
       const sw = { text: r.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}),
         reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now(), initiative: INI.provenance(reasons) };
-      recordToolStatus(sw, dr.stateIssues);
+      recordToolStatus(sw, dr.stateIssues, dr.stateRejected);
       const snap = ms.snapshot(path, msNow);
       if (snap) sw.messengerAt = snap;
       let msg;
