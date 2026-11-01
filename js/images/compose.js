@@ -605,7 +605,7 @@
     const calls = [], issues = [], rejected = [];
     const reject = (source, reason) => {
       if (issues.length < 8) {
-        issues.push("invalid-state-directive: " + reason);
+        issues.push("invalid-state-directive: " + reason + " · " + String(source).slice(0,180));
         // Source is diagnostic data only, never replay authority.
         rejected.push(String(source).slice(0,300));
       }
