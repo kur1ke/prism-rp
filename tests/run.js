@@ -4152,8 +4152,7 @@ async function foundationH() {
       await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
       assert.strictEqual(backendCount,1,"verified historical draw may reach A1111");
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
-      assert.deepStrictEqual(inspected.wearState.worn.map(x=>x.item),["white t-shirt"]);
-      assert.deepStrictEqual(inspected.wearState.removed,[]);
+      assert.strictEqual(inspected.wearState,undefined,"historical authored DRAW must not re-resolve wear");
       assert.strictEqual(live.swipes[0].images[0].sourceDrawIndex,0);
       assert.strictEqual(live.swipes[0].images[0].promptSources.historicalDrawState,true);
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
@@ -5043,9 +5042,8 @@ async function foundationH() {
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:visual,ratio:"1:1"});
       assert.strictEqual(calls.length,1,JSON.stringify(calls));
       assert.strictEqual(calls[0].o.intentMode,true);
-      assert.deepStrictEqual(calls[0].o.wearState.removed.map(x=>x.item),["шорты"],"the first translation receives end-of-turn removed facts");
-      assert.strictEqual(calls[0].o.visualPlan.actor,"char");
-      assert.strictEqual(calls[0].o.visualPlan.allowGlobalGarmentNegative,false);
+      assert.strictEqual(calls[0].o.wearState,undefined,"authored DRAW should not consume Tracker wear");
+      assert.strictEqual(calls[0].o.visualPlan,undefined,"authored DRAW translator only receives source shot and prompt plan");
       assert.ok(sent.prompt.includes("red dress"),sent.prompt);
       assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"intent");
     }finally {ICP.compile=oldC;IB.generate=oldG;}
@@ -5130,12 +5128,11 @@ async function foundationH() {
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:shot,ratio:"1:1"});
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
       assert.strictEqual(instructions.length,1,"one canonical compilation request");
-      assert.ok(instructions[0].includes("белая хлопковая футболка"));
+      assert.ok(instructions[0].includes("SCENE:\\n"+shot),"only original authored DRAW is supplied");
       assert.ok(!/t-shirt|lifting shirt|shirt pulled up/i.test(sent.prompt),sent.prompt);
       assert.ok(sent.prompt.includes("white lace lingerie"),sent.prompt);
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.actor,"char");
-      assert.deepStrictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.absentFromBody,
-        ["белая хлопковая футболка"]);
+      assert.deepStrictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.absentFromBody,[]);
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.negative,"");
     } finally {globalThis.PRP.llm.simple=originalLLM;IB.generate=originalBackend;}
   });
@@ -5302,10 +5299,9 @@ async function foundationH() {
         info:{width:512,height:512}};};
       const source=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
-      assert.deepStrictEqual(options.visualPlan.offBodyVisible,
-        [{role:"offBody",item:"белую футболку",evidence:"держу её в руках"}]);
+      assert.strictEqual(options.visualPlan,undefined,"authored DRAW is enough to describe off-body objects");
       assert.ok(sent.prompt.includes("holding a white t-shirt"));
-      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.plan.offBodyVisible.length,1);
+      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.plan.offBodyVisible.length,0);
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
         ["белую футболку"],"shot roles must not create wear.add");
     }finally{ICP.compile=oldC;IB.generate=oldG;}
@@ -5399,9 +5395,8 @@ async function foundationH() {
       IB.generate=async()=>{called++;throw Error("backend should not be called");};
       const source=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
-      assert.strictEqual(called,0);
-      assert.strictEqual(source.swipes[0].images[0].status,"error");
-      assert.ok(source.swipes[0].images[0].error.includes("Конфликт одежды"),source.swipes[0].images[0].error);
+      assert.strictEqual(called,1,"fixedPrompt no longer checks Tracker clothing");
+      assert.strictEqual(source.swipes[0].images[0].status,"error","mock backend intentionally fails");
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
         ["белую футболку"]);
     }finally{ICP.compile=oldC;IB.generate=oldG;}
@@ -5473,7 +5468,7 @@ async function foundationH() {
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
       assert.strictEqual(calls,1,"no secondary semantic classifier");
       assert.ok(sent.prompt.includes("white cotton t-shirt"));
-      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.scope,"multi-subject");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.scope,"not-owner");
       assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.validated,false);
       assert.ok(!sent.negative.includes("white cotton t-shirt"),
         "do not globally suppress the other actor's shirt");
