@@ -5128,7 +5128,7 @@ async function foundationH() {
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:shot,ratio:"1:1"});
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
       assert.strictEqual(instructions.length,1,"one canonical compilation request");
-      assert.ok(instructions[0].includes("SCENE:\\n"+shot),"only original authored DRAW is supplied");
+      assert.ok(instructions[0].includes("SCENE:\n"+shot),"only original authored DRAW is supplied");
       assert.ok(!/t-shirt|lifting shirt|shirt pulled up/i.test(sent.prompt),sent.prompt);
       assert.ok(sent.prompt.includes("white lace lingerie"),sent.prompt);
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.actor,"char");
