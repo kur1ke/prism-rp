@@ -66,3 +66,11 @@ const tamperedGeneric=TR.eventsFromStateCalls(generic.calls,"messenger");
 tamperedGeneric[0].value="чужой дом";
 assert.ok(folding([mk("generic-bad",generic.calls,tamperedGeneric)]).diagnostics
  .some(d=>/state-tool/.test(d.issue)));
+
+
+const malformed=IC.parseStateCalls('Привет! [state: wear.add(no-quotes)] конец.');
+assert.equal(malformed.calls.length,0);
+assert.equal(malformed.issues.length,1);
+assert.equal(malformed.text,"Привет!  конец.");
+const unmatched=TR.eventsFromStateCalls([{field:"location",operation:"set",items:["дома"]}],"messenger")[0];
+assert.ok(folding([mk("noprotocol",[],[unmatched])]).diagnostics.some(d=>/state-tool/.test(d.issue)));
