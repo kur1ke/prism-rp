@@ -597,25 +597,28 @@
   // The model may report a completed wardrobe transition in the same answer.
   // Syntax is intentionally tiny; arguments are JSON strings, never JS code.
   // Only successful model responses are allowed to persist parsed calls.
-  const STATE_RE = /\[state:\s*wear\.(replace|add|remove)\(([^)\]\r\n]{1,400})\)\s*\]/gi;
+  const STATE_RE = /\[state:\s*(wear|location|activity|pose|hair|nearby|ongoing|availability)\.(replace|add|remove|set|clear)\(([^)\]\r\n]{0,500})\)\s*\]/gi;
+  const STATE_LIST = new Set(["wear", "nearby", "ongoing"]);
   function parseStateCalls(text) {
     const calls = [], issues = [];
-    const clean = String(text || "").replace(STATE_RE, (full, operation, args) => {
+    const clean = String(text || "").replace(STATE_RE, (full, fieldRaw, operationRaw, args) => {
+      const field = fieldRaw.toLowerCase(), operation = operationRaw.toLowerCase();
       try {
+        if (field === "wear" ? !["replace","add","remove"].includes(operation) :
+            !["set","clear"].includes(operation)) throw Error("invalid-operation");
         const items = JSON.parse("[" + args + "]");
-        if (!Array.isArray(items) || !items.length || items.length > 12 ||
-            items.some(x => typeof x !== "string" || !x.trim() || x.length > 160))
-          throw Error("invalid-items");
+        if (!Array.isArray(items) || items.length > 12 ||
+            items.some(x => typeof x !== "string" || !x.trim() || x.length > 240) ||
+            (operation !== "clear" && (!items.length || (!STATE_LIST.has(field) && items.length !== 1))) ||
+            (operation === "clear" && items.length)) throw Error("invalid-items");
         if (calls.length >= 8) throw Error("too-many-calls");
-        calls.push({ field: "wear", operation: operation.toLowerCase(),
-          items: items.map(x => x.trim()) });
+        calls.push({ field, operation, items:items.map(x => x.trim()) });
       } catch (_e) { issues.push("invalid-state-directive"); }
       return "";
     });
     return { text: clean.replace(/\n{3,}/g, "\n\n").trim(), calls, issues };
   }
-  const stateToolInstruction = () => "Если персонаж действительно изменил текущую одежду, можешь добавить [state: wear.replace(\"новый комплект\")] для полной смены наряда, [state: wear.remove(\"вещь\")] для снятия или [state: wear.add(\"вещь\")] для надевания. Указывай только произошедшие изменения, не намерения, воспоминания и старые фотографии. Аргументы — JSON-строки в двойных кавычках. Без изменений инструмент не вызывай.";
-
+  const stateToolInstruction = () => "Только после реального изменения состояния можешь сообщить результат через [state: wear.replace(\"пижама\")], wear.add/remove(\"вещь\"), location.set(\"место\"), pose.set(\"поза\"), activity.set(\"занятие\"), hair.set(\"причёска\"), availability.set(\"статус\"), nearby.set(\"предмет\") или ongoing.set(\"дело\"); clear() отменяет ранее установленное значение поля. Используй JSON-строки в двойных кавычках; для списков можно несколько. Не вызывай для намерений, воспоминаний, старых фото и неизменившихся фактов.";
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
 
   // Mode-specific visual contracts are injected only for the active chat.
