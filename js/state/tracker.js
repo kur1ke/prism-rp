@@ -257,14 +257,27 @@
       const calls = source && Array.isArray(source.stateCalls) ? source.stateCalls : [];
       const index = e.stateCallIndex;
       const call = Number.isInteger(index) && index >= 0 ? calls[index] : null;
-      const action = e.action === "invalidate" || (e.action === "add" && call && call.operation === "replace") ? "replace" : e.action;
-      if (!source || source.role !== "assistant" || e.actor !== "char" ||
-          e.field !== "wear" || e.certainty !== (source.mode === "messenger" ? "reported" : "established") ||
-          !call || call.field !== "wear" || call.operation !== action ||
-          !Array.isArray(call.items) || !call.items.length ||
-          (e.action !== "invalidate" && JSON.stringify(e.value) !== JSON.stringify(call.items)) ||
-          (e.action === "invalidate" && e.value != null) ||
-          str(e.evidence) !== JSON.stringify(call))
+      const action = e.action === "invalidate" ||
+        (e.action === "add" && call && call.operation === "replace") ? "replace" : e.action;
+      const expected = call && call.field === "wear" && call.operation === "replace"
+        ? (e.action === "invalidate" ? null : call.items)
+        : call && call.operation === "clear" ? null
+        : call && LIST.has(call.field) ? call.items
+        : call && call.items && call.items[0];
+      if (!source || source.role !== "assistant" || source.stateProtocol !== 1 ||
+          e.actor !== "char" || !call || !FIELDS.includes(call.field) ||
+          e.field !== call.field || call.operation !== action ||
+          e.certainty !== (source.mode === "messenger" ? "reported" : "established") ||
+          !Array.isArray(call.items) || call.items.length > 12 ||
+          call.items.some(x => typeof x !== "string" || !x.trim() || x.length > 240) ||
+          (call.field === "wear" && !["replace","add","remove"].includes(call.operation)) ||
+          (call.field !== "wear" && !["set","clear"].includes(call.operation)) ||
+          (call.operation !== "clear" && (!call.items.length ||
+            (!LIST.has(call.field) && call.items.length !== 1))) ||
+          (call.operation === "clear" && call.items.length) ||
+          JSON.stringify(e.value) !== JSON.stringify(expected) ||
+          str(e.evidence) !== JSON.stringify(call) ||
+          e.reference != null || e.sourceSpan != null || e.drawIndex != null)
         return "state-tool не подтверждён вызовом модели этого свайпа";
     }
     const drawn = e.evidenceType === "draw";
@@ -559,7 +572,8 @@
             ["remove","adjust","add"]);
         }
         st = apply(st, e, { role: m.role, mode: opts.mode, text: sw.text, draws: sw.draws || [],
-          references: unitReferences, wearInquiries: sw.wearInquiries || [], stateCalls: sw.stateCalls || [],
+          references: unitReferences, wearInquiries: sw.wearInquiries || [],
+          stateProtocol: sw.stateProtocol, stateCalls: sw.stateCalls || [],
           messageId: m.id, swipeIdx: m.swipeIdx || 0 });
       }
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
@@ -735,15 +749,22 @@
   function eventsFromStateCalls(calls, mode) {
     const out = [];
     (Array.isArray(calls) ? calls : []).slice(0,8).forEach((call,index) => {
-      if (!call || call.field !== "wear" || !["replace","add","remove"].includes(call.operation) ||
-          !Array.isArray(call.items) || !call.items.length || call.items.length > 12 ||
-          call.items.some(x => typeof x !== "string" || !x.trim() || x.length > 160)) return;
-      const base = { actor:"char", field:"wear", certainty:mode==="messenger" ? "reported" : "established",
+      if (!call || !FIELDS.includes(call.field) || !Array.isArray(call.items) ||
+          call.items.length > 12 || call.items.some(x => typeof x !== "string" ||
+            !x.trim() || x.length > 240) ||
+          (call.field === "wear" ? !["replace","add","remove"].includes(call.operation) :
+            !["set","clear"].includes(call.operation)) ||
+          (call.operation !== "clear" && (!call.items.length ||
+            (!LIST.has(call.field) && call.items.length !== 1))) ||
+          (call.operation === "clear" && call.items.length)) return;
+      const base = { actor:"char", field:call.field,
+        certainty:mode==="messenger" ? "reported" : "established",
         evidence:JSON.stringify(call), evidenceType:"state-tool", stateCallIndex:index };
       if (call.operation === "replace")
         out.push({ ...base, action:"invalidate", value:null });
       out.push({ ...base, action:call.operation === "replace" ? "add" : call.operation,
-        value:call.items.slice() });
+        value:call.operation === "clear" ? null :
+          LIST.has(call.field) ? call.items.slice() : call.items[0] });
     });
     return out;
   }
