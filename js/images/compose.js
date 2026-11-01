@@ -597,7 +597,7 @@
   // The model may report a completed wardrobe transition in the same answer.
   // Syntax is intentionally tiny; arguments are JSON strings, never JS code.
   // Only successful model responses are allowed to persist parsed calls.
-  const STATE_RE = /\\[state:\\s*wear\\.(replace|add|remove)\\(([^)\\]\\r\\n]{1,400})\\)\\s*\\]/gi;
+  const STATE_RE = /\[state:\s*wear\.(replace|add|remove)\(([^)\]\r\n]{1,400})\)\s*\]/gi;
   function parseStateCalls(text) {
     const calls = [], issues = [];
     const clean = String(text || "").replace(STATE_RE, (full, operation, args) => {
@@ -612,9 +612,9 @@
       } catch (_e) { issues.push("invalid-state-directive"); }
       return "";
     });
-    return { text: clean.replace(/\\n{3,}/g, "\\n\\n").trim(), calls, issues };
+    return { text: clean.replace(/\n{3,}/g, "\n\n").trim(), calls, issues };
   }
-  const stateToolInstruction = () => "Когда персонаж действительно изменил текущую одежду, необязательно добавь [state: wear.replace(\\\"новый комплект\\\")] для полной смены наряда, [state: wear.remove(\\\"вещь\\\")] при снятии или [state: wear.add(\\\"вещь\\\")] при надевании. Указывай реальные результаты, не намерения, старые фотографии или неизменившиеся вещи. Аргументы — строки JSON в двойных кавычках. Директивы скрыты от собеседника.";
+  const stateToolInstruction = () => "Когда персонаж действительно изменил текущую одежду, необязательно добавь [state: wear.replace(\\"новый комплект\\")] для полной смены наряда, [state: wear.remove(\\"вещь\\")] при снятии или [state: wear.add(\\"вещь\\")] при надевании. Указывай реальные результаты, не намерения, старые фотографии или неизменившиеся вещи. Аргументы — строки JSON в двойных кавычках. Директивы скрыты от собеседника.";
 
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
 
