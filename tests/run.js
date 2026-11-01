@@ -9790,3 +9790,4 @@ foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).the
 });
 
 require("./state-tool-protocol.js");
+require("./draw-owned-visual.js");
