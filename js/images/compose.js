@@ -616,7 +616,8 @@
       } catch (_e) { issues.push("invalid-state-directive"); }
       return "";
     });
-    return { text: clean.replace(/\n{3,}/g, "\n\n").trim(), calls, issues };
+    const sanitized = clean.replace(/\[state:[^\]]{0,600}\]/gi, () => { issues.push("invalid-state-directive"); return ""; });
+    return { text: sanitized.replace(/\n{3,}/g, "\n\n").trim(), calls, issues };
   }
   const stateToolInstruction = () => "Только после реального изменения состояния можешь сообщить результат через [state: wear.replace(\"пижама\")], wear.add/remove(\"вещь\"), location.set(\"место\"), pose.set(\"поза\"), activity.set(\"занятие\"), hair.set(\"причёска\"), availability.set(\"статус\"), nearby.set(\"предмет\") или ongoing.set(\"дело\"); clear() отменяет ранее установленное значение поля. Используй JSON-строки в двойных кавычках; для списков можно несколько. Не вызывай для намерений, воспоминаний, старых фото и неизменившихся фактов.";
   function stripDrawsForDisplay(text) { return String(text || "").replace(DRAW_RE, "").replace(/\[draw:[^\]]*$/i, ""); }
