@@ -90,7 +90,7 @@
         reflection: ctx.svc.memory ? ctx.svc.memory.experience(path) : null,
         worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
-        singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, noPostHistory: !!s.noPostHistory,
+        singleSystem: s.singleSystem, sceneProtocol: s.sceneProtocol, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
       }, extra));
       built.report.imageDirectiveAllowed = allowDraw;

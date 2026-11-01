@@ -15,6 +15,7 @@
     autoContext: true,
     singleSystem: false,
     sceneProtocol: true,
+    stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,
     expLimit: 8,

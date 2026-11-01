@@ -9788,3 +9788,5 @@ foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).the
   process.exit(failed ? 1 : 0);
 });
 });
+
+require("./state-tool-protocol.js");

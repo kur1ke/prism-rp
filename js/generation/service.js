@@ -33,6 +33,21 @@
   const turnKey = (p) => (p || []).map((m) => { const t = String(TR.activeSwipe(m).text || ""); return m.id + ":" + (m.swipeIdx || 0) + ":" + t.length + ":" + fnv(t); }).join(">");
 
   const now = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
+  function recordToolStatus(swipe, issues) {
+    if (!swipe || swipe.stateProtocol !== 1) return;
+    const shots = Array.isArray(swipe.draws) ? swipe.draws : [];
+    const last = shots.length ? shots[shots.length - 1] : null;
+    const problems = Array.isArray(issues) ? issues.slice(0,8) : [];
+    swipe.stateStatus = {
+      status:problems.length ? "partial" :
+        (swipe.stateEvents || []).length ? "ok" : "no-changes",
+      method:"state-tool", issues:problems,
+      sourceText:swipe.text || "", sourceDraw:last && last.prompt || "",
+      sourceDrawIndex:shots.length-1,
+      eventCount:(swipe.stateEvents || []).length, at:Date.now(),
+    };
+  }
+
 
   function create(ctx) {
     const { S, ui } = ctx;
@@ -63,8 +78,9 @@
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : prov;
       const hasAuthoredDraw = Array.isArray(sw.draws) && sw.draws.some(d =>
         d && typeof d.prompt === "string" && d.prompt.trim());
-      const analysed = st && msg && (text.trim() || hasAuthoredDraw)
-        ? st.track(msg, observerProvider) : Promise.resolve(null);
+      const analysed = sw.stateProtocol === 1 ? Promise.resolve({ status: "state-tool" }) :
+        st && msg && (text.trim() || hasAuthoredDraw)
+          ? st.track(msg, observerProvider) : Promise.resolve(null);
       return analysed.then((res) => {
         // Independent non-blocking Memory → Reflection cycle after a committed answer.
         // No manual interaction, no writes on failed/stale generation.
@@ -221,6 +237,8 @@
       const th = OA.splitThink(raw || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
+      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
       // Даже если модель сама добавила [draw:] без разрешения, картинка не
       // создаётся. Служебный текст при этом всё равно удалён из ответа.
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
@@ -232,12 +250,26 @@
         sw.sceneOps = (sw.sceneOps || []).concat(sf.sceneOps);
         if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = (sw.ignoredSceneOps || []).concat(sf.ignoredSceneOps);
         sw.draws = (sw.draws || []).concat(dr.draws);
+        if (S.settings.stateToolEnabled) {
+        const offset = (sw.stateCalls || []).length;
+        sw.stateCalls = (sw.stateCalls || []).concat(dr.stateCalls);
+        sw.stateEvents = (sw.stateEvents || []).concat(
+          PRP.stateTracker.eventsFromStateCalls(dr.stateCalls, c.mode)
+            .map(e => ({ ...e, stateCallIndex: e.stateCallIndex + offset })));
+        sw.stateProtocol = 1;
+        }
       } else {
         sw.text = dr.text;
         sw.sceneOps = sf.sceneOps;
         if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = sf.ignoredSceneOps; else delete sw.ignoredSceneOps;
         sw.draws = dr.draws;
+        if (S.settings.stateToolEnabled) {
+        sw.stateCalls = dr.stateCalls;
+        sw.stateEvents = PRP.stateTracker.eventsFromStateCalls(dr.stateCalls, c.mode);
+        sw.stateProtocol = 1;
+        }
       }
+      recordToolStatus(sw, dr.stateIssues);
       sw.reasoning = [sw.reasoning && mode === "continue" ? sw.reasoning : "", reasoning, th.reasoning].filter(Boolean).join("\n").trim();
       if (error) sw.error = error; else delete sw.error;
       /* Метка времени переписки — только у успешного ответа. «Продолжить» дописывает ту же единицу:
@@ -329,6 +361,8 @@
         th = OA.splitThink((res && res.text) || "");
         parsed = SC.parse(th.text);
         dr = IC.parseDraws(parsed.text);
+        const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+        dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
         if (!built.report.imageDirectiveAllowed) dr.draws = [];
         else dr.draws = dr.draws.slice(0, 1);
         if (!dr.text.trim()) error = "модель вернула пустой ответ";
@@ -344,7 +378,9 @@
 
       const m = chat().newMsg("assistant", null, "");
       m.opening = "generated";
-      m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws, reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
+        ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}), reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
+      recordToolStatus(m.swipes[0], dr.stateIssues);
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
       try { await chat().commitMessage(m, m.id); }
       finally { S.gen = null; }
@@ -434,6 +470,8 @@
       const th = OA.splitThink((res && res.text) || "");
       const parsed = SC.parse(th.text);
       const dr = IC.parseDraws(parsed.text);
+      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+      dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues;
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
       const r = INI.parse(dr.text);
@@ -444,7 +482,9 @@
       if (r.kind === "malformed") return finish("malformed", "Модель вернула служебный маркер вперемешку с текстом — ответ не сохранён, можно попробовать ещё раз.", true);
 
       const sw = { text: r.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
+        ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}),
         reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now(), initiative: INI.provenance(reasons) };
+      recordToolStatus(sw, dr.stateIssues);
       const snap = ms.snapshot(path, msNow);
       if (snap) sw.messengerAt = snap;
       let msg;
