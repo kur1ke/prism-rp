@@ -50,3 +50,19 @@ assert.ok(rendered(toolPrompt).includes("wear.replace"));
 assert.equal(toolPrompt.report.overflow,false);
 const accidental=IC.parseStateCalls("Привет!");
 assert.deepEqual(accidental.calls,[],"ordinary conversations must not rewrite canonical state");
+
+
+const generic=IC.parseStateCalls('Перешла в спальню. [state: location.set("спальня")] [state: pose.set("лежу")]');
+assert.deepEqual(generic.calls.map(c=>c.field),["location","pose"]);
+const genericEvents=TR.eventsFromStateCalls(generic.calls,"messenger");
+assert.deepEqual(genericEvents.map(e=>e.action),["set","set"]);
+const genericState=folding([mk("generic",generic.calls,genericEvents)]);
+assert.equal(genericState.actors.char.fields.location.value,"спальня");
+assert.equal(genericState.actors.char.fields.pose.value,"лежу");
+assert.equal(IC.parseStateCalls('[state: location.add("фальшивое место")]').calls.length,0);
+const clearing=IC.parseStateCalls('[state: location.clear()]');
+assert.equal(TR.eventsFromStateCalls(clearing.calls,"messenger")[0].value,null);
+const tamperedGeneric=TR.eventsFromStateCalls(generic.calls,"messenger");
+tamperedGeneric[0].value="чужой дом";
+assert.ok(folding([mk("generic-bad",generic.calls,tamperedGeneric)]).diagnostics
+ .some(d=>/state-tool/.test(d.issue)));
