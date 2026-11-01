@@ -247,8 +247,8 @@
         const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true,
           requireNamedUser: currentChat.mode === "messenger" });
         const currentSelfie = drawAuthored &&
-          /(?:\\bmy\\s+selfie\\b|\\btaking\\s+(?:a\\s+)?selfie\\b|\\bselfie\\s+of\\s+myself\\b|(?:^|[\\s,;:])я\\s+[^.!?]{0,60}селфи|(?:^|[\\s,;:])сво[её]\\s+селфи)/iu.test(shot) &&
-          !/(?:скриншот|screenshot|чужое\\s+селфи|someone\\s+else)/iu.test(shot) &&
+          /(?:\bmy\s+selfie\b|\btaking\s+(?:a\s+)?selfie\b|\bselfie\s+of\s+myself\b|(?:^|[\s,;:])я\s+[^.!?]{0,60}селфи|(?:^|[\s,;:])сво[её]\s+селфи)/iu.test(shot) &&
+          !/(?:скриншот|screenshot|чужое\s+селфи|someone\s+else)/iu.test(shot) &&
           !shotActors.empty && !shotActors.userNamed;
         const resolvedActors = currentSelfie && !shotActors.owner
           ? { ...shotActors, owner: true, reason: "current-selfie" } : shotActors;
