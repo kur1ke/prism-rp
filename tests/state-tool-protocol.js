@@ -16,6 +16,15 @@ assert.ok(toolRules.includes("Одна директива [state: ...] = одн�
 assert.ok(toolRules.includes("Не объединяй операции"));
 assert.ok(toolRules.includes("старые фотографии"));
 assert.ok(toolRules.includes("Если состояние не менялось"));
+assert.ok(toolRules.includes("DRAW не заменяет state"));
+assert.ok(toolRules.includes("сначала сообщи изменение через [state: ...]"));
+assert.ok(toolRules.includes("повторять state не нужно"));
+const concurrentDraw=IC.parseDraws('Переоделась. [state: wear.replace("розовая пижама")] [draw: moment=current-self; розовая пижама]');
+const concurrentState=IC.parseStateCalls(concurrentDraw.text);
+assert.equal(concurrentDraw.draws.length,1);
+assert.equal(concurrentState.calls.length,1);
+assert.deepEqual(concurrentState.calls[0].items,["розовая пижама"]);
+
 assert.ok(toolRules.includes('[state: wear.replace("розовая пижама")]'));
 assert.ok(toolRules.includes('[state: wear.remove("юбка")]'));
 assert.ok(toolRules.includes('[state: wear.add("кофта")]'));
