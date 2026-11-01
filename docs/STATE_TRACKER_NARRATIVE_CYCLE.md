@@ -79,7 +79,7 @@ real-model validation in the testing mirror: an actual outfit change and a
 retrieved historical photograph must have opposite Tracker effects.
 
 
-## State Tool candidate (feature branch; NOT enabled in testing)
+## State Tool candidate (feature branch; experimental opt-in)
 
 The feature branch introduces opt-in RP-authored state directives:
 `[state: wear.replace("garment")]`, `[state: wear.add("garment")]`,
@@ -95,8 +95,9 @@ each tool event matches the call at the same swipe-local index and actor.
 Uncommitted, aborted, stale, or rejected generations cannot write events.
 Legacy swipes without `stateProtocol` retain prior Observer behavior.
 
-**Review gate:** The candidate currently changes mandatory Observer
-semantics. Existing end-to-end tests still expect Observer calls, and
-prompt-budget fixtures fail with the added protocol. This must be
-resolved and retested before merge to testing; a passing unit-only
-fixture is not sufficient. A live Perchance model test is NOT RUN.
+**Review gate:** `stateToolEnabled` defaults to false. When enabled, the
+new short tool instruction is assembled in the existing operation protocol
+and Observer is skipped for newly generated assistant swipes. Disabled
+mode retains previous generation, Observer and budget behavior; historical
+swipes keep their stored events regardless of the current toggle. A live
+Perchance model test is NOT RUN.
