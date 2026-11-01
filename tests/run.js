@@ -5119,8 +5119,7 @@ async function foundationH() {
     try {
       globalThis.PRP.llm.simple=async (_,instruction)=>{
         instructions.push(instruction);
-        return JSON.stringify({prompt:"pov, torso, white lace lingerie, navel, from above",
-          absent:[{index:0,tag:"white cotton t-shirt"}]});
+        return "pov, torso, white lace lingerie, navel, from above";
       };
       IB.generate=async (_,options)=>{sent=options;return {dataUrl:"data:image/png;base64,AA==",
         seed:93,info:{width:1024,height:1024}};};
@@ -5136,7 +5135,7 @@ async function foundationH() {
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.negative,"");
     } finally {globalThis.PRP.llm.simple=originalLLM;IB.generate=originalBackend;}
   });
-  await ta("VC-01-4: edited source wear facts during authored compilation skip A1111",async()=>{
+  await ta("VC-01-4: edited authored DRAW during compilation skips A1111",async()=>{
     const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
@@ -5157,8 +5156,7 @@ async function foundationH() {
     try {
       ICP.compile=async (_scene,_opts)=>{
         const mutated=await h.ctx.DB.get("messages",next.id);
-        mutated.swipes[0].stateCorrections=[{actor:"char",field:"wear",action:"add",
-          value:["юбку"],certainty:"reported",evidence:""}];
+        mutated.swipes[0].draws[0].prompt="Изменённый DRAW после старта перевода";
         await h.ctx.DB.put("messages",mutated);
         return {text:"pov, legs, from above",compiled:true,wearValidated:true,negative:"",
           wearItems:[{index:0,item:"юбку",tag:"skirt"}]};
