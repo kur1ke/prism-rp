@@ -8,6 +8,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const IC = PRP.imgCompose || (typeof require !== "undefined" ? require("./compose.js") : null);
+  const VP = PRP.visualPlan || (typeof require !== "undefined" ? require("./visual-plan.js") : null);
 
   const mem = new Map();
   const MAX = 300;
@@ -236,7 +237,15 @@
     try {
       const raw = rawReply = String((await generateText(instruction)) || "").trim();
       let result;
-      if (negativesRequired) {
+      if (o.shotOnly) {
+        const parsed = VP.parseFrame(raw);
+        if (parsed.error) return failure(parsed.error);
+        const outputFormat = hybrid || o.format === "description" ? "description" : "tags";
+        const text = VP.renderFrame(parsed.frame, outputFormat);
+        if (text.length < 4) return failure("Visual Frame rendered empty output");
+        if (hybrid && validateHybrid(text)) return failure(validateHybrid(text));
+        result = { text, compiled: true, visualFrameVersion: 1 };
+      } else if (negativesRequired) {
         const decoded = canonicalJSON(raw);
         const prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";
         const absent = decoded.absent;
@@ -288,7 +297,7 @@
       remember(key, result);
       return result;
     } catch (e) {
-      return failure("Ошибка компиляции канонической одежды: " + String(e && e.message || e).slice(0, 120));
+      return failure((o.shotOnly ? "Ошибка Visual Frame: " : "Ошибка компиляции канонической одежды: ") + String(e && e.message || e).slice(0, 120));
     }
   }
 
