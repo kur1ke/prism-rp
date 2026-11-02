@@ -256,7 +256,7 @@
           qualityPinned: ST.qualityPinned(S.settings) });
         const firstPass = intent ? await measuredCompile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
-            qualityPinned: ST.qualityPinned(S.settings),
+            qualityPinned: ST.qualityPinned(S.settings), shotOnly: drawAuthored,
             visualPlan: drawAuthored ? undefined : visualPlan, subjectScope: shotScope,
             promptPlan, debug: !!S.settings.developerMode }) : null;
         if (intent && (!firstPass || !firstPass.compiled)) {
