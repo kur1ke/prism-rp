@@ -58,5 +58,5 @@ for (const bad of [
   "{}",
   JSON.stringify({camera:"",subjects:[{name:"",pose:"",clothing:""}],objects:[],environment:"",lighting:""}),
   JSON.stringify({camera:"photo",subjects:[],objects:["<script>"],environment:"",lighting:""}),
-  JSON.stringify({camera:"photo",subjects:[],objects:[],environment:"",lighting:"line\\nline"})
+  JSON.stringify({camera:"photo",subjects:[],objects:[],environment:"",lighting:"line\nline"})
 ]) assert.ok(VP.parseFrame(bad).error, "invalid visual representation must fail closed");
