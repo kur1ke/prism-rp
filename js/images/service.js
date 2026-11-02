@@ -6,7 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan, TRACK = PRP.stateTracker;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -158,16 +158,9 @@
         ? (matching.includes(pinnedIndex) ? pinnedIndex : -1)
         : matching.length === 1 ? matching[0] : -1;
       const drawAuthored = authoredIndex >= 0;
-      // Historical authored photo: derive a read-only source snapshot from
-      // this exact swipe's indexed photo events. Do not borrow the final photo's
-      // garment state. Ambiguous narration/Scene/corrections fail closed.
-      const historical = drawAuthored && authoredIndex !== authorDraws.length - 1
-        ? TRACK.historicalDrawPath(origin.path, authoredIndex) : null;
-      if (historical && !historical.ok) {
-        ui.toast("Нельзя достоверно восстановить одежду на момент прежнего кадра (" +
-          historical.reason + "). Рисование отменено.", true);
-        return;
-      }
+      // An authored historical photo remains the selected source DRAW, not a
+      // reconstructed state snapshot. Its index is provenance only.
+      const historical = drawAuthored && authoredIndex !== authorDraws.length - 1;
       if (matching.length > 1 && !drawAuthored) {
         ui.toast("Невозможно определить исходный Draw среди одинаковых снимков. Рисование отменено.", true);
         return;
@@ -189,24 +182,15 @@
         entry.intentMode = !!(drawAuthored && drawMode !== "tags");
         entry.drawPromptMode = drawMode;
       }
-      // Resolve physical state from the frozen origin path BEFORE the first await.
-      // Do not let a later UI branch/chat selection change this image's source.
-      const upto = historical ? historical.path : origin.path;
+      // Only non-authored (legacy) image generation uses a projected scene.
+      // Authored DRAW is a complete visual request, including historical photos.
+      const upto = origin.path;
       const sourceMsg = upto[upto.length - 1];
       const sourceSwipe = TR.activeSwipe(sourceMsg);
       const ms = currentChat.mode === "messenger" && ctx.svc.messenger;
-      const stamped = sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
-      if (historical && !ctx.svc.state) {
-        ui.toast("Для восстановления прежнего кадра необходим StateTracker.", true);
-        return;
-      }
-      const snap = !drawAuthored && ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
-      if (historical && snap && snap.state && (snap.state.diagnostics || []).some(x => x.source === origin.messageId)) {
-        ui.toast("Историческое состояние снимка содержит неподтверждённые события. Рисование отменено.", true);
-        return;
-      }
-      // The frozen image-origin path is authoritative. Use the same
-      // projection as Prism; do not mutate the folded StateTracker snapshot.
+      const stamped = !drawAuthored && sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
+      const snap = !drawAuthored && ctx.svc.state
+        ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
       const projected = drawAuthored
         ? { scene: { chars: {}, present: [] }, wearFacts: [] }
         : SR.resolve({
@@ -214,8 +198,10 @@
           names: { char: cd.name, user: pers.name },
         });
       const st = projected.scene;
-      let visual = ms ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null })) : null;
-      if (!snap && ms && visual) {
+      const visual = !drawAuthored && ms
+        ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null }))
+        : null;
+      if (!snap && !drawAuthored && ms && visual) {
         st.chars = st.chars || {};
         st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
       }
@@ -387,7 +373,7 @@
           promptSources: { draw: entry.draw, drawPromptMode: hybrid ? "hybrid" : intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text,
             ...(drawAuthored ? { sourceDrawIndex: authoredIndex,
-              historicalDrawState: !!historical } : {}),
+              historicalDrawState: historical } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
             actorState: drawAuthored ? null : snap ? snap.character.fieldStatus : null,
             wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
