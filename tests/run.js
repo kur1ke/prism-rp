@@ -8966,7 +8966,7 @@ async function perfTurn() {
       sims[1].res(ok());
       await until(() => sims.length >= 3, "image compiler request");
       assert.strictEqual(sims[2].prov, processing, "visual prompt uses Processing Provider");
-      sims[2].res(visualFrameReply({camera:"view from a window",environment:"tidy room",lighting:"soft daylight"}));
+      sims[2].res(JSON.stringify({camera:"view from a window",subjects:[],objects:[],environment:"tidy room",lighting:"soft daylight"}));
       await r.reply.post;
       assert.strictEqual(imgs.length, 1, "image backend completed after processing");
     });
