@@ -8,6 +8,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const IC = PRP.imgCompose || (typeof require !== "undefined" ? require("./compose.js") : null);
+  const VP = PRP.visualPlan || (typeof require !== "undefined" ? require("./visual-plan.js") : null);
 
   const mem = new Map();
   const MAX = 300;
@@ -161,6 +162,10 @@
     const s = String(scene || "").trim(), o = opts || {};
     const stateContext = String(o.stateContext || "").trim();
     const hybrid = !!(o.intentMode && o.format === "hybrid");
+    // The authored image contract never imports another physical-state source.
+    // Fail closed if an upstream caller accidentally reintroduces one.
+    if (o.shotOnly && (o.wearState != null || stateContext || (o.visualPlan && o.visualPlan.wear)))
+      return { text: s, compiled: false, error: "Authored DRAW cannot consume secondary physical state" };
     const wear = visualWear(o.wearState);
     const reconcile = hasWearChange(wear);
     // Source-bound owner facts also matter when all garments are still worn:
@@ -180,7 +185,8 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v19-hybrid-description-bounds" : "v14-mirror-framing",
+    const key = [hybrid ? "v20-hybrid-source-ownership" : "v15-source-ownership",
+      o.shotOnly ? "authored-draw-only" : "legacy-image-state",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
@@ -231,7 +237,19 @@
     try {
       const raw = rawReply = String((await generateText(instruction)) || "").trim();
       let result;
-      if (negativesRequired) {
+      if (o.shotOnly) {
+        const parsed = VP.parseFrame(raw);
+        if (parsed.error) return failure(parsed.error);
+        if (o.promptPlan && o.promptPlan.sections &&
+            o.promptPlan.sections.COMPOSITION && o.promptPlan.sections.COMPOSITION.singleMirror &&
+            parsed.frame.subjects.length > 1)
+          return failure("Зеркальное фото описывает одного человека, но Visual Frame добавил второго.");
+        const outputFormat = hybrid || o.format === "description" ? "description" : "tags";
+        const text = VP.renderFrame(parsed.frame, outputFormat);
+        if (text.length < 4) return failure("Visual Frame rendered empty output");
+        if (hybrid && validateHybrid(text)) return failure(validateHybrid(text));
+        result = { text, compiled: true, visualFrameVersion: 1 };
+      } else if (negativesRequired) {
         const decoded = canonicalJSON(raw);
         const prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";
         const absent = decoded.absent;
@@ -283,7 +301,7 @@
       remember(key, result);
       return result;
     } catch (e) {
-      return failure("Ошибка компиляции канонической одежды: " + String(e && e.message || e).slice(0, 120));
+      return failure((o.shotOnly ? "Ошибка Visual Frame: " : "Ошибка компиляции канонической одежды: ") + String(e && e.message || e).slice(0, 120));
     }
   }
 

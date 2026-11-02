@@ -4152,53 +4152,36 @@ async function foundationH() {
       await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
       assert.strictEqual(backendCount,1,"verified historical draw may reach A1111");
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
-      assert.deepStrictEqual(inspected.wearState.worn.map(x=>x.item),["white t-shirt"]);
-      assert.deepStrictEqual(inspected.wearState.removed,[]);
+      assert.strictEqual(inspected.wearState,undefined,"historical authored DRAW must not re-resolve wear");
       assert.strictEqual(live.swipes[0].images[0].sourceDrawIndex,0);
       assert.strictEqual(live.swipes[0].images[0].promptSources.historicalDrawState,true);
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
         ["white t-shirt"],"historical redraw does not modify latest canon");
     }finally{ICP.compile=oldCompiler;IB.generate=oldBackend;}
   });
-  await ta("VC-05-3: ambiguous historical event order fails before image entry or backend mutation",async()=>{
+  await ta("VC-05-3: historical authored photo remains isolated from subsequent state events",async()=>{
     const h=fbHarness({name:"Химэ"});
-    await h.chat.createChat("messenger","c1");h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    await h.chat.createChat("messenger","c1");
     const first={prompt:"1girl, wearing hoodie, selfie",ratio:"1:1"};
     const last={prompt:"1girl, hoodie removed, selfie",ratio:"1:1"};
     const m=h.chat.newMsg("assistant",null,"Два фото");
     m.swipes[0].draws=[first,last];
-    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["hoodie"],
-      certainty:"reported",evidence:"wearing hoodie",evidenceType:"draw",visualScope:"current-self",drawIndex:0},
-      {actor:"char",field:"wear",action:"remove",value:["hoodie"],
-      certainty:"reported",evidence:"hoodie removed",evidenceType:"draw",visualScope:"current-self",drawIndex:1}];
-    m.swipes[0].stateStatus={status:"ok",sourceText:m.swipes[0].text,
-      sourceDraw:last.prompt,sourceDrawIndex:1};
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
+      value:["hoodie"],certainty:"reported",evidence:"hoodie removed",
+      evidenceType:"draw",visualScope:"current-self",drawIndex:1}];
     await h.chat.commitMessage(m,m.id);
     h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
       {enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"tags"});
     h.S.drawing=new Set();h.S.imgUrls={};h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
-    const backend=IB.generate;let count=0;
+    const backend=IB.generate;let count=0,sent;
     try {
-      IB.generate=async()=>{count++;throw Error("backend must not run");};
+      IB.generate=async (_,o)=>{count++;sent=o;return {dataUrl:"data:image/png;base64,AA==",seed:21,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===m.id);
-      const reject=async()=>{
-        await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
-        assert.deepStrictEqual(live.swipes[0].images||[],[]);
-      };
-      live.swipes[0].stateEvents.push({actor:"char",field:"wear",action:"add",
-        value:["scarf"],certainty:"reported",evidence:"scarf"});
-      await reject();
-      live.swipes[0].stateEvents.pop();
-      live.swipes[0].stateCorrections=[{field:"wear",actor:"char",action:"remove",
-        value:["hoodie"],certainty:"reported",evidence:""}];
-      await reject();
-      delete live.swipes[0].stateCorrections;
-      live.swipes[0].sceneOps=[{subject:"Химэ",key:"wear",value:"hoodie"}];
-      await reject();
-      delete live.swipes[0].sceneOps;
-      delete live.swipes[0].stateStatus;
-      await reject();
-      assert.strictEqual(count,0);
+      await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
+      assert.strictEqual(count,1);
+      assert.ok(sent.prompt.includes("wearing hoodie"),sent.prompt);
+      assert.strictEqual(live.swipes[0].images[0].sourceDrawIndex,0);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.historicalDrawState,true);
     }finally{IB.generate=backend;}
   });
   await ta("VC-05-4: edited photo or missing indexed observation cannot provide historical state",async()=>{
@@ -4224,26 +4207,25 @@ async function foundationH() {
     obj.swipes[0].stateEvents[0].evidenceType="text";
     assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"unsequenced-state-event");
   });
-  await ta("VC-04-DRAW-5: re-render earlier authored photo is blocked before adding an image",async()=>{
+  await ta("VC-04-DRAW-5: historical author photo renders its own source and retains index",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");
     const m=h.chat.newMsg("assistant",null,"Два фото");
     const first={prompt:"current selfie, blue hoodie",ratio:"1:1"};
     const last={prompt:"current mirror selfie, red t-shirt",ratio:"1:1"};
-    m.swipes[0].draws=[first,last];
-    await h.chat.commitMessage(m,m.id);
+    m.swipes[0].draws=[first,last];await h.chat.commitMessage(m,m.id);
     h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
       {enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"tags"});
-    h.S.drawing=new Set();h.S.imgUrls={};
-    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
-    const backend=IB.generate;let requests=0;
+    h.S.drawing=new Set();h.S.imgUrls={};h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const backend=IB.generate;let requests=0,actual;
     try {
-      IB.generate=async()=>{requests++;throw Error("backend must not be called");};
+      IB.generate=async (_,args)=>{requests++;actual=args;return {dataUrl:"data:image/png;base64,AA==",seed:8,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
-      assert.strictEqual(requests,0);
-      assert.deepStrictEqual(live.swipes[0].images||[],[],"rejected historical image does not mutate swipe");
-      assert.strictEqual(await h.ctx.DB.get("messages",m.id).then(x=>(x.swipes[0].images||[]).length),0);
+      assert.strictEqual(requests,1);
+      assert.ok(actual.prompt.includes("blue hoodie"),actual.prompt);
+      assert.strictEqual(live.swipes[0].images[0].status,"done");
+      assert.strictEqual(live.swipes[0].images[0].sourceDrawIndex,0);
     } finally {IB.generate=backend;}
   });
   await ta("VC-04-DRAW-6: drawFromMessage selects latest authored photograph",async()=>{
@@ -4855,6 +4837,9 @@ async function foundationH() {
     }
   });
 
+  const visualFrameReply = (f) => JSON.stringify({
+    camera:"", subjects:[], objects:[], environment:"", lighting:"", ...f
+  });
   await ta("VIS-MIRROR-2: lone mirror selfie cannot pass a fabricated second subject to backend",async()=>{
     for(const wrong of [false,true]){
       ICP.clear(); // Both responses must be compiled, never replayed from the previous case.
@@ -4877,8 +4862,11 @@ async function foundationH() {
           calls++;
           assert.ok(instruction.includes("SINGLE-PERSON MIRROR SELFIE:"),instruction.slice(-850));
           assert.ok(instruction.includes("SCENE:\n"+shot));
-          return wrong?"Two women stand before a mirror, one taking a selfie.":
-            "One woman stands in three-quarter view, glancing into a mirror with a playful expression, wearing a white t-shirt.";
+          return wrong ? visualFrameReply({camera:"portrait",subjects:[
+            {name:"Orihime",pose:"looking at the camera",clothing:"white t-shirt"},
+            {name:"another woman",pose:"standing next to her",clothing:""}]}) :
+            visualFrameReply({camera:"selfie-style portrait",subjects:[
+              {name:"Orihime",pose:"standing in three-quarter view, glancing toward the camera with a playful expression",clothing:"white t-shirt"}]});
         };
         IB.generate=async (_,o)=>{backends++;body=o;return {
           dataUrl:"data:image/png;base64,AA==",seed:12,info:{width:768,height:768}}};
@@ -4924,10 +4912,11 @@ async function foundationH() {
       globalThis.PRP.llm.simple=async (_,instruction)=>{
         calls++;
         assert.ok(instruction.includes("SCENE:\nОрихимэ Иноуэ приподняла"),instruction.slice(-850));
-        assert.ok(instruction.includes("visual translator"));
-        assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"actual ImageService uses structured prompt plan");
+        assert.ok(instruction.includes("AUTHORED VISUAL SCENE COMPILATION"));
+        assert.ok(instruction.includes("SOURCE ACTOR SCOPE"),"typed Visual Frame receives source actor scope without legacy prose instructions");
+        assert.ok(!instruction.includes("VISUAL PROMPT PLAN"),"typed JSON contract cannot receive legacy no-empty-fields instructions");
         assert.ok(!instruction.includes("camera=owner;"),"camera directive is metadata");
-        return "The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
+        return visualFrameReply({subjects:[{name:"",pose:"The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel",clothing:""}]});
       };
       IB.generate=async (_,opts)=>{requests++;backend=opts;
         return {dataUrl:"data:image/png;base64,AA==",seed:8,info:{width:512,height:512}};};
@@ -4976,7 +4965,7 @@ async function foundationH() {
       await h.ctx.svc.images.draw(source,source.swipes[0],source.swipes[0].draws[0]);
       const im=source.swipes[0].images[0];
       assert.strictEqual(im.status,"error",JSON.stringify(im));
-      assert.ok(im.error.includes("Гибридный перевод должен"),im.error);
+      assert.ok(im.error.includes("Visual Frame must"),im.error);
       assert.strictEqual(im.translationFailure.stage,"first-pass");
       assert.strictEqual(im.translationFailure.responsePreview,raw);
       assert.strictEqual(calls,1);
@@ -5010,7 +4999,7 @@ async function foundationH() {
     const oldModel=globalThis.PRP.llm.simple,oldBackend=IB.generate;
     let received;
     try {
-      globalThis.PRP.llm.simple=async()=>"Orihime Inoue stands in a shop.";
+      globalThis.PRP.llm.simple=async()=>visualFrameReply({subjects:[{name:"Orihime Inoue",pose:"stands in a shop",clothing:""}]});
       IB.generate=async(_,args)=>{received=args;
         return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===msg.id);
@@ -5043,9 +5032,8 @@ async function foundationH() {
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:visual,ratio:"1:1"});
       assert.strictEqual(calls.length,1,JSON.stringify(calls));
       assert.strictEqual(calls[0].o.intentMode,true);
-      assert.deepStrictEqual(calls[0].o.wearState.removed.map(x=>x.item),["шорты"],"the first translation receives end-of-turn removed facts");
-      assert.strictEqual(calls[0].o.visualPlan.actor,"char");
-      assert.strictEqual(calls[0].o.visualPlan.allowGlobalGarmentNegative,false);
+      assert.strictEqual(calls[0].o.wearState,undefined,"authored DRAW should not consume Tracker wear");
+      assert.strictEqual(calls[0].o.visualPlan,undefined,"authored DRAW translator only receives source shot and prompt plan");
       assert.ok(sent.prompt.includes("red dress"),sent.prompt);
       assert.strictEqual(live.swipes[0].images[0].promptSources.drawPromptMode,"intent");
     }finally {ICP.compile=oldC;IB.generate=oldG;}
@@ -5121,8 +5109,7 @@ async function foundationH() {
     try {
       globalThis.PRP.llm.simple=async (_,instruction)=>{
         instructions.push(instruction);
-        return JSON.stringify({prompt:"pov, torso, white lace lingerie, navel, from above",
-          absent:[{index:0,tag:"white cotton t-shirt"}]});
+        return visualFrameReply({camera:"view from above",subjects:[{name:"Orihime Inoue",pose:"torso and navel visible",clothing:"white lace lingerie"}]});
       };
       IB.generate=async (_,options)=>{sent=options;return {dataUrl:"data:image/png;base64,AA==",
         seed:93,info:{width:1024,height:1024}};};
@@ -5130,16 +5117,16 @@ async function foundationH() {
       await h.ctx.svc.images.draw(live,live.swipes[0],{prompt:shot,ratio:"1:1"});
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
       assert.strictEqual(instructions.length,1,"one canonical compilation request");
-      assert.ok(instructions[0].includes("белая хлопковая футболка"));
+      assert.ok(instructions[0].includes("SCENE:\n"+shot),"only original authored DRAW is supplied");
       assert.ok(!/t-shirt|lifting shirt|shirt pulled up/i.test(sent.prompt),sent.prompt);
       assert.ok(sent.prompt.includes("white lace lingerie"),sent.prompt);
-      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.actor,"char");
-      assert.deepStrictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.absentFromBody,
-        ["белая хлопковая футболка"]);
-      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.negative,"");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.visualAuthority,"authored-draw");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.visualAuthority,"authored-draw");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints,undefined);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints,undefined);
     } finally {globalThis.PRP.llm.simple=originalLLM;IB.generate=originalBackend;}
   });
-  await ta("VC-01-4: edited source wear facts during authored compilation skip A1111",async()=>{
+  await ta("VC-01-4: edited authored DRAW during compilation skips A1111",async()=>{
     const h=fbHarness({name:"Химэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");
     h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
@@ -5160,8 +5147,7 @@ async function foundationH() {
     try {
       ICP.compile=async (_scene,_opts)=>{
         const mutated=await h.ctx.DB.get("messages",next.id);
-        mutated.swipes[0].stateCorrections=[{actor:"char",field:"wear",action:"add",
-          value:["юбку"],certainty:"reported",evidence:""}];
+        mutated.swipes[0].draws[0].prompt="Изменённый DRAW после старта перевода";
         await h.ctx.DB.put("messages",mutated);
         return {text:"pov, legs, from above",compiled:true,wearValidated:true,negative:"",
           wearItems:[{index:0,item:"юбку",tag:"skirt"}]};
@@ -5302,10 +5288,10 @@ async function foundationH() {
         info:{width:512,height:512}};};
       const source=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
-      assert.deepStrictEqual(options.visualPlan.offBodyVisible,
-        [{role:"offBody",item:"белую футболку",evidence:"держу её в руках"}]);
+      assert.strictEqual(options.visualPlan,undefined,"authored DRAW is enough to describe off-body objects");
       assert.ok(sent.prompt.includes("holding a white t-shirt"));
-      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.plan.offBodyVisible.length,1);
+      assert.strictEqual(source.swipes[0].images[0].promptSources.visualAuthority,"authored-draw");
+      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints,undefined);
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
         ["белую футболку"],"shot roles must not create wear.add");
     }finally{ICP.compile=oldC;IB.generate=oldG;}
@@ -5399,9 +5385,8 @@ async function foundationH() {
       IB.generate=async()=>{called++;throw Error("backend should not be called");};
       const source=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
-      assert.strictEqual(called,0);
-      assert.strictEqual(source.swipes[0].images[0].status,"error");
-      assert.ok(source.swipes[0].images[0].error.includes("Конфликт одежды"),source.swipes[0].images[0].error);
+      assert.strictEqual(called,1,"fixedPrompt no longer checks Tracker clothing");
+      assert.strictEqual(source.swipes[0].images[0].status,"error","mock backend intentionally fails");
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
         ["белую футболку"]);
     }finally{ICP.compile=oldC;IB.generate=oldG;}
@@ -5463,9 +5448,9 @@ async function foundationH() {
     h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
     const oldLLM=globalThis.PRP.llm.simple,oldBackend=IB.generate;let calls=0,sent;
     try{
-      globalThis.PRP.llm.simple=async()=>{calls++;return JSON.stringify({
-        prompt:"Химэ, Леон, white cotton t-shirt, standing",
-        absent:[{index:0,tag:"white cotton t-shirt"}],offBody:[]});};
+      globalThis.PRP.llm.simple=async()=>{calls++;return visualFrameReply({
+        subjects:[{name:"Химэ",pose:"standing",clothing:""},
+                  {name:"Леон",pose:"standing nearby",clothing:"white cotton t-shirt"}]});};
       IB.generate=async(_,opts)=>{sent=opts;return {dataUrl:"data:image/png;base64,AA==",
         seed:3,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===msg.id);
@@ -5473,7 +5458,7 @@ async function foundationH() {
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
       assert.strictEqual(calls,1,"no secondary semantic classifier");
       assert.ok(sent.prompt.includes("white cotton t-shirt"));
-      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.scope,"multi-subject");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.scope,"draw-authority");
       assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.validated,false);
       assert.ok(!sent.negative.includes("white cotton t-shirt"),
         "do not globally suppress the other actor's shirt");
@@ -8982,7 +8967,7 @@ async function perfTurn() {
       sims[1].res(ok());
       await until(() => sims.length >= 3, "image compiler request");
       assert.strictEqual(sims[2].prov, processing, "visual prompt uses Processing Provider");
-      sims[2].res("window view, tidy room, soft daylight");
+      sims[2].res(JSON.stringify({camera:"view from a window",subjects:[],objects:[],environment:"tidy room",lighting:"soft daylight"}));
       await r.reply.post;
       assert.strictEqual(imgs.length, 1, "image backend completed after processing");
     });
@@ -9790,3 +9775,4 @@ foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).the
 });
 
 require("./state-tool-protocol.js");
+require("./draw-owned-visual.js");

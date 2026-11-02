@@ -6,7 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan, TRACK = PRP.stateTracker;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -158,16 +158,9 @@
         ? (matching.includes(pinnedIndex) ? pinnedIndex : -1)
         : matching.length === 1 ? matching[0] : -1;
       const drawAuthored = authoredIndex >= 0;
-      // Historical authored photo: derive a read-only source snapshot from
-      // this exact swipe's indexed photo events. Do not borrow the final photo's
-      // garment state. Ambiguous narration/Scene/corrections fail closed.
-      const historical = drawAuthored && authoredIndex !== authorDraws.length - 1
-        ? TRACK.historicalDrawPath(origin.path, authoredIndex) : null;
-      if (historical && !historical.ok) {
-        ui.toast("Нельзя достоверно восстановить одежду на момент прежнего кадра (" +
-          historical.reason + "). Рисование отменено.", true);
-        return;
-      }
+      // An authored historical photo remains the selected source DRAW, not a
+      // reconstructed state snapshot. Its index is provenance only.
+      const historical = drawAuthored && authoredIndex !== authorDraws.length - 1;
       if (matching.length > 1 && !drawAuthored) {
         ui.toast("Невозможно определить исходный Draw среди одинаковых снимков. Рисование отменено.", true);
         return;
@@ -189,31 +182,26 @@
         entry.intentMode = !!(drawAuthored && drawMode !== "tags");
         entry.drawPromptMode = drawMode;
       }
-      // Resolve physical state from the frozen origin path BEFORE the first await.
-      // Do not let a later UI branch/chat selection change this image's source.
-      const upto = historical ? historical.path : origin.path;
+      // Only non-authored (legacy) image generation uses a projected scene.
+      // Authored DRAW is a complete visual request, including historical photos.
+      const upto = origin.path;
       const sourceMsg = upto[upto.length - 1];
       const sourceSwipe = TR.activeSwipe(sourceMsg);
       const ms = currentChat.mode === "messenger" && ctx.svc.messenger;
-      const stamped = sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
-      if (historical && !ctx.svc.state) {
-        ui.toast("Для восстановления прежнего кадра необходим StateTracker.", true);
-        return;
-      }
-      const snap = ctx.svc.state ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
-      if (historical && snap && snap.state && (snap.state.diagnostics || []).some(x => x.source === origin.messageId)) {
-        ui.toast("Историческое состояние снимка содержит неподтверждённые события. Рисование отменено.", true);
-        return;
-      }
-      // The frozen image-origin path is authoritative. Use the same
-      // projection as Prism; do not mutate the folded StateTracker snapshot.
-      const projected = SR.resolve({
-        tracked: snap, scene: snap ? snap.state.scene : chat().sceneState(upto),
-        names: { char: cd.name, user: pers.name },
-      });
+      const stamped = !drawAuthored && sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
+      const snap = !drawAuthored && ctx.svc.state
+        ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
+      const projected = drawAuthored
+        ? { scene: { chars: {}, present: [] }, wearFacts: [] }
+        : SR.resolve({
+          tracked: snap, scene: snap ? snap.state.scene : chat().sceneState(upto),
+          names: { char: cd.name, user: pers.name },
+        });
       const st = projected.scene;
-      let visual = ms ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null })) : null;
-      if (!snap && ms && visual) {
+      const visual = !drawAuthored && ms
+        ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null }))
+        : null;
+      if (!snap && !drawAuthored && ms && visual) {
         st.chars = st.chars || {};
         st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
       }
@@ -238,36 +226,23 @@
         const intent = !!entry.intentMode;
         const hybrid = intent && drawAuthored && drawMode === "hybrid";
         const shot = String(entry.draw || "");
-        // VC-01: the canonical snapshot already includes this accepted message's
-        // validated Observer events. It is END-OF-TURN, not stale pre-shot wear.
-        // The first (and only) intent translation must receive those facts.
-        // Subject scoping happens on the ORIGINAL authored shot, before a
-        // translator can hallucinate the card owner into a product screenshot.
+        // The authored DRAW is the complete image authority. The RP model has
+        // already received tracked state while composing its reply; image
+        // rendering must not resolve it again or borrow Observer frame roles.
+        // Subject attribution is locked to the original source before translation.
         const shotActors = IC.frameActors(cd, pers, shot, { requireNamedOwner: true,
           requireNamedUser: currentChat.mode === "messenger" });
-        // A current authored selfie need not repeat the card owner's name.
-        // Do not infer the owner from a mere portrait or screenshot.
         const currentSelfie = drawAuthored &&
           /(?:\bmy\s+selfie\b|\btaking\s+(?:a\s+)?selfie\b|\bselfie\s+of\s+myself\b|(?:^|[\s,;:])я\s+[^.!?]{0,60}селфи|(?:^|[\s,;:])сво[её]\s+селфи)/iu.test(shot) &&
           !/(?:скриншот|screenshot|чужое\s+селфи|someone\s+else)/iu.test(shot) &&
           !shotActors.empty && !shotActors.userNamed;
-        // Use only Observer metadata tied to the exact active authored shot.
-        // Rewrites, stale statuses, manual prompts and older continued photos
-        // never supply canonical frame roles.
-        const frameStatus = sourceSwipe.stateStatus;
-        const verifiedFrameObjects = drawAuthored && frameStatus &&
-          frameStatus.sourceDraw === String(entry.draw || "") &&
-          frameStatus.sourceText === String(sourceSwipe.text || "") &&
-          Array.isArray(frameStatus.frameObjects) ? frameStatus.frameObjects : [];
-        // Lock the authored frame's subjects before translation. A self-authored
-        // selfie can show the owner without repeating the Card name.
         const resolvedActors = currentSelfie && !shotActors.owner
           ? { ...shotActors, owner: true, reason: "current-selfie" } : shotActors;
         const visualPlan = VP.create({
-          wearFacts: projected.wearFacts,
+          wearFacts: drawAuthored ? [] : projected.wearFacts,
           owner: !!resolvedActors.owner,
           shotAuthored: drawAuthored,
-          draw: shot, frameObjects: verifiedFrameObjects,
+          draw: shot,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });
         const shotScope = { otherActorPresent: !!resolvedActors.user };
@@ -281,8 +256,8 @@
           qualityPinned: ST.qualityPinned(S.settings) });
         const firstPass = intent ? await measuredCompile(shot,
           { format: hybrid ? "hybrid" : cfg.format, intentMode: true,
-            qualityPinned: ST.qualityPinned(S.settings),
-            wearState: visualPlan.wear, visualPlan, subjectScope: shotScope,
+            qualityPinned: ST.qualityPinned(S.settings), shotOnly: drawAuthored,
+            visualPlan: drawAuthored ? undefined : visualPlan, subjectScope: shotScope,
             promptPlan, debug: !!S.settings.developerMode }) : null;
         if (intent && (!firstPass || !firstPass.compiled)) {
           // Surface the compiler's actual failure; the previous generic text
@@ -316,8 +291,8 @@
         // VC-03: BOTH authored modes consume the same END-OF-TURN facts.
         // The current authored shot may establish a new verified action;
         // no stale pre-shot rule is allowed to veto that action.
-        const canonicalWear = drawAuthored ? visualPlan.wear : composed.physicalWear;
-        const auditPlan = drawAuthored ? visualPlan : VP.create({
+        const canonicalWear = drawAuthored ? null : composed.physicalWear;
+        const auditPlan = drawAuthored ? null : VP.create({
           wearFacts: projected.wearFacts,
           owner: !!composed.ownerPresent,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
@@ -332,7 +307,7 @@
           await measuredCompile(imageScene, { format: cfg.format, translate: cfg.translate,
             qualityPinned: ST.qualityPinned(S.settings), identity: composed.ownerPresent ? identityFor(cd) : "",
             frame: composed.subjects, stateContext,
-            wearState: canonicalWear, visualPlan: drawAuthored ? visualPlan : undefined,
+            wearState: canonicalWear, visualPlan: undefined,
             promptPlan: finalPromptPlan, subjectScope });
         // An English input or disabled general translation must not bypass
         // known physical changes. If reconciliation fails, don't send a
@@ -360,26 +335,31 @@
         if (mirrorSingle && (IC.subjectCount(fin.prompt) > 1 ||
             /\b(?:another|second)\s+(?:person|girl|boy|woman|man)\b|\b(?:two|three)\s+(?:women|men|people|persons)\b/i.test(fin.prompt)))
           throw new Error("Зеркальное фото описывает одного человека, но итоговый prompt добавил второго.");
-        const auditStarted = clock();
-        let finalAudit;
-        try {
-          finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
-        } finally {
-          perf("imageFinalAuditMs", auditStarted, origin,
-            finalAudit && finalAudit.issues && finalAudit.issues.length ? "rejected"
-              : finalAudit ? "accepted" : "error");
+        // Source-authored DRAW has no canonical wear to audit. The legacy
+        // non-authored mode retains its independent canonical wear checks.
+        let finalAudit = { validated: false, scope: "draw-authority", issues: [] };
+        if (!drawAuthored) {
+          const auditStarted = clock();
+          try {
+            finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
+          } finally {
+            perf("imageFinalAuditMs", auditStarted, origin,
+              finalAudit && finalAudit.issues && finalAudit.issues.length ? "rejected"
+                : finalAudit ? "accepted" : "error");
+          }
+          if (finalAudit.issues.length)
+            throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
+        } else {
+          // Keep the performance metric stable while skipping the obsolete audit.
+          perf("imageFinalAuditMs", clock(), origin, "skipped");
         }
-        if (finalAudit.issues.length)
-          throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
         finishPreparation("ready");
-        // A VisualPlan derived from canonical wear is invalid if the source's
-        // selected-path garment events/corrections change while compiling.
-        // Shot-only equality is safe ONLY for authored images whose rendered
-        // content did not consume tracked state.
-        shotOnlyGate = drawAuthored && !canonicalWear;
+        // An authored DRAW depends on its original shot and branch identity,
+        // not the evolving physical-state projection.
+        shotOnlyGate = drawAuthored;
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
         if (!(await sourceStillCurrent(DB, origin, shotOnlyGate)) ||
@@ -398,16 +378,17 @@
           promptSources: { draw: entry.draw, drawPromptMode: hybrid ? "hybrid" : intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text,
             ...(drawAuthored ? { sourceDrawIndex: authoredIndex,
-              historicalDrawState: !!historical } : {}),
+              historicalDrawState: historical } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
-            actorState: snap ? snap.character.fieldStatus : null,
-            wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
-              globallyScoped: !!singleOwner,
-              plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
-                complete: !!(visualPlan.wear && visualPlan.wear.complete),
-                absentFromBody: visualPlan.absentFromBody,
-                offBodyVisible: visualPlan.offBodyVisible,
-                negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
+            ...(drawAuthored ? { visualAuthority: "authored-draw" } : {
+              actorState: snap ? snap.character.fieldStatus : null,
+              wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
+                globallyScoped: !!singleOwner,
+                plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
+                  complete: !!(visualPlan.wear && visualPlan.wear.complete),
+                  absentFromBody: visualPlan.absentFromBody,
+                  offBodyVisible: visualPlan.offBodyVisible,
+                  negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } }) } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
         finishPreparation("error");
