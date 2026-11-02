@@ -5114,7 +5114,8 @@ async function foundationH() {
       assert.ok(!/t-shirt|lifting shirt|shirt pulled up/i.test(sent.prompt),sent.prompt);
       assert.ok(sent.prompt.includes("white lace lingerie"),sent.prompt);
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.actor,"char");
-      assert.deepStrictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.absentFromBody,[]);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.visualAuthority,"authored-draw");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints,undefined);
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.negative,"");
     } finally {globalThis.PRP.llm.simple=originalLLM;IB.generate=originalBackend;}
   });
@@ -5282,7 +5283,8 @@ async function foundationH() {
       await h.ctx.svc.images.draw(source,source.swipes[0],{prompt:draw,ratio:"1:1"});
       assert.strictEqual(options.visualPlan,undefined,"authored DRAW is enough to describe off-body objects");
       assert.ok(sent.prompt.includes("holding a white t-shirt"));
-      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints.plan.offBodyVisible.length,0);
+      assert.strictEqual(source.swipes[0].images[0].promptSources.visualAuthority,"authored-draw");
+      assert.strictEqual(source.swipes[0].images[0].promptSources.wearConstraints,undefined);
       assert.deepStrictEqual(h.ctx.svc.state.snapshot().actors.char.wearState.removed.map(x=>x.item),
         ["белую футболку"],"shot roles must not create wear.add");
     }finally{ICP.compile=oldC;IB.generate=oldG;}
@@ -5449,7 +5451,7 @@ async function foundationH() {
       assert.strictEqual(live.swipes[0].images[0].status,"done",JSON.stringify(live.swipes[0].images[0]));
       assert.strictEqual(calls,1,"no secondary semantic classifier");
       assert.ok(sent.prompt.includes("white cotton t-shirt"));
-      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.scope,"not-owner");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.scope,"draw-authority");
       assert.strictEqual(live.swipes[0].images[0].promptSources.semanticAudit.validated,false);
       assert.ok(!sent.negative.includes("white cotton t-shirt"),
         "do not globally suppress the other actor's shirt");
