@@ -161,6 +161,10 @@
     const s = String(scene || "").trim(), o = opts || {};
     const stateContext = String(o.stateContext || "").trim();
     const hybrid = !!(o.intentMode && o.format === "hybrid");
+    // The authored image contract never imports another physical-state source.
+    // Fail closed if an upstream caller accidentally reintroduces one.
+    if (o.shotOnly && (o.wearState != null || stateContext || (o.visualPlan && o.visualPlan.wear)))
+      return { text: s, compiled: false, error: "Authored DRAW cannot consume secondary physical state" };
     const wear = visualWear(o.wearState);
     const reconcile = hasWearChange(wear);
     // Source-bound owner facts also matter when all garments are still worn:
@@ -180,7 +184,8 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v19-hybrid-description-bounds" : "v14-mirror-framing",
+    const key = [hybrid ? "v20-hybrid-source-ownership" : "v15-source-ownership",
+      o.shotOnly ? "authored-draw-only" : "legacy-image-state",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
       o.format || "tags", o.qualityPinned ? "q" : "", o.identity || "",
