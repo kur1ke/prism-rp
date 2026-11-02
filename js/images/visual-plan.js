@@ -135,13 +135,13 @@
     let value;
     try {
       const src = String(raw || "").trim();
-      const fence = /^\`\`\`(?:json)?[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\`$/i.exec(src);
+      const fence = /^\`\`\`(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n\`\`\`$/i.exec(src);
       value = JSON.parse(fence ? fence[1].trim() : src);
     } catch (_) { return { error: "Visual Frame must be a valid JSON object" }; }
     if (!value || typeof value !== "object" || Array.isArray(value))
       return { error: "Visual Frame must be an object" };
     const short = (v, limit) => typeof v === "string" && v.length <= limit &&
-      !/[\\r\\n<>]/.test(v) ? v.trim() : null;
+      !/[\r\n<>]/.test(v) ? v.trim() : null;
     const camera = short(value.camera, 180);
     const environment = short(value.environment, 260);
     const lighting = short(value.lighting, 160);
@@ -173,7 +173,7 @@
     const clauses = [frame.camera].concat(frame.subjects.map(p =>
       [p.name, p.pose, p.clothing].filter(Boolean).join(", ")),
     frame.objects, [frame.environment, frame.lighting]).flat().filter(Boolean);
-    const clean = clauses.map(x => String(x).replace(/[\\s.,;:]+$/g, "").trim()).filter(Boolean);
+    const clean = clauses.map(x => String(x).replace(/[\s.,;:]+$/g, "").trim()).filter(Boolean);
     if (format === "tags") return clean.join(", ");
     return clean.join(". ") + (clean.length ? "." : "");
   }
