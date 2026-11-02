@@ -185,11 +185,11 @@
     let data;
     try {
       const input = String(raw || "").trim();
-      const fenced = /^\x60\x60\x60(?:json)?[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n\x60\x60\x60$/i.exec(input);
+      const fenced = /^\x60\x60\x60(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n\x60\x60\x60$/i.exec(input);
       data = JSON.parse(fenced ? fenced[1].trim() : input);
     } catch (_) { return { error: "Visual Planner must return JSON" }; }
     const field = (x, max=220) => typeof x === "string" && x.length <= max &&
-      !/[\\r\\n<>]/.test(x) ? x.trim() : null;
+      !/[\r\n<>]/.test(x) ? x.trim() : null;
     if (!data || data.version !== 2 || typeof data !== "object" || Array.isArray(data))
       return { error: "Visual Planner v2 schema required" };
     const focus = field(data.focus);
@@ -230,7 +230,7 @@
     const clauses=[plan.composition.medium,plan.composition.framing,
       plan.composition.viewpoint,plan.focus,...subjects,...plan.objects,
       plan.environment,plan.lighting].filter(Boolean);
-    const pieces=clauses.map(x=>x.replace(/[\\s.,;:]+$/g,"").trim()).filter(Boolean);
+    const pieces=clauses.map(x=>x.replace(/[\s.,;:]+$/g,"").trim()).filter(Boolean);
     return format==="tags" ? pieces.join(", ") : pieces.join(". ")+(pieces.length?".":"");
   }
 
