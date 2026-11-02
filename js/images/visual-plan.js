@@ -178,6 +178,62 @@
     return clean.join(". ") + (clean.length ? "." : "");
   }
 
-  PRP.visualPlan = { create, prompt, promptOrder, singleMirror, parseFrame, renderFrame };
+
+  // Planner v2 separates source evidence from freely chosen presentation.
+  // Neither the plan nor its decisions are world facts.
+  function parsePlannedFrame(raw) {
+    let data;
+    try {
+      const input = String(raw || "").trim();
+      const fenced = /^\x60\x60\x60(?:json)?[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n\x60\x60\x60$/i.exec(input);
+      data = JSON.parse(fenced ? fenced[1].trim() : input);
+    } catch (_) { return { error: "Visual Planner must return JSON" }; }
+    const field = (x, max=220) => typeof x === "string" && x.length <= max &&
+      !/[\\r\\n<>]/.test(x) ? x.trim() : null;
+    if (!data || data.version !== 2 || typeof data !== "object" || Array.isArray(data))
+      return { error: "Visual Planner v2 schema required" };
+    const focus = field(data.focus);
+    const c = data.composition;
+    if (!focus || !c || typeof c !== "object" || Array.isArray(c))
+      return { error: "Visual Planner requires a visual focus and composition" };
+    const medium = field(c.medium), framing = field(c.framing),
+      viewpoint = field(c.viewpoint), rationale = field(c.rationale, 320);
+    if ([medium,framing,viewpoint,rationale].some(x => x === null) || !framing || !rationale)
+      return { error: "Invalid composition decision" };
+    if (!Array.isArray(data.subjects) || data.subjects.length > 6 ||
+        !Array.isArray(data.objects) || data.objects.length > 12)
+      return { error: "Invalid planned subject/object list" };
+    const subjects=[];
+    for(const p of data.subjects) {
+      if (!p || typeof p !== "object" || Array.isArray(p)) return { error: "Invalid planned subject" };
+      const subject = {};
+      for(const k of ["name","orientation","action","visibleResult","clothing","expression"])
+        subject[k] = field(p[k], k==="action" || k==="visibleResult" ? 300 : 220);
+      if (Object.values(subject).some(x=>x===null) || !Object.values(subject).some(Boolean))
+        return { error: "Invalid subject relations" };
+      subjects.push(subject);
+    }
+    const objects=data.objects.map(x=>field(x,240));
+    if(objects.some(x=>x===null))return {error:"Invalid planned object"};
+    const environment=field(data.environment,260),lighting=field(data.lighting,160);
+    if(environment===null || lighting===null)return {error:"Invalid planned environment"};
+    return {plan:freeze({version:2,focus,composition:{medium,framing,viewpoint,rationale},
+      subjects,objects,environment,lighting})};
+  }
+
+  function renderPlannedFrame(plan, format) {
+    if (!plan || plan.version!==2) return "";
+    // Put the visually essential action and result ahead of background context.
+    // Rationale is explanatory planning metadata and is never emitted as an image tag.
+    const subjects=plan.subjects.map(p=>[p.name,p.orientation,p.action,p.visibleResult,
+      p.clothing,p.expression].filter(Boolean).join(", "));
+    const clauses=[plan.composition.medium,plan.composition.framing,
+      plan.composition.viewpoint,plan.focus,...subjects,...plan.objects,
+      plan.environment,plan.lighting].filter(Boolean);
+    const pieces=clauses.map(x=>x.replace(/[\\s.,;:]+$/g,"").trim()).filter(Boolean);
+    return format==="tags" ? pieces.join(", ") : pieces.join(". ")+(pieces.length?".":"");
+  }
+
+  PRP.visualPlan = { create, prompt, promptOrder, singleMirror, parseFrame, renderFrame, parsePlannedFrame, renderPlannedFrame };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.visualPlan;
 })(typeof window !== "undefined" ? window : globalThis);
