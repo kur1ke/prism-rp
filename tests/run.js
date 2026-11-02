@@ -4837,6 +4837,9 @@ async function foundationH() {
     }
   });
 
+  const visualFrameReply = (f) => JSON.stringify({
+    camera:"", subjects:[], objects:[], environment:"", lighting:"", ...f
+  });
   await ta("VIS-MIRROR-2: lone mirror selfie cannot pass a fabricated second subject to backend",async()=>{
     for(const wrong of [false,true]){
       ICP.clear(); // Both responses must be compiled, never replayed from the previous case.
@@ -4859,8 +4862,11 @@ async function foundationH() {
           calls++;
           assert.ok(instruction.includes("SINGLE-PERSON MIRROR SELFIE:"),instruction.slice(-850));
           assert.ok(instruction.includes("SCENE:\n"+shot));
-          return wrong?"Two women stand before a mirror, one taking a selfie.":
-            "One woman stands in three-quarter view, glancing into a mirror with a playful expression, wearing a white t-shirt.";
+          return wrong ? visualFrameReply({camera:"portrait",subjects:[
+            {name:"Orihime",pose:"looking at the camera",clothing:"white t-shirt"},
+            {name:"another woman",pose:"standing next to her",clothing:""}]}) :
+            visualFrameReply({camera:"selfie-style portrait",subjects:[
+              {name:"Orihime",pose:"standing in three-quarter view, glancing toward the camera with a playful expression",clothing:"white t-shirt"}]});
         };
         IB.generate=async (_,o)=>{backends++;body=o;return {
           dataUrl:"data:image/png;base64,AA==",seed:12,info:{width:768,height:768}}};
@@ -4909,7 +4915,7 @@ async function foundationH() {
         assert.ok(instruction.includes("AUTHORED VISUAL SCENE COMPILATION"));
         assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"actual ImageService uses structured prompt plan");
         assert.ok(!instruction.includes("camera=owner;"),"camera directive is metadata");
-        return "The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
+        return visualFrameReply({subjects:[{name:"",pose:"The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel",clothing:""}]});
       };
       IB.generate=async (_,opts)=>{requests++;backend=opts;
         return {dataUrl:"data:image/png;base64,AA==",seed:8,info:{width:512,height:512}};};
@@ -4958,7 +4964,7 @@ async function foundationH() {
       await h.ctx.svc.images.draw(source,source.swipes[0],source.swipes[0].draws[0]);
       const im=source.swipes[0].images[0];
       assert.strictEqual(im.status,"error",JSON.stringify(im));
-      assert.ok(im.error.includes("Гибридный перевод должен"),im.error);
+      assert.ok(im.error.includes("Visual Frame must"),im.error);
       assert.strictEqual(im.translationFailure.stage,"first-pass");
       assert.strictEqual(im.translationFailure.responsePreview,raw);
       assert.strictEqual(calls,1);
@@ -4992,7 +4998,7 @@ async function foundationH() {
     const oldModel=globalThis.PRP.llm.simple,oldBackend=IB.generate;
     let received;
     try {
-      globalThis.PRP.llm.simple=async()=>"Orihime Inoue stands in a shop.";
+      globalThis.PRP.llm.simple=async()=>visualFrameReply({subjects:[{name:"Orihime Inoue",pose:"stands in a shop",clothing:""}]});
       IB.generate=async(_,args)=>{received=args;
         return {dataUrl:"data:image/png;base64,AA==",seed:3,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===msg.id);
@@ -5102,7 +5108,7 @@ async function foundationH() {
     try {
       globalThis.PRP.llm.simple=async (_,instruction)=>{
         instructions.push(instruction);
-        return "pov, torso, white lace lingerie, navel, from above";
+        return visualFrameReply({camera:"view from above",subjects:[{name:"Orihime Inoue",pose:"torso and navel visible",clothing:"white lace lingerie"}]});
       };
       IB.generate=async (_,options)=>{sent=options;return {dataUrl:"data:image/png;base64,AA==",
         seed:93,info:{width:1024,height:1024}};};
@@ -5113,10 +5119,10 @@ async function foundationH() {
       assert.ok(instructions[0].includes("SCENE:\n"+shot),"only original authored DRAW is supplied");
       assert.ok(!/t-shirt|lifting shirt|shirt pulled up/i.test(sent.prompt),sent.prompt);
       assert.ok(sent.prompt.includes("white lace lingerie"),sent.prompt);
-      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.plan.actor,"char");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.visualAuthority,"authored-draw");
       assert.strictEqual(live.swipes[0].images[0].promptSources.visualAuthority,"authored-draw");
       assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints,undefined);
-      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints.negative,"");
+      assert.strictEqual(live.swipes[0].images[0].promptSources.wearConstraints,undefined);
     } finally {globalThis.PRP.llm.simple=originalLLM;IB.generate=originalBackend;}
   });
   await ta("VC-01-4: edited authored DRAW during compilation skips A1111",async()=>{
@@ -5441,9 +5447,9 @@ async function foundationH() {
     h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
     const oldLLM=globalThis.PRP.llm.simple,oldBackend=IB.generate;let calls=0,sent;
     try{
-      globalThis.PRP.llm.simple=async()=>{calls++;return JSON.stringify({
-        prompt:"Химэ, Леон, white cotton t-shirt, standing",
-        absent:[{index:0,tag:"white cotton t-shirt"}],offBody:[]});};
+      globalThis.PRP.llm.simple=async()=>{calls++;return visualFrameReply({
+        subjects:[{name:"Химэ",pose:"standing",clothing:""},
+                  {name:"Леон",pose:"standing nearby",clothing:"white cotton t-shirt"}]});};
       IB.generate=async(_,opts)=>{sent=opts;return {dataUrl:"data:image/png;base64,AA==",
         seed:3,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===msg.id);
@@ -8960,7 +8966,7 @@ async function perfTurn() {
       sims[1].res(ok());
       await until(() => sims.length >= 3, "image compiler request");
       assert.strictEqual(sims[2].prov, processing, "visual prompt uses Processing Provider");
-      sims[2].res("window view, tidy room, soft daylight");
+      sims[2].res(visualFrameReply({camera:"view from a window",environment:"tidy room",lighting:"soft daylight"}));
       await r.reply.post;
       assert.strictEqual(imgs.length, 1, "image backend completed after processing");
     });
