@@ -581,7 +581,7 @@ t("Experience: старый ручной вход не используется,
 // её место занимает среда переписки (prism/modes). Рамка переписки по-прежнему своя.
 t("сборка: режим мессенджера меняет рамку; сцена RP в переписку не подаётся", () => {
   const r = A.build({ mode: "messenger", card, userName: "Кира", sceneState: S.fold("loc=Работа", []), history: [] });
-  assert.ok(r.messages[0].content.includes("переписывается с Кира"));
+  assert.ok(r.messages[0].content.includes("общается в мессенджере"));
   assert.ok(r.messages[0].content.includes("вне переписки"));
   assert.ok(!r.messages[0].content.includes("Работа") && !r.messages.some((m) => m.content.includes("[scene:")));
 });
@@ -637,10 +637,12 @@ t("RP frame simplification: граница {{user}}, сцена + характе
   const r = A.build({ card: { name: "Химэ", description: "DESC" }, userName: "Кира", sceneState: st, reflection: { perspective: "EVT" }, history: [{ role: "user", text: "hi" }] });
   const sys = r.messages[0].content;
   const frame = sys.split("\n\n###")[0];
-  assert.ok(frame.includes("Ты играешь за Химэ") && frame.includes("Кира управляет только собой"));
-  assert.ok(frame.includes("Не пиши мысли, действия или реплики за Кира"), "граница собеседника");
-  assert.ok(frame.includes("текущей сцены") && frame.includes("характера Химэ") && frame.includes("релевантного прошлого опыта"));
-  assert.ok(frame.includes("не являются жёстким сценарием"));
+  assert.ok(frame.includes("Ты играешь за Химэ"));
+  assert.ok(frame.includes("собственная точка зрения, желания, намерения и границы"));
+  assert.ok(frame.includes("Его слова и поступки исходят из характера, опыта и текущих обстоятельств"));
+  assert.ok(frame.includes("Чужие ожидания и просьбы не обязывают его соглашаться или поступать вопреки себе"));
+  assert.ok(frame.includes("Мысли, решения, действия и реплики собеседника остаются за ним"));
+  assert.ok(!frame.includes("Кира"), "рамка не сосредоточена на имени собеседника");
   // раздельные разделы
   const iCard = sys.indexOf("### Характер Химэ\n"), iExp = sys.indexOf("### Experience — субъективное восприятие Химэ"), iScene = sys.indexOf("### Сейчас в сцене");
   assert.ok(iCard > 0 && sys.slice(iCard, iExp).includes('"DESC"') && iExp > iCard && iScene > iExp, JSON.stringify([iCard, iExp, iScene]));
@@ -652,9 +654,15 @@ t("RP frame simplification: граница {{user}}, сцена + характе
   // кадр не длиннее прежнего; FOUNDATION-H добавил только общее правило чтения разделов «данные / указания»
   assert.ok(A.TEMPLATES.rp.frame.endsWith("\n" + globalThis.PRP.prismModes.DATA_RULE));
   assert.ok(A.TEMPLATES.rp.frame.replace("\n" + globalThis.PRP.prismModes.DATA_RULE, "").length < 398);
-  // переписка: рамка не тронута, повтор философии в заголовках убран
+  // Общая основа и одна граница собеседника в обоих режимах.
   const mf = A.TEMPLATES.messenger.frame;
-  assert.ok(mf.includes("мессенджере") && mf.includes("Не пиши за {{user}}"));
+  assert.ok(mf.includes("мессенджере") && mf.includes("Чужие ожидания и просьбы не обязывают"));
+  for (const mode of ["rp", "messenger"]) {
+    const f = A.TEMPLATES[mode].frame;
+    assert.ok(!f.includes("{{user}}"));
+    assert.strictEqual(f.split("собеседника остаются за ним").length - 1, 1);
+    assert.ok(f.startsWith(A.TEMPLATES.rp.frame.split("\n")[0]));
+  }
   const ms = A.build({ mode: "messenger", card: { name: "Химэ", description: "D" }, reflection: { perspective: "EVT" }, history: [{ role: "user", text: "hi" }] }).messages[0].content;
   assert.strictEqual(ms.split("свидетельства прошлого").length - 1, 1, "в переписке — один раз, в рамке");
 });
