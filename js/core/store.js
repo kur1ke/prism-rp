@@ -16,6 +16,7 @@
   // Тестовый загрузчик выбирает отдельную IndexedDB до подключения приложения.
   const DB_NAME = root.__PRP_TEST_MIRROR === true ? "prism-rp-testing" : "prism-rp";
   const DB_VERSION = 8;
+  // experience is an inert legacy archive: preserved by backups, never loaded into RP.
   const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments", "memories", "reflections", "memorySources"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
   const OPEN_TIMEOUT_MS = 7000;

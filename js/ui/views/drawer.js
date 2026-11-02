@@ -174,7 +174,7 @@
       ${w.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${w.warnings.map((x) => `<li class="off">${esc(x.message)}</li>`).join("")}</ul></div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.chunks": "подробности карточки", "card.core": "вторичное ядро карточки" };
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", reflection: "автоматический Experience", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.chunks": "подробности карточки", "card.core": "вторичное ядро карточки" };
   const CHUNK_STATE = { selected: "в контексте", budget: "не поместилось", limit: "сверх лимита", "no-relation": "не относится" };
   // Карточка в Prism: ядро (явное или запасное), кандидаты подробностей, примеры речи.
   function cardDebug(c) {
@@ -188,7 +188,7 @@
       ${c.candidates.length ? `<table><thead><tr><th>Кусок</th><th>почему</th><th>итог</th></tr></thead><tbody>
       ${c.candidates.map((x) => `<tr class="${x.state === "selected" ? "sel" : ""}"><td>${esc(x.id)}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${CHUNK_STATE[x.state]}</td></tr>`).join("")}</tbody></table>` : ""}</details>`;
   }
-  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт (legacy)", "#ff9ec7"], ["reflection", "Experience", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
+  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["reflection", "Experience", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const req = m.debugLastRpInput;
     const actual = '<div class="block"><div class="block-title">Последний фактически отправленный RP-запрос</div>' +
@@ -210,8 +210,7 @@
       <div class="block"><dl class="kv">
         <dt>Бюджет</dt><dd>${r.used} из ${r.budget} — ${r.fits ? "помещается" : "<b>не помещается</b>"}</dd>
         <dt>История</dt><dd>${r.historyKept} из ${r.historyTotal} сообщений</dd>
-        <dt>Опыт</dt><dd>${r.experienceKept} ${R.plural(r.experienceKept, "запись", "записи", "записей")}${r.experienceDropped ? `, не поместилось ${r.experienceDropped}` : ""}${r.experienceVisible != null ? `; видно в ветке ${r.experienceVisible}` : ""}</dd>
-        ${r.legacyUnscoped ? `<dt>Без привязки</dt><dd>${r.legacyUnscoped} — в контекст не идут</dd>` : ""}
+        <dt>Experience</dt><dd>${r.reflectionKept ? "автоматическое восприятие в контексте" : "не передаётся"}</dd>
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
         ${r.world ? `<dt>Мир</dt><dd>${r.worldKept} ${R.plural(r.worldKept, "факт", "факта", "фактов")} из ${r.world.relevant} релевантных${r.worldDropped ? `, не поместилось ${r.worldDropped}` : ""}; действует ${r.world.effective}, проходит отбор по таймлайну ${r.world.eligible}</dd>` : ""}
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
@@ -221,10 +220,6 @@
         ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "")).join(", ")}</dd>` : ""}
         </dl></div>
       ${cardDebug(r.card)}
-      ${(r.expDebug || []).length ? `<details class="block exp-debug"><summary>Отбор опыта</summary>
-        <table><thead><tr><th>Событие</th><th title="совпадение по темам">тема</th><th title="о присутствующих">участ.</th><th title="важность">важн.</th><th title="ранг свежести, только при равенстве">свеж.</th><th>итог</th></tr></thead><tbody>
-        ${r.expDebug.map((x) => `<tr class="${x.selected ? "sel" : ""}"><td>${esc((x.event || "").slice(0, 60))}</td><td>${x.topic}</td><td>${x.participant}</td><td>${x.weight}</td><td>${x.recencyRank}</td><td>${x.selected ? "в контексте" : !x.visible ? esc(x.reason) : !x.active ? "не действует" : "не выбрано"}</td></tr>`).join("")}
-        </tbody></table></details>` : ""}
       ${r.world && r.world.rows.length ? `<details class="block exp-debug world-debug"><summary>Отбор мира</summary>
         <table><thead><tr><th>Факт</th><th>почему</th><th>итог</th></tr></thead><tbody>
         ${r.world.rows.map((x) => { const kept = (r.worldIds || []).includes(x.id); return `<tr class="${kept ? "sel" : ""}"><td>${esc((x.text || "").slice(0, 60))}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${kept ? "в контексте" : x.selected ? "не поместилось" : x.omitted === "limit" ? "сверх лимита" : "не относится"}</td></tr>`; }).join("")}

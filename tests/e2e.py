@@ -231,35 +231,12 @@ try:
         page.click(".turn.last [data-act=swipe][data-dir='-1']")
         check("назад к 1/2", wait_text(page, ".turn.last .swipes", "1/2"))
 
-        # Опыт
-        page.click(".turn.last [data-act=to-exp]")
-        page.wait_for_selector("#x-event")
-        check("время сцены в черновике опыта", wait_text(page, "#drawer-body", "14.05"))
-        page.fill("#x-event", "Кира соврал Химэ о деньгах")
-        page.fill("#x-interp", "Решила, что он считает её наивной")
-        page.click("[data-act=x-val][data-v='-2']")
-        check("значения формы опыта переживают перерисовку", page.input_value("#x-event") == "Кира соврал Химэ о деньгах")
-        page.fill("#x-domain-add", "деньги, доверие, кафе")
-        page.keyboard.press("Enter")
-        check("темы-чипы", wait_text(page, "#x-domains", "доверие"))
-        page.click("[data-act=exp-save]")
-        check("событие сохранено", wait_text(page, "#drawer-body", "соврал Химэ о деньгах"))
-        check("опыт из сообщения помечен как опыт ветки", wait_text(page, "#drawer-body", "ветка"))
+        # Автоматическая память доступна только для чтения.
+        if not page.locator(".drawer.open").count(): page.click("[data-act=drawer]")
+        page.click("[data-act=tab][data-tab=memory]")
+        check("автоматическая память: нет ручного редактора", page.locator("#x-event, [data-act=to-exp], [data-act=exp-save]").count() == 0)
+        check("автоматическая память: панель Experience", "Experience" in page.inner_text("#drawer-body"))
         shot(page, "05-memory.png")
-        # Ветки: другой вариант ответа скрывает запись, возврат восстанавливает (PRISM1-2/3 в интерфейсе)
-        page.click(".turn.last [data-act=swipe][data-dir='1']")
-        check("ветка: в другом варианте запись скрыта", wait_text(page, ".turn.last .swipes", "2/2") and "соврал Химэ о деньгах" not in page.inner_text("#drawer-body") and "В других ветках этого чата ещё 1" in page.inner_text("#drawer-body"))
-        page.click(".turn.last [data-act=swipe][data-dir='-1']")
-        check("ветка: возврат восстанавливает запись", wait_text(page, "#drawer-body", "соврал Химэ о деньгах"))
-
-        # Prism
-        page.click("[data-act=tab][data-tab=prism]")
-        check("Prism: память с интерпретацией — запись прошлого", wait_text(page, "#drawer-body", '"interpretation_at_the_time":"Решила'))
-        check("Prism: строгий бюджет в отчёте", "помещается" in page.inner_text("#drawer-body"))
-        check("Prism: таблица отбора опыта", page.locator(".exp-debug tr.sel").count() == 1)
-        check("Prism: полоса слоёв", page.locator(".bar-meter i").count() >= 5)
-        shot(page, "06-prism.png")
-
 
         # Изображения: Forge/A1111 (мок)
         page.click("[data-act=settings]")
@@ -413,7 +390,7 @@ try:
         with page.expect_download() as dl:
             page.click("[data-act=backup]")
         data = json.load(open(dl.value.path()))
-        check("бэкап со всеми коллекциями", all(len(data[k]) > 0 for k in ["cards", "chats", "messages", "experience", "settings"]))
+        check("бэкап со всеми коллекциями", all(len(data[k]) > 0 for k in ["cards", "chats", "messages", "settings"]))
         page.click("[data-act=modal-close]")
 
         # Ассистент: разговор с моделью вне игры
@@ -468,7 +445,7 @@ try:
         check("экспорт: LoRA едут внутри карточки", png_card_lora(png) == "Orihime_IL")
         page.click("[data-act=modal-close]")
 
-        # Миграция старого опыта: без надёжного чата — в карантин, не угадываем (PRISM1-6/7/24)
+        # Архив старого опыта не мигрируется и не становится игровым контекстом.
         page.evaluate("""async () => {
           const S = window.PRP.app.S;
           await window.PRP.store.put('experience', { id: 'legacy1', owner: S.cardId, event: 'Старое событие без чата', interpretation: '', consequences: '', domains: [], about: ['user'], valence: 0, weight: 3, status: 'active', createdAt: 1, source: { messageIds: [] } });
@@ -482,20 +459,10 @@ try:
             page.wait_for_selector(".turn")
         if not page.locator(".drawer.open").count(): page.click("[data-act=drawer]")
         page.click("[data-act=tab][data-tab=memory]")
-        check("миграция: непривязанная запись в отдельном разделе", wait_text(page, "#drawer-body", "Без привязки к чату"))
-        page.click("[data-act=tab][data-tab=prism]")
-        check("миграция: непривязанная не идёт в модель", "Старое событие без чата" not in page.inner_text(".code") and "Без привязки" in page.inner_text("#drawer-body"))
-        exp_all = page.evaluate("window.PRP.store.all('experience')")
-        check("PRISM1-24: опыт пишется только вручную (2 записи: своя и внесённая)", len(exp_all) == 2 and any(r.get("legacyUnscoped") for r in exp_all))
-        page.click("[data-act=tab][data-tab=memory]")
-        page.once("dialog", lambda d: d.accept())
-        page.click("[data-act=exp-assign][data-id=legacy1]")
-        try:
-            page.wait_for_selector(".legacy-block", state="detached", timeout=8000)
-            assigned = "Старое событие без чата" in page.inner_text("#drawer-body")
-        except Exception:
-            assigned = False
-        check("миграция: ручная привязка к чату", assigned)
+        check("архив не показывается как автоматическая память", "Старое событие без чата" not in page.inner_text("#drawer-body"))
+        legacy = page.evaluate("async () => (await PRP.store.all('experience')).find(r => r.id === 'legacy1')")
+        check("старый Experience сохранён без миграции", legacy is not None and "legacyUnscoped" not in legacy and "chatId" not in legacy)
+        check("старый Experience не входит в Prism", page.evaluate("!PRP.app.ctx.svc.prism.build(PRP.app.ctx.svc.chat.path()).messages.some(m => m.content.includes('Старое событие без чата'))"))
         page.click("[data-act=tab][data-tab=scene]")
 
         # OVERFLOW: заведомо непомещающийся контекст не меняет дерево и не уходит в модель (new / regen / continue)

@@ -403,20 +403,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .core-preview { border: 1px dashed var(--line); border-radius: var(--r-s); padding: 8px 12px; margin: 0 0 12px; }
 .core-preview .hint { margin: 4px 0; overflow-wrap: anywhere; }
 .core-block .tag { font-weight: 400; margin-left: 6px; }
-.pick { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; }
-.pick button { border: 0; background: var(--sunken); padding: 5px 9px; cursor: pointer; font-size: 13px; color: var(--text-2); border-right: 1px solid var(--line); }
-.pick button:last-child { border-right: 0; }
 .pick button.on { background: var(--accent); color: var(--accent-ink); }
 .memo { background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; position: relative; }
 .memo:hover { border-color: var(--line); }
-.memo.off { opacity: .55; }
 .memo .ev { font-size: 14.5px; }
-.memo .in { font-size: 13px; color: var(--text-2); margin-top: 4px; font-style: italic; }
 .memo .mt { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--sunken); color: var(--text-2); }
-.tag.pos { color: var(--ok); }
-.tag.neg { color: var(--danger); }
-.memo-bar { position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; margin: 0; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; }
@@ -573,8 +565,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .exp-debug th { color: var(--muted); font-weight: 500; }
 .exp-debug tr.sel td:first-child { color: var(--text); font-weight: 600; }
 .exp-debug td:not(:first-child) { white-space: nowrap; color: var(--text-2); }
-.legacy-block { border-top: 1px dashed var(--line); padding-top: 12px; margin-top: 8px; }
-.legacy-block .memo { cursor: default; }
 
 /* ── Проверка импорта карточек ───────────────────────────────────────── */
 .imp-modal { width: min(720px, 100%); }
@@ -811,6 +801,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // Тестовый загрузчик выбирает отдельную IndexedDB до подключения приложения.
   const DB_NAME = root.__PRP_TEST_MIRROR === true ? "prism-rp-testing" : "prism-rp";
   const DB_VERSION = 8;
+  // experience is an inert legacy archive: preserved by backups, never loaded into RP.
   const STORES = ["cards", "chats", "messages", "experience", "settings", "images", "assist", "worldPacks", "worldLenses", "worldOverlays", "messengerEnvironments", "memories", "reflections", "memorySources"];
   // Время ожидания открытия базы. Для тестов можно задать window.__PRP_DB_OPEN_TIMEOUT_MS до загрузки приложения.
   const OPEN_TIMEOUT_MS = 7000;
@@ -1179,7 +1170,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,
-    expLimit: 8,
     worldLimit: 8, // фактов мира за ход (наибольшее число; входят только релевантные)
     theme: "dusk",
     proseSize: 17,
@@ -1327,7 +1317,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 /* Prism RP — правило активной ветки для привязанных к ветке записей. Чистый модуль.
 
    Одно определение «видно в этой ветке» для всего, что привязано к сообщениям чата:
-   опыт персонажа (prism/experience) и наложение мира на чат (world/canon).
+   наложение мира на чат (world/canon) и события среды переписки (messenger/environment).
 
    source: { messageIds: [id], swipes: { id: индекс варианта } }
    path:   активная ветка [{ id, swipeIdx }] от корня к листу.
@@ -3507,224 +3497,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
-<script>/* js/prism/experience.js */
-/* Prism RP — опыт персонажа (Experience).
-   Запись = свидетельство прошлого, а не инструкция.
-
-   Канон (этап 1):
-   • Каждый чат — отдельный мир. Опыт принадлежит чату: record.chatId === chat.id.
-     Одна и та же карточка в другом чате этот опыт не видит.
-   • Внутри чата опыт подчиняется веткам так же, как сцена:
-       – source.messageIds пуст → запись «на весь чат», видна во всех ветках;
-       – иначе запись видна, только если ВСЕ её сообщения лежат на активном пути,
-         и (если записан source.swipes) у них активен тот же вариант ответа.
-     Скрытые записи не удаляются: вернулись в ветку — запись снова видна.
-   • Записи без надёжной привязки к чату (старые данные) не угадываются:
-     они помечаются legacyUnscoped, хранятся целиком и в Prism не попадают,
-     пока пользователь сам не привяжет их к чату.
-
-   Отбор: входит только запись, совпавшая по теме с происходящим. Среди подходящих порядок:
-   тема → участники → важность → свежесть (только при равенстве). Важность не создаёт
-   релевантность; знак события (valence) — метаданные и отбор не запускает. */
-(function (root) {
-  "use strict";
-  const PRP = (root.PRP = root.PRP || {});
-  const BR = PRP.branch || (typeof require !== "undefined" ? require("../chat/branch.js") : null);
-
-  function blank(ownerId, chatId) {
-    return {
-      id: null,
-      chatId: chatId || null,
-      owner: ownerId || null,
-      witnesses: [],
-      event: "",
-      interpretation: "",
-      consequences: "",
-      domains: [],
-      about: [],
-      valence: 0,
-      weight: 1,
-      source: { chatId: chatId || null, messageIds: [], swipes: {}, sceneTime: "" },
-      status: "active",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-  }
-
-  /* ── Канон: чат и ветка ─────────────────────────────────────────────── */
-
-  // "branch" — привязана к сообщениям; "chat" — на весь чат; "legacy" — без надёжного чата.
-  function scopeOf(r) {
-    if (!r || r.legacyUnscoped || !r.chatId) return "legacy";
-    return (r.source && r.source.messageIds && r.source.messageIds.length) ? "branch" : "chat";
-  }
-
-  /* ctx: { chatId, path: [{id, swipeIdx}] } — активный путь текущего чата.
-     → { visible, reason } */
-  function visibility(r, ctx) {
-    const c = ctx || {};
-    if (!r) return { visible: false, reason: "нет записи" };
-    const scope = scopeOf(r);
-    if (scope === "legacy") return { visible: false, reason: "не привязана к чату" };
-    if (r.chatId !== c.chatId) return { visible: false, reason: "другой чат" };
-    if (scope === "chat") return { visible: true, reason: "на весь чат" };
-    // Правило ветки — общее с наложением мира на чат (chat/branch.js).
-    const v = BR.visibleOnPath(r.source, c.path);
-    return { visible: v.visible, reason: v.reason };
-  }
-
-  /* Миграция старых записей. Чистая функция, идемпотентна.
-     lookup.messageChat(id) → chatId сообщения или null (если сообщения нет).
-     → { records: [новые объекты], changed: [id], legacy: число } */
-  function migrate(records, lookup) {
-    const L = lookup || {};
-    const out = [], changed = [];
-    let legacy = 0;
-    for (const r0 of records || []) {
-      const r = JSON.parse(JSON.stringify(r0));
-      r.source = r.source || {};
-      if (!Array.isArray(r.source.messageIds)) r.source.messageIds = [];
-      let chatId = r.chatId || null;
-      if (!chatId && r.source.chatId) chatId = r.source.chatId;
-      if (!chatId && r.source.messageIds.length && L.messageChat) {
-        const chats = new Set(r.source.messageIds.map((id) => L.messageChat(id)));
-        // Только однозначно: все сообщения найдены и все из одного чата.
-        if (chats.size === 1 && !chats.has(null) && !chats.has(undefined)) chatId = [...chats][0];
-      }
-      if (chatId) {
-        if (r.chatId !== chatId || r.legacyUnscoped) {
-          r.chatId = chatId;
-          delete r.legacyUnscoped;
-          if (!r.source.chatId) r.source.chatId = chatId;
-          changed.push(r.id);
-        }
-      } else {
-        legacy++;
-        if (!r.legacyUnscoped || r.chatId) { r.legacyUnscoped = true; r.chatId = null; changed.push(r.id); }
-      }
-      out.push(r);
-    }
-    return { records: out, changed, legacy };
-  }
-
-  // Ручная привязка старой записи к чату. Происхождение сохраняется в source.originMessageIds;
-  // запись становится «на весь чат», потому что её сообщения этому чату не принадлежат.
-  function assignToChat(r0, chatId) {
-    const r = JSON.parse(JSON.stringify(r0));
-    r.source = r.source || {};
-    if ((r.source.messageIds || []).length) r.source.originMessageIds = r.source.messageIds.slice();
-    r.source.messageIds = [];
-    r.source.swipes = {};
-    r.source.assignedManually = true;
-    r.chatId = chatId;
-    delete r.legacyUnscoped;
-    return r;
-  }
-
-  /* ── Отбор по теме ───────────────────────────────────────────────────── */
-
-  function stem(w) {
-    w = String(w || "").toLowerCase().trim();
-    return w.length > 5 ? w.slice(0, Math.max(4, w.length - 2)) : w;
-  }
-  function tokens(text) {
-    return String(text || "").toLowerCase().replace(/ё/g, "е").match(/[\p{L}\p{N}]+/gu) || [];
-  }
-  // Словарь контекста: уникальные слова без имён участников.
-  function contextVocab(text, names) {
-    const skip = new Set();
-    for (const n of names || []) tokens(n).forEach((t) => skip.add(t));
-    const set = new Set();
-    for (const t of tokens(text)) if (t.length >= 3 && !skip.has(t)) set.add(t);
-    return { words: [...set], skip };
-  }
-  // Тема (домен) совпала, если каждое её слово (по основе) встречается в контексте.
-  function domainHit(domain, vocab) {
-    const parts = tokens(domain).filter((t) => t.length >= 3 && !vocab.skip.has(t));
-    if (!parts.length) return false;
-    return parts.every((p) => { const s = stem(p); return vocab.words.some((w) => w.startsWith(s)); });
-  }
-
-  // Числа отбора для одной записи.
-  function relevance(r, ctx, vocab) {
-    const doms = [...new Set((r.domains || []).map((d) => String(d).toLowerCase().trim()).filter(Boolean))];
-    const domainHits = doms.filter((d) => domainHit(d, vocab)).length;
-    // Слабый запасной сигнал: длинные слова самого события, если темы не заданы или не совпали.
-    let wordHits = 0;
-    if (!domainHits) {
-      const ev = new Set(tokens(r.event).filter((t) => t.length >= 5 && !vocab.skip.has(t)).map(stem));
-      for (const s of ev) if (vocab.words.some((w) => w.startsWith(s))) wordHits++;
-    }
-    const topic = domainHits + 0.25 * Math.min(wordHits, 3);
-    const present = new Set(ctx.present || []);
-    const participant = (r.about || []).some((a) => present.has(a)) ? 1 : 0;
-    return { topic, domainHits, wordHits, participant, weight: Number(r.weight) || 1 };
-  }
-
-
-  /* records: все записи; ctx: { chatId, path, present: [ids], text, names: [имена], limit, ownerId? }
-     → { selected: [записи в хронологическом порядке], debug: [строки отбора] } */
-  function rank(records, ctx) {
-    const c = ctx || {};
-    const limit = c.limit != null ? c.limit : 8;
-    const vocab = contextVocab(c.text, c.names);
-    const rows = [];
-    for (const r of records || []) {
-      if (c.ownerId && r.owner && r.owner !== c.ownerId) continue;
-      const vis = visibility(r, c);
-      const inChat = r.chatId === c.chatId && scopeOf(r) !== "legacy";
-      if (!inChat) continue; // чужие чаты и непривязанные записи даже не показываем в отладке
-      const rel = relevance(r, c, vocab);
-      // Релевантность решает, может ли запись войти; важность лишь упорядочивает подходящие.
-      const eligible = vis.visible && r.status === "active" && rel.topic > 0;
-      rows.push({ r, visible: vis.visible, reason: vis.reason, active: r.status === "active", eligible, ...rel, recencyRank: 0, selected: false });
-    }
-    // Свежесть: ранг среди записей чата (1 — самая новая). Только для разрешения равенства.
-    rows.slice().sort((a, b) => (b.r.createdAt || 0) - (a.r.createdAt || 0)).forEach((x, i) => { x.recencyRank = i + 1; });
-    const cmp = (a, b) => (b.topic - a.topic) || (b.participant - a.participant) || (b.weight - a.weight) || (a.recencyRank - b.recencyRank);
-    const pool = rows.filter((x) => x.eligible).sort(cmp);
-    pool.slice(0, limit).forEach((x, i) => { x.selected = true; x.priority = i + 1; });
-    const selectedRows = pool.filter((x) => x.selected);
-    return {
-      // Порядок важности (priority) нужен сборщику: при нехватке места уходят последние.
-      ranked: selectedRows.map((x) => x.r),
-      // Хронологический порядок читается моделью как история, а не как рейтинг.
-      selected: selectedRows.map((x) => x.r).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
-      debug: rows.sort((a, b) => (b.selected - a.selected) || cmp(a, b)).map((x) => ({
-        id: x.r.id, event: x.r.event, topic: x.topic, domainHits: x.domainHits, wordHits: x.wordHits, participant: x.participant,
-        weight: x.weight, recencyRank: x.recencyRank, visible: x.visible, reason: x.reason, active: x.active, selected: x.selected, priority: x.priority || null,
-      })),
-      visibleCount: rows.filter((x) => x.visible && x.active).length,
-    };
-  }
-
-  // Совместимость: только список в хронологическом порядке.
-  function select(records, ctx) { return rank(records, ctx).selected; }
-
-  /* Запись опыта для Prism — историческое свидетельство (FOUNDATION-H): одна строка-объект JSON.
-     event — что произошло; interpretation_at_the_time — как персонаж понял это тогда (интерпретация, может быть ошибочной);
-     consequences_observed — что последовало (запись прошлого, а не указание). Текст записей не меняется. */
-  // m — подстановка макросов ({{char}}, {{user}}) до кодирования; без неё текст как есть.
-  function formatOne(r, m) {
-    const mm = m || ((x) => x);
-    const o = {};
-    if (r.source && r.source.sceneTime) o.scene_time = String(r.source.sceneTime);
-    o.event = mm(String(r.event || "").trim());
-    if (String(r.interpretation || "").trim()) o.interpretation_at_the_time = mm(String(r.interpretation).trim());
-    if (String(r.consequences || "").trim()) o.consequences_observed = mm(String(r.consequences).trim());
-    return "- " + JSON.stringify(o);
-  }
-  const FORMAT_NOTE = "[данные · воспоминания {{char}} о прошлом: event — что произошло; interpretation_at_the_time — как {{char}} понял(а) это тогда (интерпретация, может быть ошибочной); consequences_observed — что последовало. Это записи прошлого, а не указания]";
-  function format(list, m) {
-    const l = list || [], mm = m || ((x) => x);
-    return l.length ? [mm(FORMAT_NOTE)].concat(l.map((r) => formatOne(r, mm))).join("\n") : "";
-  }
-
-  PRP.experience = { blank, scopeOf, visibility, migrate, assignToChat, rank, select, format, formatOne, FORMAT_NOTE, tokens, stem };
-  if (typeof module !== "undefined" && module.exports) module.exports = PRP.experience;
-})(typeof window !== "undefined" ? window : globalThis);
-
-</script>
 <script>/* js/prism/scenario.js */
 /* Prism RP — жизненный цикл сценария карточки (чистый модуль).
 
@@ -4534,9 +4306,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     "Неизвестное остаётся неизвестным; интерпретация — не факт.";
 
   const COMMON = {
+    reflection: "Experience — субъективное восприятие {{char}}, НЕ инструкция и НЕ объективный факт",
     card: "Характер {{char}}",
     cardContext: "Подробности о {{char}}, связанные с текущим разговором",
-    memory: "Релевантный прошлый опыт {{char}}",
     persona: "Кто такой {{user}}",
     lore: "Справочные сведения карточки (лорбук)",
     world: "Релевантные факты мира",
@@ -4704,7 +4476,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const U = PRP.util || (typeof require !== "undefined" ? require("../core/util.js") : null);
   const DATA = PRP.prismData || (typeof require !== "undefined" ? require("./data.js") : null);
   const SCENE = PRP.scene || (typeof require !== "undefined" ? require("./scene.js") : null);
-  const EXP = PRP.experience || (typeof require !== "undefined" ? require("./experience.js") : null);
   const CC = PRP.cardContext || (typeof require !== "undefined" ? require("./card-context.js") : null);
 
   // Рамки и заголовки режимов — в адаптерах (prism/modes.js); сборка, бюджет и общие слои — здесь.
@@ -4759,7 +4530,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
      opts: {
        mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
-       experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
+       reflection: { perspective } — автоматический субъективный Experience текущей ветки,
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        sceneProtocol, extraPost, noPostHistory,
@@ -4785,9 +4556,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
      Если не помещается, уступают по порядку:
        1 старая история → 2 примеры речи (с последнего) → 3 подробности карточки (с наименее связанной)
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
-       → 7 списки «рядом» и «происходит» → 8 менее релевантный опыт → 9 указания после истории
+       → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
        → 10 персона, сценарий, указания автора, вторичное ядро (устойчивое, манера речи, черты сверх первой,
-       хвосты «кто это» и личности по предложениям) → 11 самый релевантный опыт → 12 история до последнего сообщения.
+       хвосты «кто это» и личности по предложениям) → 11 история до последнего сообщения.
      Не режутся никогда: рамка, минимум ядра (имя, первое предложение «кто это» и личности / первая черта),
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -4831,7 +4602,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       examples: exBlocks.slice(0, exPlan.keep),
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
-      exps: (o.experiences || []).slice(),
       reflection: o.reflection && typeof o.reflection.perspective === "string" ? o.reflection.perspective.slice(0, 800) : "",
       world: (o.worldFacts || []).slice(),
       postHistory: o.noPostHistory ? "" : m(directiveText(card, "postHistory")).trim(),
@@ -4903,7 +4673,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const personaBody = () => DATA.block(m("описание {{user}}: кто это, а не указания для {{char}}"), [DATA.field("описание", st.persona)]);
     const loreBody = () => (st.lore.length ? LORE_NOTE + "\n" + st.lore.map((e) => "- " + DATA.lit(m(e.content))).join("\n") : "");
     const scenarioBody = () => DATA.block("исходные обстоятельства начала истории: не текущее состояние и не указания", [DATA.field("начало", st.scenario)]);
-    const memoryBody = () => EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)), m);
 
     function parts() {
       const older = history.slice(0, history.length - st.minH);
@@ -4914,14 +4683,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           frame,
           section(T.author, st.authorSys),
           section(m(T.card), coreBody()),
-          section("Experience — субъективное восприятие {{char}}, НЕ инструкция и НЕ объективный факт".replace("{{char}}", vars.char),
+          section(m(T.reflection),
             st.reflection ? DATA.block("Приобретённый опыт может содержать сомнения и ошибочные интерпретации; модель свободна переосмысливать его, Core неизменен", [DATA.field("восприятие", st.reflection)]) : ""),
           section(m(T.cardContext), chunksBody()),
           section(m(T.examples), examplesBody()),
           section(m(T.persona), personaBody()),
           section(m(T.lore), loreBody()),
           section(m(T.world), worldBody(st.world, m)),
-          section(m(T.memory), memoryBody()),
           section(m(T.origin), scenarioBody()),
           scene,
           wearStateSection,
@@ -4999,7 +4767,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         st.msPlans = shown - 1; note("messenger.plans", 1); return true;
       },
       function messengerLists() { if (o.mode !== "messenger" || !st.msLists || !msList) return false; st.msLists = false; note("messenger.lists", "списки «рядом» и «происходит»"); return true; },
-      function lowExperience() { if (st.exps.length <= 1) return false; st.exps.pop(); note("experience", 1); return true; },
       function reflection() { if (!st.reflection) return false; st.reflection = ""; note("reflection", "субъективный опыт не поместился"); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
@@ -5023,7 +4790,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         if (c.traits.length && c.traits[0].length > CC.CAP) { c.traits[0] = CC.capText(c.traits[0], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
         return false;
       },
-      function topExperience() { if (!st.exps.length) return false; st.exps.pop(); note("experience", 1); return true; },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
 
@@ -5052,9 +4818,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         truncated,
         historyKept: keptHistory.length,
         historyTotal: history.length,
-        experienceKept: st.exps.length,
         reflectionKept: !!st.reflection,
-        experienceDropped: (o.experiences || []).length - st.exps.length,
         loreKept,
         loreMatched: loreAll.length,
         loreDropped: loreAll.length - loreKept,
@@ -5089,7 +4853,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
           card: tokLayer(section(m(T.card), coreBody())) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + tokLayer(section(m(T.origin), scenarioBody())),
-          memory: tokLayer(section(m(T.memory), memoryBody())),
           reflection: tokLayer(st.reflection ? DATA.block("Experience, субъективный", [DATA.field("восприятие", st.reflection)]) : ""),
           scene: tok(scene),
           messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),
@@ -10279,7 +10042,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       ${w.warnings.length ? `<div class="block"><div class="block-title">Предупреждения</div><ul class="wc-list">${w.warnings.map((x) => `<li class="off">${esc(x.message)}</li>`).join("")}</ul></div>` : ""}`;
   }
 
-  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", experience: "опыт", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.chunks": "подробности карточки", "card.core": "вторичное ядро карточки" };
+  const TRUNC = { history: "старая история", examples: "примеры речи", lore: "лорбук", world: "факты мира", "messenger.plans": "договорённости", "messenger.lists": "списки положения", reflection: "автоматический Experience", postHistory: "указания после истории", persona: "описание собеседника", "card.scenario": "сценарий", authorSys: "указания автора", "card.chunks": "подробности карточки", "card.core": "вторичное ядро карточки" };
   const CHUNK_STATE = { selected: "в контексте", budget: "не поместилось", limit: "сверх лимита", "no-relation": "не относится" };
   // Карточка в Prism: ядро (явное или запасное), кандидаты подробностей, примеры речи.
   function cardDebug(c) {
@@ -10293,7 +10056,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       ${c.candidates.length ? `<table><thead><tr><th>Кусок</th><th>почему</th><th>итог</th></tr></thead><tbody>
       ${c.candidates.map((x) => `<tr class="${x.state === "selected" ? "sel" : ""}"><td>${esc(x.id)}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${CHUNK_STATE[x.state]}</td></tr>`).join("")}</tbody></table>` : ""}</details>`;
   }
-  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["memory", "Опыт (legacy)", "#ff9ec7"], ["reflection", "Experience", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
+  const LAYERS = [["frame", "Рамка", "#7fd1ff"], ["author", "Указания автора", "#c9a2ff"], ["card", "Карточка", "#b79cff"], ["reflection", "Experience", "#ff9ec7"], ["scene", "Сцена", "#ffd08a"], ["lore", "Лорбук", "#8ff0c3"], ["world", "Мир", "#9fd9a8"], ["messenger", "Среда", "#ffd08a"], ["history", "История", "#8d86a6"], ["post", "Протокол", "#5c5670"]];
   function prismTab(m) {
     const req = m.debugLastRpInput;
     const actual = '<div class="block"><div class="block-title">Последний фактически отправленный RP-запрос</div>' +
@@ -10315,8 +10078,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <div class="block"><dl class="kv">
         <dt>Бюджет</dt><dd>${r.used} из ${r.budget} — ${r.fits ? "помещается" : "<b>не помещается</b>"}</dd>
         <dt>История</dt><dd>${r.historyKept} из ${r.historyTotal} сообщений</dd>
-        <dt>Опыт</dt><dd>${r.experienceKept} ${R.plural(r.experienceKept, "запись", "записи", "записей")}${r.experienceDropped ? `, не поместилось ${r.experienceDropped}` : ""}${r.experienceVisible != null ? `; видно в ветке ${r.experienceVisible}` : ""}</dd>
-        ${r.legacyUnscoped ? `<dt>Без привязки</dt><dd>${r.legacyUnscoped} — в контекст не идут</dd>` : ""}
+        <dt>Experience</dt><dd>${r.reflectionKept ? "автоматическое восприятие в контексте" : "не передаётся"}</dd>
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
         ${r.world ? `<dt>Мир</dt><dd>${r.worldKept} ${R.plural(r.worldKept, "факт", "факта", "фактов")} из ${r.world.relevant} релевантных${r.worldDropped ? `, не поместилось ${r.worldDropped}` : ""}; действует ${r.world.effective}, проходит отбор по таймлайну ${r.world.eligible}</dd>` : ""}
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
@@ -10326,10 +10088,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "")).join(", ")}</dd>` : ""}
         </dl></div>
       ${cardDebug(r.card)}
-      ${(r.expDebug || []).length ? `<details class="block exp-debug"><summary>Отбор опыта</summary>
-        <table><thead><tr><th>Событие</th><th title="совпадение по темам">тема</th><th title="о присутствующих">участ.</th><th title="важность">важн.</th><th title="ранг свежести, только при равенстве">свеж.</th><th>итог</th></tr></thead><tbody>
-        ${r.expDebug.map((x) => `<tr class="${x.selected ? "sel" : ""}"><td>${esc((x.event || "").slice(0, 60))}</td><td>${x.topic}</td><td>${x.participant}</td><td>${x.weight}</td><td>${x.recencyRank}</td><td>${x.selected ? "в контексте" : !x.visible ? esc(x.reason) : !x.active ? "не действует" : "не выбрано"}</td></tr>`).join("")}
-        </tbody></table></details>` : ""}
       ${r.world && r.world.rows.length ? `<details class="block exp-debug world-debug"><summary>Отбор мира</summary>
         <table><thead><tr><th>Факт</th><th>почему</th><th>итог</th></tr></thead><tbody>
         ${r.world.rows.map((x) => { const kept = (r.worldIds || []).includes(x.id); return `<tr class="${kept ? "sel" : ""}"><td>${esc((x.text || "").slice(0, 60))}</td><td>${esc(x.reasons.join("; ") || "нет связи с ходом")}</td><td>${kept ? "в контексте" : x.selected ? "не поместилось" : x.omitted === "limit" ? "сверх лимита" : "не относится"}</td></tr>`; }).join("")}
@@ -11678,100 +11436,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
-<script>/* js/prism/experience-service.js */
-/* Prism RP — сервис опыта (прикладной уровень).
-   Загрузка опыта персонажа, однократная миграция старых записей, черновики,
-   сохранение, удаление и ручная привязка к чату.
-   Правила видимости, отбора и миграции — чистые функции prism/experience.js;
-   здесь только их применение к текущему чату и работа с хранилищем. DOM не трогает. */
-(function (root) {
-  "use strict";
-  const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, EX = PRP.experience, SC = PRP.scene;
-
-  function create(ctx) {
-    const { S, DB } = ctx;
-    const chat = () => ctx.svc.chat;
-
-    // Все записи персонажа (по владельцу); видимость в чате и ветке решает EX.visibility.
-    function loadForCard(cardId) { return DB.byIndex("experience", "owner", cardId); }
-
-    // Миграция: привязка к чату без догадок (EX.migrate). Идемпотентна; пишет только изменённые записи.
-    async function migrate() {
-      const all = await DB.all("experience");
-      const need = all.filter((r) => !r.chatId && !(r.source && r.source.chatId) && r.source && (r.source.messageIds || []).length);
-      const msgChat = new Map();
-      for (const r of need) for (const id of r.source.messageIds) {
-        if (msgChat.has(id)) continue;
-        const msg = await DB.get("messages", id);
-        msgChat.set(id, msg ? msg.chatId : null);
-      }
-      const res = EX.migrate(all, { messageChat: (id) => (msgChat.has(id) ? msgChat.get(id) : null) });
-      const changed = res.records.filter((r) => res.changed.includes(r.id));
-      if (changed.length) await DB.putMany("experience", changed);
-      S.legacyExperience = res.legacy;
-      return res;
-    }
-
-    // Что показывать во вкладке «Опыт»: видимое в этой ветке, скрытое в других ветках, непривязанное.
-    function view(p) {
-      const vctx = { chatId: S.chatId, path: chat().pathCtx(p) };
-      const inChat = S.experience.filter((r) => r.chatId === S.chatId && !r.legacyUnscoped);
-      const visible = inChat.filter((r) => EX.visibility(r, vctx).visible);
-      return { visible, hiddenInChat: inChat.length - visible.length, legacy: S.experience.filter((r) => EX.scopeOf(r) === "legacy") };
-    }
-    function legacyCount() { return S.experience.filter((r) => EX.scopeOf(r) === "legacy").length; }
-
-    // Пустой черновик ручной записи (на весь чат).
-    function blankDraft() { return Object.assign(EX.blank(S.cardId, S.chatId), { about: ["user"] }); }
-    // Черновик из сообщения: привязка к сообщению и его варианту, время сцены на тот момент.
-    function draftFromMessage(msgId) {
-      const p = chat().path();
-      const idx = p.findIndex((m) => m.id === msgId);
-      const st = chat().sceneState(p.slice(0, idx + 1));
-      const d = EX.blank(S.cardId, S.chatId);
-      d.about = ["user"];
-      const msg = p[idx];
-      d.source = { chatId: S.chatId, messageIds: [msgId], swipes: { [msgId]: (msg && msg.swipeIdx) || 0 }, sceneTime: st.clock.m != null || st.clock.min != null ? SC.formatClock(st.clock) : "" };
-      return d;
-    }
-
-    // Сохранить черновик. → строка ошибки для пользователя или null.
-    async function save(d) {
-      d.event = d.event.trim();
-      if (!d.event) return "Опишите, что произошло.";
-      if (!d.id) d.id = U.uid("x");
-      d.owner = S.cardId;
-      // Новая запись всегда принадлежит текущему чату; непривязанные старые не трогаем.
-      if (!d.chatId && !d.legacyUnscoped) { d.chatId = S.chatId; d.source = Object.assign({ messageIds: [] }, d.source, { chatId: S.chatId }); }
-      await DB.put("experience", d);
-      const i = S.experience.findIndex((x) => x.id === d.id);
-      if (i >= 0) S.experience[i] = d; else S.experience.push(d);
-      return null;
-    }
-    async function remove(id) {
-      await DB.del("experience", id);
-      S.experience = S.experience.filter((x) => x.id !== id);
-    }
-    // Ручная привязка непривязанной записи к текущему чату (EX.assignToChat).
-    async function assign(id) {
-      const r = S.experience.find((x) => x.id === id);
-      if (!r) return false;
-      const nr = EX.assignToChat(r, S.chatId);
-      await DB.put("experience", nr);
-      S.experience = S.experience.map((x) => (x.id === nr.id ? nr : x));
-      S.legacyExperience = Math.max(0, (S.legacyExperience || 1) - 1);
-      return true;
-    }
-    function find(id) { return S.experience.find((x) => x.id === id); }
-
-    return { loadForCard, migrate, view, legacyCount, blankDraft, draftFromMessage, save, remove, assign, find };
-  }
-
-  PRP.experienceService = { create };
-})(typeof window !== "undefined" ? window : globalThis);
-
-</script>
 <script>/* js/prism/memory-service.js */
 /* PrismRP — automatic Memory -> Reflection -> Experience service.
    One bounded post-reply cycle. No user prompts, approval or manual edits.
@@ -12105,7 +11769,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 <script>/* js/prism/service.js */
 /* Prism RP — сборка Prism для текущего чата (прикладной уровень).
    Связывает активную ветку, сцену, опыт и настройки с чистым сборщиком (prism/assembler.js):
-   отбор опыта (EX.rank) и фактов мира (world/overlay-service: канон чата с учётом ветки → отбор по
+   автоматический Experience (prism/memory-service) и отбор фактов мира (world/overlay-service: канон чата с учётом ветки → отбор по
    релевантности; только чтение) → сборка контекста (AS.build) → отчёт для вкладки Prism.
    Мир не зависит от режима: одни и те же факты получает и сцена, и переписка.
    Адаптер режима (prism/modes): сцена (rp) берёт текущее «сейчас» из сцены; переписка — из среды переписки
@@ -12114,7 +11778,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
+  const TR = PRP.tree, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
 
   // Bring at most two latest selected-swipe visual directives back into the
   // text model history. These are shot references, NOT canonical scene updates.
@@ -12180,18 +11844,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       // используемые для поиска мира без утверждения, что пользователь их наблюдал.
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
       const history = historyWithDraws(path, allowDraw);
-      const recent = history.slice(-4).map((h) => h.text).join("\n");
-      // The previous manually authored Experience is retained in storage only.
-      // New runtime requests must not blend it with autonomous reflective Experience.
-      const ex = ctx.svc.memory ? { ranked: [], debug: [], visibleCount: 0 } : EX.rank(S.experience, {
-        chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(here.present),
-        text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
-      });
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
       const wearFacts = projected.wearFacts;
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
-        sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked,
+        sceneState: messenger ? null : st, messenger, wearFacts,
         reflection: ctx.svc.memory ? ctx.svc.memory.experience(path) : null,
         worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
@@ -12200,11 +11857,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       }, extra));
       built.report.imageDirectiveAllowed = allowDraw;
       built.report.imageDirectivePolicy = ST.modelDrawPolicy(s);
-      built.report.expDebug = ex.debug;
       built.report.world = wctx.report;
       if (messenger) built.report.messengerState = messenger.report;
-      built.report.experienceVisible = ex.visibleCount;
-      built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
       return built;
     }
 
@@ -14768,7 +14422,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         S, view: S.view, cards: S.cards, chats: S.chats, card: ctx.card(), chat: ctx.chat(), persona: ctx.persona(), path,
         scene: ctx.chat() ? svc().chat.sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
-        exps: S.experience, expView: svc().exp.view(path), expDraft: S.expDraft,
         observedMemories: svc().memory.visibleMemories(path), currentExperience: svc().memory.experience(path), memoryStatus: S.memoryStatus,
         memoryTimeline: S.drawerOpen && S.tab === "memory" && ctx.chat() ? svc().memory.timeline(path) : null,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
@@ -16179,7 +15832,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
    Здесь: состояние сессии, сборка контекста зависимостей, навигация, загрузка,
    разбор событий DOM по контроллерам, запуск. Правил предметной области здесь нет:
      события  → контроллеры (js/ui/controllers/*) — тонкие обработчики
-              → сервисы (chat, generation, prism, experience, cards, images, assist)
+              → сервисы (chat, generation, prism, memory, cards, images, assist)
               → чистые модули (prism/*, chat/tree, cards/ccard, images/*, assist/assist)
               → хранилище (core/store) и транспорт моделей (providers/*)
      перерисовка — через порт интерфейса (js/ui/shell.js).
@@ -16191,16 +15844,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const { util: U, store: DB, settings: ST, perchance: PC, imgBackends: IB, imgCompile: ICP } = PRP;
 
   /* ── Состояние сессии ────────────────────────────────────────────────
-     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), worldOverlay (мир текущего чата),
+     Данные: settings, cards, chats, messages, memories и reflections (текущего чата), worldOverlay (мир текущего чата),
      messengerEnv (среда текущей переписки), assistList.
      Навигация: view, cardId, chatId, assist (открытый разговор).
      Генерация (временное): gen, drawing (id картинок в работе).
-     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, expDraft.
-     Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111), legacyExperience. */
+     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg.
+     Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111). */
   const S = {
     settings: null, cards: [], chats: [],
-    view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [], memories: [], reflections: [], memoryStatus: "",
-    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null, expDraft: null,
+    view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], memories: [], reflections: [], memoryStatus: "",
+    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
@@ -16242,7 +15895,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   };
   ctx.ui = PRP.shell.create(ctx);
   ctx.svc.chat = PRP.chatService.create(ctx);
-  ctx.svc.exp = PRP.experienceService.create(ctx);
   ctx.svc.memory = PRP.memoryService.create(ctx);
   ctx.svc.prism = PRP.prismService.create(ctx);
   ctx.svc.images = PRP.imageService.create(ctx);
@@ -16267,7 +15919,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
     await svc.world.loadAll();
-    await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
     S.lastSelectedChatId = S.chats.some((c) => c.id === saveUi.chatId) ? saveUi.chatId : null;
@@ -16298,13 +15949,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     S.cardId = c.cardId;
     S.view = "chat";
     S.messages = await svc.chat.loadMessages(chatId);
-    S.experience = await svc.exp.loadForCard(c.cardId);
     await svc.memory.load(chatId);
     await svc.worldChat.load(chatId);
     await svc.messenger.load(chatId);
     await svc.images.loadForChat(chatId);
     if (ticket !== navigationIntent || S.chatId !== chatId || S.view !== "chat") return;
-    S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.envEdit = null; S.find = null;
+    S.editingMsg = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); }

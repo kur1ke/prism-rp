@@ -2,7 +2,7 @@
    Здесь: состояние сессии, сборка контекста зависимостей, навигация, загрузка,
    разбор событий DOM по контроллерам, запуск. Правил предметной области здесь нет:
      события  → контроллеры (js/ui/controllers/*) — тонкие обработчики
-              → сервисы (chat, generation, prism, experience, cards, images, assist)
+              → сервисы (chat, generation, prism, memory, cards, images, assist)
               → чистые модули (prism/*, chat/tree, cards/ccard, images/*, assist/assist)
               → хранилище (core/store) и транспорт моделей (providers/*)
      перерисовка — через порт интерфейса (js/ui/shell.js).
@@ -14,16 +14,16 @@
   const { util: U, store: DB, settings: ST, perchance: PC, imgBackends: IB, imgCompile: ICP } = PRP;
 
   /* ── Состояние сессии ────────────────────────────────────────────────
-     Данные: settings, cards, chats, messages (текущего чата), experience (персонажа), worldOverlay (мир текущего чата),
+     Данные: settings, cards, chats, messages, memories и reflections (текущего чата), worldOverlay (мир текущего чата),
      messengerEnv (среда текущей переписки), assistList.
      Навигация: view, cardId, chatId, assist (открытый разговор).
      Генерация (временное): gen, drawing (id картинок в работе).
-     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, expDraft.
-     Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111), legacyExperience. */
+     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg.
+     Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111). */
   const S = {
     settings: null, cards: [], chats: [],
-    view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], experience: [], memories: [], reflections: [], memoryStatus: "",
-    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null, expDraft: null,
+    view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], memories: [], reflections: [], memoryStatus: "",
+    gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null,
     drawerOpen: false, tab: "scene", find: null, homeQuery: "",
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
@@ -65,7 +65,6 @@
   };
   ctx.ui = PRP.shell.create(ctx);
   ctx.svc.chat = PRP.chatService.create(ctx);
-  ctx.svc.exp = PRP.experienceService.create(ctx);
   ctx.svc.memory = PRP.memoryService.create(ctx);
   ctx.svc.prism = PRP.prismService.create(ctx);
   ctx.svc.images = PRP.imageService.create(ctx);
@@ -90,7 +89,6 @@
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
     await svc.world.loadAll();
-    await svc.exp.migrate();
     const saveUi = (await DB.getSetting("ui", {})) || {};
     S.drawerOpen = !!saveUi.drawerOpen && !ui.narrow();
     S.lastSelectedChatId = S.chats.some((c) => c.id === saveUi.chatId) ? saveUi.chatId : null;
@@ -121,13 +119,12 @@
     S.cardId = c.cardId;
     S.view = "chat";
     S.messages = await svc.chat.loadMessages(chatId);
-    S.experience = await svc.exp.loadForCard(c.cardId);
     await svc.memory.load(chatId);
     await svc.worldChat.load(chatId);
     await svc.messenger.load(chatId);
     await svc.images.loadForChat(chatId);
     if (ticket !== navigationIntent || S.chatId !== chatId || S.view !== "chat") return;
-    S.editingMsg = null; S.expDraft = null; S.worldEdit = null; S.envEdit = null; S.find = null;
+    S.editingMsg = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
     if (!quiet) { ui.renderAll(); ui.scrollBottom(); }

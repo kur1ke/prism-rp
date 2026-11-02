@@ -17,12 +17,12 @@ ui/app.js ── корень: состояние сессии S, контекс
    │        │
    │        ▼
    ├─► сервисы (прикладной уровень, create(ctx); DOM не трогают, перерисовку просят через ctx.ui)
-   │     chat/service · prism/service · prism/experience-service · generation/service
+   │     chat/service · prism/service · prism/memory-service · generation/service
    │     images/service · cards/service · assist/service · world/service · world/overlay-service · messenger/service
    │        │
    │        ▼
    │   чистые модули предметной области (без DOM, хранилища, сети и S)
-   │     prism/scene · prism/experience · prism/scenario · prism/modes · prism/assembler · chat/tree · chat/branch
+   │     prism/scene · prism/memory-cycle · prism/scenario · prism/modes · prism/assembler · chat/tree · chat/branch
    │     messenger/time · messenger/environment · messenger/conversation
    │     cards/model · cards/ccard · cards/formats/* · cards/validate · cards/import
    │     world/model · world/lens · world/validate · world/resolve · world/overlay · world/canon · world/retrieve
@@ -50,12 +50,11 @@ ui/app.js ── корень: состояние сессии S, контекс
 | `prism/data` | граница «данные / указания»: пометка `[данные · …]`, значения-литералы JSON, подписи только из кода, словарь статусов (ESTABLISHED / DERIVED / INTERPRETATION / UNKNOWN) | — | всего остального |
 | `prism/scene` | протокол `[scene:]`, свёртка ветки, возраст настроения, описание для модели (данные со статусом); устаревшие `rel` / `relset` / `flag` не действуют | data | DOM, хранилища, провайдеров, S |
 | `prism/card-context` | ядро карточки (явное `prismCore` или запасное из полей), куски подробностей, детерминированный отбор подробностей, правило примеров речи | — | DOM, хранилища, сети, модели, S |
-| `prism/experience` | канон чата и ветки, видимость (правило ветки — из `chat/branch`), миграция (чистая), отбор, формат | util, chat/branch | DOM, хранилища, провайдеров, S |
 | `prism/memory-cycle` | чистое выделение исходных эпизодов, fingerprint полного пути, проверка citation/source и убывающие recency-веса, выбор активной субъективной рефлексии | chat/tree | DOM, S, IndexedDB, провайдеров |
 | `prism/memory-service` | независимые LLM-запросы extraction + reflection после успешного RP-хода; budget, source preflight, транзакционное хранение, read-only projection в Prism | memory-cycle, card-context, llm router, core/store, chat/service | DOM, изменение Core, запись World |
 | `prism/scenario` | жизненный цикл сценария: подаётся ли он в данную генерацию (граница первого ответа, из ветки) | — | всего остального |
 | `prism/modes` | адаптеры режима: рамки и заголовки; rp — сцена и протокол `[scene:]`; messenger — разделы положения, состояния переписки и времени (данные, литералы JSON) вместо сцены | messenger/time | всего остального |
-| `prism/assembler` | сборка контекста, строгий бюджет, порядок уступок (режимные слои — через `prism/modes`); разделы-данные через `prism/data`, указания — только указания автора и служебные указания ответа; карточка — ядро и отобранные подробности (`prism/card-context`); сценарий — отдельным разделом, если `includeScenario`; лорбук — справка ниже мира; факты мира — из уже отобранного списка `worldFacts` | util, data, scene, experience, card-context | хранилища, генерации, дерева чата, паков, линз и наложений (мир получает готовым списком) |
+| `prism/assembler` | сборка контекста, строгий бюджет, порядок уступок (режимные слои — через `prism/modes`); разделы-данные через `prism/data`, указания — только указания автора и служебные указания ответа; карточка — ядро и отобранные подробности (`prism/card-context`); сценарий — отдельным разделом, если `includeScenario`; лорбук — справка ниже мира; факты мира — из уже отобранного списка `worldFacts` | util, data, scene, card-context | хранилища, генерации, дерева чата, паков, линз и наложений (мир получает готовым списком) |
 | `chat/tree` | дерево сообщений, путь, варианты | — | Prism, провайдеров, интерфейса |
 | `messenger/time` | время переписки: пояс, местный ввод, «сейчас» (live — переданные часы, manual — сохранённое), прошедшее время | — | всего остального, таймеров |
 | `messenger/initiative` | проверка инициативы (FOUNDATION-D): допустимость, возможные поводы (договорённости, молчание ≥ 12 ч), разбор `[no-message]`, правило «одна инициатива подряд», происхождение варианта, текст временного указания | conversation, time | всего остального, таймеров |
@@ -81,8 +80,7 @@ ui/app.js ── корень: состояние сессии S, контекс
 | `providers/openai`, `perchance` | транспорт текстовых моделей | — | сцены, опыта, карточек, дерева |
 | `providers/router` | выбор транспорта по виду провайдера | openai, perchance | смысла Prism |
 | `chat/service` | жизненный цикл чата: загрузка, создание (режим задаётся только здесь) с авторским началом (или пустым, без заглушек), правка, варианты, удаление (вместе с сообщениями, картинками, опытом, наложением мира и средой переписки), ручные правки сцены, экспорт текста; сцена с учётом режима (`sceneState` — у переписки пустая, `sceneFields` — в переписке `[scene:]` только неактивной копией) | tree, scene, util, store | DOM, провайдеров |
-| `prism/service` | сборка Prism для текущего чата и данной генерации (решение о сценарии), предпросмотр; факты мира берёт только из `world/overlay-service.context`; в переписке — данные среды из `messenger/service.context` вместо сцены | assembler, scenario, experience, settings, compose, chat/service, world/overlay-service | DOM, хранилища, провайдеров |
-| `prism/experience-service` | загрузка, миграция, черновики, сохранение, привязка опыта | experience, scene, store, chat/service | DOM, провайдеров |
+| `prism/service` | сборка Prism для текущего чата и данной генерации (решение о сценарии), предпросмотр; факты мира берёт только из `world/overlay-service.context`; в переписке — данные среды из `messenger/service.context` вместо сцены | assembler, scenario, memory-service, settings, compose, chat/service, world/overlay-service | DOM, хранилища, провайдеров |
 | `generation/service` | ход: предварительная проверка → узел или вариант → модель → разбор → сохранение → автокартинка; в переписке — момент выбирается при подготовке, метка `messengerAt` пишется только с успешным ответом; начало сцены моделью (транзакция без изменений дерева до ответа) | prism/service, scenario, chat/service, images/service, router, scene | DOM (только через ctx.ui) |
 | `images/service` | рисование, загрузка картинок чата, списки A1111 | compose, compile, backends, router, chat/service | DOM (только через ctx.ui) |
 | `world/overlay-service` | мир текущего чата: загрузка, явные действия пользователя (`commit`, `setSelectors`), канон и отбор для Prism (только чтение), удаление вместе с чатом, проверка бэкапа | world/overlay, canon, retrieve, resolve, chat/branch, store | DOM, провайдеров, генерации (генерация мир не пишет) |
@@ -91,7 +89,7 @@ ui/app.js ── корень: состояние сессии S, контекс
 | `cards/service` | импорт в два шага (`prepareImport` — без сохранения, `commitImport` — после проверки, включение указаний только по явному выбору), сохранение, удаление с каскадом, экспорт | import, model, ccard, store, ui/files | DOM (только через ctx.ui / files) |
 | `assist/service` | разговоры ассистента, генерация | assist, router, tree, scene, store | DOM (только через ctx.ui) |
 | `ui/files` | скачивание, чтение файлов, PNG портрета, буфер обмена | render | смысла Prism |
-| `ui/views/*` | разметка экранов | render, scene, tree, openai (только PRESETS), experience (scopeOf), assist (STARTERS) | хранилища, сервисов, S напрямую (работают с моделью m) |
+| `ui/views/*` | разметка экранов | render, scene, tree, openai (только PRESETS), assist (STARTERS) | хранилища, сервисов, S напрямую (работают с моделью m) |
 | `ui/shell` | модель представления, отрисовка областей, поповеры, поиск, потоковая отрисовка, уведомления, запоминание экрана | views, сервисы (только чтение), scene | правил предметной области |
 | `ui/controllers/*` | чтение форм и DOM-событий, вызовы сервисов, подтверждения | сервисы, shell, views | правил предметной области |
 | `ui/app` | состояние сессии, ctx, навигация, разбор событий, запуск | всё выше | правил предметной области |
@@ -100,14 +98,14 @@ ui/app.js ── корень: состояние сессии S, контекс
 
 Классификация полей (объект остаётся одним, поля описаны в `app.js`):
 
-- **данные:** `settings`, `cards`, `chats`, `messages` (текущего чата), `experience` (персонажа), `worldPacks`, `worldLenses`, `worldOverlay` (мир текущего чата), `messengerEnv` (среда текущей переписки), `assistList`;
+- **данные:** `settings`, `cards`, `chats`, `messages` (текущего чата), `memories` и `reflections` (текущего чата), `worldPacks`, `worldLenses`, `worldOverlay` (мир текущего чата), `messengerEnv` (среда текущей переписки), `assistList`;
 - **навигация:** `view`, `cardId`, `chatId`, `assist`;
 - **генерация (временное):** `gen`, `drawing`, `turn` (принятый ход: ждёт разбора / пишет реплику / генерирует; PERF-01), `tracking` (идут разборы состояния);
 - **диагностика (только память):** `perf` (длительности этапов хода, PERF-01), `sendDrafts` (текст не отправленного хода по чатам);
-- **интерфейс:** `drawerOpen`, `tab`, `find`, `homeQuery`, `modal`, `editProviderId`, `pop`, `editingMsg`, `expDraft`, `worldDraft`, `worldEdit`, `envEdit`;
-- **кэш производного:** `lastPrism`, `imgUrls`, `imgLists`, `legacyExperience`.
+- **интерфейс:** `drawerOpen`, `tab`, `find`, `homeQuery`, `modal`, `editProviderId`, `pop`, `editingMsg`, `worldDraft`, `worldEdit`, `envEdit`;
+- **кэш производного:** `lastPrism`, `imgUrls`, `imgLists`.
 
-Модули предметной области `S` не видят: им передаются нужные срезы (`EX.rank(records, ctx)`, `SC.fold(init, steps)`, `TR.path(index, leafId)`).
+Модули предметной области `S` не видят: им передаются нужные срезы (`SC.fold(init, steps)`, `TR.path(index, leafId)`).
 
 ## Сценарий, первое сообщение и начало сцены (FOUNDATION-B)
 
@@ -190,9 +188,9 @@ ui/app.js ── корень: состояние сессии S, контекс
 - **Эпистемический статус** — лёгкий словарь, используется там, где он нужен смыслу:
   - ESTABLISHED — явная сцена, действующий факт мира, поле среды;
   - DERIVED — состояние переписки, прошедшее время;
-  - INTERPRETATION — настроение в сцене, `interpretation_at_the_time` в опыте;
+  - INTERPRETATION — настроение в сцене и субъективное восприятие Experience;
   - UNKNOWN — пустое не заполняется значением по умолчанию.
-- **Опыт** подаётся как свидетельства прошлого: по строке-объекту `{scene_time?, event, interpretation_at_the_time?, consequences_observed?}`. Смысл записей и отбор (чат, ветка, релевантность, важность без права войти) не менялись.
+- **Experience** — автоматическая субъективная рефлексия из `prism/memory-service.experience(path)`, передаётся как JSON-литерал восприятия. Старый ручной Experience удалён: нет сервисов редактора, миграции, ранжирования, загрузки для чата или fallback в Prism. Коллекция IndexedDB `experience` остаётся пассивным архивом для бэкапов и удаления записей вместе с владельцем; старые тексты не подаются модели. Версия IndexedDB не меняется.
 - **Карточка** — источник устойчивой истины о персонаже, её поля не меняются.
 - **Ядро для Prism** (`card.prismCore`, `prism/card-context`) — компактное представление для каждого хода, а не источник истины.
   - Формат: `{ schema: 1, identity, traits[], voice[], durableContext[], source: manual|derived|imported, reviewed }`.
@@ -222,18 +220,17 @@ ui/app.js ── корень: состояние сессии S, контекс
 - **Порядок Prism:**
   1. рамка;
   2. указания автора;
-  3. ядро карточки;
+  3. ядро карточки и автоматический субъективный Experience;
   4. подробности карточки;
   5. примеры речи;
   6. персона;
   7. лорбук;
   8. факты мира;
-  9. опыт;
-  10. сценарий, пока действует;
-  11. сцена или среда переписки;
-  12. история;
-  13. указания автора после истории;
-  14. служебные указания ответа.
+  9. сценарий, пока действует;
+  10. сцена или среда переписки;
+  11. история;
+  12. указания автора после истории;
+  13. служебные указания ответа.
 - **Бюджет.** Уступки идут в таком порядке:
   1. старая история;
   2. примеры речи, с последнего;
@@ -242,11 +239,10 @@ ui/app.js ── корень: состояние сессии S, контекс
   5. факты мира;
   6. договорённости переписки;
   7. списки «рядом» и «происходит»;
-  8. менее релевантный опыт;
+  8. автоматический Experience;
   9. указания после истории;
   10. персона, сценарий, указания автора, вторичное ядро (устойчивое, манера речи, черты сверх первой, хвосты по предложениям);
-  11. самый релевантный опыт;
-  12. история до последнего сообщения.
+  11. история до последнего сообщения.
 
   Не режутся: рамка, минимум ядра (имя, первое предложение), сцена или ядро переписки, служебные указания. Иначе — OVERFLOW: 0 вызовов модели, ничего не записывается.
   - Отчёт Prism (`report.card`) показывает: ядро (явное или запасное, токены, сокращения), кандидатов подробностей с причинами и судьбой (в контексте / не поместилось / сверх лимита / не относится), примеры (сколько, по какому правилу), счётчик устаревших операций сцены.

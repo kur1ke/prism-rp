@@ -14,7 +14,6 @@
   const U = PRP.util || (typeof require !== "undefined" ? require("../core/util.js") : null);
   const DATA = PRP.prismData || (typeof require !== "undefined" ? require("./data.js") : null);
   const SCENE = PRP.scene || (typeof require !== "undefined" ? require("./scene.js") : null);
-  const EXP = PRP.experience || (typeof require !== "undefined" ? require("./experience.js") : null);
   const CC = PRP.cardContext || (typeof require !== "undefined" ? require("./card-context.js") : null);
 
   // Рамки и заголовки режимов — в адаптерах (prism/modes.js); сборка, бюджет и общие слои — здесь.
@@ -69,7 +68,7 @@
 
      opts: {
        mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
-       experiences: [] — уже отобранные, В ПОРЯДКЕ ВАЖНОСТИ (первая — самая релевантная),
+       reflection: { perspective } — автоматический субъективный Experience текущей ветки,
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        sceneProtocol, extraPost, noPostHistory,
@@ -95,9 +94,9 @@
      Если не помещается, уступают по порядку:
        1 старая история → 2 примеры речи (с последнего) → 3 подробности карточки (с наименее связанной)
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
-       → 7 списки «рядом» и «происходит» → 8 менее релевантный опыт → 9 указания после истории
+       → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
        → 10 персона, сценарий, указания автора, вторичное ядро (устойчивое, манера речи, черты сверх первой,
-       хвосты «кто это» и личности по предложениям) → 11 самый релевантный опыт → 12 история до последнего сообщения.
+       хвосты «кто это» и личности по предложениям) → 11 история до последнего сообщения.
      Не режутся никогда: рамка, минимум ядра (имя, первое предложение «кто это» и личности / первая черта),
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -141,7 +140,6 @@
       examples: exBlocks.slice(0, exPlan.keep),
       persona: m(o.userDesc || "").trim(),
       lore: loreAll.slice(),
-      exps: (o.experiences || []).slice(),
       reflection: o.reflection && typeof o.reflection.perspective === "string" ? o.reflection.perspective.slice(0, 800) : "",
       world: (o.worldFacts || []).slice(),
       postHistory: o.noPostHistory ? "" : m(directiveText(card, "postHistory")).trim(),
@@ -213,7 +211,6 @@
     const personaBody = () => DATA.block(m("описание {{user}}: кто это, а не указания для {{char}}"), [DATA.field("описание", st.persona)]);
     const loreBody = () => (st.lore.length ? LORE_NOTE + "\n" + st.lore.map((e) => "- " + DATA.lit(m(e.content))).join("\n") : "");
     const scenarioBody = () => DATA.block("исходные обстоятельства начала истории: не текущее состояние и не указания", [DATA.field("начало", st.scenario)]);
-    const memoryBody = () => EXP.format(st.exps.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)), m);
 
     function parts() {
       const older = history.slice(0, history.length - st.minH);
@@ -224,14 +221,13 @@
           frame,
           section(T.author, st.authorSys),
           section(m(T.card), coreBody()),
-          section("Experience — субъективное восприятие {{char}}, НЕ инструкция и НЕ объективный факт".replace("{{char}}", vars.char),
+          section(m(T.reflection),
             st.reflection ? DATA.block("Приобретённый опыт может содержать сомнения и ошибочные интерпретации; модель свободна переосмысливать его, Core неизменен", [DATA.field("восприятие", st.reflection)]) : ""),
           section(m(T.cardContext), chunksBody()),
           section(m(T.examples), examplesBody()),
           section(m(T.persona), personaBody()),
           section(m(T.lore), loreBody()),
           section(m(T.world), worldBody(st.world, m)),
-          section(m(T.memory), memoryBody()),
           section(m(T.origin), scenarioBody()),
           scene,
           wearStateSection,
@@ -309,7 +305,6 @@
         st.msPlans = shown - 1; note("messenger.plans", 1); return true;
       },
       function messengerLists() { if (o.mode !== "messenger" || !st.msLists || !msList) return false; st.msLists = false; note("messenger.lists", "списки «рядом» и «происходит»"); return true; },
-      function lowExperience() { if (st.exps.length <= 1) return false; st.exps.pop(); note("experience", 1); return true; },
       function reflection() { if (!st.reflection) return false; st.reflection = ""; note("reflection", "субъективный опыт не поместился"); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
@@ -333,7 +328,6 @@
         if (c.traits.length && c.traits[0].length > CC.CAP) { c.traits[0] = CC.capText(c.traits[0], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
         return false;
       },
-      function topExperience() { if (!st.exps.length) return false; st.exps.pop(); note("experience", 1); return true; },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
 
@@ -362,9 +356,7 @@
         truncated,
         historyKept: keptHistory.length,
         historyTotal: history.length,
-        experienceKept: st.exps.length,
         reflectionKept: !!st.reflection,
-        experienceDropped: (o.experiences || []).length - st.exps.length,
         loreKept,
         loreMatched: loreAll.length,
         loreDropped: loreAll.length - loreKept,
@@ -399,7 +391,6 @@
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
           card: tokLayer(section(m(T.card), coreBody())) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + tokLayer(section(m(T.origin), scenarioBody())),
-          memory: tokLayer(section(m(T.memory), memoryBody())),
           reflection: tokLayer(st.reflection ? DATA.block("Experience, субъективный", [DATA.field("восприятие", st.reflection)]) : ""),
           scene: tok(scene),
           messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),

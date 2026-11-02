@@ -18,7 +18,6 @@
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,
-    expLimit: 8,
     worldLimit: 8, // фактов мира за ход (наибольшее число; входят только релевантные)
     theme: "dusk",
     proseSize: 17,

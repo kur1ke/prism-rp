@@ -73,7 +73,6 @@ function navigationHarness() {
   };
   const service = (name, extra) => { factories[name] = { create: c => (ctx = c, extra || {}) }; };
   service("chatService", { loadMessages: async () => [] });
-  service("experienceService", { loadForCard: async () => [] });
   service("memoryService", { load: async () => {} });
   service("prismService", { refresh: noop });
   service("imageService", { loadForChat: async () => {} });
@@ -114,7 +113,6 @@ async function navigation() {
     active--;
     return [{ id: "message-" + id }];
   };
-  h.svc.exp.loadForCard = async id => [{ id: "experience-" + id }];
   h.svc.memory.load = async id => { h.S.memories = [{ id: "memory-" + id }]; };
   h.svc.worldChat.load = async id => { h.S.worldOverlay = { chatId: id }; };
   h.svc.messenger.load = async id => { h.S.messengerEnv = { chatId: id }; };
@@ -128,7 +126,7 @@ async function navigation() {
   assert.equal(concurrent, false, "chat activations must be serialized");
   assert.equal(h.S.chatId, "b");
   assert.equal(h.S.messages[0].id, "message-b");
-  assert.equal(h.S.experience[0].id, "experience-cb");
+  assert.equal("experience" in h.S, false);
   assert.equal(h.S.memories[0].id, "memory-b");
   assert.equal(h.S.worldOverlay.chatId, "b");
   assert.equal(h.S.messengerEnv.chatId, "b");

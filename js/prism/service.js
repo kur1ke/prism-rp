@@ -1,6 +1,6 @@
 /* Prism RP — сборка Prism для текущего чата (прикладной уровень).
    Связывает активную ветку, сцену, опыт и настройки с чистым сборщиком (prism/assembler.js):
-   отбор опыта (EX.rank) и фактов мира (world/overlay-service: канон чата с учётом ветки → отбор по
+   автоматический Experience (prism/memory-service) и отбор фактов мира (world/overlay-service: канон чата с учётом ветки → отбор по
    релевантности; только чтение) → сборка контекста (AS.build) → отчёт для вкладки Prism.
    Мир не зависит от режима: одни и те же факты получает и сцена, и переписка.
    Адаптер режима (prism/modes): сцена (rp) берёт текущее «сейчас» из сцены; переписка — из среды переписки
@@ -9,7 +9,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, EX = PRP.experience, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
+  const TR = PRP.tree, AS = PRP.assembler, IC = PRP.imgCompose, ST = PRP.settings, SCN = PRP.scenario, SR = PRP.stateResolver;
 
   // Bring at most two latest selected-swipe visual directives back into the
   // text model history. These are shot references, NOT canonical scene updates.
@@ -75,18 +75,11 @@
       // используемые для поиска мира без утверждения, что пользователь их наблюдал.
       const here = messenger ? { loc: messenger.world.location || "", present: messenger.world.nearby || [] } : st;
       const history = historyWithDraws(path, allowDraw);
-      const recent = history.slice(-4).map((h) => h.text).join("\n");
-      // The previous manually authored Experience is retained in storage only.
-      // New runtime requests must not blend it with autonomous reflective Experience.
-      const ex = ctx.svc.memory ? { ranked: [], debug: [], visibleCount: 0 } : EX.rank(S.experience, {
-        chatId: c.id, path: chat().pathCtx(path), ownerId: cd.id, present: ["user"].concat(here.present),
-        text: recent, names: [cd.name, ctx.persona().name].concat(here.present), limit: s.expLimit,
-      });
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
       const wearFacts = projected.wearFacts;
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
-        sceneState: messenger ? null : st, messenger, wearFacts, experiences: ex.ranked,
+        sceneState: messenger ? null : st, messenger, wearFacts,
         reflection: ctx.svc.memory ? ctx.svc.memory.experience(path) : null,
         worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
@@ -95,11 +88,8 @@
       }, extra));
       built.report.imageDirectiveAllowed = allowDraw;
       built.report.imageDirectivePolicy = ST.modelDrawPolicy(s);
-      built.report.expDebug = ex.debug;
       built.report.world = wctx.report;
       if (messenger) built.report.messengerState = messenger.report;
-      built.report.experienceVisible = ex.visibleCount;
-      built.report.legacyUnscoped = S.experience.filter((r) => EX.scopeOf(r) === "legacy").length;
       return built;
     }
 
