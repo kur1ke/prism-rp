@@ -4838,7 +4838,12 @@ async function foundationH() {
   });
 
   const visualFrameReply = (f) => JSON.stringify({
-    camera:"", subjects:[], objects:[], environment:"", lighting:"", ...f
+    version:2,focus:"show the source depicted moment",
+    composition:{medium:f.camera||"photograph",framing:"a readable shot of the described action",
+      viewpoint:"from the source viewpoint",rationale:"keep the depicted action and details visible"},
+    subjects:(f.subjects||[]).map(p=>({name:p.name||"",orientation:"",
+      action:p.pose||"",visibleResult:"",clothing:p.clothing||"",expression:""})),
+    objects:f.objects||[],environment:f.environment||"",lighting:f.lighting||""
   });
   await ta("VIS-MIRROR-2: lone mirror selfie cannot pass a fabricated second subject to backend",async()=>{
     for(const wrong of [false,true]){
@@ -4912,7 +4917,7 @@ async function foundationH() {
       globalThis.PRP.llm.simple=async (_,instruction)=>{
         calls++;
         assert.ok(instruction.includes("SCENE:\nОрихимэ Иноуэ приподняла"),instruction.slice(-850));
-        assert.ok(instruction.includes("AUTHORED VISUAL SCENE COMPILATION"));
+        assert.ok(instruction.includes("AUTHORED VISUAL PLANNER V2"));
         assert.ok(instruction.includes("SOURCE ACTOR SCOPE"),"typed Visual Frame receives source actor scope without legacy prose instructions");
         assert.ok(!instruction.includes("VISUAL PROMPT PLAN"),"typed JSON contract cannot receive legacy no-empty-fields instructions");
         assert.ok(!instruction.includes("camera=owner;"),"camera directive is metadata");
@@ -4965,7 +4970,7 @@ async function foundationH() {
       await h.ctx.svc.images.draw(source,source.swipes[0],source.swipes[0].draws[0]);
       const im=source.swipes[0].images[0];
       assert.strictEqual(im.status,"error",JSON.stringify(im));
-      assert.ok(im.error.includes("Visual Frame must"),im.error);
+      assert.ok(im.error.includes("Visual Planner must"),im.error);
       assert.strictEqual(im.translationFailure.stage,"first-pass");
       assert.strictEqual(im.translationFailure.responsePreview,raw);
       assert.strictEqual(calls,1);
@@ -8967,7 +8972,9 @@ async function perfTurn() {
       sims[1].res(ok());
       await until(() => sims.length >= 3, "image compiler request");
       assert.strictEqual(sims[2].prov, processing, "visual prompt uses Processing Provider");
-      sims[2].res(JSON.stringify({camera:"view from a window",subjects:[],objects:[],environment:"tidy room",lighting:"soft daylight"}));
+      sims[2].res(JSON.stringify({version:2,focus:"room seen through a window",
+        composition:{medium:"photograph",framing:"interior room view",viewpoint:"from window",rationale:"keep room visible"},
+        subjects:[],objects:[],environment:"tidy room",lighting:"soft daylight"}));
       await r.reply.post;
       assert.strictEqual(imgs.length, 1, "image backend completed after processing");
     });
