@@ -240,6 +240,10 @@
       if (o.shotOnly) {
         const parsed = VP.parseFrame(raw);
         if (parsed.error) return failure(parsed.error);
+        if (o.promptPlan && o.promptPlan.sections &&
+            o.promptPlan.sections.COMPOSITION && o.promptPlan.sections.COMPOSITION.singleMirror &&
+            parsed.frame.subjects.length > 1)
+          return failure("Зеркальное фото описывает одного человека, но Visual Frame добавил второго.");
         const outputFormat = hybrid || o.format === "description" ? "description" : "tags";
         const text = VP.renderFrame(parsed.frame, outputFormat);
         if (text.length < 4) return failure("Visual Frame rendered empty output");
