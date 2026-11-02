@@ -349,6 +349,9 @@
           }
           if (finalAudit.issues.length)
             throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
+        } else {
+          // Keep the performance metric stable while skipping the obsolete audit.
+          perf("imageFinalAuditMs", clock(), origin, "skipped");
         }
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
