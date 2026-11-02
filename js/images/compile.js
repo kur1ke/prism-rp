@@ -185,7 +185,7 @@
     await warm();
     // Known worn layers still reach the hybrid translator without a removal.
     // Both cache families change: earlier Persona POV instructions must not be reused.
-    const key = [hybrid ? "v20-hybrid-source-ownership" : "v15-source-ownership",
+    const key = [hybrid ? "v21-hybrid-visual-planner" : "v16-visual-planner",
       o.shotOnly ? "authored-draw-only" : "legacy-image-state",
       o.intentMode ? "intent" : "tags",
       o.visualPlan && o.visualPlan.shotAuthored ? "authored-current-frame" : "regular-frame",
@@ -238,17 +238,17 @@
       const raw = rawReply = String((await generateText(instruction)) || "").trim();
       let result;
       if (o.shotOnly) {
-        const parsed = VP.parseFrame(raw);
+        const parsed = VP.parsePlannedFrame(raw);
         if (parsed.error) return failure(parsed.error);
         if (o.promptPlan && o.promptPlan.sections &&
             o.promptPlan.sections.COMPOSITION && o.promptPlan.sections.COMPOSITION.singleMirror &&
-            parsed.frame.subjects.length > 1)
-          return failure("Зеркальное фото описывает одного человека, но Visual Frame добавил второго.");
+            parsed.plan.subjects.length > 1)
+          return failure("Зеркальное фото описывает одного человека, но Visual Planner добавил второго.");
         const outputFormat = hybrid || o.format === "description" ? "description" : "tags";
-        const text = VP.renderFrame(parsed.frame, outputFormat);
-        if (text.length < 4) return failure("Visual Frame rendered empty output");
+        const text = VP.renderPlannedFrame(parsed.plan, outputFormat);
+        if (text.length < 4) return failure("Visual Planner produced an empty prompt");
         if (hybrid && validateHybrid(text)) return failure(validateHybrid(text));
-        result = { text, compiled: true, visualFrameVersion: 1 };
+        result = { text, compiled: true, visualFrameVersion: 2, visualPlan: parsed.plan };
       } else if (negativesRequired) {
         const decoded = canonicalJSON(raw);
         const prompt = typeof decoded.prompt === "string" ? decoded.prompt.replace(/\s+/g, " ").trim() : "";

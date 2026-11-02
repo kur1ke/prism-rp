@@ -377,6 +377,7 @@
         finalPatch = { status: "done", prompt: fin.prompt, negative: fin.negative, seed: res.seed, backend: cfg.backend, info: res.info, compiledFrom: comp.compiled ? imageScene : "",
           promptSources: { draw: entry.draw, drawPromptMode: hybrid ? "hybrid" : intent ? "intent" : "tags", ...composed.provenance,
             compiled: !!comp.compiled, translatedText: comp.text,
+            ...(drawAuthored && comp.visualPlan ? { visualPlan: comp.visualPlan } : {}),
             ...(drawAuthored ? { sourceDrawIndex: authoredIndex,
               historicalDrawState: historical } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },

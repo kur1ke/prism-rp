@@ -60,3 +60,30 @@ for (const bad of [
   JSON.stringify({camera:"photo",subjects:[],objects:["<script>"],environment:"",lighting:""}),
   JSON.stringify({camera:"photo",subjects:[],objects:[],environment:"",lighting:"line\nline"})
 ]) assert.ok(VP.parseFrame(bad).error, "invalid visual representation must fail closed");
+
+const planned = VP.parsePlannedFrame(JSON.stringify({
+  version:2, focus:"hand lifting clothing to reveal the abdomen",
+  composition:{medium:"selfie portrait",framing:"upper body through hips",
+    viewpoint:"three-quarter view",rationale:"show both the gesture and the revealed abdomen"},
+  subjects:[{name:"Orihime",orientation:"slightly sideways",
+    action:"lifting the lower edge of her pajama top",visibleResult:"abdomen visible",
+    clothing:"pink pajama top, lace undergarment visible at its edge",expression:"playful smile"}],
+  objects:["crumpled skirt lying separately on the bed"],
+  environment:"in a bedroom",lighting:"soft ambient light"
+}));
+assert.ok(planned.plan && !planned.error,planned.error);
+assert.equal(planned.plan.version,2);
+assert.equal(planned.plan.composition.framing,"upper body through hips");
+assert.ok(Object.isFrozen(planned.plan.composition));
+const result=VP.renderPlannedFrame(planned.plan,"description");
+assert.ok(result.indexOf("lifting the lower edge") < result.indexOf("in a bedroom"),
+  "visual action must precede environment");
+assert.ok(result.includes("crumpled skirt lying separately on the bed"));
+assert.ok(!result.includes("show both the gesture"),"planning rationale must not leak into backend prompt");
+assert.equal(planned.plan.subjects[0].clothing.includes("crumpled skirt"),false);
+for(const invalid of [
+  JSON.stringify({version:1,camera:"portrait",subjects:[],objects:[],environment:"",lighting:""}),
+  JSON.stringify({version:2,focus:"",composition:{},subjects:[],objects:[],environment:"",lighting:""}),
+  JSON.stringify({version:2,focus:"gesture",composition:{medium:"",framing:"",viewpoint:"",rationale:""},
+    subjects:[],objects:[],environment:"",lighting:""})
+]) assert.ok(VP.parsePlannedFrame(invalid).error);

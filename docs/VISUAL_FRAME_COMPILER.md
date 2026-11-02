@@ -100,3 +100,37 @@ a diffusion model.
 Revert this feature PR on `testing`. No data migration is required:
 existing stored image entries retain their source DRAW and final prompt,
 and no new canonical information is persisted. The Visual Frame is transient.
+
+
+## Visual Planner v2 (PR #146)
+
+The authored image intent now uses a **shot-planning** response, replacing
+Visual Frame v1's translated-description layout. The RP DRAW still defines
+**what is depicted**; the Processing Provider decides **how to frame the
+known scene** so that the main action and visible result can be understood.
+
+The single-model-call JSON response includes:
+
+- `version:2`, `focus`: the source-backed visual priority;
+- `composition.medium`, `framing`, `viewpoint`: photographic staging,
+  chosen by Planner unless explicitly constrained by DRAW;
+- `composition.rationale`: why staging makes the focus visible; stays
+  in Debug metadata and must **not** be serialized into the image prompt;
+- `subjects[].orientation/action/visibleResult/clothing/expression`:
+  distinguish body orientation, action, visible effect and garments on-body;
+- `objects[]`: separately depicted off-body objects with their positions;
+- `environment`, `lighting`: source scene data, not default added props.
+
+Serializer prioritizes shot framing and the source action/visible result ahead
+of unrelated background details. The resulting frame and its rationale are
+stored only as image-generation provenance for Debug, not as world state.
+Structured JSON parse errors abort translation; there is no second LLM call
+and no return to Tracker. Old image records keep their existing prompt.
+
+**Known limitation:** a schema and a successful build cannot prove that a
+given Processing Provider will consistently select the right crop or preserve
+every subtle source relation. Evaluate the complete mechanism with real DRAW
+after it enters `testing`, not by adding text-specific patches during coding.
+
+Legacy unauthored scenes and authored precompiled tag mode are unchanged.
+No new database schema, character inventory or global rules for garments.
