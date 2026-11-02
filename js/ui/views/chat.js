@@ -72,17 +72,19 @@
 
   function tools(msg, isLast) {
     return `<div class="tools">${swipeNav(msg, isLast)}
+      ${msg.role === "user" && msg.editedFrom ? '<span class="tag">изменено · новая ветка</span>' : ""}
+      ${msg.role === "user" && isLast ? `<button class="tool" data-act="reply">${icon("bubble")}Получить ответ</button>` : ""}
       ${msg.role === "assistant" && isLast ? `<button class="tool" data-act="regen" data-id="${esc(msg.id)}">${icon("regen")}Другой вариант</button>
         <button class="tool" data-act="continue" data-id="${esc(msg.id)}">${icon("cont")}Продолжить</button>` : ""}
       ${msg.role === "assistant" ? `<button class="tool" data-act="draw" data-id="${esc(msg.id)}" title="Нарисовать этот момент">${icon("brush")}Нарисовать</button>` : ""}
-      <button class="tool" data-act="edit" data-id="${esc(msg.id)}">${icon("edit")}Править</button>
+      ${msg.role === "user" ? `<button class="tool" data-act="edit" data-id="${esc(msg.id)}">${icon("edit")}Изменить</button>` : ""}
       <button class="tool" data-act="delete" data-id="${esc(msg.id)}" title="Удалить с этого места">${icon("trash")}</button></div>`;
   }
 
   function editor(msg, sw) {
-    const raw = sw.text + (msg.role === "assistant" && sw.sceneOps && sw.sceneOps.length ? "\n\n[scene: " + sw.sceneOps.map((o) => o.raw).join("; ") + "]" : "");
-    return `<textarea class="editor" id="edit-${msg.id}">${esc(raw)}</textarea>
-      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${esc(msg.id)}">Сохранить</button>
+    if (msg.role !== "user") return "";
+    return `<textarea class="editor" id="edit-${esc(msg.id)}" aria-label="Изменить своё сообщение">${esc(sw.text || "")}</textarea>
+      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${esc(msg.id)}">Сохранить и получить ответ</button>
       <button class="btn btn-sm btn-ghost" data-act="cancel-edit">Отмена</button></div>`;
   }
 
@@ -160,7 +162,7 @@
       const live = m.gen && m.gen.msgId === msg.id;
       const who = msg.role === "user" ? me : m.card;
       let body;
-      if (m.editingMsg === msg.id) body = editor(msg, sw);
+      if (msg.role === "user" && m.editingMsg === msg.id) body = editor(msg, sw);
       else {
         const reasoning = live ? m.gen.reasoning : sw.reasoning;
         const text = live ? (m.gen.prefix || "") + liveText(m) : sw.text;
@@ -196,7 +198,7 @@
       const d = stamp.day;
       const mark = d !== lastDay ? `<div class="daymark">${esc(d)}</div>` : "";
       lastDay = d;
-      if (m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
+      if (msg.role === "user" && m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
       if (live) {
         const parts = R.bubbles(liveText(m));
         return mark + `<div class="msg-row them" id="text-${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
@@ -262,6 +264,7 @@
   function chatMenu(m) {
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
       <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка…</button>
+      <button class="pop-item" data-act="tree-open">${icon("tree")}Дерево сообщений</button>
       <div class="pop-sep"></div>
       ${m.chat.mode === "messenger" ? `<button class="pop-item" data-act="time-open">${icon("clock")}Время переписки</button>` : ""}
       <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>

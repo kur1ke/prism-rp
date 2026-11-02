@@ -18,13 +18,13 @@
      messengerEnv (среда текущей переписки), assistList.
      Навигация: view, cardId, chatId, assist (открытый разговор).
      Генерация (временное): gen, drawing (id картинок в работе).
-     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg.
+     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, branchTreeUi.
      Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111). */
   const S = {
     settings: null, cards: [], chats: [],
     view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], memories: [], reflections: [], memoryStatus: "",
     gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null,
-    drawerOpen: false, tab: "scene", find: null, homeQuery: "",
+    drawerOpen: false, tab: "scene", find: null, homeQuery: "", branchTreeUi: null,
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
     assist: null, assistList: [],

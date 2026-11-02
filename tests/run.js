@@ -2095,8 +2095,14 @@ function fbHarness(card, opts) {
     // Как одна транзакция: все записи или ни одной (настоящая атомарность IndexedDB проверяется в E2E).
     putAll: async (entries) => { for (const [st, x] of entries) await DB.put(st, x); },
     mutateBatch: async (batch) => {
+      const patches = (batch.patches || []).map(([st, id, fields]) => {
+        const current = (store[st] || new Map()).get(id);
+        if (!current) throw new Error("Исходная запись больше не существует");
+        return [st, Object.assign({}, current, fields)];
+      });
       for (const [st, id] of (batch.deletes || [])) (store[st] || new Map()).delete(id);
       for (const [st, x] of (batch.puts || [])) await DB.put(st, x);
+      for (const [st, x] of patches) await DB.put(st, x);
     },
     get: async (st, id) => { const v = (store[st] || new Map()).get(id); return v ? JSON.parse(JSON.stringify(v)) : undefined; },
     byIndex: async (st, idx, v) => [...((store[st] || new Map()).values())].filter((x) => x[idx] === v),
@@ -2221,14 +2227,14 @@ async function foundationB() {
     assert.strictEqual(h.ctx.chat().sceneInit, "");
     assert.strictEqual((await h.ctx.DB.get("chats", id)).sceneInit, "");
   });
-  await ta("ST1: ручные дельты сохраняются при правке того же ответа", async () => {
+  await ta("ST1: ответ персонажа нельзя редактировать; ручные дельты не меняются", async () => {
     const h = fbHarness({ name: "Орихимэ", description: "тест", firstMes: "Привет [scene: loc=Дом; Орихимэ.wear=блузка]" });
     await h.chat.createChat("rp");
     const msg = h.chat.path()[0];
     await h.chat.applySceneOps([h.chat.op("Орихимэ", "wear", "худи")]);
     assert.deepStrictEqual(h.chat.sceneState().chars["Орихимэ"].wear, ["худи"]);
-    await h.chat.saveEdit(msg.id, "Привет [scene: loc=Парк; Орихимэ.wear=юбка]");
-    assert.strictEqual(h.chat.sceneState().loc, "Парк");
+    assert.strictEqual(await h.chat.saveEdit(msg.id, "Привет [scene: loc=Парк; Орихимэ.wear=юбка]"), false);
+    assert.strictEqual(h.chat.sceneState().loc, "Дом");
     assert.deepStrictEqual(h.chat.sceneState().chars["Орихимэ"].wear, ["худи"]);
     assert.ok(h.chat.path()[0].swipes[0].sceneOps.some((op) => op.manual));
   });
@@ -3256,10 +3262,10 @@ async function foundationH() {
     assert.ok(!allText(seen).includes("Станция") && !allText(seen).includes("пальто") && !allText(seen).includes("рада"));
     const comp = IC.compose({ draw: "selfie, smiling", card: h.ctx.card(), scene: h.chat.sceneState(), persona: {} });
     assert.ok(!/пальто|coat|Станция/i.test(comp.scene + comp.keep), "картинка переписки не берёт одежду и место из сцены RP");
-    // правка ответа переписки — тоже без сцены
-    await h.chat.saveEdit(h.chat.path()[1].id, "Дома!\n[scene: loc=Парк]");
-    const sw2 = TR_.activeSwipe(h.chat.path()[1]);
-    assert.deepStrictEqual([sw2.text, sw2.sceneOps.length, sw2.ignoredSceneOps.length], ["Дома!", 0, 1]);
+    // Ответ персонажа и его неактивные sceneOps доступны только для чтения.
+    const beforeEdit = JSON.stringify(h.chat.path()[1]);
+    assert.strictEqual(await h.chat.saveEdit(h.chat.path()[1].id, "Дома!\n[scene: loc=Парк]"), false);
+    assert.strictEqual(JSON.stringify(h.chat.path()[1]), beforeEdit);
     assert.strictEqual(await h.chat.applySceneOps([h.chat.op(null, "loc", "Кафе")]), false, "ручные правки сцены в переписке не пишутся");
   });
   await ta("VC-8: мессенджер — визуальное состояние живёт в среде и сохраняет снимок сообщения", async () => {
@@ -7736,19 +7742,21 @@ async function unifiedTracker() {
     await h.chat.commitMessage(after, after.id);
     assert.deepStrictEqual(globalThis.PRP.stateTracker.forCharacter(h.ctx.svc.state.snapshot()).visualWear, ["платье"]);
   });
-  await ta("UT-14: исправленный текст сообщения аннулирует автофакты, но сохраняет ручную коррекцию", async () => {
+  await ta("UT-14: правка пользователя не переносит состояние исходного сообщения в новую ветку", async () => {
     const h = fbHarness({ name: "Орихимэ", description: "Девушка." });
     await h.chat.createChat("messenger", "c1");
     h.ctx.svc.state = globalThis.PRP.stateService.create(h.ctx);
     const m = await h.chat.addUserMessage("Я дома");
     m.swipes[0].stateEvents = [Evt("user", "location", "set", "дома", "reported", "Я дома")];
     await h.ctx.svc.state.correct({ visualWear: ["белый свитер"] });
-    await h.chat.saveEdit(m.id, "На улице дождь");
-    assert.strictEqual(m.swipes[0].stateEvents, undefined);
-    assert.strictEqual(m.swipes[0].stateCorrections.length, 1);
-    const snapshot = h.ctx.svc.state.snapshot();
-    assert.strictEqual(globalThis.PRP.stateTracker.fieldOf(snapshot, "user", "location"), null);
-    assert.deepStrictEqual(globalThis.PRP.stateTracker.forCharacter(snapshot).visualWear, ["белый свитер"]);
+    const edited = await h.chat.saveEdit(m.id, "На улице дождь");
+    assert.ok(edited && edited.id !== m.id);
+    assert.strictEqual(edited.swipes[0].stateEvents, undefined);
+    assert.strictEqual(edited.swipes[0].stateCorrections, undefined);
+    assert.strictEqual(globalThis.PRP.stateTracker.fieldOf(h.ctx.svc.state.snapshot(), "user", "location"), null);
+    await h.chat.selectBranch(m.id);
+    assert.strictEqual(globalThis.PRP.stateTracker.fieldOf(h.ctx.svc.state.snapshot(), "user", "location").value, "дома");
+    assert.deepStrictEqual(globalThis.PRP.stateTracker.forCharacter(h.ctx.svc.state.snapshot()).visualWear, ["белый свитер"]);
   });
   await ta("UT-15: образ из трекера побеждает базовую форму карточки в мессенджере", async () => {
     const c = { name: "Орихимэ", image: { trigger: "orihime_inoue", wardrobe: "base: school uniform", look: "base: long orange hair" } };
@@ -9222,7 +9230,7 @@ async function perfTurn() {
       assert.strictEqual(a3.swipes[0].images.length, 1);
       assert.ok(!a3.swipes[1].images);
     });
-    await ta("PERF-13 (review MAJOR): правка истории во время ожидающей отправки — реплика не уходит, текст возвращается", async () => {
+    await ta("PERF-13: редактор занят во время отправки; внешняя правка истории отменяет ожидающую реплику", async () => {
       // правка уже разобранной реплики пользователя (не того сообщения, что разбирается)
       const h = await mk("rp");
       await firstTurn(h);
@@ -9231,24 +9239,25 @@ async function perfTurn() {
       const p2 = h.gen.send("Я снял шарф.");
       await tick();
       assert.strictEqual(h.S.turn.phase, "waiting-state");
-      await h.chat.saveEdit(u.id, "Я стою на улице.");
-      h.ctx.svc.state.track(u, { id: "mock" }); // так делает контроллер правки
+      assert.strictEqual(await h.chat.saveEdit(u.id, "Я стою на улице."), false, "queued turn prevents another edit");
+      assert.strictEqual(TR_.activeSwipe(u).text.includes("Я стою на улице"), false);
       sims[1].res(ok());
-      await until(() => sims.length === 3, "разбор правки");
+      await until(() => sims.length === 3, "разбор ожидающей реплики");
       sims[2].res(ok());
       const r = await p2;
-      assert.strictEqual(r.outcome, "context-changed");
-      assert.strictEqual(h.store.messages.size, n, "реплика не записана");
-      assert.strictEqual(rp.length, nRp, "генерация не запущена");
-      assert.deepStrictEqual(h.restored.map((x) => x.text), ["Я снял шарф."]);
-      assert.ok(h.toasts.some((x) => /текст истории/.test(x.t)));
+      assert.strictEqual(r.outcome, "sent");
+      assert.strictEqual(h.store.messages.size, n + 2);
+      assert.strictEqual(rp.length, nRp + 1);
+      sims[3].res(ok()); await r.reply.post;
       // правка ответа, который сейчас разбирается
       const h2 = await mk("rp");
       await firstTurn(h2);
       const a = h2.chat.path()[1];
       const q = h2.gen.send("Я снял шарф.");
       await tick();
-      await h2.chat.saveEdit(a.id, "Я в пижаме.");
+      assert.strictEqual(await h2.chat.saveEdit(a.id, "Я в пижаме."), false);
+      // External/import mutations still invalidate a pending source, even though the UI cannot edit character replies.
+      a.swipes[0].text = "Я в пижаме."; await h2.chat.putMsg(a);
       sims[1].res(ok(jacket()));
       const r2 = await q;
       assert.strictEqual(r2.outcome, "context-changed");
@@ -9498,8 +9507,13 @@ async function autoMemoryTests() {
     await h.chat.swipe(ancestor.id,-1);
     assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,1);
     assert.ok(h.ctx.svc.memory.experience());
-    await h.chat.saveEdit(msg.id,"Сегодня я не могу ничего обещать");
+    assert.strictEqual(await h.chat.saveEdit(msg.id,"Сегодня я не могу ничего обещать"),false);
+    const edited = await h.chat.saveEdit(ancestor.id,"Ты обещаешь мне помочь?");
+    assert.ok(edited);
     assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,0);
+    await h.chat.selectBranch(msg.id);
+    assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,1);
+    assert.ok(h.ctx.svc.memory.experience());
   });
   await ta("AUTO-M6: next reflection includes earlier Experience separately from Core",async()=>{
     const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
@@ -9650,7 +9664,7 @@ const TR_ = globalThis.PRP.tree;
 // Do not let an unresolved async fixture finish Node with exit code 0.
 // The suite normally completes in seconds; a pending test must fail CI.
 setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
-foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => {
+foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
   if (BASELINE.length) {
     console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
     for (const r of BASELINE) console.log(`  ${r.id.padEnd(30)} было ${String(r.old).padStart(5)} → ядро ${String(r.core).padStart(4)} + подробн. ${String(r.details).padStart(4)} + примеры ${String(r.examples).padStart(4)} = ${String(r.total).padStart(5)}; ядро: ${r.coreSource}${r.cut.length ? " (" + r.cut.join(", ") + ")" : ""}; вошло: ${r.selected.join(", ") || "—"}; не вошло: ${r.dropped.length}`);

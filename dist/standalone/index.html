@@ -706,6 +706,48 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .home-greeting-actions { justify-content: center; margin-top: 24px; }
 .rail-chat .t2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Dialogue map: quiet nodes, connections and an on-demand message preview. */
+.map-launch { padding: 12px 0; }
+.modal.dialogue-map-modal { width: min(1200px, 100%); height: min(880px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(180px, 1fr) auto; padding: 0; }
+.map-head { display: flex; align-items: center; justify-content: space-between; padding: 22px 26px; }
+.map-head h2 { font-size: 23px; margin: 0; }
+.map-viewport { margin: 0 26px; min-height: 0; overflow: auto; background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; cursor: grab; touch-action: pan-x pan-y; }
+.map-scaled { position: relative; margin-inline: auto; }
+.map-stage { position: absolute; inset: 0 auto auto 0; transform-origin: top left; }
+.map-links { position: absolute; inset: 0; pointer-events: none; }
+.map-links path { fill: none; stroke: var(--muted); stroke-width: 1.4; opacity: .45; }
+.map-links path.active { stroke: var(--ok); opacity: .8; }
+.map-node, .map-root { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); }
+.map-node { border: 0; padding: 0; background: transparent; color: var(--text); cursor: pointer; }
+.map-node > span, .map-root > span { position: absolute; bottom: calc(100% + 5px); left: 50%; transform: translateX(-50%); width: 92px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 600; }
+.map-node i, .map-root i { display: block; width: 22px; height: 22px; margin: 3px; border: 2px solid var(--muted); border-radius: 50%; background: var(--muted); overflow: hidden; }
+.map-node i img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.map-node.active i { background: var(--ok); border-color: var(--ok); }
+.map-node.current i, .map-root i { border-color: var(--accent); }
+.map-node.selected i { outline: 3px solid var(--accent); outline-offset: 3px; }
+.map-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 7px; border-radius: 50%; }
+.map-root i { background: var(--accent); }
+.map-inspector { margin: 12px 26px 0; border-top: 1px solid var(--line-soft); padding-top: 10px; min-width: 0; }
+.dialogue-map-modal:has(.map-inspector) { grid-template-rows: auto minmax(150px, 1fr) auto auto; }
+.map-selection { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.map-selection .btn { margin-left: auto; }
+.map-selection select { background: var(--sunken); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px; }
+.map-message { max-height: 105px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: var(--text-2); margin: 9px 0 0; }
+.map-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 26px; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11px; color: var(--muted); }
+.map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.map-legend i { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.map-legend i.active { background: var(--ok); }
+.map-legend i.current { background: transparent; border: 2px solid var(--accent); }
+.map-controls { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.drawer-tabs .dtab { padding: 10px 8px 12px; font-size: 13px; gap: 4px; }
+@media(max-width:640px) {
+ .modal.dialogue-map-modal { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+ .map-head { padding: 16px; }.map-head h2 { font-size: 20px; }
+ .map-viewport { margin-inline: 12px; }.map-inspector { margin-inline: 12px; }
+ .map-footer { padding: 12px; align-items: flex-end; }.map-legend { gap: 5px 10px; }
+}
+
 </style>
 </head>
 <body>
@@ -938,12 +980,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         } catch (e) { failure = e; try { t.abort(); } catch (_) { /* уже прервана */ } }
       });
     },
-    // Atomically mix deletions and writes across stores. All IndexedDB requests
-    // are enqueued synchronously; no await occurs inside the active transaction.
+    // Atomically mix deletions, writes and patches. Initial requests are queued
+    // synchronously; patch writes run in active request callbacks, without await.
     async mutateBatch(batch) {
       const puts = (batch && batch.puts || []).filter(x => x && x[0] && x[1]);
       const deletes = (batch && batch.deletes || []).filter(x => x && x[0] && x[1] != null);
-      const names = [...new Set(puts.concat(deletes).map(x => x[0]))];
+      const patches = (batch && batch.patches || []).filter(x => x && x[0] && x[1] != null && x[2]);
+      const names = [...new Set(puts.concat(deletes, patches).map(x => x[0]))];
       if (!names.length) return;
       const db = await open();
       return new Promise((ok, fail) => {
@@ -953,6 +996,19 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         t.onerror = () => { if (!failure) failure = t.error; };
         t.onabort = () => fail(failure || t.error || new Error("Пакетная операция отменена"));
         try {
+          // Patch existing records inside this transaction, preserving fields
+          // updated by another operation (for example image/state results).
+          for (const [store, id, fields] of patches) {
+            const st = t.objectStore(store), req = st.get(id);
+            req.onsuccess = () => {
+              try {
+                if (!req.result) throw new Error("Исходная запись больше не существует");
+                const next = Object.assign({}, req.result, fields);
+                if (store !== "settings") next.updatedAt = Date.now();
+                st.put(next);
+              } catch (e) { failure = e; try { t.abort(); } catch (_) {} }
+            };
+          }
           for (const [store, id] of deletes) {
             const req = t.objectStore(store).delete(id);
             req.onerror = () => { failure = failure || req.error; };
@@ -5055,7 +5111,71 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return m.swipes[Math.min(m.swipeIdx || 0, m.swipes.length - 1)];
   }
 
-  PRP.tree = { index, path, children, descendants, latestLeaf, activeSwipe };
+  // Restore the variants recorded on parent edges, without mutating messages.
+  // Legacy edges have no variant metadata: retain their current selection.
+  function selection(list, leafId, swipeIdx) {
+    const byId = index(list), route = [], seen = new Set();
+    let node = byId.get(leafId), selected = swipeIdx;
+    if (!node) return null;
+    while (node) {
+      if (seen.has(node.id)) return null;
+      seen.add(node.id);
+      const variant = selected == null ? (node.swipeIdx || 0) : selected;
+      if (!Number.isInteger(variant) || variant < 0 || !node.swipes || variant >= node.swipes.length) return null;
+      route.unshift({ id: node.id, swipeIdx: variant });
+      if (!node.parentId) break;
+      selected = node.parentSwipeIdx;
+      node = byId.get(node.parentId);
+      if (!node) return null;
+    }
+    return route;
+  }
+
+  // Flat preorder keeps large trees renderable without recursive DOM building.
+  function outline(list, leafId) {
+    const groups = new Map(), nodes = index(list), active = new Set(path(nodes, leafId).map((m) => m.id));
+    for (const m of list || []) {
+      const key = nodes.has(m.parentId) ? m.parentId : null;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(m);
+    }
+    for (const group of groups.values()) group.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id)));
+    const stack = (groups.get(null) || []).slice().reverse().map((m) => ({ m, depth: 0 }));
+    const rows = [], seen = new Set();
+    while (stack.length) {
+      const { m, depth } = stack.pop();
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      rows.push({ id: m.id, parentId: m.parentId, role: m.role, text: String(activeSwipe(m).text || ""),
+        depth, active: active.has(m.id), current: m.id === leafId, swipeIdx: m.swipeIdx || 0,
+        variants: (m.swipes || []).map((sw, i) => ({ index: i, text: String(sw.text || "") })) });
+      const children = groups.get(m.id) || [];
+      for (let i = children.length - 1; i >= 0; i--) stack.push({ m: children[i], depth: depth + 1 });
+    }
+    return rows;
+  }
+
+  function layout(list, leafId) {
+    const rows = outline(list, leafId), byId = new Map(rows.map((n) => [n.id, n])), children = new Map(), spans = new Map();
+    for (const n of rows) {
+      const parent = byId.has(n.parentId) ? n.parentId : null;
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent).push(n);
+    }
+    for (const n of rows.slice().reverse()) spans.set(n.id, Math.max(1, (children.get(n.id) || []).reduce((v, c) => v + spans.get(c.id), 0)));
+    const roots = children.get(null) || [], total = roots.reduce((v, n) => v + spans.get(n.id), 0);
+    const width = Math.max(320, total * 112 + 100), height = Math.max(420, (Math.max(0, ...rows.map((n) => n.depth)) + 2) * 92 + 80);
+    const positions = new Map(); let cursor = (width - total * 112) / 2;
+    const place = (group, start) => { let x = start; for (const n of group) { positions.set(n.id, { x: x + spans.get(n.id) * 56, start: x }); x += spans.get(n.id) * 112; } };
+    place(roots, cursor);
+    for (const n of rows) place(children.get(n.id) || [], positions.get(n.id).start);
+    const nodes = rows.map((n) => Object.assign({}, n, { x: positions.get(n.id).x, y: 124 + n.depth * 92 }));
+    const points = new Map(nodes.map((n) => [n.id, n]));
+    const links = nodes.map((n) => { const parent = points.get(n.parentId); return { x1: parent ? parent.x : width / 2, y1: parent ? parent.y : 32, x2: n.x, y2: n.y, active: n.active }; });
+    return { nodes, links, width, height };
+  }
+
+  PRP.tree = { index, path, children, descendants, latestLeaf, activeSwipe, selection, layout };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.tree;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -9224,9 +9344,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     stop: '<rect x="7" y="7" width="10" height="10" rx="2"/>',
     regen: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>',
     edit: '<path d="m15 5 4 4L8.5 19.5H4.5v-4z"/><path d="m13 7 4 4"/>',
+    tree: '<path d="M6 4v13a3 3 0 0 0 3 3h6M6 10h9"/><circle cx="6" cy="4" r="2"/><circle cx="17" cy="10" r="2"/><circle cx="17" cy="20" r="2"/>',
     trash: '<path d="M4.5 7h15M10 11v6M14 11v6M6.5 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5l1-12.5M9.5 7V4.5h5V7"/>',
     left: '<path d="m14.5 6-6 6 6 6"/>',
     right: '<path d="m9.5 6 6 6-6 6"/>',
+    down: '<path d="m6 9 6 6 6-6"/>',
     cont: '<path d="M5 6v12M9 6l9 6-9 6z"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
@@ -9668,17 +9790,19 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   function tools(msg, isLast) {
     return `<div class="tools">${swipeNav(msg, isLast)}
+      ${msg.role === "user" && msg.editedFrom ? '<span class="tag">изменено · новая ветка</span>' : ""}
+      ${msg.role === "user" && isLast ? `<button class="tool" data-act="reply">${icon("bubble")}Получить ответ</button>` : ""}
       ${msg.role === "assistant" && isLast ? `<button class="tool" data-act="regen" data-id="${esc(msg.id)}">${icon("regen")}Другой вариант</button>
         <button class="tool" data-act="continue" data-id="${esc(msg.id)}">${icon("cont")}Продолжить</button>` : ""}
       ${msg.role === "assistant" ? `<button class="tool" data-act="draw" data-id="${esc(msg.id)}" title="Нарисовать этот момент">${icon("brush")}Нарисовать</button>` : ""}
-      <button class="tool" data-act="edit" data-id="${esc(msg.id)}">${icon("edit")}Править</button>
+      ${msg.role === "user" ? `<button class="tool" data-act="edit" data-id="${esc(msg.id)}">${icon("edit")}Изменить</button>` : ""}
       <button class="tool" data-act="delete" data-id="${esc(msg.id)}" title="Удалить с этого места">${icon("trash")}</button></div>`;
   }
 
   function editor(msg, sw) {
-    const raw = sw.text + (msg.role === "assistant" && sw.sceneOps && sw.sceneOps.length ? "\n\n[scene: " + sw.sceneOps.map((o) => o.raw).join("; ") + "]" : "");
-    return `<textarea class="editor" id="edit-${msg.id}">${esc(raw)}</textarea>
-      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${esc(msg.id)}">Сохранить</button>
+    if (msg.role !== "user") return "";
+    return `<textarea class="editor" id="edit-${esc(msg.id)}" aria-label="Изменить своё сообщение">${esc(sw.text || "")}</textarea>
+      <div class="row" style="margin-top:8px"><button class="btn btn-primary btn-sm" data-act="save-edit" data-id="${esc(msg.id)}">Сохранить и получить ответ</button>
       <button class="btn btn-sm btn-ghost" data-act="cancel-edit">Отмена</button></div>`;
   }
 
@@ -9756,7 +9880,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const live = m.gen && m.gen.msgId === msg.id;
       const who = msg.role === "user" ? me : m.card;
       let body;
-      if (m.editingMsg === msg.id) body = editor(msg, sw);
+      if (msg.role === "user" && m.editingMsg === msg.id) body = editor(msg, sw);
       else {
         const reasoning = live ? m.gen.reasoning : sw.reasoning;
         const text = live ? (m.gen.prefix || "") + liveText(m) : sw.text;
@@ -9792,7 +9916,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const d = stamp.day;
       const mark = d !== lastDay ? `<div class="daymark">${esc(d)}</div>` : "";
       lastDay = d;
-      if (m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
+      if (msg.role === "user" && m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
       if (live) {
         const parts = R.bubbles(liveText(m));
         return mark + `<div class="msg-row them" id="text-${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
@@ -9858,6 +9982,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   function chatMenu(m) {
     return `<button class="pop-item" data-act="new-chat" data-mode="rp">${icon("book")}Новая сцена с ${esc(m.card.name)}</button>
       <button class="pop-item" data-act="new-chat" data-mode="messenger">${icon("bubble")}Новая переписка…</button>
+      <button class="pop-item" data-act="tree-open">${icon("tree")}Дерево сообщений</button>
       <div class="pop-sep"></div>
       ${m.chat.mode === "messenger" ? `<button class="pop-item" data-act="time-open">${icon("clock")}Время переписки</button>` : ""}
       <button class="pop-item" data-act="assist-about-chat">${icon("assist")}Спросить ассистента об этом чате</button>
@@ -9872,6 +9997,41 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/ui/views/branch-tree.js */
+/* Prism RP — compact dialogue map; message text is shown only on selection. */
+(function (root) {
+  "use strict";
+  const P = root.PRP = root.PRP || {}, R = P.render, { esc, icon } = R;
+  function branchTree() {
+    return `<div class="map-launch"><button class="btn" data-act="tree-open">${icon("tree")}Открыть карту диалога</button></div>`;
+  }
+  function dialogueMap(m) {
+    const graph = m.dialogueMap || { nodes: [], links: [], width: 320, height: 400 };
+    const state = m.branchTreeUi || {}, zoom = state.zoom || 1;
+    const selected = graph.nodes.find((n) => n.id === state.selectedId);
+    const variant = selected ? (state.variant == null ? selected.swipeIdx : state.variant) : 0;
+    const text = selected && selected.variants[variant] ? selected.variants[variant].text : "";
+    const busy = !!(m.gen || m.turn);
+    const label = (node) => node.role === "user" ? m.persona.name : m.card.name;
+    const point = (node) => node.role === "assistant" && R.safeImageSrc(m.card.avatar)
+      ? `<img src="${R.safeImageSrc(m.card.avatar)}" alt="">` : "";
+    return `<div class="modal-wrap" data-act="modal-bg"><section class="modal dialogue-map-modal" role="dialog" aria-modal="true" aria-labelledby="dialogue-map-title">
+      <header class="map-head"><h2 id="dialogue-map-title">Карта диалога</h2><button class="icon-btn" data-act="modal-close" aria-label="Закрыть карту">${icon("x")}</button></header>
+      <div class="map-viewport" id="map-viewport" tabindex="0" aria-label="Карта сообщений; прокрутка перемещает карту">
+        <div class="map-scaled" style="width:${graph.width * zoom}px;height:${graph.height * zoom}px"><div class="map-stage" style="width:${graph.width}px;height:${graph.height}px;transform:scale(${zoom})">
+          <svg class="map-links" width="${graph.width}" height="${graph.height}" aria-hidden="true">${graph.links.map((e) => `<path class="${e.active ? "active" : ""}" d="M ${e.x1} ${e.y1} C ${e.x1} ${(e.y1 + e.y2) / 2}, ${e.x2} ${(e.y1 + e.y2) / 2}, ${e.x2} ${e.y2}"/>`).join("")}</svg>
+          <div class="map-root" style="left:${graph.width / 2}px;top:32px"><span>Начало</span><i></i></div>
+          ${graph.nodes.map((n) => `<button class="map-node ${n.active ? "active" : ""} ${n.current ? "current" : ""} ${state.selectedId === n.id ? "selected" : ""}" style="left:${n.x}px;top:${n.y}px" data-act="map-pick" data-id="${esc(n.id)}" aria-label="${esc(label(n))}: ${esc(n.text.replace(/\s+/g, " ").slice(0, 90))}" title="${esc(n.text.replace(/\s+/g, " ").slice(0, 150))}"><span>${esc(label(n))}</span><i>${point(n)}</i></button>`).join("")}
+        </div></div>
+      </div>
+      ${selected ? `<div class="map-inspector"><div class="map-selection"><b>${esc(label(selected))}</b>${selected.variants.length > 1 ? `<select data-map-variant aria-label="Вариант ответа">${selected.variants.map((v) => `<option value="${v.index}" ${v.index === variant ? "selected" : ""}>Вариант ${v.index + 1}</option>`).join("")}</select>` : ""}<button class="btn btn-sm" data-act="tree-select" data-id="${esc(selected.id)}" data-swipe="${variant}" ${busy ? "disabled" : ""}>Продолжить отсюда</button></div><p class="map-message">${esc(text)}</p></div>` : ""}
+      <footer class="map-footer"><div class="map-legend"><span><i class="active"></i>Текущая ветка</span><span><i></i>Другие ветки</span><span><i class="current"></i>Точка продолжения</span></div><div class="map-controls"><button class="tool" data-act="map-zoom" data-dir="-1" aria-label="Уменьшить">−</button><button class="tool" data-act="map-center" title="По центру">${Math.round(zoom * 100)}%</button><button class="tool" data-act="map-zoom" data-dir="1" aria-label="Увеличить">+</button></div></footer>
+    </section></div>`;
+  }
+  P.views = Object.assign(P.views || {}, { branchTree, dialogueMap });
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/ui/views/drawer.js */
 /* Prism RP — выдвижная панель: сцена, опыт, мир чата, Prism (что ушло в модель). */
 (function (root) {
@@ -9883,15 +10043,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
   /* ── Выдвижная панель ─────────────────────────────────────────────── */
   function drawer(m) {
-    // У сцены — «Сцена», у переписки — «Среда» (сцены RP в переписке нет). Мир, опыт и Prism — у обоих режимов.
+    // Режимное состояние отдельно; дерево, память и мир доступны обоим режимам.
     const ms = m.chat && m.chat.mode === "messenger";
-    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Память", "memory"], ["world", "Мир", "globe"]];
+    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["tree", "Дерево", "tree"], ["memory", "Память", "memory"], ["world", "Мир", "globe"]];
     const tab = m.tab === "prism" ? (ms ? "env" : "scene") : ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
     m = Object.assign({}, m, { tab });
     let body = "";
     if (!m.chat) body = `<p class="empty-note">Откройте чат.</p>`;
     else if (m.tab === "env") body = PRP.views.envTab(m);
     else if (m.tab === "scene") body = sceneTab(m);
+    else if (m.tab === "tree") body = PRP.views.branchTree(m);
     else if (m.tab === "memory") body = memoryTab(m);
     else if (m.tab === "world") body = worldTab(m);
     else body = ms ? PRP.views.envTab(m) : sceneTab(m);
@@ -11221,7 +11382,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        Память (S.messages, текущий чат) меняется только после успеха; при отказе не меняется ничего — ни в базе, ни в памяти.
        msg — полная новая версия сообщения (вызывающий передаёт копию; объект в памяти обновляется на месте).
        leafId — новый конец ветки (undefined — прежний). → сообщение в памяти. */
-    async function commitMessage(msg, leafId) {
+    async function commitMessage(msg, leafId, edgeUpdates) {
       const c = ctx.chat();
       const m = JSON.parse(JSON.stringify(msg));
       const next = JSON.parse(JSON.stringify(c));
@@ -11229,7 +11390,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const p = TR.path(TR.index(S.messages.filter((x) => x.id !== m.id).concat([m])), next.leafId);
       const last = p.slice(-1)[0];
       next.preview = (last && last.role === "user" ? "Вы: " : "") + (last ? TR.activeSwipe(last).text : "").replace(/\s+/g, " ").slice(0, 90);
-      await DB.putAll([["messages", m], ["chats", next]]);
+      if (edgeUpdates && edgeUpdates.length) {
+        await DB.mutateBatch({ patches: edgeUpdates.map((x) => ["messages", x.id, { parentSwipeIdx: x.parentSwipeIdx }]), puts: [["messages", m], ["chats", next]] });
+      } else await DB.putAll([["messages", m], ["chats", next]]);
+      for (const update of edgeUpdates || []) {
+        const existing = S.messages.find((x) => x.id === update.id);
+        if (existing) existing.parentSwipeIdx = update.parentSwipeIdx;
+      }
       const i = S.messages.findIndex((x) => x.id === m.id);
       if (i >= 0) { for (const k of Object.keys(S.messages[i])) if (!(k in m)) delete S.messages[i][k]; Object.assign(S.messages[i], m); }
       else S.messages.push(m);
@@ -11238,7 +11405,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }
     function newMsg(role, parentId, text) {
       const now = Date.now();
-      return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null, role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
+      const parent = parentId && S.messages.find((m) => m.id === parentId && m.chatId === S.chatId);
+      return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null,
+        ...(parent ? { parentSwipeIdx: parent.swipeIdx || 0 } : {}),
+        role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
     }
 
     /* ── Жизненный цикл ────────────────────────────────────────────────── */
@@ -11335,25 +11505,60 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       Object.assign(c, next);
       return true;
     }
-    async function saveEdit(msgId, text) {
+    function editDraft(msgId, text) {
       const m = S.messages.find((x) => x.id === msgId);
-      if (!m) return false;
-      const sw = TR.activeSwipe(m);
-      const parsed = SC.parse(text);
-      sw.text = m.role === "assistant" ? parsed.text : text.trim();
-      if (m.role === "assistant") {
-        // Правка текста переопределяет модельные дельты, но ручные корректировки
-        // принадлежат пользователю и продолжают действовать ПОСЛЕ них.
-        const manual = (sw.sceneOps || []).filter((o) => o.manual);
-        delete sw.ignoredSceneOps;
-        Object.assign(sw, sceneFields(parsed.ops.concat(manual)));
+      const body = String(text || "").trim(), c = ctx.chat();
+      if (!c || !m || m.chatId !== c.id || m.role !== "user" || !path().includes(m) || !body || body === TR.activeSwipe(m).text) return null;
+      const draft = newMsg("user", m.parentId, body);
+      // A sibling replaces this user turn, not the character's reply. Keep
+      // immutable delivery metadata, never copy extracted state from old text.
+      draft.editedFrom = m.id;
+      for (const key of ["messengerAt", "imageDataUrl"]) {
+        const value = TR.activeSwipe(m)[key];
+        if (value !== undefined) draft.swipes[0][key] = U.clone(value);
       }
-      // Извлечённые факты зависят от исходного текста этого свайпа.
-      // Изменение текста делает их недействительными до нового анализа.
-      delete sw.stateEvents; delete sw.stateStatus;
-      await putMsg(m);
-      await touch();
-      return true;
+      return draft;
+    }
+    // Freeze only the path actually visible now. Unknown variants of other
+    // legacy branches cannot be reconstructed and must not be guessed.
+    function unboundEdges() {
+      const active = path();
+      return active.slice(1).flatMap((m, i) => m.parentSwipeIdx == null && m.parentId === active[i].id
+        ? [Object.assign({}, m, { parentSwipeIdx: active[i].swipeIdx || 0 })] : []);
+    }
+    async function saveEdit(msgId, text, opts) {
+      const o = opts || {};
+      if (S.gen || (S.turn && S.turn !== o.turn)) return false;
+      const draft = editDraft(msgId, text);
+      if (!draft) return false;
+      if (o.draftId) draft.id = o.draftId;
+      return commitMessage(draft, draft.id, unboundEdges());
+    }
+
+    async function selectBranch(msgId, swipeIdx) {
+      const c = ctx.chat();
+      if (!c || S.gen || S.turn) return false;
+      const messages = S.messages.filter((m) => m.chatId === c.id);
+      const route = TR.selection(messages, msgId, swipeIdx);
+      if (!route) return false;
+      const updateMap = new Map(unboundEdges().map((m) => [m.id, m]));
+      route.forEach((p) => {
+        const m = messages.find((x) => x.id === p.id);
+        if (m.swipeIdx !== p.swipeIdx) updateMap.set(m.id, Object.assign({}, updateMap.get(m.id) || m, { swipeIdx: p.swipeIdx }));
+      });
+      const updates = [...updateMap.values()];
+      const leaf = messages.find((m) => m.id === msgId);
+      const chosen = route[route.length - 1].swipeIdx;
+      const next = Object.assign({}, c, { leafId: msgId, preview: (leaf.role === "user" ? "Вы: " : "") + String(leaf.swipes[chosen].text || "").replace(/\s+/g, " ").slice(0, 90) });
+      const lock = S.turn = { chatId: c.id, kind: "branch", phase: "branch" };
+      try {
+        const fields = (m) => Object.assign({ swipeIdx: m.swipeIdx || 0 }, m.parentSwipeIdx == null ? {} : { parentSwipeIdx: m.parentSwipeIdx });
+        await DB.mutateBatch({ patches: updates.map((m) => ["messages", m.id, fields(m)]), puts: [["chats", next]] });
+        for (const update of updates) Object.assign(S.messages.find((m) => m.id === update.id), fields(update));
+        Object.assign(c, next);
+        S.editingMsg = null;
+        return true;
+      } finally { if (S.turn === lock) S.turn = null; }
     }
     /* Листать варианты ответа. → "regen", если надо сгенерировать новый вариант
        (листание вправо за последний вариант последнего ответа); true — переключено; false — ничего. */
@@ -11436,7 +11641,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
+    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, editDraft, saveEdit, selectBranch, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };
@@ -13543,6 +13748,60 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        одна реплика: пока ход этого чата не завершён, второй не принимается.
        extra: { messengerAt } — метка переписки, снятая в момент нажатия.
        → { outcome: "busy" | "sent" | "cancelled" | "context-changed" | "left-chat", msgId?, reply? } */
+    async function edit(msgId, text) {
+      if (S.gen || S.turn) return { outcome: "busy" };
+      const draft0 = chat().editDraft(msgId, text), c = ctx.chat(), prov = ctx.provider();
+      if (!draft0 || !c) return { outcome: "invalid" };
+      if (!prov) {
+        ui.toast("Модель не подключена. Выберите модель перед сохранением правки.", true);
+        ui.openSettings("models");
+        return { outcome: "no-provider" };
+      }
+      const st = state();
+      let turn, reply = null;
+      if (st && st.pending(c.id)) {
+        const w = await waitForState("edit", { msgId, text: String(text).trim() });
+        turn = w.turn;
+        if (w.refused) {
+          releaseTurn(turn);
+          if (w.refused !== "cancelled") ui.toast(w.refused === "state-timeout"
+            ? "Разбор ещё не завершён. Правка не сохранена — повторите после его завершения."
+            : "История изменилась во время ожидания. Правка не сохранена.", true);
+          return { outcome: w.refused };
+        }
+      } else {
+        turn = S.turn = { chatId: c.id, kind: "edit", phase: "editing", msgId, text: String(text).trim() };
+      }
+      try {
+        const draft = chat().editDraft(msgId, text);
+        if (!draft || S.chatId !== c.id || turn.cancelled) return { outcome: "context-changed" };
+        const active = chat().path(), at = active.findIndex((m) => m.id === msgId);
+        const proposed = active.slice(0, at).concat([draft]);
+        // Test the replacement path before writing a new branch or contacting a model.
+        const built = prism().build(proposed, "", SCN.forGeneration(proposed, { mode: "new" }));
+        if (preflightFailed(built, prov)) return { outcome: "overflow" };
+        turn.phase = "editing";
+        const edited = await chat().saveEdit(msgId, text, { turn, draftId: draft.id });
+        if (!edited) return { outcome: "context-changed" };
+        S.editingMsg = null;
+        ui.renderFeed(); ui.renderRail();
+        if (S.drawerOpen) ui.renderDrawer();
+        if (st) {
+          turn.phase = "user-state"; renderComposer();
+          await st.track(edited, ctx.processingProvider ? ctx.processingProvider() : prov);
+          const settled = await st.settle(c.id);
+          if (settled.timedOut) {
+            ui.toast("Правка сохранена в новой ветке, но разбор ещё не завершён. Ответ можно повторить после его завершения.", true);
+            return { outcome: "state-timeout", msgId: edited.id };
+          }
+        }
+        if (S.chatId !== c.id || !chat().path().includes(edited)) return { outcome: "left-chat", msgId: edited.id };
+        turn.phase = "generating";
+        reply = await generate(null, "new", { turn });
+        return { outcome: "sent", msgId: edited.id, reply };
+      } finally { releaseTurn(turn); ready(reply); }
+    }
+
     async function send(text, extra) {
       const c = ctx.chat();
       const body = String(text || "").trim();
@@ -13613,7 +13872,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     function stop() { if (S.gen) S.gen.ctrl.abort(); }
 
-    return { generate, initiative, send, cancelTurn, stop, OPENING, INITIATIVE_ID };
+    return { generate, initiative, send, edit, cancelTurn, stop, OPENING, INITIATIVE_ID };
   }
 
   PRP.generationService = { create };
@@ -14401,7 +14660,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const SC = PRP.scene, OA = PRP.openai, IB = PRP.imgBackends, IC = PRP.imgCompose, R = PRP.render, V = PRP.views;
+  const SC = PRP.scene, TR = PRP.tree, OA = PRP.openai, IB = PRP.imgBackends, IC = PRP.imgCompose, R = PRP.render, V = PRP.views;
 
   function create(ctx) {
     const { S } = ctx;
@@ -14428,6 +14687,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return {
         S, view: S.view, cards: S.cards, chats: S.chats, card: ctx.card(), chat: ctx.chat(), persona: ctx.persona(), path,
         scene: ctx.chat() ? svc().chat.sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
+        branchTreeUi: S.branchTreeUi && ctx.chat() && S.branchTreeUi.chatId === ctx.chat().id ? S.branchTreeUi : null,
+        dialogueMap: S.modal && S.modal.kind === "tree" && ctx.chat() ? TR.layout(S.messages.filter((x) => x.chatId === ctx.chat().id), ctx.chat().leafId) : null,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
         observedMemories: svc().memory.visibleMemories(path), currentExperience: svc().memory.experience(path), memoryStatus: S.memoryStatus,
         memoryTimeline: S.drawerOpen && S.tab === "memory" && ctx.chat() ? svc().memory.timeline(path) : null,
@@ -14584,6 +14845,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const rootEl = $("#modal-root");
       if (!S.modal) { rootEl.innerHTML = ""; return; }
       const m = vm();
+      if (S.modal.kind === "tree") {
+        const old = $("#map-viewport"), position = old ? { left: old.scrollLeft, top: old.scrollTop } : null;
+        rootEl.innerHTML = V.dialogueMap(m);
+        const viewport = $("#map-viewport");
+        if (viewport) { viewport.scrollLeft = position ? position.left : Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2); viewport.scrollTop = position ? position.top : 0; }
+        if (viewport) {
+          let drag = null;
+          viewport.addEventListener("pointerdown", (e) => {
+            if (e.pointerType !== "mouse" || e.button !== 0 || e.target.closest("button")) return;
+            drag = { x: e.clientX, y: e.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+            viewport.setPointerCapture(e.pointerId); viewport.style.cursor = "grabbing"; e.preventDefault();
+          });
+          viewport.addEventListener("pointermove", (e) => { if (drag) { viewport.scrollLeft = drag.left - e.clientX + drag.x; viewport.scrollTop = drag.top - e.clientY + drag.y; } });
+          const stopDrag = () => { drag = null; viewport.style.cursor = ""; };
+          viewport.addEventListener("pointerup", stopDrag); viewport.addEventListener("lostpointercapture", stopDrag);
+        }
+        return;
+      }
       const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
       // Repainting Debug after Observer must not close a message the user
       // opened to read its diagnostics. Keys are source IDs, not view indices.
@@ -14780,6 +15059,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     async function afterBranchChange() {
       svc.prism.refresh();
       ui.renderFeed();
+      ui.renderRail();
+      if (ui.rememberUi) ui.rememberUi();
       if (S.drawerOpen) ui.renderDrawer();
     }
 
@@ -14832,25 +15113,44 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       initiative: () => { if (!S.gen) return svc.gen.initiative(); },
       regen: (t) => svc.gen.generate(t.dataset.id, "regen"),
       continue: (t) => svc.gen.generate(t.dataset.id, "continue"),
+      reply: () => {
+        const last = svc.chat.path().slice(-1)[0];
+        if (!S.gen && !S.turn && last && last.role === "user") return svc.gen.generate();
+      },
       swipe: async (t) => {
-        if (S.gen) return;
+        if (S.gen || S.turn) return;
+        const msg = S.messages.find((m) => m.id === t.dataset.id);
+        if (msg && svc.chat.path().slice(-1)[0] !== msg) {
+          const next = (msg.swipeIdx || 0) + Number(t.dataset.dir);
+          if (next >= 0 && next < msg.swipes.length && await svc.chat.selectBranch(msg.id, next)) await afterBranchChange();
+          return;
+        }
         const r = await svc.chat.swipe(t.dataset.id, +t.dataset.dir);
         if (r === "regen") return svc.gen.generate(t.dataset.id, "regen");
         if (r) await afterBranchChange();
       },
-      edit: (t) => { S.editingMsg = t.dataset.id; ui.renderFeed(); const e = document.getElementById("edit-" + t.dataset.id); if (e) { e.focus(); e.style.height = Math.min(e.scrollHeight + 4, 520) + "px"; } },
-      "save-edit": async (t) => {
-        if (!S.messages.find((x) => x.id === t.dataset.id)) return;
-        S.editingMsg = null;
-        await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
-        const edited = S.messages.find((x) => x.id === t.dataset.id);
-        // Разбор правки — управляемая задача (дедуп, без отклонений); ожидающая отправка дождётся его.
-        if (svc.state && edited) await svc.state.track(edited, ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
-        await afterBranchChange();
+      edit: (t) => {
+        const msg = S.messages.find((x) => x.id === t.dataset.id);
+        if (!msg || msg.role !== "user" || S.gen || S.turn) return;
+        S.editingMsg = msg.id; ui.renderFeed();
+        const e = document.getElementById("edit-" + msg.id);
+        if (e) { e.focus(); e.style.height = Math.min(e.scrollHeight + 4, 520) + "px"; }
       },
-      "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },
+      "save-edit": async (t) => {
+        const msg = S.messages.find((x) => x.id === t.dataset.id);
+        const field = document.getElementById("edit-" + t.dataset.id);
+        if (!msg || msg.role !== "user" || !field || S.gen || S.turn) return;
+        if (!field.value.trim() || field.value.trim() === PRP.tree.activeSwipe(msg).text) {
+          ui.toast("Введите изменённый текст сообщения.", true); return;
+        }
+        field.disabled = true; t.disabled = true;
+        try { await svc.gen.edit(msg.id, field.value); }
+        catch (error) { ui.toast("Не удалось сохранить правку: " + (error.message || String(error)), true); }
+        finally { if (field.isConnected) field.disabled = false; if (t.isConnected) t.disabled = false; }
+      },
+      "cancel-edit": () => { if (S.gen || S.turn) return; S.editingMsg = null; ui.renderFeed(); },
       delete: async (t) => {
-        if (S.gen) return;
+        if (S.gen || S.turn) return;
         if (!S.messages.find((x) => x.id === t.dataset.id) || !confirm("Удалить это сообщение и всё, что идёт после него в этой ветке?")) return;
         await svc.chat.deleteFrom(t.dataset.id);
         svc.prism.refresh();
@@ -14966,10 +15266,35 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       setTimeout(() => { const e = $("#wc-text"); if (e) e.focus(); }, 30);
     }
 
+    function treeUi() {
+      const c = ctx.chat();
+      if (!c) return null;
+      if (!S.branchTreeUi || S.branchTreeUi.chatId !== c.id) S.branchTreeUi = { chatId: c.id, selectedId: null, variant: null, zoom: 1 };
+      return S.branchTreeUi;
+    }
+    function refreshMap() { if (S.modal && S.modal.kind === "tree") ui.renderModal(); }
     const actions = {
       drawer: () => { S.drawerOpen = !S.drawerOpen; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       "drawer-close": () => { S.drawerOpen = false; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
-      tab: (t) => { collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
+      tab: (t) => { collectWorld(); S.tab = t.dataset.tab; if (S.tab === "tree") return actions["tree-open"](); if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
+      "tree-open": () => { ui.closePop(); const state = treeUi(); if (!state) return; state.selectedId = null; state.variant = null; S.tab = "tree"; S.modal = { kind: "tree" }; ui.renderDrawer(); ui.renderModal(); },
+      "tree-select": async (t) => {
+        if (S.gen || S.turn) return;
+        try {
+          const pending = svc.chat.selectBranch(t.dataset.id, t.dataset.swipe === undefined ? undefined : Number(t.dataset.swipe));
+          refreshMap();
+          if (!await pending) { ui.toast("Не удалось открыть ветку: сообщение или связанный вариант недоступны.", true); return; }
+          S.editingMsg = null;
+          svc.prism.refresh(); S.modal = null; ui.renderModal(); ui.rememberUi(); ui.renderFeed(); ui.renderHead(); ui.renderRail(); ui.renderDrawer(); ui.scrollBottom();
+        } catch (e) { ui.toast("Ветка не переключена: " + (e.message || String(e)), true); refreshMap(); }
+      },
+      "map-pick": (t) => {
+        const state = treeUi(), msg = S.messages.find((m) => m.id === t.dataset.id && m.chatId === S.chatId);
+        if (!state || !msg) return;
+        state.selectedId = msg.id; state.variant = msg.swipeIdx || 0; refreshMap();
+      },
+      "map-zoom": (t) => { const state = treeUi(); if (state) { state.zoom = Math.max(.4, Math.min(1.6, Math.round((state.zoom + Number(t.dataset.dir) * .2) * 10) / 10)); refreshMap(); } },
+      "map-center": () => { const viewport = $("#map-viewport"); if (viewport) { viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2); viewport.scrollTop = 0; } },
       "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
       "debug-copy": async () => {
@@ -15031,11 +15356,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     };
 
     function change(t) {
+      if (t.dataset.mapVariant !== undefined) { const state = treeUi(); if (state) { state.variant = Number(t.value); refreshMap(); } return true; }
       if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return true; }
       if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return true; }
       return false;
     }
-    function input() { /* полей с живым обновлением на панели сцены нет */ }
+    function input() {}
     function key(e, t) {
       if (e.key === "Enter" && t.classList && t.classList.contains("chip-add")) {
         e.preventDefault();
@@ -15855,13 +16181,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
      messengerEnv (среда текущей переписки), assistList.
      Навигация: view, cardId, chatId, assist (открытый разговор).
      Генерация (временное): gen, drawing (id картинок в работе).
-     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg.
+     Интерфейс: drawerOpen, tab, find, homeQuery, modal, editProviderId, pop, editingMsg, branchTreeUi.
      Кэш: lastPrism (последняя сборка), imgUrls (картинки чата), imgLists (списки A1111). */
   const S = {
     settings: null, cards: [], chats: [],
     view: "home", cardId: null, chatId: null, lastSelectedChatId: null, messages: [], memories: [], reflections: [], memoryStatus: "",
     gen: null, tracking: false, turn: null, perf: [], lastPrism: null, editingMsg: null,
-    drawerOpen: false, tab: "scene", find: null, homeQuery: "",
+    drawerOpen: false, tab: "scene", find: null, homeQuery: "", branchTreeUi: null,
     modal: null, editProviderId: null, pop: null,
     imgUrls: {}, imgLists: {}, drawing: new Set(),
     assist: null, assistList: [],

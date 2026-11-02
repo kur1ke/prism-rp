@@ -53,6 +53,70 @@
     return m.swipes[Math.min(m.swipeIdx || 0, m.swipes.length - 1)];
   }
 
-  PRP.tree = { index, path, children, descendants, latestLeaf, activeSwipe };
+  // Restore the variants recorded on parent edges, without mutating messages.
+  // Legacy edges have no variant metadata: retain their current selection.
+  function selection(list, leafId, swipeIdx) {
+    const byId = index(list), route = [], seen = new Set();
+    let node = byId.get(leafId), selected = swipeIdx;
+    if (!node) return null;
+    while (node) {
+      if (seen.has(node.id)) return null;
+      seen.add(node.id);
+      const variant = selected == null ? (node.swipeIdx || 0) : selected;
+      if (!Number.isInteger(variant) || variant < 0 || !node.swipes || variant >= node.swipes.length) return null;
+      route.unshift({ id: node.id, swipeIdx: variant });
+      if (!node.parentId) break;
+      selected = node.parentSwipeIdx;
+      node = byId.get(node.parentId);
+      if (!node) return null;
+    }
+    return route;
+  }
+
+  // Flat preorder keeps large trees renderable without recursive DOM building.
+  function outline(list, leafId) {
+    const groups = new Map(), nodes = index(list), active = new Set(path(nodes, leafId).map((m) => m.id));
+    for (const m of list || []) {
+      const key = nodes.has(m.parentId) ? m.parentId : null;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(m);
+    }
+    for (const group of groups.values()) group.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id)));
+    const stack = (groups.get(null) || []).slice().reverse().map((m) => ({ m, depth: 0 }));
+    const rows = [], seen = new Set();
+    while (stack.length) {
+      const { m, depth } = stack.pop();
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      rows.push({ id: m.id, parentId: m.parentId, role: m.role, text: String(activeSwipe(m).text || ""),
+        depth, active: active.has(m.id), current: m.id === leafId, swipeIdx: m.swipeIdx || 0,
+        variants: (m.swipes || []).map((sw, i) => ({ index: i, text: String(sw.text || "") })) });
+      const children = groups.get(m.id) || [];
+      for (let i = children.length - 1; i >= 0; i--) stack.push({ m: children[i], depth: depth + 1 });
+    }
+    return rows;
+  }
+
+  function layout(list, leafId) {
+    const rows = outline(list, leafId), byId = new Map(rows.map((n) => [n.id, n])), children = new Map(), spans = new Map();
+    for (const n of rows) {
+      const parent = byId.has(n.parentId) ? n.parentId : null;
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent).push(n);
+    }
+    for (const n of rows.slice().reverse()) spans.set(n.id, Math.max(1, (children.get(n.id) || []).reduce((v, c) => v + spans.get(c.id), 0)));
+    const roots = children.get(null) || [], total = roots.reduce((v, n) => v + spans.get(n.id), 0);
+    const width = Math.max(320, total * 112 + 100), height = Math.max(420, (Math.max(0, ...rows.map((n) => n.depth)) + 2) * 92 + 80);
+    const positions = new Map(); let cursor = (width - total * 112) / 2;
+    const place = (group, start) => { let x = start; for (const n of group) { positions.set(n.id, { x: x + spans.get(n.id) * 56, start: x }); x += spans.get(n.id) * 112; } };
+    place(roots, cursor);
+    for (const n of rows) place(children.get(n.id) || [], positions.get(n.id).start);
+    const nodes = rows.map((n) => Object.assign({}, n, { x: positions.get(n.id).x, y: 124 + n.depth * 92 }));
+    const points = new Map(nodes.map((n) => [n.id, n]));
+    const links = nodes.map((n) => { const parent = points.get(n.parentId); return { x1: parent ? parent.x : width / 2, y1: parent ? parent.y : 32, x2: n.x, y2: n.y, active: n.active }; });
+    return { nodes, links, width, height };
+  }
+
+  PRP.tree = { index, path, children, descendants, latestLeaf, activeSwipe, selection, layout };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.tree;
 })(typeof window !== "undefined" ? window : globalThis);

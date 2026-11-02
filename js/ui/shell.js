@@ -5,7 +5,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const SC = PRP.scene, OA = PRP.openai, IB = PRP.imgBackends, IC = PRP.imgCompose, R = PRP.render, V = PRP.views;
+  const SC = PRP.scene, TR = PRP.tree, OA = PRP.openai, IB = PRP.imgBackends, IC = PRP.imgCompose, R = PRP.render, V = PRP.views;
 
   function create(ctx) {
     const { S } = ctx;
@@ -32,6 +32,8 @@
       return {
         S, view: S.view, cards: S.cards, chats: S.chats, card: ctx.card(), chat: ctx.chat(), persona: ctx.persona(), path,
         scene: ctx.chat() ? svc().chat.sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
+        branchTreeUi: S.branchTreeUi && ctx.chat() && S.branchTreeUi.chatId === ctx.chat().id ? S.branchTreeUi : null,
+        dialogueMap: S.modal && S.modal.kind === "tree" && ctx.chat() ? TR.layout(S.messages.filter((x) => x.chatId === ctx.chat().id), ctx.chat().leafId) : null,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
         observedMemories: svc().memory.visibleMemories(path), currentExperience: svc().memory.experience(path), memoryStatus: S.memoryStatus,
         memoryTimeline: S.drawerOpen && S.tab === "memory" && ctx.chat() ? svc().memory.timeline(path) : null,
@@ -188,6 +190,24 @@
       const rootEl = $("#modal-root");
       if (!S.modal) { rootEl.innerHTML = ""; return; }
       const m = vm();
+      if (S.modal.kind === "tree") {
+        const old = $("#map-viewport"), position = old ? { left: old.scrollLeft, top: old.scrollTop } : null;
+        rootEl.innerHTML = V.dialogueMap(m);
+        const viewport = $("#map-viewport");
+        if (viewport) { viewport.scrollLeft = position ? position.left : Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2); viewport.scrollTop = position ? position.top : 0; }
+        if (viewport) {
+          let drag = null;
+          viewport.addEventListener("pointerdown", (e) => {
+            if (e.pointerType !== "mouse" || e.button !== 0 || e.target.closest("button")) return;
+            drag = { x: e.clientX, y: e.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+            viewport.setPointerCapture(e.pointerId); viewport.style.cursor = "grabbing"; e.preventDefault();
+          });
+          viewport.addEventListener("pointermove", (e) => { if (drag) { viewport.scrollLeft = drag.left - e.clientX + drag.x; viewport.scrollTop = drag.top - e.clientY + drag.y; } });
+          const stopDrag = () => { drag = null; viewport.style.cursor = ""; };
+          viewport.addEventListener("pointerup", stopDrag); viewport.addEventListener("lostpointercapture", stopDrag);
+        }
+        return;
+      }
       const scroll = $(".modal-body") ? $(".modal-body").scrollTop : 0;
       // Repainting Debug after Observer must not close a message the user
       // opened to read its diagnostics. Keys are source IDs, not view indices.

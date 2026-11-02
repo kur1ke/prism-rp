@@ -525,6 +525,60 @@
        одна реплика: пока ход этого чата не завершён, второй не принимается.
        extra: { messengerAt } — метка переписки, снятая в момент нажатия.
        → { outcome: "busy" | "sent" | "cancelled" | "context-changed" | "left-chat", msgId?, reply? } */
+    async function edit(msgId, text) {
+      if (S.gen || S.turn) return { outcome: "busy" };
+      const draft0 = chat().editDraft(msgId, text), c = ctx.chat(), prov = ctx.provider();
+      if (!draft0 || !c) return { outcome: "invalid" };
+      if (!prov) {
+        ui.toast("Модель не подключена. Выберите модель перед сохранением правки.", true);
+        ui.openSettings("models");
+        return { outcome: "no-provider" };
+      }
+      const st = state();
+      let turn, reply = null;
+      if (st && st.pending(c.id)) {
+        const w = await waitForState("edit", { msgId, text: String(text).trim() });
+        turn = w.turn;
+        if (w.refused) {
+          releaseTurn(turn);
+          if (w.refused !== "cancelled") ui.toast(w.refused === "state-timeout"
+            ? "Разбор ещё не завершён. Правка не сохранена — повторите после его завершения."
+            : "История изменилась во время ожидания. Правка не сохранена.", true);
+          return { outcome: w.refused };
+        }
+      } else {
+        turn = S.turn = { chatId: c.id, kind: "edit", phase: "editing", msgId, text: String(text).trim() };
+      }
+      try {
+        const draft = chat().editDraft(msgId, text);
+        if (!draft || S.chatId !== c.id || turn.cancelled) return { outcome: "context-changed" };
+        const active = chat().path(), at = active.findIndex((m) => m.id === msgId);
+        const proposed = active.slice(0, at).concat([draft]);
+        // Test the replacement path before writing a new branch or contacting a model.
+        const built = prism().build(proposed, "", SCN.forGeneration(proposed, { mode: "new" }));
+        if (preflightFailed(built, prov)) return { outcome: "overflow" };
+        turn.phase = "editing";
+        const edited = await chat().saveEdit(msgId, text, { turn, draftId: draft.id });
+        if (!edited) return { outcome: "context-changed" };
+        S.editingMsg = null;
+        ui.renderFeed(); ui.renderRail();
+        if (S.drawerOpen) ui.renderDrawer();
+        if (st) {
+          turn.phase = "user-state"; renderComposer();
+          await st.track(edited, ctx.processingProvider ? ctx.processingProvider() : prov);
+          const settled = await st.settle(c.id);
+          if (settled.timedOut) {
+            ui.toast("Правка сохранена в новой ветке, но разбор ещё не завершён. Ответ можно повторить после его завершения.", true);
+            return { outcome: "state-timeout", msgId: edited.id };
+          }
+        }
+        if (S.chatId !== c.id || !chat().path().includes(edited)) return { outcome: "left-chat", msgId: edited.id };
+        turn.phase = "generating";
+        reply = await generate(null, "new", { turn });
+        return { outcome: "sent", msgId: edited.id, reply };
+      } finally { releaseTurn(turn); ready(reply); }
+    }
+
     async function send(text, extra) {
       const c = ctx.chat();
       const body = String(text || "").trim();
@@ -595,7 +649,7 @@
 
     function stop() { if (S.gen) S.gen.ctrl.abort(); }
 
-    return { generate, initiative, send, cancelTurn, stop, OPENING, INITIATIVE_ID };
+    return { generate, initiative, send, edit, cancelTurn, stop, OPENING, INITIATIVE_ID };
   }
 
   PRP.generationService = { create };

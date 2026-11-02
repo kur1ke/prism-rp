@@ -31,6 +31,8 @@
     async function afterBranchChange() {
       svc.prism.refresh();
       ui.renderFeed();
+      ui.renderRail();
+      if (ui.rememberUi) ui.rememberUi();
       if (S.drawerOpen) ui.renderDrawer();
     }
 
@@ -83,25 +85,44 @@
       initiative: () => { if (!S.gen) return svc.gen.initiative(); },
       regen: (t) => svc.gen.generate(t.dataset.id, "regen"),
       continue: (t) => svc.gen.generate(t.dataset.id, "continue"),
+      reply: () => {
+        const last = svc.chat.path().slice(-1)[0];
+        if (!S.gen && !S.turn && last && last.role === "user") return svc.gen.generate();
+      },
       swipe: async (t) => {
-        if (S.gen) return;
+        if (S.gen || S.turn) return;
+        const msg = S.messages.find((m) => m.id === t.dataset.id);
+        if (msg && svc.chat.path().slice(-1)[0] !== msg) {
+          const next = (msg.swipeIdx || 0) + Number(t.dataset.dir);
+          if (next >= 0 && next < msg.swipes.length && await svc.chat.selectBranch(msg.id, next)) await afterBranchChange();
+          return;
+        }
         const r = await svc.chat.swipe(t.dataset.id, +t.dataset.dir);
         if (r === "regen") return svc.gen.generate(t.dataset.id, "regen");
         if (r) await afterBranchChange();
       },
-      edit: (t) => { S.editingMsg = t.dataset.id; ui.renderFeed(); const e = document.getElementById("edit-" + t.dataset.id); if (e) { e.focus(); e.style.height = Math.min(e.scrollHeight + 4, 520) + "px"; } },
-      "save-edit": async (t) => {
-        if (!S.messages.find((x) => x.id === t.dataset.id)) return;
-        S.editingMsg = null;
-        await svc.chat.saveEdit(t.dataset.id, document.getElementById("edit-" + t.dataset.id).value);
-        const edited = S.messages.find((x) => x.id === t.dataset.id);
-        // Разбор правки — управляемая задача (дедуп, без отклонений); ожидающая отправка дождётся его.
-        if (svc.state && edited) await svc.state.track(edited, ctx.processingProvider ? ctx.processingProvider() : ctx.provider());
-        await afterBranchChange();
+      edit: (t) => {
+        const msg = S.messages.find((x) => x.id === t.dataset.id);
+        if (!msg || msg.role !== "user" || S.gen || S.turn) return;
+        S.editingMsg = msg.id; ui.renderFeed();
+        const e = document.getElementById("edit-" + msg.id);
+        if (e) { e.focus(); e.style.height = Math.min(e.scrollHeight + 4, 520) + "px"; }
       },
-      "cancel-edit": () => { S.editingMsg = null; ui.renderFeed(); },
+      "save-edit": async (t) => {
+        const msg = S.messages.find((x) => x.id === t.dataset.id);
+        const field = document.getElementById("edit-" + t.dataset.id);
+        if (!msg || msg.role !== "user" || !field || S.gen || S.turn) return;
+        if (!field.value.trim() || field.value.trim() === PRP.tree.activeSwipe(msg).text) {
+          ui.toast("Введите изменённый текст сообщения.", true); return;
+        }
+        field.disabled = true; t.disabled = true;
+        try { await svc.gen.edit(msg.id, field.value); }
+        catch (error) { ui.toast("Не удалось сохранить правку: " + (error.message || String(error)), true); }
+        finally { if (field.isConnected) field.disabled = false; if (t.isConnected) t.disabled = false; }
+      },
+      "cancel-edit": () => { if (S.gen || S.turn) return; S.editingMsg = null; ui.renderFeed(); },
       delete: async (t) => {
-        if (S.gen) return;
+        if (S.gen || S.turn) return;
         if (!S.messages.find((x) => x.id === t.dataset.id) || !confirm("Удалить это сообщение и всё, что идёт после него в этой ветке?")) return;
         await svc.chat.deleteFrom(t.dataset.id);
         svc.prism.refresh();

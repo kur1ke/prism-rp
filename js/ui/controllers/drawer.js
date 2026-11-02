@@ -56,10 +56,35 @@
       setTimeout(() => { const e = $("#wc-text"); if (e) e.focus(); }, 30);
     }
 
+    function treeUi() {
+      const c = ctx.chat();
+      if (!c) return null;
+      if (!S.branchTreeUi || S.branchTreeUi.chatId !== c.id) S.branchTreeUi = { chatId: c.id, selectedId: null, variant: null, zoom: 1 };
+      return S.branchTreeUi;
+    }
+    function refreshMap() { if (S.modal && S.modal.kind === "tree") ui.renderModal(); }
     const actions = {
       drawer: () => { S.drawerOpen = !S.drawerOpen; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
       "drawer-close": () => { S.drawerOpen = false; ui.rememberUi(); ui.renderDrawer(); ui.renderFeed(); },
-      tab: (t) => { collectWorld(); S.tab = t.dataset.tab; if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
+      tab: (t) => { collectWorld(); S.tab = t.dataset.tab; if (S.tab === "tree") return actions["tree-open"](); if (S.tab === "prism") svc.prism.refresh(); ui.renderDrawer(); },
+      "tree-open": () => { ui.closePop(); const state = treeUi(); if (!state) return; state.selectedId = null; state.variant = null; S.tab = "tree"; S.modal = { kind: "tree" }; ui.renderDrawer(); ui.renderModal(); },
+      "tree-select": async (t) => {
+        if (S.gen || S.turn) return;
+        try {
+          const pending = svc.chat.selectBranch(t.dataset.id, t.dataset.swipe === undefined ? undefined : Number(t.dataset.swipe));
+          refreshMap();
+          if (!await pending) { ui.toast("Не удалось открыть ветку: сообщение или связанный вариант недоступны.", true); return; }
+          S.editingMsg = null;
+          svc.prism.refresh(); S.modal = null; ui.renderModal(); ui.rememberUi(); ui.renderFeed(); ui.renderHead(); ui.renderRail(); ui.renderDrawer(); ui.scrollBottom();
+        } catch (e) { ui.toast("Ветка не переключена: " + (e.message || String(e)), true); refreshMap(); }
+      },
+      "map-pick": (t) => {
+        const state = treeUi(), msg = S.messages.find((m) => m.id === t.dataset.id && m.chatId === S.chatId);
+        if (!state || !msg) return;
+        state.selectedId = msg.id; state.variant = msg.swipeIdx || 0; refreshMap();
+      },
+      "map-zoom": (t) => { const state = treeUi(); if (state) { state.zoom = Math.max(.4, Math.min(1.6, Math.round((state.zoom + Number(t.dataset.dir) * .2) * 10) / 10)); refreshMap(); } },
+      "map-center": () => { const viewport = $("#map-viewport"); if (viewport) { viewport.scrollLeft = Math.max(0, (viewport.scrollWidth - viewport.clientWidth) / 2); viewport.scrollTop = 0; } },
       "debug-open": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "debug-section": (t) => { if (S.modal && S.modal.kind === "debug") { S.modal.section = t.dataset.section; ui.renderModal(); } },
       "debug-copy": async () => {
@@ -121,11 +146,12 @@
     };
 
     function change(t) {
+      if (t.dataset.mapVariant !== undefined) { const state = treeUi(); if (state) { state.variant = Number(t.value); refreshMap(); } return true; }
       if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return true; }
       if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return true; }
       return false;
     }
-    function input() { /* полей с живым обновлением на панели сцены нет */ }
+    function input() {}
     function key(e, t) {
       if (e.key === "Enter" && t.classList && t.classList.contains("chip-add")) {
         e.preventDefault();

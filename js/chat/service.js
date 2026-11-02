@@ -60,7 +60,7 @@
        Память (S.messages, текущий чат) меняется только после успеха; при отказе не меняется ничего — ни в базе, ни в памяти.
        msg — полная новая версия сообщения (вызывающий передаёт копию; объект в памяти обновляется на месте).
        leafId — новый конец ветки (undefined — прежний). → сообщение в памяти. */
-    async function commitMessage(msg, leafId) {
+    async function commitMessage(msg, leafId, edgeUpdates) {
       const c = ctx.chat();
       const m = JSON.parse(JSON.stringify(msg));
       const next = JSON.parse(JSON.stringify(c));
@@ -68,7 +68,13 @@
       const p = TR.path(TR.index(S.messages.filter((x) => x.id !== m.id).concat([m])), next.leafId);
       const last = p.slice(-1)[0];
       next.preview = (last && last.role === "user" ? "Вы: " : "") + (last ? TR.activeSwipe(last).text : "").replace(/\s+/g, " ").slice(0, 90);
-      await DB.putAll([["messages", m], ["chats", next]]);
+      if (edgeUpdates && edgeUpdates.length) {
+        await DB.mutateBatch({ patches: edgeUpdates.map((x) => ["messages", x.id, { parentSwipeIdx: x.parentSwipeIdx }]), puts: [["messages", m], ["chats", next]] });
+      } else await DB.putAll([["messages", m], ["chats", next]]);
+      for (const update of edgeUpdates || []) {
+        const existing = S.messages.find((x) => x.id === update.id);
+        if (existing) existing.parentSwipeIdx = update.parentSwipeIdx;
+      }
       const i = S.messages.findIndex((x) => x.id === m.id);
       if (i >= 0) { for (const k of Object.keys(S.messages[i])) if (!(k in m)) delete S.messages[i][k]; Object.assign(S.messages[i], m); }
       else S.messages.push(m);
@@ -77,7 +83,10 @@
     }
     function newMsg(role, parentId, text) {
       const now = Date.now();
-      return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null, role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
+      const parent = parentId && S.messages.find((m) => m.id === parentId && m.chatId === S.chatId);
+      return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null,
+        ...(parent ? { parentSwipeIdx: parent.swipeIdx || 0 } : {}),
+        role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
     }
 
     /* ── Жизненный цикл ────────────────────────────────────────────────── */
@@ -174,25 +183,60 @@
       Object.assign(c, next);
       return true;
     }
-    async function saveEdit(msgId, text) {
+    function editDraft(msgId, text) {
       const m = S.messages.find((x) => x.id === msgId);
-      if (!m) return false;
-      const sw = TR.activeSwipe(m);
-      const parsed = SC.parse(text);
-      sw.text = m.role === "assistant" ? parsed.text : text.trim();
-      if (m.role === "assistant") {
-        // Правка текста переопределяет модельные дельты, но ручные корректировки
-        // принадлежат пользователю и продолжают действовать ПОСЛЕ них.
-        const manual = (sw.sceneOps || []).filter((o) => o.manual);
-        delete sw.ignoredSceneOps;
-        Object.assign(sw, sceneFields(parsed.ops.concat(manual)));
+      const body = String(text || "").trim(), c = ctx.chat();
+      if (!c || !m || m.chatId !== c.id || m.role !== "user" || !path().includes(m) || !body || body === TR.activeSwipe(m).text) return null;
+      const draft = newMsg("user", m.parentId, body);
+      // A sibling replaces this user turn, not the character's reply. Keep
+      // immutable delivery metadata, never copy extracted state from old text.
+      draft.editedFrom = m.id;
+      for (const key of ["messengerAt", "imageDataUrl"]) {
+        const value = TR.activeSwipe(m)[key];
+        if (value !== undefined) draft.swipes[0][key] = U.clone(value);
       }
-      // Извлечённые факты зависят от исходного текста этого свайпа.
-      // Изменение текста делает их недействительными до нового анализа.
-      delete sw.stateEvents; delete sw.stateStatus;
-      await putMsg(m);
-      await touch();
-      return true;
+      return draft;
+    }
+    // Freeze only the path actually visible now. Unknown variants of other
+    // legacy branches cannot be reconstructed and must not be guessed.
+    function unboundEdges() {
+      const active = path();
+      return active.slice(1).flatMap((m, i) => m.parentSwipeIdx == null && m.parentId === active[i].id
+        ? [Object.assign({}, m, { parentSwipeIdx: active[i].swipeIdx || 0 })] : []);
+    }
+    async function saveEdit(msgId, text, opts) {
+      const o = opts || {};
+      if (S.gen || (S.turn && S.turn !== o.turn)) return false;
+      const draft = editDraft(msgId, text);
+      if (!draft) return false;
+      if (o.draftId) draft.id = o.draftId;
+      return commitMessage(draft, draft.id, unboundEdges());
+    }
+
+    async function selectBranch(msgId, swipeIdx) {
+      const c = ctx.chat();
+      if (!c || S.gen || S.turn) return false;
+      const messages = S.messages.filter((m) => m.chatId === c.id);
+      const route = TR.selection(messages, msgId, swipeIdx);
+      if (!route) return false;
+      const updateMap = new Map(unboundEdges().map((m) => [m.id, m]));
+      route.forEach((p) => {
+        const m = messages.find((x) => x.id === p.id);
+        if (m.swipeIdx !== p.swipeIdx) updateMap.set(m.id, Object.assign({}, updateMap.get(m.id) || m, { swipeIdx: p.swipeIdx }));
+      });
+      const updates = [...updateMap.values()];
+      const leaf = messages.find((m) => m.id === msgId);
+      const chosen = route[route.length - 1].swipeIdx;
+      const next = Object.assign({}, c, { leafId: msgId, preview: (leaf.role === "user" ? "Вы: " : "") + String(leaf.swipes[chosen].text || "").replace(/\s+/g, " ").slice(0, 90) });
+      const lock = S.turn = { chatId: c.id, kind: "branch", phase: "branch" };
+      try {
+        const fields = (m) => Object.assign({ swipeIdx: m.swipeIdx || 0 }, m.parentSwipeIdx == null ? {} : { parentSwipeIdx: m.parentSwipeIdx });
+        await DB.mutateBatch({ patches: updates.map((m) => ["messages", m.id, fields(m)]), puts: [["chats", next]] });
+        for (const update of updates) Object.assign(S.messages.find((m) => m.id === update.id), fields(update));
+        Object.assign(c, next);
+        S.editingMsg = null;
+        return true;
+      } finally { if (S.turn === lock) S.turn = null; }
     }
     /* Листать варианты ответа. → "regen", если надо сгенерировать новый вариант
        (листание вправо за последний вариант последнего ответа); true — переключено; false — ничего. */
@@ -275,7 +319,7 @@
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, saveEdit, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
+    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, editDraft, saveEdit, selectBranch, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };

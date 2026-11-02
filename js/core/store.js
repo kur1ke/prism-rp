@@ -146,12 +146,13 @@
         } catch (e) { failure = e; try { t.abort(); } catch (_) { /* уже прервана */ } }
       });
     },
-    // Atomically mix deletions and writes across stores. All IndexedDB requests
-    // are enqueued synchronously; no await occurs inside the active transaction.
+    // Atomically mix deletions, writes and patches. Initial requests are queued
+    // synchronously; patch writes run in active request callbacks, without await.
     async mutateBatch(batch) {
       const puts = (batch && batch.puts || []).filter(x => x && x[0] && x[1]);
       const deletes = (batch && batch.deletes || []).filter(x => x && x[0] && x[1] != null);
-      const names = [...new Set(puts.concat(deletes).map(x => x[0]))];
+      const patches = (batch && batch.patches || []).filter(x => x && x[0] && x[1] != null && x[2]);
+      const names = [...new Set(puts.concat(deletes, patches).map(x => x[0]))];
       if (!names.length) return;
       const db = await open();
       return new Promise((ok, fail) => {
@@ -161,6 +162,19 @@
         t.onerror = () => { if (!failure) failure = t.error; };
         t.onabort = () => fail(failure || t.error || new Error("Пакетная операция отменена"));
         try {
+          // Patch existing records inside this transaction, preserving fields
+          // updated by another operation (for example image/state results).
+          for (const [store, id, fields] of patches) {
+            const st = t.objectStore(store), req = st.get(id);
+            req.onsuccess = () => {
+              try {
+                if (!req.result) throw new Error("Исходная запись больше не существует");
+                const next = Object.assign({}, req.result, fields);
+                if (store !== "settings") next.updatedAt = Date.now();
+                st.put(next);
+              } catch (e) { failure = e; try { t.abort(); } catch (_) {} }
+            };
+          }
           for (const [store, id] of deletes) {
             const req = t.objectStore(store).delete(id);
             req.onerror = () => { failure = failure || req.error; };

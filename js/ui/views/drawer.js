@@ -8,15 +8,16 @@
 
   /* ── Выдвижная панель ─────────────────────────────────────────────── */
   function drawer(m) {
-    // У сцены — «Сцена», у переписки — «Среда» (сцены RP в переписке нет). Мир, опыт и Prism — у обоих режимов.
+    // Режимное состояние отдельно; дерево, память и мир доступны обоим режимам.
     const ms = m.chat && m.chat.mode === "messenger";
-    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["memory", "Память", "memory"], ["world", "Мир", "globe"]];
+    const tabs = [ms ? ["env", "Среда", "clock"] : ["scene", "Сцена", "scene"], ["tree", "Дерево", "tree"], ["memory", "Память", "memory"], ["world", "Мир", "globe"]];
     const tab = m.tab === "prism" ? (ms ? "env" : "scene") : ms && m.tab === "scene" ? "env" : !ms && m.tab === "env" ? "scene" : m.tab;
     m = Object.assign({}, m, { tab });
     let body = "";
     if (!m.chat) body = `<p class="empty-note">Откройте чат.</p>`;
     else if (m.tab === "env") body = PRP.views.envTab(m);
     else if (m.tab === "scene") body = sceneTab(m);
+    else if (m.tab === "tree") body = PRP.views.branchTree(m);
     else if (m.tab === "memory") body = memoryTab(m);
     else if (m.tab === "world") body = worldTab(m);
     else body = ms ? PRP.views.envTab(m) : sceneTab(m);
