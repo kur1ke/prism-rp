@@ -335,25 +335,27 @@
         if (mirrorSingle && (IC.subjectCount(fin.prompt) > 1 ||
             /\b(?:another|second)\s+(?:person|girl|boy|woman|man)\b|\b(?:two|three)\s+(?:women|men|people|persons)\b/i.test(fin.prompt)))
           throw new Error("Зеркальное фото описывает одного человека, но итоговый prompt добавил второго.");
-        const auditStarted = clock();
-        let finalAudit;
-        try {
-          finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
-        } finally {
-          perf("imageFinalAuditMs", auditStarted, origin,
-            finalAudit && finalAudit.issues && finalAudit.issues.length ? "rejected"
-              : finalAudit ? "accepted" : "error");
+        // Source-authored DRAW has no canonical wear to audit. The legacy
+        // non-authored mode retains its independent canonical wear checks.
+        let finalAudit = { validated: false, scope: "draw-authority", issues: [] };
+        if (!drawAuthored) {
+          const auditStarted = clock();
+          try {
+            finalAudit = ICP.auditFinal(fin.prompt, fin.negative, auditPlan, comp.wearItems, comp.offBodyTags, subjectScope);
+          } finally {
+            perf("imageFinalAuditMs", auditStarted, origin,
+              finalAudit && finalAudit.issues && finalAudit.issues.length ? "rejected"
+                : finalAudit ? "accepted" : "error");
+          }
+          if (finalAudit.issues.length)
+            throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         }
-        if (finalAudit.issues.length)
-          throw new Error("Конфликт одежды в итоговом промпте: " + finalAudit.issues.join("; ").slice(0, 240));
         entry.stage = cfg.backend === "a1111" ? "Рисую на вашем сервере…" : "Рисую…";
         repaint();
         const seed = o.seed != null ? o.seed : (cd.image && String(cd.image.seed || "").trim() !== "" ? Number(cd.image.seed) : undefined);
         finishPreparation("ready");
-        // A VisualPlan derived from canonical wear is invalid if the source's
-        // selected-path garment events/corrections change while compiling.
-        // Shot-only equality is safe ONLY for authored images whose rendered
-        // content did not consume tracked state.
+        // An authored DRAW depends on its original shot and branch identity,
+        // not the evolving physical-state projection.
         shotOnlyGate = drawAuthored;
         // A changed ancestor swipe or evidence during compilation invalidates
         // this image before a potentially expensive backend request.
@@ -375,14 +377,15 @@
             ...(drawAuthored ? { sourceDrawIndex: authoredIndex,
               historicalDrawState: historical } : {}),
             semanticAudit: { validated: !!finalAudit.validated, scope: finalAudit.scope, issues: finalAudit.issues },
-            actorState: drawAuthored ? null : snap ? snap.character.fieldStatus : null,
-            wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
-              globallyScoped: !!singleOwner,
-              plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
-                complete: !!(visualPlan.wear && visualPlan.wear.complete),
-                absentFromBody: visualPlan.absentFromBody,
-                offBodyVisible: visualPlan.offBodyVisible,
-                negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } } };
+            ...(drawAuthored ? { visualAuthority: "authored-draw" } : {
+              actorState: snap ? snap.character.fieldStatus : null,
+              wearConstraints: { items: comp.wearItems || [], negative: wearNegative,
+                globallyScoped: !!singleOwner,
+                plan: { actor: visualPlan.actor, known: !!(visualPlan.wear && visualPlan.wear.known),
+                  complete: !!(visualPlan.wear && visualPlan.wear.complete),
+                  absentFromBody: visualPlan.absentFromBody,
+                  offBodyVisible: visualPlan.offBodyVisible,
+                  negativeEligible: !!visualPlan.allowGlobalGarmentNegative } } }) } };
         if (dims) { finalPatch.w = dims[0]; finalPatch.h = dims[1]; }
       } catch (e) {
         finishPreparation("error");
