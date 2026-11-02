@@ -4159,45 +4159,29 @@ async function foundationH() {
         ["white t-shirt"],"historical redraw does not modify latest canon");
     }finally{ICP.compile=oldCompiler;IB.generate=oldBackend;}
   });
-  await ta("VC-05-3: ambiguous historical event order fails before image entry or backend mutation",async()=>{
+  await ta("VC-05-3: historical authored photo remains isolated from subsequent state events",async()=>{
     const h=fbHarness({name:"Химэ"});
-    await h.chat.createChat("messenger","c1");h.ctx.svc.state=globalThis.PRP.stateService.create(h.ctx);
+    await h.chat.createChat("messenger","c1");
     const first={prompt:"1girl, wearing hoodie, selfie",ratio:"1:1"};
     const last={prompt:"1girl, hoodie removed, selfie",ratio:"1:1"};
     const m=h.chat.newMsg("assistant",null,"Два фото");
     m.swipes[0].draws=[first,last];
-    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"add",value:["hoodie"],
-      certainty:"reported",evidence:"wearing hoodie",evidenceType:"draw",visualScope:"current-self",drawIndex:0},
-      {actor:"char",field:"wear",action:"remove",value:["hoodie"],
-      certainty:"reported",evidence:"hoodie removed",evidenceType:"draw",visualScope:"current-self",drawIndex:1}];
-    m.swipes[0].stateStatus={status:"ok",sourceText:m.swipes[0].text,
-      sourceDraw:last.prompt,sourceDrawIndex:1};
+    m.swipes[0].stateEvents=[{actor:"char",field:"wear",action:"remove",
+      value:["hoodie"],certainty:"reported",evidence:"hoodie removed",
+      evidenceType:"draw",visualScope:"current-self",drawIndex:1}];
     await h.chat.commitMessage(m,m.id);
     h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
       {enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"tags"});
     h.S.drawing=new Set();h.S.imgUrls={};h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
-    const backend=IB.generate;let count=0;
+    const backend=IB.generate;let count=0,sent;
     try {
-      IB.generate=async()=>{count++;throw Error("backend must not run");};
+      IB.generate=async (_,o)=>{count++;sent=o;return {dataUrl:"data:image/png;base64,AA==",seed:21,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===m.id);
-      const reject=async()=>{
-        await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
-        assert.deepStrictEqual(live.swipes[0].images||[],[]);
-      };
-      live.swipes[0].stateEvents.push({actor:"char",field:"wear",action:"add",
-        value:["scarf"],certainty:"reported",evidence:"scarf"});
-      await reject();
-      live.swipes[0].stateEvents.pop();
-      live.swipes[0].stateCorrections=[{field:"wear",actor:"char",action:"remove",
-        value:["hoodie"],certainty:"reported",evidence:""}];
-      await reject();
-      delete live.swipes[0].stateCorrections;
-      live.swipes[0].sceneOps=[{subject:"Химэ",key:"wear",value:"hoodie"}];
-      await reject();
-      delete live.swipes[0].sceneOps;
-      delete live.swipes[0].stateStatus;
-      await reject();
-      assert.strictEqual(count,0);
+      await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
+      assert.strictEqual(count,1);
+      assert.ok(sent.prompt.includes("wearing hoodie"),sent.prompt);
+      assert.strictEqual(live.swipes[0].images[0].sourceDrawIndex,0);
+      assert.strictEqual(live.swipes[0].images[0].promptSources.historicalDrawState,true);
     }finally{IB.generate=backend;}
   });
   await ta("VC-05-4: edited photo or missing indexed observation cannot provide historical state",async()=>{
@@ -4223,26 +4207,25 @@ async function foundationH() {
     obj.swipes[0].stateEvents[0].evidenceType="text";
     assert.strictEqual(ST.historicalDrawPath([obj],0).reason,"unsequenced-state-event");
   });
-  await ta("VC-04-DRAW-5: re-render earlier authored photo is blocked before adding an image",async()=>{
+  await ta("VC-04-DRAW-5: historical author photo renders its own source and retains index",async()=>{
     const h=fbHarness({name:"Орихимэ",image:{trigger:"orihime_inoue"}});
     await h.chat.createChat("messenger","c1");
     const m=h.chat.newMsg("assistant",null,"Два фото");
     const first={prompt:"current selfie, blue hoodie",ratio:"1:1"};
     const last={prompt:"current mirror selfie, red t-shirt",ratio:"1:1"};
-    m.swipes[0].draws=[first,last];
-    await h.chat.commitMessage(m,m.id);
+    m.swipes[0].draws=[first,last];await h.chat.commitMessage(m,m.id);
     h.S.settings.images=Object.assign({},STG.DEFAULTS.images,
       {enabled:true,backend:"a1111",url:"http://unused",drawPromptMode:"tags"});
-    h.S.drawing=new Set();h.S.imgUrls={};
-    h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
-    const backend=IB.generate;let requests=0;
+    h.S.drawing=new Set();h.S.imgUrls={};h.ctx.svc.images=globalThis.PRP.imageService.create(h.ctx);
+    const backend=IB.generate;let requests=0,actual;
     try {
-      IB.generate=async()=>{requests++;throw Error("backend must not be called");};
+      IB.generate=async (_,args)=>{requests++;actual=args;return {dataUrl:"data:image/png;base64,AA==",seed:8,info:{width:512,height:512}};};
       const live=h.S.messages.find(x=>x.id===m.id);
       await h.ctx.svc.images.draw(live,live.swipes[0],live.swipes[0].draws[0]);
-      assert.strictEqual(requests,0);
-      assert.deepStrictEqual(live.swipes[0].images||[],[],"rejected historical image does not mutate swipe");
-      assert.strictEqual(await h.ctx.DB.get("messages",m.id).then(x=>(x.swipes[0].images||[]).length),0);
+      assert.strictEqual(requests,1);
+      assert.ok(actual.prompt.includes("blue hoodie"),actual.prompt);
+      assert.strictEqual(live.swipes[0].images[0].status,"done");
+      assert.strictEqual(live.swipes[0].images[0].sourceDrawIndex,0);
     } finally {IB.generate=backend;}
   });
   await ta("VC-04-DRAW-6: drawFromMessage selects latest authored photograph",async()=>{
@@ -4923,7 +4906,7 @@ async function foundationH() {
       globalThis.PRP.llm.simple=async (_,instruction)=>{
         calls++;
         assert.ok(instruction.includes("SCENE:\nОрихимэ Иноуэ приподняла"),instruction.slice(-850));
-        assert.ok(instruction.includes("visual translator"));
+        assert.ok(instruction.includes("AUTHORED VISUAL SCENE COMPILATION"));
         assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"actual ImageService uses structured prompt plan");
         assert.ok(!instruction.includes("camera=owner;"),"camera directive is metadata");
         return "The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel.";
