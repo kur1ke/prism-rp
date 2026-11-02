@@ -709,11 +709,18 @@
       ];
       if (opts.subjectScope && opts.subjectScope.otherActorPresent) rules.push(
         "Keep each person's visible properties and actions assigned to that same individual; no cross-person clothing inheritance.");
-      if (planOrder) rules.push(planOrder);
+      // A typed JSON frame cannot also obey the old prose/tags-only Plan
+      // output instruction. Carry only source actor scope and mirror staging.
+      const sections = opts.promptPlan && opts.promptPlan.sections;
+      if (sections && sections.SUBJECT) rules.push(
+        "SOURCE ACTOR SCOPE: card owner " + (sections.SUBJECT.owner ? "depicted" : "not established") +
+        ", user " + (sections.SUBJECT.user ? "depicted" : "not established") +
+        ". Never add missing or duplicate people.");
+      if (sections && sections.COMPOSITION && sections.COMPOSITION.singleMirror) rules.push(
+        "SINGLE-PERSON MIRROR SELFIE: represent the source as one regular selfie/portrait. Do not draw mirror glass, reflections or a second human. Preserve source body orientation, gestures, non-mirror objects and room.");
       rules.push(
         'Return ONLY a JSON object with EXACTLY these keys: {"camera":"English camera/viewpoint/framing phrase or empty string","subjects":[{"name":"person name or empty","pose":"visible body orientation, expression, gestures and actions","clothing":"only clothes visually worn on this person"}],"objects":["each separately visible object and its spatial placement, including garments off-body"],"environment":"location and surroundings only","lighting":"visible lighting only"}.',
         "Each subject is a different source-depicted person. Use empty strings or empty arrays for unspecified fields. Do not fill the camera section with body pose, the environment with camera direction, the objects section with worn clothing, or the clothing section with removed objects.",
-        "For a single-person mirror selfie the mirror is optical staging, not a second person. Express a normal one-person selfie/portrait framing, with no physical mirror or reflection, while keeping the actual pose and non-mirror scene details.",
         "Field strings must be short, self-contained English visual clauses, without newline characters. Never write executable instructions, tags or quality terms into JSON. No additional keys and no explanation."
       );
       return "AUTHORED VISUAL SCENE COMPILATION\n" + rules.map((x, i) => (i + 1) + ". " + x).join("\n");
