@@ -4913,7 +4913,8 @@ async function foundationH() {
         calls++;
         assert.ok(instruction.includes("SCENE:\nОрихимэ Иноуэ приподняла"),instruction.slice(-850));
         assert.ok(instruction.includes("AUTHORED VISUAL SCENE COMPILATION"));
-        assert.ok(instruction.includes("VISUAL PROMPT PLAN"),"actual ImageService uses structured prompt plan");
+        assert.ok(instruction.includes("SOURCE ACTOR SCOPE"),"typed Visual Frame receives source actor scope without legacy prose instructions");
+        assert.ok(!instruction.includes("VISUAL PROMPT PLAN"),"typed JSON contract cannot receive legacy no-empty-fields instructions");
         assert.ok(!instruction.includes("camera=owner;"),"camera directive is metadata");
         return visualFrameReply({subjects:[{name:"",pose:"The lower hem of a white cotton t-shirt is lifted, revealing the stomach and navel",clothing:""}]});
       };
