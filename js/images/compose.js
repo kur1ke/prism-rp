@@ -713,7 +713,7 @@
       if (hybrid) rules.push("Return one to three short, fluent English sentences with the resolved visual result, 100 words and 600 characters maximum; never a Danbooru tag list.");
       else if (opts.format === "description") rules.push("Return one to three fluent English sentences, at most 60 words.");
       else rules.push("Return one line of English comma-separated image tags, at most 50 tags, with the same spatial relations and object roles.");
-      return "AUTHORED VISUAL SCENE COMPILATION\\n" + rules.map((x, i) => (i + 1) + ". " + x).join("\\n");
+      return "AUTHORED VISUAL SCENE COMPILATION\n" + rules.map((x, i) => (i + 1) + ". " + x).join("\n");
     }
     const q = opts.qualityPinned
       ? "Do NOT write quality tags (masterpiece, best quality, absurdres, 8k) or weighted tags — the app pins its own."
