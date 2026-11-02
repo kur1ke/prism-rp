@@ -127,6 +127,57 @@
         (s.TECHNICAL.format === "tags" ? "Use subject-count tags only for explicitly depicted people; solo only for exactly one person." : "")
     ].join("\n");
   }
-  PRP.visualPlan = { create, prompt, promptOrder, singleMirror };
+  // Visual Frame v1 — source-local IR returned by the existing single
+  // translation call. It is never persisted as character state or applied to
+  // the narrative tree. Camera, persons, clothes, objects and surroundings
+  // remain distinct until final prompt serialization.
+  function parseFrame(raw) {
+    let value;
+    try {
+      const src = String(raw || "").trim();
+      const fence = /^\`\`\`(?:json)?[ \\t]*\\r?\\n([\\s\\S]*?)\\r?\\n\`\`\`$/i.exec(src);
+      value = JSON.parse(fence ? fence[1].trim() : src);
+    } catch (_) { return { error: "Visual Frame must be a valid JSON object" }; }
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return { error: "Visual Frame must be an object" };
+    const short = (v, limit) => typeof v === "string" && v.length <= limit &&
+      !/[\\r\\n<>]/.test(v) ? v.trim() : null;
+    const camera = short(value.camera, 180);
+    const environment = short(value.environment, 260);
+    const lighting = short(value.lighting, 160);
+    if (camera === null || environment === null || lighting === null)
+      return { error: "Invalid camera, environment or lighting in Visual Frame" };
+    if (!Array.isArray(value.subjects) || value.subjects.length > 6 ||
+        !Array.isArray(value.objects) || value.objects.length > 12)
+      return { error: "Invalid subjects or objects in Visual Frame" };
+    const subjects = [];
+    for (const person of value.subjects) {
+      if (!person || typeof person !== "object" || Array.isArray(person))
+        return { error: "Invalid subject in Visual Frame" };
+      const name = short(person.name, 100), pose = short(person.pose, 280),
+        clothing = short(person.clothing, 260);
+      if (name === null || pose === null || clothing === null ||
+          !(name || pose || clothing))
+        return { error: "Invalid subject attributes in Visual Frame" };
+      subjects.push({ name, pose, clothing });
+    }
+    const objects = value.objects.map(x => short(x, 200));
+    if (objects.some(x => x === null)) return { error: "Invalid off-body objects in Visual Frame" };
+    if (!(camera || environment || lighting || subjects.length || objects.some(Boolean)))
+      return { error: "Visual Frame is empty" };
+    return { frame: freeze({ version: 1, camera, subjects, objects, environment, lighting }) };
+  }
+
+  function renderFrame(frame, format) {
+    if (!frame || frame.version !== 1) return "";
+    const clauses = [frame.camera].concat(frame.subjects.map(p =>
+      [p.name, p.pose, p.clothing].filter(Boolean).join(", ")),
+    frame.objects, [frame.environment, frame.lighting]).flat().filter(Boolean);
+    const clean = clauses.map(x => String(x).replace(/[\\s.,;:]+$/g, "").trim()).filter(Boolean);
+    if (format === "tags") return clean.join(", ");
+    return clean.join(". ") + (clean.length ? "." : "");
+  }
+
+  PRP.visualPlan = { create, prompt, promptOrder, singleMirror, parseFrame, renderFrame };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.visualPlan;
 })(typeof window !== "undefined" ? window : globalThis);
