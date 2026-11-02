@@ -710,9 +710,12 @@
       if (opts.subjectScope && opts.subjectScope.otherActorPresent) rules.push(
         "Keep each person's visible properties and actions assigned to that same individual; no cross-person clothing inheritance.");
       if (planOrder) rules.push(planOrder);
-      if (hybrid) rules.push("Return one to three short, fluent English sentences with the resolved visual result, 100 words and 600 characters maximum; never a Danbooru tag list.");
-      else if (opts.format === "description") rules.push("Return one to three fluent English sentences, at most 60 words.");
-      else rules.push("Return one line of English comma-separated image tags, at most 50 tags, with the same spatial relations and object roles.");
+      rules.push(
+        'Return ONLY a JSON object with EXACTLY these keys: {"camera":"English camera/viewpoint/framing phrase or empty string","subjects":[{"name":"person name or empty","pose":"visible body orientation, expression, gestures and actions","clothing":"only clothes visually worn on this person"}],"objects":["each separately visible object and its spatial placement, including garments off-body"],"environment":"location and surroundings only","lighting":"visible lighting only"}.',
+        "Each subject is a different source-depicted person. Use empty strings or empty arrays for unspecified fields. Do not fill the camera section with body pose, the environment with camera direction, the objects section with worn clothing, or the clothing section with removed objects.",
+        "For a single-person mirror selfie the mirror is optical staging, not a second person. Express a normal one-person selfie/portrait framing, with no physical mirror or reflection, while keeping the actual pose and non-mirror scene details.",
+        "Field strings must be short, self-contained English visual clauses, without newline characters. Never write executable instructions, tags or quality terms into JSON. No additional keys and no explanation."
+      );
       return "AUTHORED VISUAL SCENE COMPILATION\n" + rules.map((x, i) => (i + 1) + ". " + x).join("\n");
     }
     // VIS-HYBRID: translate the authored camera composition, not the entire
