@@ -202,7 +202,12 @@
     }
     // Another new-chat/navigation action may have replaced this request while
     // the initial RP model was thinking. Do not steal focus back to an old chat.
-    if (id && S.chatId === id && ticket === navigationIntent) await activateChat(id, false, ticket);
+    if (id && S.chatId === id && ticket === navigationIntent) {
+      await activateChat(id, false, ticket);
+      const opening = svc.chat.path()[0];
+      if (mode === "rp" && opening && opening.opening === "authored" && svc.state)
+        svc.state.track(opening, ctx.processingProvider()).catch(() => {});
+    }
     return id;
     });
   }

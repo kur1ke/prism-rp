@@ -6,7 +6,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, SR = PRP.stateResolver, VP = PRP.visualPlan;
+  const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, VP = PRP.visualPlan;
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -46,7 +46,7 @@
     // The character has already authored this exact photograph. Changes to
     // an Observer's inferred facts do not invalidate the photo itself.
     return JSON.stringify(shotOnly ? shot : shot.concat([
-      sw.sceneOps, sw.stateEvents, sw.stateCorrections, sw.messengerAt,
+      sw.stateEvents, sw.stateCorrections, sw.messengerAt,
       sw.stateStatus && sw.stateStatus.frameObjects,
     ]));
   }
@@ -191,13 +191,8 @@
       const stamped = !drawAuthored && sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
       const snap = !drawAuthored && ctx.svc.state
         ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
-      const projected = drawAuthored
-        ? { scene: { chars: {}, present: [] }, wearFacts: [] }
-        : SR.resolve({
-          tracked: snap, scene: snap ? snap.state.scene : chat().sceneState(upto),
-          names: { char: cd.name, user: pers.name },
-        });
-      const st = projected.scene;
+      const wearFacts = !drawAuthored && snap ? PRP.stateTracker.wearFacts(snap.state) : [];
+      const st = drawAuthored ? { chars: {}, present: [] } : PRP.stateTracker.view(snap ? snap.state : PRP.stateTracker.empty({}));
       const visual = !drawAuthored && ms
         ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null }))
         : null;
@@ -239,7 +234,7 @@
         const resolvedActors = currentSelfie && !shotActors.owner
           ? { ...shotActors, owner: true, reason: "current-selfie" } : shotActors;
         const visualPlan = VP.create({
-          wearFacts: drawAuthored ? [] : projected.wearFacts,
+          wearFacts: drawAuthored ? [] : wearFacts,
           owner: !!resolvedActors.owner,
           shotAuthored: drawAuthored,
           draw: shot,
@@ -272,7 +267,7 @@
           throw new Error("Не удалось преобразовать визуальный замысел: " + reason + ". Изображение не отправлено.");
         }
         const composed = IC.compose({ draw: intent ? firstPass.text : shot, card: cd,
-          scene: st, persona: pers, messenger: visual, wearFacts: projected.wearFacts,
+          scene: st, persona: pers, messenger: visual, wearFacts,
           // The translator may change wording, never actor ownership.
           frameActors: intent && drawAuthored ? resolvedActors : null,
           shotAuthored: drawAuthored, assumeOwner: !intent && !!entry.fromMessage,
@@ -293,7 +288,7 @@
         // no stale pre-shot rule is allowed to veto that action.
         const canonicalWear = drawAuthored ? null : composed.physicalWear;
         const auditPlan = drawAuthored ? null : VP.create({
-          wearFacts: projected.wearFacts,
+          wearFacts,
           owner: !!composed.ownerPresent,
           source: { chatId: origin.chatId, messageId: origin.messageId, swipeIdx: origin.swipeIdx },
         });

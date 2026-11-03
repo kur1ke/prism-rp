@@ -59,7 +59,7 @@
       const path = p || chat().path();
       const k = canon(path);
       const history = path.map((m) => TR.activeSwipe(m).text).filter(Boolean);
-      const st = scene || chat().sceneState(path);
+      const st = scene || PRP.stateTracker.view(ctx.svc.state ? ctx.svc.state.snapshot(path) : PRP.stateTracker.empty({}));
       const lens = k.lens || {};
       const r = WRT.retrieve(k.eligible, {
         text: history.slice(-4).join("\n"), sceneLoc: st.loc || "", present: st.present || [],

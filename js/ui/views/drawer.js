@@ -2,7 +2,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const R = PRP.render, TR = PRP.tree, OA = PRP.openai;
   const { esc, icon } = R;
   const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
 
@@ -27,53 +27,15 @@
   }
 
   function sceneTab(m) {
-    const st = m.scene, c = st.clock;
-    const date = c.m != null ? `${String(c.d).padStart(2, "0")}.${String(c.m).padStart(2, "0")}${c.y != null ? "." + c.y : ""}` : "";
-    const tm = c.min != null ? `${String(Math.floor(c.min / 60)).padStart(2, "0")}:${String(c.min % 60).padStart(2, "0")}` : "";
-    const names = [];
-    const add = (n) => { if (n && !names.some((x) => x.toLowerCase() === n.toLowerCase())) names.push(n); };
-    add(m.card.name);
-    st.present.forEach(add);
-    Object.keys(st.chars).forEach(add);
-    const people = names.map((n) => {
-      const key = Object.keys(st.chars).find((k) => k.toLowerCase() === n.toLowerCase());
-      const ch = key ? st.chars[key] : { wear: [], pose: "", mood: "" };
-      const isMain = n.toLowerCase() === m.card.name.toLowerCase();
-      return `<div class="panel" data-person="${esc(n)}">
-        <div class="who">${R.avatar(isMain ? m.card : { name: n }, 34)}<b>${esc(n)}</b>
-          ${st.present.some((p) => p.toLowerCase() === n.toLowerCase()) ? `<span class="tag">в сцене</span>` : `<button class="tool" data-act="sc-enter" data-name="${esc(n)}">в сцену</button>`}</div>
-        <div class="field"><span class="label">${icon("shirt", "")} Одежда</span>
-          <div class="chips">${ch.wear.map((w) => `<span class="chip"><span>${esc(w)}</span><button data-act="sc-remove" data-name="${esc(n)}" data-item="${esc(w)}" title="Снять">${icon("x")}</button></span>`).join("")}
-            <input class="chip-add" data-sc-add="${esc(n)}" placeholder="+ надеть…"></div></div>
-        <div class="row"><div class="field"><label>Поза, где</label><input data-sc-field="pose" data-name="${esc(n)}" value="${esc(ch.pose)}" placeholder="сидит у окна"></div>
-          <div class="field"><label>Настроение (оценка)</label><input data-sc-field="mood" data-name="${esc(n)}" value="${esc(ch.mood)}" placeholder="спокойна"></div></div>
-        ${isMain && ch.mood ? `<span class="help">Модель видит настроение как предполагаемую оценку, а не как факт.</span>` : ""}
-      </div>`;
-    }).join("");
-    return `
-      <div class="block"><div class="block-title">Когда и где</div>
-        <div class="row"><div class="field"><label>Дата</label><input id="sc-date" value="${esc(date)}" placeholder="14.05"></div>
-          <div class="field"><label>Время</label><input id="sc-time" type="time" value="${esc(tm)}"></div>
-          <button class="btn btn-sm" data-act="sc-time-set" style="margin-bottom:12px">Задать</button></div>
-        <div class="quick">${[["+15m", "+15 мин"], ["+1h", "+1 час"], ["+3h", "+3 часа"], ["+1d", "+1 день"]].map(([v, l]) => `<button class="btn btn-sm btn-ghost" data-act="sc-shift" data-v="${v}">${icon("clock")}${l}</button>`).join("")}</div>
-        <div class="field" style="margin-top:12px"><label>Место</label><input data-sc-top="loc" value="${esc(st.loc)}" placeholder="Кафе у кампуса, терраса"></div>
-        <div class="field"><label>Погода</label><input data-sc-top="weather" list="weather-list" value="${esc(st.weather)}" placeholder="дождь"><datalist id="weather-list">${WEATHER.map((w) => `<option value="${w}">`).join("")}</datalist></div>
-      </div>
-      <div class="block"><div class="block-title">Кто рядом <small>${st.present.length || "никого"}</small></div>
-        <div class="chips">${st.present.map((p) => `<span class="chip"><span>${esc(p)}</span><button data-act="sc-leave" data-name="${esc(p)}" title="Ушёл из сцены">${icon("x")}</button></span>`).join("")}
-          <input class="chip-add" id="sc-enter-new" placeholder="+ добавить…"></div></div>
-      <div class="block"><div class="block-title">Персонажи</div>${people}</div>
-      ${st.legacyIgnored ? `<p class="hint legacy-note">На этой ветке есть устаревшие отметки сцены (отношение, отметки сюжета): ${st.legacyIgnored}. Они сохранены в сообщениях, но больше не действуют и в модель не подаются.</p>` : ""}
-      ${st.invalidOps ? `<details class="block"><summary class="hint">Не применены команды трекера: ${st.invalidOps}</summary>
-        <p class="hint">Такие команды не меняют состояние сцены. Исходные сообщения не переписываются.</p>
-        <ul class="imp-issues">${(st.invalidEntries || []).map((x) => `<li><code>${esc(x.raw)}</code> <small>(${esc(x.source)})</small></li>`).join("")}</ul>
-      </details>` : ""}
-      <div class="block"><div class="block-title">Как модель ведёт сцену</div>
-        <label class="check"><input type="checkbox" data-set="sceneProtocol" ${m.settings.sceneProtocol ? "checked" : ""}><span>Модель сообщает изменения сама<small>В конце ответа она пишет короткую служебную строку; приложение применяет её и прячет из текста.</small></span></label>
-        <details><summary class="hint" style="cursor:pointer">Начальная сцена в текстовом виде</summary>
-          <div class="field" style="margin-top:8px"><textarea id="scene-init" placeholder="time=14.05 18:00; loc=Кафе; Химэ.wear=белая блузка, юбка">${esc(m.chat.sceneInit || "")}</textarea></div>
-          <button class="btn btn-sm" data-act="scene-init-save">Сохранить</button></details>
-      </div>`;
+    const st = m.scene;
+    const field = (label, value) => `<p><span class="label">${esc(label)}</span> ${esc(value || "неизвестно")}</p>`;
+    return `<div class="block"><div class="block-title">Обстановка</div>
+      ${field("Время", st.time)}${field("Место персонажа", st.loc)}${field("Погода", st.weather)}
+      ${field("Присутствуют", st.present.length ? st.present.join(", ") : st.presentKnown ? "никого" : "неизвестно")}</div>
+      ${Object.entries(st.chars).map(([name, ch]) => `<div class="panel"><div class="who"><b>${esc(name)}</b></div>
+        ${field("Место", ch.location)}${field("Занятие", ch.activity)}${field("Одежда", ch.wearKnown ? ch.wear.join(", ") || (ch.wearComplete ? "ничего не надето" : "неизвестно") : "неизвестно")}
+        ${field("Поза", ch.pose)}${field("Волосы", ch.visualHair)}${field("Настроение (оценка)", ch.mood)}</div>`).join("")}
+      <p class="hint">Текущее состояние выбранной ветки. Неустановленные сведения остаются неизвестными.</p>`;
   }
 
   function memoryTab(m) {
@@ -215,7 +177,6 @@
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
         ${r.world ? `<dt>Мир</dt><dd>${r.worldKept} ${R.plural(r.worldKept, "факт", "факта", "фактов")} из ${r.world.relevant} релевантных${r.worldDropped ? `, не поместилось ${r.worldDropped}` : ""}; действует ${r.world.effective}, проходит отбор по таймлайну ${r.world.eligible}</dd>` : ""}
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
-        ${r.sceneLegacyIgnored ? `<dt>Устаревшее в сцене</dt><dd>${r.sceneLegacyIgnored} — не действует (отношение, отметки сюжета)</dd>` : ""}
         ${r.scenarioState && r.scenarioState !== "none" ? `<dt>Сценарий</dt><dd>${{ included: "в контексте — исходные обстоятельства, до первого ответа на вашу реплику", "past-first-turn": "больше не подаётся: первый ответ на вашу реплику уже прозвучал", budget: "не поместился" }[r.scenarioState]}</dd>` : ""}
         ${r.postHistoryDisabled ? `<dt>После истории</dt><dd>указания автора выключены в настройках</dd>` : ""}
         ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "")).join(", ")}</dd>` : ""}
@@ -389,12 +350,11 @@
     const originText = origin
       ? 'chat.initialWear · ' + origin.action + ' · ' +
         (Array.isArray(origin.value) ? origin.value.join(", ") : origin.action === "clear" ? "пустой комплект" : "нет данных")
-      : d.mode === "rp" ? "Режим сцены: начальная свёртка sceneInit, без chat.initialWear"
+      : d.mode === "rp" ? "Режим сцены: события StateTracker выбранной ветки"
         : "chat.initialWear не записан";
     const snapshots = '<div class="block"><div class="block-title">Исходная запись</div><p>' +
         esc(originText) + '</p>' +
-        (d.sceneInit ? '<details class="exp-debug"><summary>Исходные команды сцены</summary><pre class="debug-prompt">' +
-          esc(d.sceneInit) + '</pre></details>' : "") +
+
         '</div>' +
       '<div class="block"><div class="block-title">Актуальное состояние · активная ветка</div>' +
         format(d.current) + '</div>';

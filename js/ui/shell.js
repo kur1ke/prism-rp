@@ -5,7 +5,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const SC = PRP.scene, TR = PRP.tree, OA = PRP.openai, IB = PRP.imgBackends, IC = PRP.imgCompose, R = PRP.render, V = PRP.views;
+  const TRACK = PRP.stateTracker, TR = PRP.tree, OA = PRP.openai, IB = PRP.imgBackends, IC = PRP.imgCompose, R = PRP.render, V = PRP.views;
 
   function create(ctx) {
     const { S } = ctx;
@@ -31,7 +31,7 @@
       const path = svc().chat.path();
       return {
         S, view: S.view, cards: S.cards, chats: S.chats, card: ctx.card(), chat: ctx.chat(), persona: ctx.persona(), path,
-        scene: ctx.chat() ? svc().chat.sceneState(path) : SC.emptyState(), gen: S.gen, editingMsg: S.editingMsg,
+        scene: TRACK.view(svc().state ? svc().state.snapshot(path) : TRACK.empty({})), gen: S.gen, editingMsg: S.editingMsg,
         branchTreeUi: S.branchTreeUi && ctx.chat() && S.branchTreeUi.chatId === ctx.chat().id ? S.branchTreeUi : null,
         dialogueMap: S.modal && S.modal.kind === "tree" && ctx.chat() ? TR.layout(S.messages.filter((x) => x.chatId === ctx.chat().id), ctx.chat().leafId) : null,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
@@ -331,7 +331,7 @@
         if (!S.gen) return;
         const el = document.getElementById("text-" + S.gen.msgId);
         if (!el) return;
-        const txt = IC.stripDrawsForDisplay(SC.stripForDisplay(OA.splitThink(S.gen.raw).text));
+        const txt = IC.stripDrawsForDisplay(OA.splitThink(S.gen.raw).text);
         if (ctx.chat().mode === "messenger") {
           el.innerHTML = R.bubbles(txt).map((p) => `<div class="bub">${R.esc(p)}</div>`).join("") + `<div class="bub typing"><i></i><i></i><i></i></div>`;
         } else el.innerHTML = R.rpText(S.gen.prefix + txt);

@@ -8,7 +8,6 @@ const root = path.resolve(__dirname, "..");
 function load(name) { require(path.join(root, "js", name)); }
 load("core/util.js");
 load("prism/data.js");
-load("prism/scene.js");
 load("chat/tree.js");
 load("chat/service.js");
 load("ui/render.js");

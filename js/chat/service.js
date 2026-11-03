@@ -1,39 +1,22 @@
 /* Prism RP — сервис чата (прикладной уровень).
    Жизненный цикл чата и его сообщений: загрузка, создание с приветствием, правка,
-   варианты, удаление ветки и чата, ручные изменения сцены, сохранение.
-   Алгоритмы дерева — в chat/tree.js, свёртка сцены — в prism/scene.js; здесь только
+   варианты, удаление ветки и чата, сохранение.
+   Алгоритмы дерева — в chat/tree.js, состояние — в state/tracker.js; здесь только
    их применение к текущему чату и сохранение через хранилище.
    Зависимости передаются в create(ctx): состояние сессии S, хранилище DB, геттеры. DOM не трогает. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, SC = PRP.scene;
+  const U = PRP.util, TR = PRP.tree;
 
   function create(ctx) {
     const { S, DB } = ctx;
 
-    /* ── Путь и сцена активной ветки ───────────────────────────────────── */
+    /* ── Путь активной ветки ───────────────────────────────────── */
     function path() {
       const c = ctx.chat();
       return c ? TR.path(TR.index(S.messages), c.leafId) : [];
     }
-    /* Сцена RP активной ветки. У переписки сцены нет (FOUNDATION-H): пустое состояние — служебные строки
-       [scene:] в переписке (в том числе старые, сохранённые до разделения режимов) сцену не создают
-       и не попадают ни в Prism, ни в картинки, ни в ассистента. */
-    function sceneState(p) {
-      const c = ctx.chat();
-      if (c && c.mode === "messenger") return SC.fold("", []);
-      return SC.fold(c ? c.sceneInit : "", (p || path()).map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })), {
-        charName: ctx.card() && ctx.card().name, userName: ctx.persona() && ctx.persona().name,
-      });
-    }
-    /* Служебная строка [scene:] из текста ответа: в сцене — операции сцены; в переписке — вырезается из текста,
-       а операции хранятся в варианте только как неактивные (ignoredSceneOps, для совместимости и отладки). */
-    function sceneFields(ops) {
-      const c = ctx.chat();
-      return c && c.mode === "messenger" ? { sceneOps: [], ignoredSceneOps: ops || [] } : { sceneOps: ops || [] };
-    }
-    // Путь в виде, который понимают модули Prism: [{id, swipeIdx}].
     function pathCtx(p) { return (p || path()).map((m) => ({ id: m.id, swipeIdx: m.swipeIdx || 0 })); }
 
     /* ── Сохранение ────────────────────────────────────────────────────── */
@@ -86,14 +69,14 @@
       const parent = parentId && S.messages.find((m) => m.id === parentId && m.chatId === S.chatId);
       return { id: U.uid("m"), chatId: S.chatId, parentId: parentId || null,
         ...(parent ? { parentSwipeIdx: parent.swipeIdx || 0 } : {}),
-        role, swipes: [{ text: text || "", sceneOps: [], createdAt: now }], swipeIdx: 0, createdAt: now };
+        role, swipes: [{ text: text || "", createdAt: now }], swipeIdx: 0, createdAt: now };
     }
 
     /* ── Жизненный цикл ────────────────────────────────────────────────── */
     function loadMessages(chatId) { return DB.byIndex("messages", "chatId", chatId); }
 
     /* Новый чат. Режим «Сцена»: первое сообщение карточки и альтернативные приветствия — авторское
-       начало, варианты одного корневого сообщения (без вызова модели; [scene:] разбирается как обычно).
+       начало, варианты одного корневого сообщения (без вызова модели; состояние извлекается Observer).
        Без первого сообщения чат создаётся пустым: ни заглушек, ни пустых узлов, leafId = null —
        начать может пользователь или, по явному действию, модель (generation/service, режим opening).
        Сценарий карточки в сцену не переносится. Делает чат текущим и возвращает его id. */
@@ -101,7 +84,7 @@
     async function createChat(mode, cardId) {
       const cd = S.cards.find((x) => x.id === (cardId || S.cardId));
       if (!cd) return null;
-      const c = { id: U.uid("chat"), cardId: cd.id, mode, title: mode === "messenger" ? "Переписка" : "Сцена", sceneInit: "", leafId: null, createdAt: Date.now() };
+      const c = { id: U.uid("chat"), cardId: cd.id, mode, title: mode === "messenger" ? "Переписка" : "Сцена", leafId: null, createdAt: Date.now() };
       let first = null;
       if (mode === "rp" && (cd.firstMes || (cd.altGreetings || []).length)) {
         const vars = { char: cd.name, user: ctx.persona().name };
@@ -109,8 +92,7 @@
         first.chatId = c.id; // newMsg normally uses the currently selected chat
         first.opening = "authored";
         first.swipes = [cd.firstMes].concat(cd.altGreetings || []).filter(Boolean).map((g) => {
-          const parsed = SC.parse(U.macros(g, vars));
-          return { text: parsed.text, sceneOps: parsed.ops, createdAt: Date.now() };
+          return { text: U.macros(g, vars), createdAt: Date.now() };
         });
         c.leafId = first.id;
         c.preview = first.swipes[0].text.replace(/\s+/g, " ").slice(0, 90);
@@ -262,30 +244,6 @@
     }
 
     /* ── Сцена из форм ─────────────────────────────────────────────────── */
-    function op(subject, key, value) {
-      return { subject: subject || undefined, key, value, raw: `${subject ? subject + "." : ""}${key}=${value}`, manual: true };
-    }
-    // Ручные изменения сцены пишутся в последнее сообщение ветки (или в начальную сцену пустого чата).
-    async function applySceneOps(ops) {
-      if (!ops.length) return false;
-      const c = ctx.chat();
-      if (!c || c.mode === "messenger") return false; // у переписки сцены нет
-      // Ручное изменение не записывается, если оно не может подействовать
-      // (например, +15 минут при ещё неизвестном времени суток).
-      const preview = SC.apply(sceneState(), ops, { charName: ctx.card() && ctx.card().name, userName: ctx.persona() && ctx.persona().name });
-      if (preview.ignored.length || preview.applied.length !== ops.length) return false;
-      const leaf = path().slice(-1)[0];
-      if (leaf) {
-        const sw = TR.activeSwipe(leaf);
-        sw.sceneOps = (sw.sceneOps || []).concat(ops);
-        await putMsg(leaf);
-      } else {
-        c.sceneInit = [c.sceneInit, ops.map((o) => o.raw).join("; ")].filter(Boolean).join("; ");
-        await putChat(c);
-      }
-      return true;
-    }
-
     /* ── Бэкап ─────────────────────────────────────────────────────────── */
     /* Восстановление ДОБАВЛЕНИЕМ: локальный чат главнее входящего с тем же id в вопросе режима (режим фиксирован).
        Входящий чат с тем же id, но другим режимом отклоняется до записи вместе со всем, что к нему привязано
@@ -319,7 +277,7 @@
       return { name: `${cd.name} — ${c.title || "чат"}.txt`, text: lines.join("\n\n") };
     }
 
-    return { path, sceneState, sceneFields, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, editDraft, saveEdit, selectBranch, swipe, addUserMessage, op, applySceneOps, exportText, checkBackupChats };
+    return { path, pathCtx, putMsg, putChat, touch, commitMessage, newMsg, loadMessages, createChat, latestForCard, deleteChat, deleteFrom, editDraft, saveEdit, selectBranch, swipe, addUserMessage, exportText, checkBackupChats };
   }
 
   PRP.chatService = { create };

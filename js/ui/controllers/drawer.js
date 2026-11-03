@@ -2,13 +2,12 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const SC = PRP.scene, U = PRP.util;
+  const U = PRP.util;
 
   PRP.controllers = PRP.controllers || {};
   PRP.controllers.drawer = function (ctx) {
     const { S, ui, svc } = ctx;
     const { $ } = ui;
-    const op = (...a) => svc.chat.op(...a);
 
     // Copy only the currently open Debug section, not other tabs or hidden
     // application state. A legacy fallback is needed in embedded Perchance frames.
@@ -24,19 +23,7 @@
       } finally { field.remove(); }
     }
 
-    // Ручные изменения сцены → в ветку; затем Prism, панель и шапка.
-    async function applySceneOps(ops) {
-      if (!(await svc.chat.applySceneOps(ops))) {
-        ui.toast("Изменение сцены отклонено: проверьте значение. Сдвиг минут/часов возможен после установки времени суток.", true);
-        return;
-      }
-      svc.prism.refresh();
-      ui.renderDrawer();
-      ui.renderHead();
-    }
 
-    // Форма «Мир чата» → черновик действия (S.worldEdit). Область — только явный выбор пользователя.
-    const csv = (v) => String(v || "").split(",").map((x) => x.trim()).filter(Boolean);
     function collectWorld() {
       const d = S.worldEdit;
       if (!d) return d;
@@ -103,25 +90,6 @@
       },
       "open-prism": () => { svc.prism.refresh(); S.modal = { kind: "debug", section: "prism" }; ui.renderModal(); },
       "prism-preview": () => { svc.prism.refresh(); if (S.modal && S.modal.kind === "debug") ui.renderModal(); else ui.renderDrawer(); },
-      // Сцена
-      "sc-time-set": () => {
-        const d = $("#sc-date").value.trim(), tm = $("#sc-time").value.trim();
-        if (d && !/^\d{1,2}\.\d{1,2}(\.\d{2,4})?$/.test(d)) { ui.toast("Дата в виде 14.05 или 14.05.2026", true); return; }
-        const v = [d, tm].filter(Boolean).join(" ");
-        if (v) applySceneOps([op(null, "time", v)]);
-      },
-      "sc-shift": (t) => applySceneOps([op(null, "time", t.dataset.v)]),
-      "sc-leave": (t) => applySceneOps([op(null, "leave", t.dataset.name)]),
-      "sc-enter": (t) => applySceneOps([op(null, "enter", t.dataset.name)]),
-      "sc-remove": (t) => applySceneOps([op(t.dataset.name, "remove", t.dataset.item)]),
-      "scene-init-save": async () => {
-        const c = ctx.chat(), value = $("#scene-init").value.trim();
-        const ops = SC.parseBody(value);
-        const check = SC.apply(SC.emptyState(), ops, { charName: ctx.card() && ctx.card().name, userName: ctx.persona() && ctx.persona().name });
-        if (check.ignored.length) { ui.toast("Начальная сцена содержит недопустимые команды. Исправьте их перед сохранением.", true); return; }
-        c.sceneInit = value; await svc.chat.putChat(c);
-        svc.prism.refresh(); ui.renderDrawer(); ui.renderFeed(); ui.toast("Начальная сцена сохранена.");
-      },
       // Мир чата: только явные действия; ничего не извлекается из текста ответов.
       "wc-new": () => worldDraft("assert"),
       "wc-override": (t) => worldDraft("override", t.dataset.id),
@@ -147,21 +115,10 @@
 
     function change(t) {
       if (t.dataset.mapVariant !== undefined) { const state = treeUi(); if (state) { state.variant = Number(t.value); refreshMap(); } return true; }
-      if (t.dataset.scTop) { applySceneOps([op(null, t.dataset.scTop, t.value.trim() || "-")]); return true; }
-      if (t.dataset.scField) { applySceneOps([op(t.dataset.name, t.dataset.scField, t.value.trim() || "-")]); return true; }
       return false;
     }
     function input() {}
     function key(e, t) {
-      if (e.key === "Enter" && t.classList && t.classList.contains("chip-add")) {
-        e.preventDefault();
-        const v = t.value.trim();
-        if (!v) return true;
-        if (t.dataset.scAdd) applySceneOps([op(t.dataset.scAdd, "add", v)]);
-        else if (t.id === "sc-enter-new") applySceneOps([op(null, "enter", v)]);
-        return true;
-      }
-      if (e.key === "Enter" && t.tagName === "INPUT" && (t.dataset.scTop || t.dataset.scField)) { t.blur(); return true; }
       return false;
     }
 

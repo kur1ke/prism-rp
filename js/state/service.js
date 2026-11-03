@@ -25,7 +25,7 @@
         const world = ctx.svc.messenger.worldAt(p, extra.now);
         legacy = world && world.world;
       }
-      return TRACK.fold({ mode: c.mode, sceneInit: c.sceneInit, path: p,
+      return TRACK.fold({ mode: c.mode, initialState:c.initialState, path: p,
         charName: cd.name, userName: ctx.persona().name, legacyWorld: legacy, initialWear: c.initialWear });
     }
 
@@ -151,7 +151,7 @@
       return JSON.stringify((path || []).map((m) => [
         m.id, m.swipeIdx || 0, TR.activeSwipe(m).text,
         TR.activeSwipe(m).stateEvents, TR.activeSwipe(m).stateCorrections,
-        TR.activeSwipe(m).sceneOps, TR.activeSwipe(m).draws,
+        TR.activeSwipe(m).draws,
       ]));
     }
 
@@ -339,7 +339,7 @@
           swipes: [{
             text: priorStatus.sourceText,
             draws: draws.slice(0, previousIndex + 1),
-            sceneOps: [], stateCorrections: [],
+            stateCorrections: [],
             stateEvents: archivedDrawEvents.slice(-32),
             wearInquiries: archivedWearInquiries,
           }],
@@ -628,7 +628,6 @@
           wearInquiry: s && s.wearInquiry || null };
       }).reverse();
       return { mode: c.mode, origin: c.initialWear || null,
-        sceneInit: c.mode === "rp" ? String(c.sceneInit || "") : "",
         baseline: origin.actors.char.wearState, current: current.actors.char.wearState,
         replayIssues: current.diagnostics.slice(-12), changes, changeCount: candidates.length, recent };
     }

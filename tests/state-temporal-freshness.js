@@ -3,7 +3,6 @@
 "use strict";
 const assert = require("node:assert/strict");
 require("../js/chat/tree.js");
-require("../js/prism/scene.js");
 require("../js/messenger/time.js");
 require("../js/prism/data.js");
 const T = require("../js/state/tracker.js");

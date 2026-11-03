@@ -4,7 +4,7 @@
    склонности и воспоминания как контекст восприятия, а не как приказы.
 
    Граница «данные / указания» (FOUNDATION-H): указания — только указания автора карточки и служебные указания
-   текущей операции (протокол сцены и рисования, «продолжи», «начни сцену»). Всё остальное — разделы-данные
+   текущей операции (протокол состояния и рисования, «продолжи», «начни сцену»). Всё остальное — разделы-данные
    (prism/data): пометка [данные · …] и значения-литералы JSON в одной строке. Текст карточки, персоны, сценария,
    лорбука, опыта, сцены, мира и среды переписки не может начать новый раздел или стать указанием, как бы он
    ни выглядел; по смыслу он не меняется. */
@@ -13,7 +13,7 @@
   const PRP = (root.PRP = root.PRP || {});
   const U = PRP.util || (typeof require !== "undefined" ? require("../core/util.js") : null);
   const DATA = PRP.prismData || (typeof require !== "undefined" ? require("./data.js") : null);
-  const SCENE = PRP.scene || (typeof require !== "undefined" ? require("./scene.js") : null);
+  const TRACK = PRP.stateTracker || (typeof require !== "undefined" ? require("../state/tracker.js") : null);
   const CC = PRP.cardContext || (typeof require !== "undefined" ? require("./card-context.js") : null);
 
   // Рамки и заголовки режимов — в адаптерах (prism/modes.js); сборка, бюджет и общие слои — здесь.
@@ -67,11 +67,11 @@
   /* Сборка контекста со строгим бюджетом.
 
      opts: {
-       mode: 'rp'|'messenger', card, userName, userDesc, sceneState,
+       mode: 'rp'|'messenger', card, userName, userDesc, stateSnapshot,
        reflection: { perspective } — автоматический субъективный Experience текущей ветки,
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
-       sceneProtocol, extraPost, noPostHistory,
+       stateToolEnabled, extraPost, noPostHistory,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
        messenger — для режима messenger: { world, conversation, temporal, plans } (готовые данные среды переписки;
          сцена RP в переписку не подаётся, протокол [scene:] не просится — prism/modes),
@@ -87,7 +87,7 @@
                → примеры речи → ПЕРСОНА → ЛОРБУК (справка карточки) → ФАКТЫ МИРА → ОПЫТ
                → НАЧАЛО ИСТОРИИ (сценарий, пока действует) → СЦЕНА (rp) | ПОЛОЖЕНИЕ, СОСТОЯНИЕ ПЕРЕПИСКИ, ВРЕМЯ (messenger)
        user/assistant: ИСТОРИЯ
-       system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → СЛУЖЕБНЫЕ УКАЗАНИЯ ДЛЯ ЭТОГО ОТВЕТА (протокол сцены и рисования, операция)
+       system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → СЛУЖЕБНЫЕ УКАЗАНИЯ ДЛЯ ЭТОГО ОТВЕТА (протокол состояния и рисования, операция)
      При singleSystem всё служебное идёт одним system в начале (разделы и пометки те же), затем строго user/assistant.
 
      Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
@@ -101,7 +101,7 @@
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
-    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, sceneProtocol: true, noPostHistory: false, includeScenario: true, allowSyntheticUser: true }, opts);
+    const o = Object.assign({ mode: "rp", contextTokens: 8192, reserveTokens: 700, singleSystem: false, minHistory: 4, noPostHistory: false, includeScenario: true, allowSyntheticUser: true }, opts);
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const AD = MODES.adapter(o.mode);
     const card = o.card || {};
@@ -119,7 +119,7 @@
     // Карточка: ядро + выборочные подробности + примеры (prism/card-context).
     const core = CC.core(card, m);
     const msW = o.mode === "messenger" && o.messenger ? o.messenger.world || {} : null;
-    const sc = o.sceneState || null;
+    const sc = o.stateSnapshot ? TRACK.view(o.stateSnapshot) : null;
     const modeText = msW ? [msW.location, msW.activity].concat(msW.nearby || [], msW.ongoing || []).filter(Boolean).join("\n")
       : sc ? [sc.loc, sc.weather].concat(sc.present || [], ...Object.keys(sc.chars || {}).map((n) => [sc.chars[n].pose].concat(sc.chars[n].wear || []))).filter(Boolean).join("\n") : "";
     const scenarioText = o.includeScenario ? m(card.scenario || "").trim() : "";
@@ -150,7 +150,7 @@
     };
     const frame = m(T.frame);
     // Сцена — слой режима rp. В переписке её место занимают разделы среды переписки.
-    const scene = AD.usesScene ? section(m(T.scene), SCENE.describe(o.sceneState)) : "";
+    const scene = AD.usesScene ? section(m(T.scene), TRACK.describe(o.stateSnapshot)) : "";
     // Current physical absences are facts, never behavioral commands. Keep
     // these in preflight accounting even after the originating raw turn drops
     // out of the history; source is the active path, not other swipes/chats.
@@ -181,7 +181,6 @@
         "Рассказывай только то, что персонаж мог знать и решил сообщить; не обязан перечислять весь прошедший день."
       : "";
     const protocolBody = [o.stateToolEnabled && PRP.imgCompose && PRP.imgCompose.stateToolInstruction ? PRP.imgCompose.stateToolInstruction() : "",
-      AD.sceneProtocol && o.sceneProtocol ? m(SCENE.PROTOCOL) : "",
       temporalReconciliation, o.extraPost ? m(o.extraPost) : ""].filter(Boolean).join("\n\n");
     const protocol = section(T.operation, protocolBody);
     const msPlansAll = (o.messenger && o.messenger.plans) || [];
@@ -386,7 +385,6 @@
         syntheticUser: !!synthetic,
         needsUserFirst: !!needsUserFirst,
         scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
-        sceneLegacyIgnored: (o.sceneState && o.sceneState.legacyIgnored) || 0,
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),

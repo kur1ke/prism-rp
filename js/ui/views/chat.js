@@ -2,7 +2,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const R = PRP.render, TR = PRP.tree, OA = PRP.openai;
   const { esc, icon } = R;
   const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
 
@@ -21,7 +21,7 @@
 
   function chatHead(m) {
     const cd = m.card, c = m.chat;
-    const line = SC.summaryLine(m.scene);
+    const line = [m.scene.time, m.scene.loc, m.scene.weather].filter(Boolean).join(" · ");
     const status = c.mode === "messenger"
       ? (m.gen ? `<span class="head-scene live">печатает…</span>` : `<span class="head-scene"><span class="status-dot"></span> ${esc(PRP.views.messengerStatus(m.msWorld) || "положение неизвестно — см. «Среда»")}</span>`)
       : `<span class="head-scene ${m.gen ? "live" : ""}">${m.gen ? "пишет…" : esc(line || "Сцена не задана — откройте панель сцены")}</span>`;
@@ -88,16 +88,8 @@
       <button class="btn btn-sm btn-ghost" data-act="cancel-edit">Отмена</button></div>`;
   }
 
-  // Изменения сцены от модели под сообщением; ручные правки видны в панели сцены.
-  function deltas(sw) {
-    const ops = (sw.sceneOps || []).filter((o) => !o.manual);
-    if (!ops.length) return "";
-    const shown = ops.slice(0, 6);
-    return `<div class="turn-meta">${shown.map((o) => `<span class="delta">${esc(SC.opLabel(o))}</span>`).join("")}${ops.length > 6 ? `<span class="delta">ещё ${ops.length - 6}</span>` : ""}</div>`;
-  }
-
   function liveText(m) {
-    return PRP.imgCompose.stripDrawsForDisplay(SC.stripForDisplay(OA.splitThink(m.gen.raw).text));
+    return PRP.imgCompose.stripDrawsForDisplay(OA.splitThink(m.gen.raw).text);
   }
 
   // Картинки сообщения: в работе, готовые, с ошибкой.
@@ -171,7 +163,6 @@
           <div class="prose ${live ? "cursor" : ""}" id="text-${msg.id}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>
           ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
           ${!live ? shots(m, msg, sw) : ""}
-          ${!live ? deltas(sw) : ""}
           ${live ? "" : tools(msg, isLast)}`;
       }
       return `<article class="turn ${esc(msg.role)} ${isLast ? "last" : ""}" data-mid="${esc(msg.id)}">${R.avatar(who, 40)}<div style="min-width:0">

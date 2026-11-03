@@ -2,7 +2,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const R = PRP.render, TR = PRP.tree, OA = PRP.openai;
   const { esc, icon } = R;
   const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
 

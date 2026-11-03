@@ -14,7 +14,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TR = PRP.tree, SC = PRP.scene, OA = PRP.openai, IC = PRP.imgCompose, ST = PRP.settings, LLM = PRP.llm, SCN = PRP.scenario;
+  const TR = PRP.tree, OA = PRP.openai, IC = PRP.imgCompose, ST = PRP.settings, LLM = PRP.llm, SCN = PRP.scenario;
 
   const CONTINUE = "Продолжи последнее сообщение {{char}} ровно с того места, где оно оборвалось. Не повторяй уже написанное и не начинай заново.";
   // Временное указание для начала сцены моделью. В историю не попадает; учитывается в бюджете как часть протокола.
@@ -194,7 +194,7 @@
       try {
         if (mode === "regen") {
           target = S.messages.find((m) => m.id === msgId);
-          target.swipes.push({ text: "", sceneOps: [], createdAt: Date.now() });
+          target.swipes.push({ text: "", createdAt: Date.now() });
           target.swipeIdx = target.swipes.length - 1;
         } else if (mode === "continue") {
           target = S.messages.find((m) => m.id === msgId);
@@ -236,20 +236,15 @@
       }
       perf("roleplayMs", Math.round(now() - rpT0), { msgId: target.id, chatId: c.id, outcome: error ? "error" : mode });
       const th = OA.splitThink(raw || "");
-      const parsed = SC.parse(th.text);
-      const dr = IC.parseDraws(parsed.text);
-      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+      const dr = IC.parseDraws(th.text);
+      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text, { mode: c.mode }) : { text:dr.text, calls:[], issues:[] };
       dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
       // Даже если модель сама добавила [draw:] без разрешения, картинка не
       // создаётся. Служебный текст при этом всё равно удалён из ответа.
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
-      // Переписка: [scene:] вырезается из текста, но сцену не пишет (chat/service.sceneFields — только неактивная копия).
-      const sf = chat().sceneFields(parsed.ops);
       if (mode === "continue") {
         if (dr.text) sw.text = S.gen.prefix + dr.text;
-        sw.sceneOps = (sw.sceneOps || []).concat(sf.sceneOps);
-        if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = (sw.ignoredSceneOps || []).concat(sf.ignoredSceneOps);
         sw.draws = (sw.draws || []).concat(dr.draws);
         if (S.settings.stateToolEnabled) {
         const offset = (sw.stateCalls || []).length;
@@ -261,8 +256,6 @@
         }
       } else {
         sw.text = dr.text;
-        sw.sceneOps = sf.sceneOps;
-        if (sf.ignoredSceneOps && sf.ignoredSceneOps.length) sw.ignoredSceneOps = sf.ignoredSceneOps; else delete sw.ignoredSceneOps;
         sw.draws = dr.draws;
         if (S.settings.stateToolEnabled) {
         sw.stateCalls = dr.stateCalls;
@@ -357,12 +350,11 @@
         if (e.name !== "AbortError") error = e.message || String(e);
       }
       const aborted = ctrl.signal.aborted;
-      let th = null, parsed = null, dr = null;
+      let th = null, dr = null;
       if (!aborted && !error) {
         th = OA.splitThink((res && res.text) || "");
-        parsed = SC.parse(th.text);
-        dr = IC.parseDraws(parsed.text);
-        const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+        dr = IC.parseDraws(th.text);
+        const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text, { mode: c.mode }) : { text:dr.text, calls:[], issues:[] };
         dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
         if (!built.report.imageDirectiveAllowed) dr.draws = [];
         else dr.draws = dr.draws.slice(0, 1);
@@ -379,7 +371,7 @@
 
       const m = chat().newMsg("assistant", null, "");
       m.opening = "generated";
-      m.swipes = [{ text: dr.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
+      m.swipes = [{ text: dr.text, draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}), reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now() }];
       recordToolStatus(m.swipes[0], dr.stateIssues, dr.stateRejected);
       if (ms) { const snap = ms.snapshot([], msNow); if (snap) m.swipes[0].messengerAt = snap; }
@@ -469,9 +461,8 @@
       if (aborted) return finish("aborted");
       if (error) return finish("error", `Проверка инициативы не удалась: ${error}. Ничего не изменилось — можно попробовать ещё раз.`, true);
       const th = OA.splitThink((res && res.text) || "");
-      const parsed = SC.parse(th.text);
-      const dr = IC.parseDraws(parsed.text);
-      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text) : { text:dr.text, calls:[], issues:[] };
+      const dr = IC.parseDraws(th.text);
+      const stateParsed = S.settings.stateToolEnabled ? IC.parseStateCalls(dr.text, { mode: c.mode }) : { text:dr.text, calls:[], issues:[] };
       dr.text = stateParsed.text; dr.stateCalls = stateParsed.calls; dr.stateIssues = stateParsed.issues; dr.stateRejected = stateParsed.rejected;
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
@@ -482,7 +473,7 @@
       if (r.kind === "empty") return finish("empty", "Модель вернула пустой ответ — ничего не сохранено.", true);
       if (r.kind === "malformed") return finish("malformed", "Модель вернула служебный маркер вперемешку с текстом — ответ не сохранён, можно попробовать ещё раз.", true);
 
-      const sw = { text: r.text, ...chat().sceneFields(parsed.ops), draws: dr.draws,
+      const sw = { text: r.text, draws: dr.draws,
         ...(S.settings.stateToolEnabled ? { stateCalls:dr.stateCalls, stateEvents:PRP.stateTracker.eventsFromStateCalls(dr.stateCalls,c.mode), stateProtocol:1 } : {}),
         reasoning: [(res && res.reasoning) || "", th.reasoning].filter(Boolean).join("\n").trim(), createdAt: Date.now(), initiative: INI.provenance(reasons) };
       recordToolStatus(sw, dr.stateIssues, dr.stateRejected);

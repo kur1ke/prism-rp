@@ -2,7 +2,6 @@
    No rendered-image backend, second wardrobe, or fabricated removal. */
 "use strict";
 const assert = require("node:assert/strict");
-require("../js/prism/scene.js");
 require("../js/chat/tree.js");
 require("../js/messenger/time.js");
 require("../js/prism/data.js");

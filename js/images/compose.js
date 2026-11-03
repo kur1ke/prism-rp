@@ -279,7 +279,7 @@
     const keyOf = (name) => Object.keys(st.chars || {}).find((k) => k.toLowerCase().replace(/ё/g, "е") === String(name || "").toLowerCase().replace(/ё/g, "е"));
     const owner = actors.owner ? st.chars && st.chars[keyOf(card.name)] : null;
     const user = actors.user ? st.chars && st.chars[keyOf(persona.name)] : null;
-    // Physical facts are projected once by StateResolver for the exact
+    // Physical facts are read directly from StateTracker for the exact
     // origin path. The shot is NOT allowed to write back into this state.
     const charWear = (o.wearFacts || []).find((x) => x && x.actor === "char");
     const physicalWear = actors.owner && charWear
@@ -314,6 +314,11 @@
     if (!shotAuthored && actors.owner && outfit && !wardrobe && !messenger && !stale && !garmentWords(draw).length) bits.push("clothing: " + outfit);
     // Physical state is context for the shot, not a second free-form prompt layer.
     const established = [];
+    if (!shotAuthored && !messenger) {
+      if (st.loc) established.push("location: " + st.loc);
+      if (st.weather) established.push("weather: " + st.weather);
+      if (st.time) established.push("time: " + st.time);
+    }
     if (!shotAuthored && actors.owner && messenger && outfit && !wardrobe)
       established.push("clothing: " + outfit);
     // Messenger reports a remote character's circumstances, not a camera pose.
@@ -599,9 +604,9 @@
   // Only successful model responses are allowed to persist parsed calls.
   // A state directive is data from the RP response, never executable code.
   // Accept a flat JSON argument list or a single JSON string array.
-  const STATE_RE = /\[state:\s*(wear|location|activity|pose|hair|nearby|ongoing|availability)\.(replace|add|remove|set|clear)\(([^)\r\n]{0,500})\)\s*\]/gi;
-  const STATE_LIST = new Set(["wear", "nearby", "ongoing"]);
-  function parseStateCalls(text) {
+  const STATE_RE = /\[state:\s*(wear|location|activity|pose|hair|nearby|ongoing|availability|mood|time|weather|present)\.(replace|add|remove|set|clear)\(([^)\r\n]{0,500})\)\s*\]/gi;
+  const STATE_LIST = new Set(["wear", "nearby", "ongoing", "present"]);
+  function parseStateCalls(text, options) {
     const calls = [], issues = [], rejected = [];
     const reject = (source, reason) => {
       if (issues.length < 8) {
@@ -613,6 +618,7 @@
     const clean = String(text || "").replace(STATE_RE, (full, fieldRaw, operationRaw, args) => {
       const field = fieldRaw.toLowerCase(), operation = operationRaw.toLowerCase();
       try {
+        if (options && options.mode === "messenger" && ["time", "weather", "present"].includes(field)) throw Error("mode");
         if (field === "wear" ? !["replace","add","remove"].includes(operation) :
             !["set","clear"].includes(operation)) throw Error("operation");
         let items = JSON.parse("[" + args + "]");
@@ -636,7 +642,7 @@
     "Если персонаж действительно изменил текущее состояние, ОБЯЗАТЕЛЬНО сообщи результат директивой [state: ...] в этом же ответе.",
     "Полностью переоделся: [state: wear.replace(\"розовая пижама\")]. Снял отдельную вещь: [state: wear.remove(\"юбка\")]. Надел отдельную вещь: [state: wear.add(\"кофта\")].",
     "Одна директива [state: ...] = одна операция; для нескольких операций используй несколько отдельных блоков [state: ...]. Не объединяй операции запятой внутри блока.",
-    "Другие поля: [state: location.set(\"спальня\")], [state: pose.set(\"сидит\")], [state: activity.set(\"читает\")], [state: hair.set(\"коса\")], [state: nearby.set(\"книга\")], [state: ongoing.set(\"дождь\")], [state: availability.set(\"busy\")]. Для сброса поля используй соответствующий clear().",
+    "В RP общее время, погода и присутствующие: [state: time.set(\"18:00\")], [state: weather.set(\"дождь\")], [state: present.set(\"имя\")]. Эти поля не используются в Messenger. [state: mood.set(\"грустно\")] — собственное выраженное настроение. Другие поля: [state: location.set(\"спальня\")], [state: pose.set(\"сидит\")], [state: activity.set(\"читает\")], [state: hair.set(\"коса\")], [state: nearby.set(\"книга\")], [state: ongoing.set(\"дождь\")], [state: availability.set(\"busy\")]. Для сброса поля используй соответствующий clear().",
     "Если в этом же ответе есть [draw: moment=current-self; ...] с новым состоянием персонажа, сначала сообщи изменение через [state: ...], затем опиши итоговый кадр в [draw:]. DRAW не заменяет state. Если DRAW показывает уже установленное состояние без нового изменения, повторять state не нужно.",
     "Аргументы — только JSON-строки в двойных кавычках; для списковых полей допустимы несколько строк. Если состояние не менялось, не вызывай state. Намерения, воспоминания, старые фотографии и [draw:] сами по себе не меняют состояние."
   ].join(" ");

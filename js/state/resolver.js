@@ -1,12 +1,7 @@
-/* Prism RP — one read-only projection of the selected-path StateTracker snapshot.
-   No scene/World writes, no state extraction, no independent storage or authority.
-   The caller supplies one already-resolved snapshot for an exact path/swipe.
-   Legacy Messenger Environment remains an input baseline, not a competing
-   store of extracted state events. */
+/* Messenger-only read-only reporting and freshness. No RP projection or state fold. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const TRACK = PRP.stateTracker || (typeof require !== "undefined" ? require("./tracker.js") : null);
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
   const MT = PRP.messengerTime || (typeof require !== "undefined" ? require("../messenger/time.js") : null);
   const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -20,10 +15,6 @@
     "location", "activity", "visualWear", "visualPose", "visualHair",
     "nearby", "ongoing", "availability",
   ]);
-  const SCENE_FIELDS = Object.freeze([
-    ["wear", "wear"], ["pose", "pose"], ["hair", "visualHair"],
-  ]);
-
   function world(base, tracked) {
     if (!base) return base;
     const out = clone(base);
@@ -82,51 +73,6 @@
     return out;
   }
 
-  function scene(base, tracked, names) {
-    if (!base) return base;
-    const out = clone(base);
-    if (!tracked || !tracked.state || !tracked.state.actors) return out;
-    out.chars = out.chars || {};
-    for (const [actorId, name] of [["char", names && names.char], ["user", names && names.user]]) {
-      if (!name) continue;
-      const actor = tracked.state.actors[actorId];
-      if (!actor || !actor.fields) continue;
-      const previous = out.chars[name] || { wear: [], pose: "", mood: "" };
-      const projected = Object.assign({}, previous);
-      for (const [field, target] of SCENE_FIELDS) {
-        const datum = TRACK.fieldOf(tracked.state, actorId, field);
-        if (datum) projected[target] = clone(datum.value == null ? (field === "wear" ? [] : "") : datum.value);
-      }
-      // Materialize from canonical fields, not a possibly stale compatibility
-      // mirror. Unknown wear must not create a fictional actor in a POV shot.
-      if (out.chars[name] || SCENE_FIELDS.some(([field]) => TRACK.fieldOf(tracked.state, actorId, field))) out.chars[name] = projected;
-    }
-    return out;
-  }
-
-  function wearFacts(tracked) {
-    if (!tracked || !tracked.state || !tracked.state.actors) return [];
-    return ["char", "user"].map((actor) => ({
-      actor,
-      known: !!(tracked.state.actors[actor] && tracked.state.actors[actor].wearState && tracked.state.actors[actor].wearState.known),
-      complete: !!(tracked.state.actors[actor] && tracked.state.actors[actor].wearState && tracked.state.actors[actor].wearState.complete),
-      worn: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
-        tracked.state.actors[actor].wearState.worn) || []),
-      removed: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
-        tracked.state.actors[actor].wearState.removed) || []),
-      partiallyWorn: clone((tracked.state.actors[actor] && tracked.state.actors[actor].wearState &&
-        tracked.state.actors[actor].wearState.partiallyWorn) || []),
-    }));
-  }
-
-  function resolve(o) {
-    const input = o || {};
-    return {
-      scene: scene(input.scene, input.tracked, input.names),
-      world: world(input.world, input.tracked),
-      wearFacts: wearFacts(input.tracked),
-    };
-  }
-  PRP.stateResolver = { world, messengerFreshness, REPORT_STALE_MS, scene, wearFacts, resolve };
+  PRP.stateResolver = { world, messengerFreshness, REPORT_STALE_MS };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateResolver;
 })(typeof window !== "undefined" ? window : globalThis);

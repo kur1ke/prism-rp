@@ -4,7 +4,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const U = PRP.util, TR = PRP.tree, SC = PRP.scene, OA = PRP.openai, AST = PRP.assist, LLM = PRP.llm;
+  const U = PRP.util, TR = PRP.tree, TRACK = PRP.stateTracker, OA = PRP.openai, AST = PRP.assist, LLM = PRP.llm;
 
   function create(ctx) {
     const { S, DB, ui } = ctx;
@@ -40,10 +40,10 @@
       const path = TR.path(TR.index(msgs), c.leafId);
       const cd = S.cards.find((x) => x.id === c.cardId);
       const lines = path.map((m) => ({ name: m.role === "user" ? ctx.persona().name : (cd ? cd.name : "Персонаж"), text: TR.activeSwipe(m).text || "" })).filter((l) => l.text.trim());
-      // Строка сцены — только у сцены RP: у переписки сцены нет (служебные [scene:] в ней не действуют).
+      // Строка сцены — только у сцены RP: у переписки отдельные время и удалённые reported-сведения.
       if (c.mode === "messenger") return { lines, scene: "" };
-      const st = SC.fold(c.sceneInit, path.map((m) => ({ msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [] })));
-      return { lines, scene: SC.summaryLine(st) || "" };
+      const st = TRACK.fold({ mode:c.mode, initialState:c.initialState, path, charName:cd && cd.name, userName:ctx.persona().name });
+      return { lines, scene: TRACK.summary(st) };
     }
 
     async function send(text) {

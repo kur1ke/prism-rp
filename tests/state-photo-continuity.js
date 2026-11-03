@@ -2,7 +2,6 @@
    invented full-body outfit or an unproven garment removal. */
 "use strict";
 const assert = require("node:assert/strict");
-require("../js/prism/scene.js");
 require("../js/chat/tree.js");
 const T = require("../js/state/tracker.js");
 const R = require("../js/state/resolver.js");

@@ -2,7 +2,7 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const R = PRP.render, SC = PRP.scene, TR = PRP.tree, OA = PRP.openai;
+  const R = PRP.render, TR = PRP.tree, OA = PRP.openai;
   const { esc, icon } = R;
   const { SAMPLER_PRESETS, THEMES, WEATHER, loraRows } = PRP.viewKit;
 
@@ -67,7 +67,7 @@
         </details>`;
     } else if (section === "greet") {
       const alts = d.altGreetings || [];
-      body = `${f("cf-first", "Первое сообщение", "first_mes", d.firstMes, 7, "С него начинается новый чат. В конце можно добавить строку [scene: …] с начальным местом и одеждой.")}
+      body = `${f("cf-first", "Первое сообщение", "first_mes", d.firstMes, 7, "С него начинается новый чат. Явно описанные обстоятельства и состояние учитываются наблюдателем.")}
         <div class="block-title" style="margin-top:18px">${lab("Альтернативные приветствия", "alternate_greetings")}</div>
         <p class="hint" style="margin-top:0">В новом чате их можно листать стрелками под первым сообщением.</p>
         ${alts.map((g, i) => `<div class="field alt-greet"><label for="cf-alt-${i}">Приветствие ${i + 2}<button class="icon-btn" data-act="alt-del" data-i="${i}" title="Убрать">${icon("x")}</button></label><textarea id="cf-alt-${i}" rows="5" data-alt="${i}">${esc(g)}</textarea></div>`).join("")}

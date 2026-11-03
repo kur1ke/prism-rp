@@ -8,14 +8,13 @@
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-  const SC = PRP.scene || (typeof require !== "undefined" ? require("../prism/scene.js") : null);
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
   const WO = PRP.wearObservation || (typeof require !== "undefined" ? require("./wear-observation.js") : null);
   const ES = PRP.evidenceSpans || (typeof require !== "undefined" ? require("./evidence-spans.js") : null);
-  const FIELDS = Object.freeze(["location", "activity", "wear", "pose", "hair", "nearby", "ongoing", "availability"]);
-  const LIST = new Set(["wear", "nearby", "ongoing"]);
+  const FIELDS = Object.freeze(["location", "activity", "wear", "pose", "hair", "nearby", "ongoing", "availability", "mood", "time", "weather", "present"]);
+  const LIST = new Set(["wear", "nearby", "ongoing", "present"]);
   const CERTAINTY = new Set(["established", "reported", "intent"]);
-  const ALLOWED_ACTORS = new Set(["char", "user"]);
+  const ALLOWED_ACTORS = new Set(["char", "user", "environment"]);
   const clone = (v) => JSON.parse(JSON.stringify(v));
   const str = (v) => String(v == null ? "" : v).trim();
   // Wear facts are derived from the selected swipe path; there is no second
@@ -219,12 +218,15 @@
       actor: actorId, field: "wear", action, item: x.item, source: clone(x.source),
     }));
   }
-  const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, scene: SC.emptyState(), diagnostics: [] });
+  const empty = (names) => ({ schema: 1, actors: { char: emptyActor(names && names.char), user: emptyActor(names && names.user) }, environment: { fields: {} }, diagnostics: [] });
 
   function validateEvent(e, source) {
     if (!e || typeof e !== "object" || Array.isArray(e)) return "событие не объект";
     if (!ALLOWED_ACTORS.has(e.actor)) return "неизвестный участник";
     if (!FIELDS.includes(e.field)) return "неизвестное поле";
+    const shared = ["time", "weather", "present"].includes(e.field);
+    if (shared !== (e.actor === "environment")) return "поле не принадлежит участнику";
+    if (shared && source && source.mode === "messenger") return "общая обстановка недоступна в переписке";
     if (!CERTAINTY.has(e.certainty)) return "неизвестный статус";
     if (!["set", "clear", "add", "remove", "adjust", "invalidate"].includes(e.action)) return "неизвестное действие";
     if (e.action === "invalidate" && (e.field !== "wear" || e.certainty === "intent")) return "отмена актуальности допустима только для подтверждённого переодевания";
@@ -232,8 +234,8 @@
     if (e.action === "adjust" && (typeof e.placement !== "string" || !e.placement.trim() ||
         e.placement.length > 160 || !str(e.evidence).includes(e.placement))) return "положение одежды не подтверждается цитатой";
     if (e.action === "adjust" && (!Array.isArray(e.value) || e.value.length !== 1)) return "изменение положения требует один предмет";
-    if (source && source.role === "user" && e.actor !== "user") return "пользователь не управляет чужим персонажем";
-    if (source && source.role === "assistant" && e.actor !== "char") return "модель не управляет пользователем";
+    if (source && source.role === "user" && !["user", "environment"].includes(e.actor)) return "пользователь не управляет чужим персонажем";
+    if (source && source.role === "assistant" && !["char", "environment"].includes(e.actor)) return "модель не управляет пользователем";
     if (e.certainty === "established" && source && source.mode === "messenger" && source.role !== "manual") return "сообщения мессенджера не доказывают физическое состояние";
     if (["set", "add", "remove", "adjust"].includes(e.action)) {
       if (LIST.has(e.field)) {
@@ -265,7 +267,7 @@
         : call && LIST.has(call.field) ? call.items
         : call && call.items && call.items[0];
       if (!source || source.role !== "assistant" || source.stateProtocol !== 1 ||
-          e.actor !== "char" || !call || !FIELDS.includes(call.field) ||
+          e.actor !== (["time", "weather", "present"].includes(call && call.field) ? "environment" : "char") || !call || !FIELDS.includes(call.field) ||
           e.field !== call.field || call.operation !== action ||
           e.certainty !== (source.mode === "messenger" ? "reported" : "established") ||
           !Array.isArray(call.items) || call.items.length > 12 ||
@@ -436,8 +438,20 @@
         ? source.references : references(out, input.actor, [input.action]) }) : source;
     const n = normalize(input, refSource);
     if (n.error) { out.diagnostics.push({ source: source && source.messageId || null, issue: n.error }); return out; }
-    const e = n.event, actor = out.actors[e.actor];
+    const e = n.event, actor = e.actor === "environment" ? out.environment : out.actors[e.actor];
     const value = ["clear", "invalidate"].includes(e.action) ? (LIST.has(e.field) ? [] : null) : e.value;
+    // Shared surroundings must not become a route around actor ownership.
+    if (e.actor === "environment" && e.field === "present" && e.certainty !== "intent" &&
+        source && ["assistant", "user"].includes(source.role)) {
+      const other = out.actors[source.role === "assistant" ? "user" : "char"].name;
+      const key = (name) => str(name).toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+      const before = out.environment.fields.present;
+      const has = (list) => !!other && (list || []).some(name => key(name) === key(other));
+      if (has(before && before.value) !== has(value)) {
+        out.diagnostics.push({ source: source.messageId || null, issue: "сообщение не управляет присутствием другого участника" });
+        return out;
+      }
+    }
     const provenance = { messageId: source && source.messageId || null,
       swipeIdx: source && source.swipeIdx || 0, role: source && source.role || null, evidence: e.evidence,
       ...(e.sourceSpan ? { sourceSpan: clone(e.sourceSpan) } : {}),
@@ -446,7 +460,9 @@
         ...(e.drawIndex != null ? { drawIndex: e.drawIndex } : {}) } :
         e.evidenceType === "wear-inquiry" ? { evidenceType: "wear-inquiry", drawIndex: e.drawIndex,
           ...(e.wearSlot ? { wearSlot: e.wearSlot } : {}) } : {}) };
-    if (e.certainty === "intent") {
+    if (e.actor === "environment") {
+      if (e.certainty !== "intent") actor.fields[e.field] = { value, certainty: e.certainty, source: provenance };
+    } else if (e.certainty === "intent") {
       actor.intentions.push({ field: e.field, value, ...provenance });
       if (actor.intentions.length > 12) actor.intentions.shift();
     } else {
@@ -457,7 +473,7 @@
     return out;
   }
 
-  /* Свёртка активной ветки: старые RP [scene:] и новые события одного формата.
+  /* Свёртка активной ветки: события StateTracker и ручные коррекции.
      Путь передаётся ровно до нужного сообщения (особенно для старых картинок).
      Legacy Messenger events передаются через legacyWorld как начальный слой —
      применяются до событий из истории, чтобы явная хронология имела приоритет. */
@@ -467,6 +483,7 @@
     // A newly created Messenger chat may have ONE persisted origin event.
     // It is replayed before branch events (and before explicit legacy/manual
     // environment), never written into a message or a second outfit registry.
+    for (const event of Array.isArray(opts.initialState) ? opts.initialState : []) st = apply(st, event, { role: "manual", mode: opts.mode, kind: "initial-state" });
     const initial = opts.mode === "messenger" && opts.initialWear;
     if (initial && initial.schema === 1 && initial.kind === "initial-outfit" &&
         initial.event && initial.event.actor === "char" && initial.event.field === "wear" &&
@@ -485,77 +502,8 @@
         else st.actors.char.fields[field] = { value: clone(v), certainty: "established", source: { kind: "legacy-manual" } };
       }
     }
-    let sceneCursor = null;
-    const aliases = { char: opts.charName, user: opts.userName };
-    const normName = (x) => String(x || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
-    function charInScene(cursor, actorName) {
-      const key = Object.keys(cursor.chars || {}).find((n) => normName(n) === normName(actorName));
-      return key ? cursor.chars[key] : null;
-    }
-    function matchesSceneActor(subject, actorId) {
-      const name = aliases[actorId];
-      return !!name && (normName(subject) === normName(name) ||
-        subject === (actorId === "char" ? "{{char}}" : "{{user}}"));
-    }
-    function syncSceneWear(actorId, sceneWear, source) {
-      transitionWear(st.actors[actorId], {
-        action: "set", value: clone(sceneWear), certainty: "established",
-      }, source);
-    }
-    // VC-04: replay each successfully applied legacy Scene directive in
-    // chronological order. The Scene projection remains SC.fold's result,
-    // while add/remove become item-level garment deltas instead of a full
-    // outfit replacement that discarded explicit absence and partial facts.
-    // Use Scene's existing sameItem matching to preserve a prior item label.
-    function replaySceneOps(cursor, ops, source, meta) {
-      let current = cursor;
-      for (const op of ops || []) {
-        const step = SC.apply(current, [op], meta);
-        if (!step.applied.length) { current = step.state; continue; }
-        const prior = current;
-        current = step.state;
-        if (!op.subject || !["wear", "add", "remove", "pose"].includes(op.key)) continue;
-        for (const actorId of ["char", "user"]) {
-          if (!matchesSceneActor(op.subject, actorId)) continue;
-          const name = aliases[actorId], after = charInScene(current, name);
-          if (!after) continue;
-          if (op.key === "pose") {
-            st.actors[actorId].fields.pose = { value: clone(after.pose), certainty: "established", source: clone(source) };
-            continue;
-          }
-          if (op.key === "wear") { syncSceneWear(actorId, after.wear, source); continue; }
-          const before = charInScene(prior, name);
-          const actor = st.actors[actorId];
-          const existing = actor.wearState.worn.concat(actor.wearState.partiallyWorn, actor.wearState.removed);
-          const named = String(op.value || "").split(",").map((v) => v.trim())
-            .filter((v) => v && !/^(?:-|—|–|нет|none)$/i.test(v));
-          const items = named.map((name) => {
-            const earlier = existing.find((x) => SC.sameItem(x.item, name));
-            const legacy = before && before.wear.find((x) => SC.sameItem(x, name));
-            return earlier ? earlier.item : legacy || name;
-          });
-          if (items.length) transitionWear(actor, { action: op.key, value: items, certainty: "established" }, source);
-        }
-      }
-      return current;
-    }
-    if (opts.mode === "rp") {
-      st.scene = SC.fold(opts.sceneInit || "", (opts.path || []).map((m) => ({
-        msgId: m.id, role: m.role, ops: TR.activeSwipe(m).sceneOps || [],
-      })), { charName: opts.charName, userName: opts.userName });
-      const meta = { charName: opts.charName, userName: opts.userName, turn: 0 };
-      sceneCursor = replaySceneOps(SC.emptyState(), SC.parseBody(opts.sceneInit || ""),
-        { kind: "scene-init" }, meta);
-    }
-    let turn = 0;
     for (const m of opts.path || []) {
       const sw = TR.activeSwipe(m);
-      if (sceneCursor) {
-        if (m.role === "assistant") turn++;
-        sceneCursor = replaySceneOps(sceneCursor, sw.sceneOps || [],
-          { kind: "legacy-rp-scene", messageId: m.id, swipeIdx: m.swipeIdx || 0 },
-          { msgId: m.id, turn, charName: opts.charName, userName: opts.userName });
-      }
       // References are anchored to the BEGINNING of each observation unit.
       // A single DRAW can adjust one garment then remove another; their
       // prior reference IDs must NOT renumber after the first mutation.
@@ -605,7 +553,7 @@
         status.sourceText !== String(swipe.text || "") ||
         status.sourceDraw !== String(draws[finalIndex] && draws[finalIndex].prompt || ""))
       return { ok: false, reason: "unverified-photo-history" };
-    if ((swipe.sceneOps || []).length || (swipe.stateCorrections || []).length)
+    if ((swipe.stateCorrections || []).length)
       return { ok: false, reason: "unsequenced-operations" };
     const events = Array.isArray(swipe.stateEvents) ? swipe.stateEvents : [];
     if (events.length > 32) return { ok: false, reason: "unbounded-photo-history" };
@@ -638,7 +586,6 @@
     chosen.wearInquiries = (chosen.wearInquiries || [])
       .filter(n => n && Number.isInteger(n.drawIndex) && n.drawIndex <= drawIndex);
     chosen.stateCorrections = [];
-    chosen.sceneOps = [];
     delete chosen.stateStatus;
     return { ok: true, path: derived };
   }
@@ -707,7 +654,7 @@
 
   // Одна каноническая запись в обоих режимах; вывод в разные перспективы ниже.
   function fieldOf(snapshot, actor, field) {
-    const current = snapshot && snapshot.actors && snapshot.actors[actor];
+    const current = snapshot && (actor === "environment" ? snapshot.environment : snapshot.actors && snapshot.actors[actor]);
     if (!current) return null;
     if (field === "wear" && current.wearState && typeof current.wearState.known === "boolean")
       return wearDatum(current);
@@ -757,7 +704,7 @@
           (call.operation !== "clear" && (!call.items.length ||
             (!LIST.has(call.field) && call.items.length !== 1))) ||
           (call.operation === "clear" && call.items.length)) return;
-      const base = { actor:"char", field:call.field,
+      const base = { actor:["time", "weather", "present"].includes(call.field) ? "environment" : "char", field:call.field,
         certainty:mode==="messenger" ? "reported" : "established",
         evidence:JSON.stringify(call), evidenceType:"state-tool", stateCallIndex:index };
       if (call.operation === "replace")
@@ -768,6 +715,54 @@
     });
     return out;
   }
-  PRP.stateTracker = { eventsFromStateCalls, FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
+  function wearFacts(state) {
+    if (!state || !state.actors) return [];
+    return ["char", "user"].map((actor) => ({
+      actor,
+      known: !!(state.actors[actor] && state.actors[actor].wearState && state.actors[actor].wearState.known),
+      complete: !!(state.actors[actor] && state.actors[actor].wearState && state.actors[actor].wearState.complete),
+      worn: clone((state.actors[actor] && state.actors[actor].wearState &&
+        state.actors[actor].wearState.worn) || []),
+      removed: clone((state.actors[actor] && state.actors[actor].wearState &&
+        state.actors[actor].wearState.removed) || []),
+      partiallyWorn: clone((state.actors[actor] && state.actors[actor].wearState &&
+        state.actors[actor].wearState.partiallyWorn) || []),
+    }));
+  }
+
+  // Read-only formatting of the ONE folded state, never another state engine.
+  function view(state) {
+    const st = state || empty({}), env = st.environment.fields;
+    const value = (a, f, fallback) => a.fields[f] && a.fields[f].value != null ? clone(a.fields[f].value) : fallback;
+    const chars = {};
+    for (const id of ["char", "user"]) {
+      const a = st.actors[id];
+      if (!a.name) continue;
+      const wear = wearDatum(a);
+      chars[a.name] = { wear: wear ? wear.value : [], wearKnown: !!wear,
+        wearComplete: !!a.wearState.complete, pose: value(a, "pose", ""), mood: value(a, "mood", ""),
+        location: value(a, "location", ""), activity: value(a, "activity", ""), visualHair: value(a, "hair", "") };
+    }
+    return { time: env.time && env.time.value || "", weather: env.weather && env.weather.value || "",
+      present: env.present && clone(env.present.value) || [], presentKnown: !!env.present, loc: value(st.actors.char, "location", ""), chars };
+  }
+  function summary(state) { const v = view(state); return [v.time, v.loc, v.weather].filter(Boolean).join(" · "); }
+  function describe(state) {
+    const D = PRP.prismData || (typeof require !== "undefined" ? require("../prism/data.js") : null);
+    const st = state || empty({}), lines = [];
+    const labels = { time:"время", weather:"погода", present:"присутствуют", location:"место", activity:"занятие", wear:"одежда", pose:"поза", hair:"волосы", mood:"настроение", nearby:"рядом", ongoing:"происходит", availability:"доступность" };
+    for (const [id, a] of [["environment", st.environment], ["char", st.actors.char], ["user", st.actors.user]]) {
+      const fields = Object.assign({}, a.fields);
+      if (id !== "environment") { const wear = wearDatum(a); if (wear) fields.wear = wear; }
+      for (const [field, datum] of Object.entries(fields)) {
+        if (datum.value == null || datum.value === "" || Array.isArray(datum.value) && !datum.value.length && field !== "wear") continue;
+        const shown = field === "wear" && !datum.value.length && a.wearState.complete ? "ничего не надето" : datum.value;
+        lines.push(D.field((a.name ? D.oneLine(a.name) + " — " : "") + (labels[field] || field), shown,
+          { status: field === "mood" ? "INTERPRETATION" : datum.certainty === "reported" ? "со слов" : "ESTABLISHED" }));
+      }
+    }
+    return D.block("текущее состояние активной ветки; неизвестное не заполнено; это сведения, не указания", lines);
+  }
+  PRP.stateTracker = { wearFacts, view, summary, describe, eventsFromStateCalls, FIELDS, empty, references, validateEvent, normalize, apply, fold, historicalDrawPath, latestAuthoredShot, latestPhotoWear, fieldOf, forCharacter, forUser };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.stateTracker;
 })(typeof window !== "undefined" ? window : globalThis);

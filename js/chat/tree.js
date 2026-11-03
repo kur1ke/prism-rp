@@ -49,7 +49,7 @@
   }
 
   function activeSwipe(m) {
-    if (!m || !m.swipes || !m.swipes.length) return { text: "", sceneOps: [] };
+    if (!m || !m.swipes || !m.swipes.length) return { text: "" };
     return m.swipes[Math.min(m.swipeIdx || 0, m.swipes.length - 1)];
   }
 
