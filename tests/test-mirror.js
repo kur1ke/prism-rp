@@ -33,10 +33,15 @@ const currentDbVersion=Number(storeJs.match(/const DB_VERSION = (\d+)/)[1]);
 const fallbackDbVersion=Number(html.match(/var safeDbVersion = (\d+)/)[1]);
 assert.equal(fallbackDbVersion,currentDbVersion,
   "the immutable fallback is declared for a stale IndexedDB schema; repin a verified testing bundle");
-assert.match(html,/var safeRevision = "c92f1c685a237c989047f327f9cedac1d9f750e2"/);
+const fallbackManifest=JSON.parse(fs.readFileSync(path.join(ROOT,"tests/fixtures/testing-fallback.json"),"utf8"));
+assert.match(fallbackManifest.revision,/^[a-f0-9]{40}$/);
+assert.match(fallbackManifest.buildSha,/^[a-f0-9]{40}$/);
+assert.match(fallbackManifest.bundleSha256,/^[a-f0-9]{64}$/);
+assert.equal(fallbackManifest.dbVersion,currentDbVersion);
+assert.equal(html.match(/var safeRevision = "([a-f0-9]{40})"/)[1],fallbackManifest.revision);
 assert.doesNotMatch(html,/9355480089a1dd2d25b25be528b5bf93bc3a847b/);
 const scriptCode = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-const pinned="c92f1c685a237c989047f327f9cedac1d9f750e2";
+const pinned=fallbackManifest.revision;
 const sha="e338fa4dab0eb6a7e70b0e6f25ea0ddc23eb31a3";
 const good='window.__boots=(window.__boots||0)+1;window.PRP={};window.PRISM_RP_VERSION="test";window.PRISM_RP_BUILD_SHA="'+sha+'";';
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -88,7 +93,7 @@ function immutable(h,ref){
  const slowApi=run();await flush();await slowApi.tick(5000);assert.equal(slowApi.requests[0].options.signal.aborted,true);
  assert.equal(slowApi.ctx.PRISM_RP_TEST_REVISION,pinned);slowApi.requests[0].respond({commit:{sha}});await flush();assert.equal(slowApi.requests.length,2);
  slowApi.requests[1].respond(good);await flush();assert.equal(slowApi.ctx.__boots,1);assert.equal(slowApi.ctx.PRISM_RP_TEST_REVISION,pinned);immutable(slowApi,pinned);
- assert.match(slowApi.badge.textContent,/закреплено c92f1c6/);assert.match(slowApi.badge.textContent,/сборка e338fa4/);assert.match(slowApi.badge.textContent,/DB v8/);assert.match(slowApi.badge.textContent,/API недоступен/);
+ assert.match(slowApi.badge.textContent,new RegExp("закреплено "+pinned.slice(0,7)));assert.match(slowApi.badge.textContent,/сборка e338fa4/);assert.match(slowApi.badge.textContent,/DB v8/);assert.match(slowApi.badge.textContent,/API недоступен/);
 
  const apiBody=run();await flush();apiBody.requests[0].headers();await flush();await apiBody.tick(5000);
  apiBody.requests[0].body({commit:{sha}});await flush();assert.equal(apiBody.ctx.PRISM_RP_TEST_REVISION,pinned);assert.equal(apiBody.requests.length,2);

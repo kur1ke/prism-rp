@@ -1,7 +1,7 @@
 """F24: real browser fetch/inline execution with mocked HTTPS routes and virtual time.
 No external network or live Perchance API. Run after node build.js.
 """
-import json,os,pathlib,shutil,sys,tempfile
+import hashlib,json,os,pathlib,shutil,sys,tempfile
 from playwright.sync_api import sync_playwright
 root=pathlib.Path(__file__).resolve().parents[1]
 out=pathlib.Path(sys.argv[1]) if len(sys.argv)>1 else pathlib.Path(tempfile.mkdtemp(prefix='prism-loader-'))
@@ -9,12 +9,17 @@ out.mkdir(parents=True,exist_ok=True)
 loader=(root/'templates/loader-testing.html').read_text()
 bundle=(root/'dist/web/prism-app.js').read_text()
 sha='e338fa4dab0eb6a7e70b0e6f25ea0ddc23eb31a3'
-pinned='c92f1c685a237c989047f327f9cedac1d9f750e2'
+manifest=json.loads((root/'tests/fixtures/testing-fallback.json').read_text())
+pinned=manifest['revision']
+fallback_path=os.environ.get('PRISM_FALLBACK_BUNDLE')
+fallback_bundle=pathlib.Path(fallback_path).read_bytes() if fallback_path else None
+if fallback_bundle:
+ assert hashlib.sha256(fallback_bundle).hexdigest()==manifest['bundleSha256']
 good='window.__boots=(window.__boots||0)+1;window.PRP={};window.PRISM_RP_VERSION="test";'
 results=[]
 with sync_playwright() as pw:
  browser=pw.chromium.launch(headless=True,executable_path=os.environ.get('PRISM_CHROMIUM') or shutil.which('chromium'))
- for scenario in ['normal-app','late-cdn','late-api','all-stalled','http-fallback','runtime-error','syntax-error']:
+ for scenario in ['normal-app','late-cdn','late-api','all-stalled','http-fallback','runtime-error','syntax-error']+(['fallback-app'] if fallback_bundle else []):
   context=browser.new_context(viewport={'width':1100,'height':800})
   if scenario in ['late-cdn','late-api']:
    # Cancellation is intentionally ignored; late successful responses must still be harmless.
@@ -31,10 +36,12 @@ with sync_playwright() as pw:
    if 'api.github.com/' in url:
     requests.append(url)
     if scenario in ['late-api','all-stalled']:held['api']=route;return
+    if scenario=='fallback-app':respond(route,'unavailable',503);return
     respond(route,json.dumps({'commit':{'sha':sha}}),kind='application/json');return
    if 'cdn.jsdelivr.net/' in url:
     requests.append(url)
     if scenario in ['late-cdn','all-stalled']:held['cdn']=route;return
+    if scenario=='fallback-app':respond(route,'window.__boots=(window.__boots||0)+1;'+fallback_bundle.decode());return
     if scenario=='http-fallback':respond(route,'unavailable',503);return
     if scenario=='runtime-error':respond(route,good+'document.getElementById("prism-boot").remove();throw new Error("intentional startup failure");');return
     if scenario=='syntax-error':respond(route,'<html>not javascript</html>');return
@@ -47,11 +54,17 @@ with sync_playwright() as pw:
    route.abort()
   page.route('**/*',handle)
   page.goto('https://prism-loader.test/',wait_until='domcontentloaded')
-  if scenario=='normal-app':
+  if scenario in ['normal-app','fallback-app']:
    page.wait_for_function('window.PRP && PRP.app && document.querySelector("#stage").innerText.length>0')
    assert page.evaluate('window.__boots')==1
    assert page.evaluate('window.__openedDbs')==['prism-rp-testing']
    assert len(requests)==2,requests
+   if scenario=='fallback-app':
+    assert page.evaluate('window.PRISM_RP_BUILD_SHA')==manifest['buildSha']
+    assert page.evaluate('window.PRISM_RP_TEST_REVISION')==pinned
+    assert page.evaluate('!!PRP.stateTracker && !PRP.scene && !PRP.experience')
+    assert pinned in requests[1]
+    page.screenshot(path=str(out/'fallback-app.png'))
   elif scenario=='late-cdn':
    page.wait_for_function('document.querySelector("#prism-testing-badge").textContent.includes("e338fa4")')
    assert 'cdn' in held,held
