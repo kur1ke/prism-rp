@@ -28,9 +28,9 @@
 
   function sceneTab(m) {
     const st = m.scene;
-    const field = (label, value) => `<p><span class="label">${esc(label)}</span> ${esc(value || "неизвестно")}</p>`;
+    const field = (label, value) => `<p><span class="label">${esc(label)}:</span> ${esc(value || "неизвестно")}</p>`;
     return `<div class="block"><div class="block-title">Обстановка</div>
-      ${field("Время", st.time)}${field("Место персонажа", st.loc)}${field("Погода", st.weather)}
+      ${field("Время", st.time)}${field("Погода", st.weather)}
       ${field("Присутствуют", st.present.length ? st.present.join(", ") : st.presentKnown ? "никого" : "неизвестно")}</div>
       ${Object.entries(st.chars).map(([name, ch]) => `<div class="panel"><div class="who"><b>${esc(name)}</b></div>
         ${field("Место", ch.location)}${field("Занятие", ch.activity)}${field("Одежда", ch.wearKnown ? ch.wear.join(", ") || (ch.wearComplete ? "ничего не надето" : "неизвестно") : "неизвестно")}
