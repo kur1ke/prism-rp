@@ -22,41 +22,85 @@
   var badge = document.getElementById("prism-testing-badge");
   var boot = document.getElementById("prism-boot");
   function status(t) { if (badge) badge.textContent = "PRISM TEST · " + t; }
-  function error(t) { if (boot) boot.textContent = "Тестовая версия не загрузилась: " + t + ". Рабочая версия не затронута."; status("ошибка загрузки"); }
+  function error(t) {
+    if (boot) {
+      boot.textContent = "Тестовая версия не загрузилась: " + t + ". Рабочая версия не затронута.";
+      // The bundle removes the initial boot node before initializing modules.
+      if (!boot.isConnected) {
+        boot.style.cssText += ";position:fixed;inset:0;z-index:2147482999";
+        document.body.appendChild(boot);
+      }
+    }
+    status("ошибка загрузки");
+  }
+  var apiTimeoutMs = 5000;
+  var bundleTimeoutMs = 20000;
+  var executed = false;
+
+  // The deadline covers response headers AND body decoding. Abort is best-effort:
+  // the settled gate also discards late results from uncooperative requests.
+  function fetchWithin(url, accept, decode, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var controller = new AbortController();
+      var settled = false;
+      var timer;
+      function complete(ok, value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (ok) resolve(value);
+        else { controller.abort(); reject(value); }
+      }
+      timer = setTimeout(function () { complete(false, new Error("timeout")); }, timeoutMs);
+      Promise.resolve().then(function () {
+        return fetch(url, { cache: "no-store", credentials: "omit",
+          headers: { "Accept": accept }, signal: controller.signal });
+      }).then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return decode(res);
+      }).then(function (value) { complete(true, value); }, function (err) { complete(false, err); });
+    });
+  }
+
   function load(ref, warning) {
     if (!/^[a-f0-9]{40}$/.test(ref)) { error("неверный SHA"); return; }
     window.PRISM_RP_TEST_REVISION = ref;
-    // Never fall back to @testing: jsDelivr can cache branch aliases for hours.
-    // The same immutable ref is used by both sources.
+    // Both sources use ONE immutable revision; never fall back to @testing/main.
     var urls = [cdn + encodeURIComponent(ref) + suffix, raw + encodeURIComponent(ref) + suffix];
+    function execute(code, index) {
+      if (executed) return;
+      executed = true;
+      // A downloaded script cannot execute by itself. Only this selected result
+      // is inserted; removing a timed-out script[src] would not guarantee that.
+      var failed = false;
+      var onError = function () { failed = true; };
+      window.addEventListener("error", onError);
+      try {
+        var script = document.createElement("script");
+        script.textContent = code + "\n//# sourceURL=" + urls[index];
+        document.head.appendChild(script);
+      } catch (err) { failed = true; }
+      finally { window.removeEventListener("error", onError); }
+      // Never retry after execution began: partially initialized code must not
+      // be followed by a second application instance.
+      if (failed || !window.PRP || !window.PRISM_RP_VERSION) { error("приложение не инициализировалось"); return; }
+      var builtFrom = window.PRISM_RP_BUILD_SHA || "";
+      if (warning) {
+        var marker = /^[a-f0-9]{40}$/.test(builtFrom) ? " · сборка " + builtFrom.slice(0, 7) : " · SHA сборки отсутствует";
+        status("testing · закреплено " + ref.slice(0, 7) + marker + " · DB v" + safeDbVersion + " · API недоступен");
+      } else status((index ? "резерв · " : "") + ref.slice(0, 7));
+    }
     function attempt(index) {
       status(index ? "резервный источник · " + ref.slice(0, 7) : (warning || ref.slice(0, 7)));
-      var script = document.createElement("script");
-      script.src = urls[index];
-      script.onerror = function () {
-        if (index + 1 < urls.length) attempt(index + 1);
-        else error("оба источника недоступны (" + ref.slice(0, 7) + ")");
-      };
-      script.onload = function () {
-        if (!window.PRP || !window.PRISM_RP_VERSION) error("приложение не инициализировалось");
-        else {
-          // Embedded at build time by GitHub Actions: this is the source commit
-          // used to generate the bundle, not necessarily the bot's later dist commit.
-          var builtFrom = window.PRISM_RP_BUILD_SHA || "";
-          if (warning) {
-            var marker = /^[a-f0-9]{40}$/.test(builtFrom) ? " · сборка " + builtFrom.slice(0, 7) : " · SHA сборки отсутствует";
-            status("testing · закреплено " + ref.slice(0, 7) + marker + " · DB v" + safeDbVersion + " · API недоступен");
-          } else {
-            status((index ? "резерв · " : "") + ref.slice(0, 7));
-          }
-        }
-      };
-      document.head.appendChild(script);
+      fetchWithin(urls[index], "text/javascript", function (res) { return res.text(); }, bundleTimeoutMs)
+        .then(function (code) { execute(code, index); }, function () {
+          if (index + 1 < urls.length) attempt(index + 1);
+          else error("оба источника недоступны или не ответили вовремя (" + ref.slice(0, 7) + ")");
+        });
     }
     attempt(0);
   }
-  fetch(api, { cache: "no-store", headers: { "Accept": "application/vnd.github+json" } })
-    .then(function (res) { if (!res.ok) throw new Error("GitHub API " + res.status); return res.json(); })
+  fetchWithin(api, "application/vnd.github+json", function (res) { return res.json(); }, apiTimeoutMs)
     .then(function (data) { var sha = data && data.commit && data.commit.sha; if (!/^[a-f0-9]{40}$/.test(sha || "")) throw new Error("неверный ответ GitHub"); load(sha); })
     .catch(function () { load(safeRevision, "GitHub API недоступен"); });
 })();
