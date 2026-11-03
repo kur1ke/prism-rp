@@ -124,7 +124,7 @@
           { role: "system", content: system },
           { role: "user", content: user }
         ], { names: { char: "Анализатор", user: "История" },
-          outputFormat: "message-body", sampler: { temperature: 0.35, max_tokens } });
+          outputFormat: "json", sampler: { temperature: 0.35, max_tokens } });
         return PRP.openai.splitThink(response.text || "").text;
       };
       let proposed;

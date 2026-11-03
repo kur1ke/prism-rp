@@ -10,7 +10,7 @@
   /* prov — элемент settings.providerList; messages — [{role, content}].
      opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
              closing (Perchance: последняя строка инструкции, текст готовит вызывающий),
-             outputFormat: "message-body" (содержимое Messenger; без префиксов отправителя) }
+             outputFormat: "message-body" (Messenger) | "json" (структурированная задача; без рамки диалога) }
      → { text, reasoning } (контракт PRP.openai.chat / PRP.perchance.chat) */
   function chat(prov, messages, opts) {
     const o = opts || {};

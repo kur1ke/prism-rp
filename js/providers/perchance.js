@@ -26,6 +26,18 @@
      closing — последняя строка инструкции вместо «Напиши следующее сообщение…» (проверка инициативы: персонаж
      может промолчать). Это часть инструкции, а не строка стенограммы: новой реплики пользователя не появляется. */
   function toPrompt(messages, names, closing, outputFormat) {
+    // Structured tasks have no dialogue seed, speaker stops or Messenger prose rules.
+    // Roles of non-system messages remain explicit data, including embedded JSON.
+    if (outputFormat === "json") {
+      return {
+        instruction: messages.map((m) => m.role === "system" ? String(m.content || "")
+          : JSON.stringify({ role: m.role, content: String(m.content || "") }))
+          .concat(closing ? String(closing) : "",
+            "Верни только JSON согласно заданной схеме. Без Markdown и текста вне JSON.")
+          .filter(Boolean).join("\n\n"),
+        startWith: "", stop: [],
+      };
+    }
     const char = names.char || "Персонаж";
     const user = names.user || "Пользователь";
     // Perchance cannot accept structured chat roles. For Messenger we send
@@ -68,8 +80,9 @@
     const ai = plugin();
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
     const bodyOnly = o.outputFormat === "message-body";
+    const unprefixed = bodyOnly || o.outputFormat === "json";
     const p = toPrompt(messages, names, o.closing, o.outputFormat);
-    if (o.continueFrom) p.startWith = bodyOnly ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
+    if (o.continueFrom) p.startWith = unprefixed ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
     const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
     return Promise.resolve(imageBlob).then((blob) => {
@@ -89,17 +102,17 @@
     });
     if (o.signal) o.signal.addEventListener("abort", () => { try { handle.stop(); } catch (e) {} }, { once: true });
     return Promise.resolve(handle).then((res) => {
-      // In body-only mode, streaming already excludes the transport seed
+      // In unprefixed modes, streaming already excludes the transport seed
       // (isFromStartWith). Prefer that exact body over generatedText, whose
       // inclusion of startWith varies across plugin versions.
-      let out = bodyOnly && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
-      if (bodyOnly && !text && p.startWith && out.startsWith(p.startWith)) {
+      let out = unprefixed && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
+      if (unprefixed && !text && p.startWith && out.startsWith(p.startWith)) {
         out = out.slice(p.startWith.length); // remove only our exact seed, never a model-written name
       }
       out = out.replace(/^\s+/, "");
       // Transcript continuation guard is RP-only. Messenger content (including
-      // quoted names) is not rewritten or stripped by a UI-facing regex.
-      if (!bodyOnly) out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
+      // quoted names) and structured JSON are not cut by speaker-name regexes.
+      if (!unprefixed) out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
       if (o.signal && o.signal.aborted) {
         const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = out; throw e;
       }

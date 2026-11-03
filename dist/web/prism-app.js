@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "e0c119c5461dce0eda75a32873a5c9eacb516d0d";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -7940,6 +7940,18 @@
      closing — последняя строка инструкции вместо «Напиши следующее сообщение…» (проверка инициативы: персонаж
      может промолчать). Это часть инструкции, а не строка стенограммы: новой реплики пользователя не появляется. */
   function toPrompt(messages, names, closing, outputFormat) {
+    // Structured tasks have no dialogue seed, speaker stops or Messenger prose rules.
+    // Roles of non-system messages remain explicit data, including embedded JSON.
+    if (outputFormat === "json") {
+      return {
+        instruction: messages.map((m) => m.role === "system" ? String(m.content || "")
+          : JSON.stringify({ role: m.role, content: String(m.content || "") }))
+          .concat(closing ? String(closing) : "",
+            "Верни только JSON согласно заданной схеме. Без Markdown и текста вне JSON.")
+          .filter(Boolean).join("\n\n"),
+        startWith: "", stop: [],
+      };
+    }
     const char = names.char || "Персонаж";
     const user = names.user || "Пользователь";
     // Perchance cannot accept structured chat roles. For Messenger we send
@@ -7982,8 +7994,9 @@
     const ai = plugin();
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
     const bodyOnly = o.outputFormat === "message-body";
+    const unprefixed = bodyOnly || o.outputFormat === "json";
     const p = toPrompt(messages, names, o.closing, o.outputFormat);
-    if (o.continueFrom) p.startWith = bodyOnly ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
+    if (o.continueFrom) p.startWith = unprefixed ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
     let started = false, text = "";
     const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
     return Promise.resolve(imageBlob).then((blob) => {
@@ -8003,17 +8016,17 @@
     });
     if (o.signal) o.signal.addEventListener("abort", () => { try { handle.stop(); } catch (e) {} }, { once: true });
     return Promise.resolve(handle).then((res) => {
-      // In body-only mode, streaming already excludes the transport seed
+      // In unprefixed modes, streaming already excludes the transport seed
       // (isFromStartWith). Prefer that exact body over generatedText, whose
       // inclusion of startWith varies across plugin versions.
-      let out = bodyOnly && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
-      if (bodyOnly && !text && p.startWith && out.startsWith(p.startWith)) {
+      let out = unprefixed && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
+      if (unprefixed && !text && p.startWith && out.startsWith(p.startWith)) {
         out = out.slice(p.startWith.length); // remove only our exact seed, never a model-written name
       }
       out = out.replace(/^\s+/, "");
       // Transcript continuation guard is RP-only. Messenger content (including
-      // quoted names) is not rewritten or stripped by a UI-facing regex.
-      if (!bodyOnly) out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
+      // quoted names) and structured JSON are not cut by speaker-name regexes.
+      if (!unprefixed) out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
       if (o.signal && o.signal.aborted) {
         const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = out; throw e;
       }
@@ -8055,7 +8068,7 @@
   /* prov — элемент settings.providerList; messages — [{role, content}].
      opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
              closing (Perchance: последняя строка инструкции, текст готовит вызывающий),
-             outputFormat: "message-body" (содержимое Messenger; без префиксов отправителя) }
+             outputFormat: "message-body" (Messenger) | "json" (структурированная задача; без рамки диалога) }
      → { text, reasoning } (контракт PRP.openai.chat / PRP.perchance.chat) */
   function chat(prov, messages, opts) {
     const o = opts || {};
@@ -10436,7 +10449,7 @@
           { role: "system", content: system },
           { role: "user", content: user }
         ], { names: { char: "Анализатор", user: "История" },
-          outputFormat: "message-body", sampler: { temperature: 0.35, max_tokens } });
+          outputFormat: "json", sampler: { temperature: 0.35, max_tokens } });
         return PRP.openai.splitThink(response.text || "").text;
       };
       let proposed;
