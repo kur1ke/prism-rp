@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "6170213090c2454f6008736372477c65ef2ce6e4";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4610,6 +4610,7 @@
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        stateToolEnabled, extraPost, noPostHistory,
+       inputCost — необязательная чистая функция messages → стоимость конечной транспортной формы,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
        messenger — для режима messenger: { world, conversation, temporal, plans } (готовые данные среды переписки;
          сцена RP в переписку не подаётся, протокол [scene:] не просится — prism/modes),
@@ -4628,7 +4629,7 @@
        system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → СЛУЖЕБНЫЕ УКАЗАНИЯ ДЛЯ ЭТОГО ОТВЕТА (протокол состояния и рисования, операция)
      При singleSystem всё служебное идёт одним system в начале (разделы и пометки те же), затем строго user/assistant.
 
-     Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
+     Бюджет: inputCost(messages) ≤ budget; по умолчанию Σ токены сообщений + 4 на сообщение.
      Если не помещается, уступают по порядку:
        1 старая история → 2 примеры речи (с последнего) → 3 подробности карточки (с наименее связанной)
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
@@ -4804,7 +4805,10 @@
       if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
       return { p, messages: out };
     }
-    const cost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
+    const messageCost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
+    // Application services may inject the cost of the final transport form.
+    // The assembler retains ownership of degradation, without knowing providers.
+    const cost = typeof o.inputCost === "function" ? o.inputCost : messageCost;
     const fits = () => !invalidBudget && cost(render().messages) <= budget;
 
     const truncated = [];
@@ -4896,6 +4900,7 @@
         reserveTokens: o.reserveTokens,
         invalidBudget,
         used,
+        messageUsed: messageCost(messages),
         fits: !invalidBudget && used <= budget,
         overflow,
         truncated,
@@ -7995,6 +8000,23 @@
     };
   }
 
+  const IMAGE_NOTE = "\n\nК последнему сообщению пользователя прикреплено изображение. Это фотография в переписке, а не свидетельство текущей обстановки персонажа. Ответь в роли персонажа с учётом действительно видимого на снимке.\n";
+
+  // Pure preparation shared by budget estimation and the actual plugin call.
+  function prepareChat(names, messages, opts) {
+    const o = opts || {}, n = names || {};
+    const p = toPrompt(messages, n, o.closing, o.outputFormat);
+    if (o.continueFrom) p.startWith = o.outputFormat === "message-body" || o.outputFormat === "json"
+      ? o.continueFrom : `${n.char || "Персонаж"}: ${o.continueFrom}`;
+    if (o.imageDataUrl) p.instruction += IMAGE_NOTE;
+    return p;
+  }
+
+  function inputCost(names, messages, opts) {
+    const p = prepareChat(names, messages, opts);
+    return PRP.util.estimateTokens(p.instruction) + PRP.util.estimateTokens(p.startWith);
+  }
+
   // Тот же контракт, что у PRP.openai.chat: onDelta({text}), signal, возвращает {text, reasoning}
   // opts.continueFrom — продолжить уже начатый ответ: он уходит в startWith.
   function chat(names, messages, opts) {
@@ -8003,13 +8025,12 @@
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
     const bodyOnly = o.outputFormat === "message-body";
     const unprefixed = bodyOnly || o.outputFormat === "json";
-    const p = toPrompt(messages, names, o.closing, o.outputFormat);
-    if (o.continueFrom) p.startWith = unprefixed ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
+    const p = prepareChat(names, messages, o);
     let started = false, text = "";
     const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
     return Promise.resolve(imageBlob).then((blob) => {
     const handle = ai({
-      instruction: () => blob ? [p.instruction, "\n\nК последнему сообщению пользователя прикреплено изображение. Это фотография в переписке, а не свидетельство текущей обстановки персонажа. Ответь в роли персонажа с учётом действительно видимого на снимке.\n", blob] : p.instruction,
+      instruction: () => blob ? [p.instruction, blob] : p.instruction,
       startWith: () => p.startWith,
       stopSequences: () => p.stop,
       hideStartWith: true,
@@ -8059,7 +8080,7 @@
     return res && res.generatedText != null ? String(res.generatedText) : String(res || "");
   }
 
-  PRP.perchance = { available, meta, chat, toPrompt, simple };
+  PRP.perchance = { available, meta, chat, toPrompt, prepareChat, inputCost, simple };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.perchance;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -10737,6 +10758,14 @@
       const history = historyWithDraws(path, allowDraw);
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
       const wearFacts = PRP.stateTracker.wearFacts(snapshot);
+      const provider = ctx.provider();
+      const imageMessage = c.mode === "messenger" ? (path || []).slice().reverse().find((x) => x.role === "user") : null;
+      const transport = Object.assign({
+        names: { char: cd.name, user: ctx.persona().name },
+        outputFormat: c.mode === "messenger" ? "message-body" : null,
+        imageDataUrl: imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null,
+      }, extra && extra.transport);
+      const perchanceInput = provider && provider.kind === "perchance";
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
         stateSnapshot: messenger ? null : snapshot, messenger, wearFacts,
@@ -10745,7 +10774,9 @@
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
+        inputCost: perchanceInput ? (messages) => PRP.perchance.inputCost(transport.names, messages, transport) : undefined,
       }, extra));
+      built.report.inputFormat = perchanceInput ? "perchance" : "messages";
       built.report.imageDirectiveAllowed = allowDraw;
       built.report.imageDirectivePolicy = ST.modelDrawPolicy(s);
       built.report.world = wctx.report;
@@ -12078,7 +12109,14 @@
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined; // момент переписки для этого хода (выбран при подготовке)
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign(rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
+      const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
+      const transport = {
+        names: { char: cd.name, user: ctx.persona().name },
+        continueFrom: mode === "continue" ? TR.activeSwipe(target0).text || null : null,
+        outputFormat: ms ? "message-body" : null,
+        imageDataUrl: imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null,
+      };
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign({ transport }, rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
@@ -12116,15 +12154,10 @@
       let raw = "", reasoning = "", error = null;
       const rpT0 = now();
       try {
-        const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
-        const imageDataUrl = imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null;
         debugRpPayload(c.id, mode, built.messages);
-        const res = await LLM.chat(prov, built.messages, {
-          names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
-          signal: ctrl.signal, onDelta, continueFrom: prefix || null,
-          outputFormat: ms ? "message-body" : null,
-          imageDataUrl,
-        });
+        const res = await LLM.chat(prov, built.messages, Object.assign({}, transport, {
+          sampler: S.settings.sampler, signal: ctrl.signal, onDelta,
+        }));
         raw = res.text; reasoning = res.reasoning;
       } catch (e) {
         raw = e.partial != null ? e.partial : S.gen.raw;
@@ -12227,7 +12260,8 @@
       if (chat().path().length) return { ok: false, reason: "not-empty" };
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined;
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening" }, ms ? { messengerNow: msNow } : {}));
+      const transport = { names: { char: cd.name, user: ctx.persona().name } };
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
@@ -12242,7 +12276,7 @@
       let res = null, error = null;
       try {
         debugRpPayload(c.id, "opening", built.messages);
-        res = await LLM.chat(prov, built.messages, { names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler, signal: ctrl.signal, onDelta });
+        res = await LLM.chat(prov, built.messages, Object.assign({}, transport, { sampler: S.settings.sampler, signal: ctrl.signal, onDelta }));
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
       }
@@ -12322,8 +12356,10 @@
       const msNow = ms.now();
       const conv = ms.context(path, msNow).conversation;
       const reasons = INI.reasons(conv, msNow);
+      const vars = { char: cd.name, user: ctx.persona().name };
+      const transport = { names: vars, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) };
       const built = prism().build(path, INI.INSTRUCTION, SCN.forGeneration(path, { mode: "new" }),
-        { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons } });
+        { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons }, transport });
       if (preflightFailed(built, prov)) return done("overflow");
 
       const chatId = c.id, key = pathKey(full);
@@ -12334,11 +12370,10 @@
       ui.scrollBottom();
 
       const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
-      const vars = { char: cd.name, user: ctx.persona().name };
       let res = null, error = null;
       try {
         debugRpPayload(c.id, "initiative", built.messages);
-        res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) });
+        res = await LLM.chat(prov, built.messages, Object.assign({}, transport, { sampler: S.settings.sampler, signal: ctrl.signal, onDelta }));
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
       }
@@ -12487,7 +12522,9 @@
       // Reject before storing the text or starting a new Observer request.
       const draftOverflow = (provider) => {
         if (!provider) return false;
-        const path = chat().path().concat(chat().newMsg("user", ctx.chat().leafId, body));
+        const draft = chat().newMsg("user", ctx.chat().leafId, body);
+        if (extra && extra.imageDataUrl) draft.swipes[0].imageDataUrl = extra.imageDataUrl;
+        const path = chat().path().concat(draft);
         return preflightFailed(prism().build(path, "", SCN.forGeneration(path, { mode: "new" })), provider);
       };
       if (draftOverflow(roleProvider)) {

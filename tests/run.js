@@ -1880,6 +1880,7 @@ t("W2-31: строгий бюджет — факты мира уходят с н
 });
 
 // Сервисы чата, Prism и генерации на памяти: хранилище — Map, модель — подставная функция.
+require(J("providers/perchance.js"));
 let fbLLM = null;
 globalThis.PRP.llm = { chat: (...a) => fbLLM(...a) };
 require(J("chat/service.js"));
@@ -2198,7 +2199,8 @@ async function foundationB() {
     const txt = allText(seen);
     assert.ok(!txt.includes("[Начало]"));
     assert.ok(txt.includes("Начни сцену"), "C: указание есть");
-    assert.strictEqual(seen.reduce((n, x) => n + globalThis.PRP.util.estimateTokens(x.content) + 4, 0), rep.used, "C: в бюджете");
+    assert.strictEqual(seen.reduce((n, x) => n + globalThis.PRP.util.estimateTokens(x.content) + 4, 0), rep.messageUsed, "C: исходные сообщения");
+    assert.strictEqual(PRP.perchance.inputCost({char:h.ctx.card().name,user:h.ctx.persona().name},seen),rep.used,"C: итоговый транспорт в бюджете");
     assert.ok(rep.used <= rep.budget && !rep.syntheticUser && rep.needsUserFirst);
     assert.ok(txt.includes("SCEN-LIB"), "D: сценарий");
     assert.ok(txt.includes("AUTH-SYS-ON"), "E: включённое указание");
@@ -9352,7 +9354,7 @@ const TR_ = globalThis.PRP.tree;
 // Do not let an unresolved async fixture finish Node with exit code 0.
 // The suite normally completes in seconds; a pending test must fail CI.
 setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
-foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
+foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./perchance-budget.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
   if (BASELINE.length) {
     console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
     for (const r of BASELINE) console.log(`  ${r.id.padEnd(30)} было ${String(r.old).padStart(5)} → ядро ${String(r.core).padStart(4)} + подробн. ${String(r.details).padStart(4)} + примеры ${String(r.examples).padStart(4)} = ${String(r.total).padStart(5)}; ядро: ${r.coreSource}${r.cut.length ? " (" + r.cut.join(", ") + ")" : ""}; вошло: ${r.selected.join(", ") || "—"}; не вошло: ${r.dropped.length}`);

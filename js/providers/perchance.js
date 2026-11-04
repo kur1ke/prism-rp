@@ -73,6 +73,23 @@
     };
   }
 
+  const IMAGE_NOTE = "\n\nК последнему сообщению пользователя прикреплено изображение. Это фотография в переписке, а не свидетельство текущей обстановки персонажа. Ответь в роли персонажа с учётом действительно видимого на снимке.\n";
+
+  // Pure preparation shared by budget estimation and the actual plugin call.
+  function prepareChat(names, messages, opts) {
+    const o = opts || {}, n = names || {};
+    const p = toPrompt(messages, n, o.closing, o.outputFormat);
+    if (o.continueFrom) p.startWith = o.outputFormat === "message-body" || o.outputFormat === "json"
+      ? o.continueFrom : `${n.char || "Персонаж"}: ${o.continueFrom}`;
+    if (o.imageDataUrl) p.instruction += IMAGE_NOTE;
+    return p;
+  }
+
+  function inputCost(names, messages, opts) {
+    const p = prepareChat(names, messages, opts);
+    return PRP.util.estimateTokens(p.instruction) + PRP.util.estimateTokens(p.startWith);
+  }
+
   // Тот же контракт, что у PRP.openai.chat: onDelta({text}), signal, возвращает {text, reasoning}
   // opts.continueFrom — продолжить уже начатый ответ: он уходит в startWith.
   function chat(names, messages, opts) {
@@ -81,13 +98,12 @@
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
     const bodyOnly = o.outputFormat === "message-body";
     const unprefixed = bodyOnly || o.outputFormat === "json";
-    const p = toPrompt(messages, names, o.closing, o.outputFormat);
-    if (o.continueFrom) p.startWith = unprefixed ? o.continueFrom : `${names.char || "Персонаж"}: ${o.continueFrom}`;
+    const p = prepareChat(names, messages, o);
     let started = false, text = "";
     const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
     return Promise.resolve(imageBlob).then((blob) => {
     const handle = ai({
-      instruction: () => blob ? [p.instruction, "\n\nК последнему сообщению пользователя прикреплено изображение. Это фотография в переписке, а не свидетельство текущей обстановки персонажа. Ответь в роли персонажа с учётом действительно видимого на снимке.\n", blob] : p.instruction,
+      instruction: () => blob ? [p.instruction, blob] : p.instruction,
       startWith: () => p.startWith,
       stopSequences: () => p.stop,
       hideStartWith: true,
@@ -137,6 +153,6 @@
     return res && res.generatedText != null ? String(res.generatedText) : String(res || "");
   }
 
-  PRP.perchance = { available, meta, chat, toPrompt, simple };
+  PRP.perchance = { available, meta, chat, toPrompt, prepareChat, inputCost, simple };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.perchance;
 })(typeof window !== "undefined" ? window : globalThis);

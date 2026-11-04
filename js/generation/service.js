@@ -181,7 +181,14 @@
       const extraPost = mode === "continue" ? CONTINUE : rootOpening ? OPENING : "";
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined; // момент переписки для этого хода (выбран при подготовке)
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign(rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
+      const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
+      const transport = {
+        names: { char: cd.name, user: ctx.persona().name },
+        continueFrom: mode === "continue" ? TR.activeSwipe(target0).text || null : null,
+        outputFormat: ms ? "message-body" : null,
+        imageDataUrl: imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null,
+      };
+      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign({ transport }, rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
@@ -219,15 +226,10 @@
       let raw = "", reasoning = "", error = null;
       const rpT0 = now();
       try {
-        const imageMessage = ms && prov.kind === "perchance" ? path.slice().reverse().find((m) => m.role === "user") : null;
-        const imageDataUrl = imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null;
         debugRpPayload(c.id, mode, built.messages);
-        const res = await LLM.chat(prov, built.messages, {
-          names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler,
-          signal: ctrl.signal, onDelta, continueFrom: prefix || null,
-          outputFormat: ms ? "message-body" : null,
-          imageDataUrl,
-        });
+        const res = await LLM.chat(prov, built.messages, Object.assign({}, transport, {
+          sampler: S.settings.sampler, signal: ctrl.signal, onDelta,
+        }));
         raw = res.text; reasoning = res.reasoning;
       } catch (e) {
         raw = e.partial != null ? e.partial : S.gen.raw;
@@ -330,7 +332,8 @@
       if (chat().path().length) return { ok: false, reason: "not-empty" };
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined;
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening" }, ms ? { messengerNow: msNow } : {}));
+      const transport = { names: { char: cd.name, user: ctx.persona().name } };
+      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
@@ -345,7 +348,7 @@
       let res = null, error = null;
       try {
         debugRpPayload(c.id, "opening", built.messages);
-        res = await LLM.chat(prov, built.messages, { names: { char: cd.name, user: ctx.persona().name }, sampler: S.settings.sampler, signal: ctrl.signal, onDelta });
+        res = await LLM.chat(prov, built.messages, Object.assign({}, transport, { sampler: S.settings.sampler, signal: ctrl.signal, onDelta }));
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
       }
@@ -425,8 +428,10 @@
       const msNow = ms.now();
       const conv = ms.context(path, msNow).conversation;
       const reasons = INI.reasons(conv, msNow);
+      const vars = { char: cd.name, user: ctx.persona().name };
+      const transport = { names: vars, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) };
       const built = prism().build(path, INI.INSTRUCTION, SCN.forGeneration(path, { mode: "new" }),
-        { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons } });
+        { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons }, transport });
       if (preflightFailed(built, prov)) return done("overflow");
 
       const chatId = c.id, key = pathKey(full);
@@ -437,11 +442,10 @@
       ui.scrollBottom();
 
       const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintStreaming(); };
-      const vars = { char: cd.name, user: ctx.persona().name };
       let res = null, error = null;
       try {
         debugRpPayload(c.id, "initiative", built.messages);
-        res = await LLM.chat(prov, built.messages, { names: vars, sampler: S.settings.sampler, signal: ctrl.signal, onDelta, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) });
+        res = await LLM.chat(prov, built.messages, Object.assign({}, transport, { sampler: S.settings.sampler, signal: ctrl.signal, onDelta }));
       } catch (e) {
         if (e.name !== "AbortError") error = e.message || String(e);
       }
@@ -590,7 +594,9 @@
       // Reject before storing the text or starting a new Observer request.
       const draftOverflow = (provider) => {
         if (!provider) return false;
-        const path = chat().path().concat(chat().newMsg("user", ctx.chat().leafId, body));
+        const draft = chat().newMsg("user", ctx.chat().leafId, body);
+        if (extra && extra.imageDataUrl) draft.swipes[0].imageDataUrl = extra.imageDataUrl;
+        const path = chat().path().concat(draft);
         return preflightFailed(prism().build(path, "", SCN.forGeneration(path, { mode: "new" })), provider);
       };
       if (draftOverflow(roleProvider)) {

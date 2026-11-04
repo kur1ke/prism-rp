@@ -71,6 +71,14 @@
       const history = historyWithDraws(path, allowDraw);
       const wctx = ctx.svc.worldChat ? ctx.svc.worldChat.context(path, here) : { facts: [], report: null };
       const wearFacts = PRP.stateTracker.wearFacts(snapshot);
+      const provider = ctx.provider();
+      const imageMessage = c.mode === "messenger" ? (path || []).slice().reverse().find((x) => x.role === "user") : null;
+      const transport = Object.assign({
+        names: { char: cd.name, user: ctx.persona().name },
+        outputFormat: c.mode === "messenger" ? "message-body" : null,
+        imageDataUrl: imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null,
+      }, extra && extra.transport);
+      const perchanceInput = provider && provider.kind === "perchance";
       const built = AS.build(Object.assign({
         mode: c.mode, card: cd, userName: ctx.persona().name, userDesc: ctx.persona().description,
         stateSnapshot: messenger ? null : snapshot, messenger, wearFacts,
@@ -79,7 +87,9 @@
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
         includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
+        inputCost: perchanceInput ? (messages) => PRP.perchance.inputCost(transport.names, messages, transport) : undefined,
       }, extra));
+      built.report.inputFormat = perchanceInput ? "perchance" : "messages";
       built.report.imageDirectiveAllowed = allowDraw;
       built.report.imageDirectivePolicy = ST.modelDrawPolicy(s);
       built.report.world = wctx.report;

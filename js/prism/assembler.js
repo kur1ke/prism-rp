@@ -72,6 +72,7 @@
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        stateToolEnabled, extraPost, noPostHistory,
+       inputCost — необязательная чистая функция messages → стоимость конечной транспортной формы,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
        messenger — для режима messenger: { world, conversation, temporal, plans } (готовые данные среды переписки;
          сцена RP в переписку не подаётся, протокол [scene:] не просится — prism/modes),
@@ -90,7 +91,7 @@
        system: УКАЗАНИЯ АВТОРА ПОСЛЕ ИСТОРИИ (post_history) → СЛУЖЕБНЫЕ УКАЗАНИЯ ДЛЯ ЭТОГО ОТВЕТА (протокол состояния и рисования, операция)
      При singleSystem всё служебное идёт одним system в начале (разделы и пометки те же), затем строго user/assistant.
 
-     Бюджет: итоговая оценка (Σ токены сообщений + 4 на сообщение) ≤ budget.
+     Бюджет: inputCost(messages) ≤ budget; по умолчанию Σ токены сообщений + 4 на сообщение.
      Если не помещается, уступают по порядку:
        1 старая история → 2 примеры речи (с последнего) → 3 подробности карточки (с наименее связанной)
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
@@ -266,7 +267,10 @@
       if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
       return { p, messages: out };
     }
-    const cost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
+    const messageCost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
+    // Application services may inject the cost of the final transport form.
+    // The assembler retains ownership of degradation, without knowing providers.
+    const cost = typeof o.inputCost === "function" ? o.inputCost : messageCost;
     const fits = () => !invalidBudget && cost(render().messages) <= budget;
 
     const truncated = [];
@@ -358,6 +362,7 @@
         reserveTokens: o.reserveTokens,
         invalidBudget,
         used,
+        messageUsed: messageCost(messages),
         fits: !invalidBudget && used <= budget,
         overflow,
         truncated,
