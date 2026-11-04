@@ -29,14 +29,14 @@
           <div class="presets">${OA.PRESETS.map((pr) => `<button class="preset" data-act="prov-add" data-preset="${pr.id}"><b>${esc(pr.name)}</b><small>${pr.local ? "на этом компьютере" : pr.id === "custom" ? "любой совместимый" : "облачный API"}</small></button>`).join("")}</div>`}`;
     } else if (section === "gen") {
       const sm = s.sampler;
-      const num = (k, label, step, help) => `<div class="field"><label>${label}</label><input type="number" step="${step}" data-sampler="${k}" value="${sm[k] != null ? sm[k] : ""}">${help ? `<span class="help">${help}</span>` : ""}</div>`;
+      const num = (k, label, step, help) => `<div class="field"><label>${label}</label><input type="number" step="${step}" data-sampler="${k}" value="${esc(sm[k] != null ? sm[k] : "")}">${help ? `<span class="help">${help}</span>` : ""}</div>`;
       body = `<h3>Генерация</h3><p class="lead">Стиль, длина ответа и объём памяти. Для бесплатной модели Perchance параметры сэмплирования не применяются.</p>
         <div class="presets">${SAMPLER_PRESETS.map((p) => `<button class="preset ${s.samplerPreset === p.id ? "on" : ""}" data-act="pick-preset" data-id="${esc(p.id)}"><b>${p.name}</b><small>${p.hint}</small></button>`).join("")}
           <button class="preset ${s.samplerPreset === "custom" ? "on" : ""}" data-act="pick-preset" data-id="custom"><b>Свой</b><small>значения ниже</small></button></div>
         <div class="row">${num("temperature", "Температура", "0.05", "выше — смелее")}${num("top_p", "Top P", "0.01")}${num("min_p", "Min P", "0.01")}</div>
         <div class="row">${num("top_k", "Top K", "1", "0 — выключено")}${num("repetition_penalty", "Штраф за повторы", "0.01")}${num("max_tokens", "Длина ответа", "50", "в токенах")}</div>
-        <div class="row"><div class="field"><label>Объём контекста</label><input type="number" step="512" data-set-num="contextTokens" value="${s.contextTokens}"><span class="help">в токенах; для Perchance берётся из плагина</span></div>
-          <div class="field"><label>Фактов мира за ход</label><input type="number" min="0" max="30" data-set-num="worldLimit" value="${s.worldLimit}"></div></div>
+        <div class="row"><div class="field"><label>Объём контекста</label><input type="number" step="512" data-set-num="contextTokens" value="${esc(s.contextTokens)}"><span class="help">в токенах; для Perchance берётся из плагина</span></div>
+          <div class="field"><label>Фактов мира за ход</label><input type="number" min="0" max="30" data-set-num="worldLimit" value="${esc(s.worldLimit)}"></div></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
         <label class="check"><input type="checkbox" data-set="noPostHistory" ${s.noPostHistory ? "checked" : ""}><span>Не передавать инструкции после истории<small>Касается только указаний автора карточки (post_history_instructions), не самого характера. По умолчанию выключено — для совместимости с карточками.</small></span></label>
@@ -61,7 +61,7 @@
         <div class="themes">${THEMES.map((t) => `<button class="theme ${s.theme === t.id ? "on" : ""}" data-act="theme" data-id="${t.id}">
           <div class="sw" style="background:${t.c[0]}"><i style="width:36%;background:${t.c[1]}"></i><i style="width:18%;background:${t.c[2]}"></i><i style="width:12%;background:${t.c[3]}"></i></div><div class="nm">${t.name}</div></button>`).join("")}</div>
         <label class="check" style="margin-top:18px"><input type="checkbox" data-set="developerMode" ${s.developerMode ? "checked" : ""}><span>Режим разработчика<small>Показывать кнопку Debug в шапке переписки.</small></span></label>
-        <div class="field" style="margin-top:18px"><label>Размер текста сцены: <span id="fs-out">${s.proseSize}</span> px</label><input type="range" min="14" max="22" step="1" data-set-range="proseSize" value="${s.proseSize}" style="accent-color:var(--accent)"></div>`;
+        <div class="field" style="margin-top:18px"><label>Размер текста сцены: <span id="fs-out">${esc(s.proseSize)}</span> px</label><input type="range" min="14" max="22" step="1" data-set-range="proseSize" value="${esc(s.proseSize)}" style="accent-color:var(--accent)"></div>`;
     } else {
       body = `<h3>Данные</h3><p class="lead">Всё хранится только в этом браузере. Бэкап переносит персонажей, чаты, опыт и настройки — в том числе на другую платформу.</p>
         <div class="row"><button class="btn" data-act="backup">${icon("download")}Скачать бэкап</button><button class="btn" data-act="restore">${icon("upload")}Загрузить бэкап</button></div>

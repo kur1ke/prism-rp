@@ -36,8 +36,8 @@
       const th = OA.splitThink(text || "");
       const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
       const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
-        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
-      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${esc(msg.id)}">
+        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${esc(msg.id)}">${R.md(th.text)}</div>`;
+      return `<article class="aturn ${esc(msg.role)} ${last ? "last" : ""}" data-mid="${esc(msg.id)}">
         ${body}
         ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
         ${live ? "" : `<div class="tools">

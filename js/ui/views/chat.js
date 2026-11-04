@@ -60,7 +60,7 @@
   function openingLive(m) {
     return `<article class="turn assistant last opening-live">${R.avatar(m.card, 40)}<div style="min-width:0">
       <div class="turn-head"><span class="turn-name">${esc(m.card.name)}</span><span class="turn-time">начинает сцену…</span></div>
-      <div class="prose cursor" id="text-${m.gen.msgId}">${R.rpText(liveText(m))}</div></div></article>`;
+      <div class="prose cursor" id="text-${esc(m.gen.msgId)}">${R.rpText(liveText(m))}</div></div></article>`;
   }
 
   function swipeNav(msg, isLast) {
@@ -101,7 +101,7 @@
       const ar = im.w && im.h ? `${im.w}/${im.h}` : (im.ratio || "1:1").replace(":", "/");
       const base = `data-mid="${esc(msg.id)}" data-sw="${idx}" data-img="${esc(im.id)}"`;
       if (im.status === "pending") {
-        return `<figure class="shot wait" style="aspect-ratio:${ar}"><div class="shot-wait"><span>${esc(im.stage || "Рисую…")}</span></div>
+        return `<figure class="shot wait" style="aspect-ratio:${esc(ar)}"><div class="shot-wait"><span>${esc(im.stage || "Рисую…")}</span></div>
           <figcaption class="shot-cap">${esc(im.draw || "")}</figcaption></figure>`;
       }
       if (im.status === "error") {
@@ -109,11 +109,11 @@
           <div class="row"><button class="btn btn-sm" data-act="img-regen" ${base}>${icon("regen")}Попробовать ещё раз</button><button class="btn btn-sm btn-ghost" data-act="img-del" ${base}>Убрать</button></div></figure>`;
       }
       const url = m.imgUrls && m.imgUrls[im.id];
-      return `<figure class="shot" style="aspect-ratio:${ar}">
+      return `<figure class="shot" style="aspect-ratio:${esc(ar)}">
         ${R.safeImageSrc(url) ? `<img src="${R.safeImageSrc(url)}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
         <div class="shot-tools">
           <button class="icon-btn" data-act="img-regen" ${base} title="Нарисовать заново, другой seed">${icon("regen")}</button>
-          <button class="icon-btn" data-act="img-pin" ${base} title="Закрепить seed ${im.seed != null ? im.seed : ""} за персонажем">${icon("pin")}</button>
+          <button class="icon-btn" data-act="img-pin" ${base} title="Закрепить seed ${esc(im.seed != null ? im.seed : "")} за персонажем">${icon("pin")}</button>
           <button class="icon-btn" data-act="img-info" ${base} title="Промпт и параметры">${icon("info")}</button>
           <button class="icon-btn" data-act="img-dl" ${base} title="Скачать">${icon("download")}</button>
           <button class="icon-btn" data-act="img-del" ${base} title="Удалить картинку">${icon("trash")}</button>
@@ -160,7 +160,7 @@
         const text = live ? (m.gen.prefix || "") + liveText(m) : sw.text;
         const prose = R.rpText(text);
         body = `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}
-          <div class="prose ${live ? "cursor" : ""}" id="text-${msg.id}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>
+          <div class="prose ${live ? "cursor" : ""}" id="text-${esc(msg.id)}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>
           ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
           ${!live ? shots(m, msg, sw) : ""}
           ${live ? "" : tools(msg, isLast)}`;
@@ -192,7 +192,7 @@
       if (msg.role === "user" && m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
       if (live) {
         const parts = R.bubbles(liveText(m));
-        return mark + `<div class="msg-row them" id="text-${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
+        return mark + `<div class="msg-row them" id="text-${esc(msg.id)}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
       }
       const parts = R.bubbles(sw.text);
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
@@ -204,7 +204,7 @@
   // Проверка инициативы в процессе: временный пузырь «печатает», в дереве сообщений его нет до успешного ответа.
   function initiativeLive(m) {
     const parts = R.bubbles(liveText(m));
-    return `<div class="msg-row them" id="text-${m.gen.msgId}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
+    return `<div class="msg-row them" id="text-${esc(m.gen.msgId)}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
   }
 
   function meter(m) {

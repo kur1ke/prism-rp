@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "78edfd4f3d9545a5c891d4bcd82eb49720e61f2d";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -8554,7 +8554,7 @@
   function openingLive(m) {
     return `<article class="turn assistant last opening-live">${R.avatar(m.card, 40)}<div style="min-width:0">
       <div class="turn-head"><span class="turn-name">${esc(m.card.name)}</span><span class="turn-time">начинает сцену…</span></div>
-      <div class="prose cursor" id="text-${m.gen.msgId}">${R.rpText(liveText(m))}</div></div></article>`;
+      <div class="prose cursor" id="text-${esc(m.gen.msgId)}">${R.rpText(liveText(m))}</div></div></article>`;
   }
 
   function swipeNav(msg, isLast) {
@@ -8595,7 +8595,7 @@
       const ar = im.w && im.h ? `${im.w}/${im.h}` : (im.ratio || "1:1").replace(":", "/");
       const base = `data-mid="${esc(msg.id)}" data-sw="${idx}" data-img="${esc(im.id)}"`;
       if (im.status === "pending") {
-        return `<figure class="shot wait" style="aspect-ratio:${ar}"><div class="shot-wait"><span>${esc(im.stage || "Рисую…")}</span></div>
+        return `<figure class="shot wait" style="aspect-ratio:${esc(ar)}"><div class="shot-wait"><span>${esc(im.stage || "Рисую…")}</span></div>
           <figcaption class="shot-cap">${esc(im.draw || "")}</figcaption></figure>`;
       }
       if (im.status === "error") {
@@ -8603,11 +8603,11 @@
           <div class="row"><button class="btn btn-sm" data-act="img-regen" ${base}>${icon("regen")}Попробовать ещё раз</button><button class="btn btn-sm btn-ghost" data-act="img-del" ${base}>Убрать</button></div></figure>`;
       }
       const url = m.imgUrls && m.imgUrls[im.id];
-      return `<figure class="shot" style="aspect-ratio:${ar}">
+      return `<figure class="shot" style="aspect-ratio:${esc(ar)}">
         ${R.safeImageSrc(url) ? `<img src="${R.safeImageSrc(url)}" alt="${esc(im.draw || "картинка")}" data-act="img-view" ${base} loading="lazy">` : `<div class="shot-wait"><span>Загрузка…</span></div>`}
         <div class="shot-tools">
           <button class="icon-btn" data-act="img-regen" ${base} title="Нарисовать заново, другой seed">${icon("regen")}</button>
-          <button class="icon-btn" data-act="img-pin" ${base} title="Закрепить seed ${im.seed != null ? im.seed : ""} за персонажем">${icon("pin")}</button>
+          <button class="icon-btn" data-act="img-pin" ${base} title="Закрепить seed ${esc(im.seed != null ? im.seed : "")} за персонажем">${icon("pin")}</button>
           <button class="icon-btn" data-act="img-info" ${base} title="Промпт и параметры">${icon("info")}</button>
           <button class="icon-btn" data-act="img-dl" ${base} title="Скачать">${icon("download")}</button>
           <button class="icon-btn" data-act="img-del" ${base} title="Удалить картинку">${icon("trash")}</button>
@@ -8654,7 +8654,7 @@
         const text = live ? (m.gen.prefix || "") + liveText(m) : sw.text;
         const prose = R.rpText(text);
         body = `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}
-          <div class="prose ${live ? "cursor" : ""}" id="text-${msg.id}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>
+          <div class="prose ${live ? "cursor" : ""}" id="text-${esc(msg.id)}">${msg.role === "user" ? `<span class="bubble-plain">${prose}</span>` : prose}</div>
           ${sw.error ? `<div class="err">${icon("alert")}<span>${esc(sw.error)}</span></div>` : ""}
           ${!live ? shots(m, msg, sw) : ""}
           ${live ? "" : tools(msg, isLast)}`;
@@ -8686,7 +8686,7 @@
       if (msg.role === "user" && m.editingMsg === msg.id) return mark + `<div class="msg-row ${side}">${editor(msg, sw)}</div>`;
       if (live) {
         const parts = R.bubbles(liveText(m));
-        return mark + `<div class="msg-row them" id="text-${msg.id}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
+        return mark + `<div class="msg-row them" id="text-${esc(msg.id)}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
       }
       const parts = R.bubbles(sw.text);
       const ini = PRP.messengerInitiative && PRP.messengerInitiative.isInitiative(msg);
@@ -8698,7 +8698,7 @@
   // Проверка инициативы в процессе: временный пузырь «печатает», в дереве сообщений его нет до успешного ответа.
   function initiativeLive(m) {
     const parts = R.bubbles(liveText(m));
-    return `<div class="msg-row them" id="text-${m.gen.msgId}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
+    return `<div class="msg-row them" id="text-${esc(m.gen.msgId)}">${parts.map((p) => `<div class="bub">${esc(p)}</div>`).join("")}<div class="bub typing"><i></i><i></i><i></i></div></div>`;
   }
 
   function meter(m) {
@@ -9329,14 +9329,14 @@
           <div class="presets">${OA.PRESETS.map((pr) => `<button class="preset" data-act="prov-add" data-preset="${pr.id}"><b>${esc(pr.name)}</b><small>${pr.local ? "на этом компьютере" : pr.id === "custom" ? "любой совместимый" : "облачный API"}</small></button>`).join("")}</div>`}`;
     } else if (section === "gen") {
       const sm = s.sampler;
-      const num = (k, label, step, help) => `<div class="field"><label>${label}</label><input type="number" step="${step}" data-sampler="${k}" value="${sm[k] != null ? sm[k] : ""}">${help ? `<span class="help">${help}</span>` : ""}</div>`;
+      const num = (k, label, step, help) => `<div class="field"><label>${label}</label><input type="number" step="${step}" data-sampler="${k}" value="${esc(sm[k] != null ? sm[k] : "")}">${help ? `<span class="help">${help}</span>` : ""}</div>`;
       body = `<h3>Генерация</h3><p class="lead">Стиль, длина ответа и объём памяти. Для бесплатной модели Perchance параметры сэмплирования не применяются.</p>
         <div class="presets">${SAMPLER_PRESETS.map((p) => `<button class="preset ${s.samplerPreset === p.id ? "on" : ""}" data-act="pick-preset" data-id="${esc(p.id)}"><b>${p.name}</b><small>${p.hint}</small></button>`).join("")}
           <button class="preset ${s.samplerPreset === "custom" ? "on" : ""}" data-act="pick-preset" data-id="custom"><b>Свой</b><small>значения ниже</small></button></div>
         <div class="row">${num("temperature", "Температура", "0.05", "выше — смелее")}${num("top_p", "Top P", "0.01")}${num("min_p", "Min P", "0.01")}</div>
         <div class="row">${num("top_k", "Top K", "1", "0 — выключено")}${num("repetition_penalty", "Штраф за повторы", "0.01")}${num("max_tokens", "Длина ответа", "50", "в токенах")}</div>
-        <div class="row"><div class="field"><label>Объём контекста</label><input type="number" step="512" data-set-num="contextTokens" value="${s.contextTokens}"><span class="help">в токенах; для Perchance берётся из плагина</span></div>
-          <div class="field"><label>Фактов мира за ход</label><input type="number" min="0" max="30" data-set-num="worldLimit" value="${s.worldLimit}"></div></div>
+        <div class="row"><div class="field"><label>Объём контекста</label><input type="number" step="512" data-set-num="contextTokens" value="${esc(s.contextTokens)}"><span class="help">в токенах; для Perchance берётся из плагина</span></div>
+          <div class="field"><label>Фактов мира за ход</label><input type="number" min="0" max="30" data-set-num="worldLimit" value="${esc(s.worldLimit)}"></div></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
         <label class="check"><input type="checkbox" data-set="noPostHistory" ${s.noPostHistory ? "checked" : ""}><span>Не передавать инструкции после истории<small>Касается только указаний автора карточки (post_history_instructions), не самого характера. По умолчанию выключено — для совместимости с карточками.</small></span></label>
@@ -9361,7 +9361,7 @@
         <div class="themes">${THEMES.map((t) => `<button class="theme ${s.theme === t.id ? "on" : ""}" data-act="theme" data-id="${t.id}">
           <div class="sw" style="background:${t.c[0]}"><i style="width:36%;background:${t.c[1]}"></i><i style="width:18%;background:${t.c[2]}"></i><i style="width:12%;background:${t.c[3]}"></i></div><div class="nm">${t.name}</div></button>`).join("")}</div>
         <label class="check" style="margin-top:18px"><input type="checkbox" data-set="developerMode" ${s.developerMode ? "checked" : ""}><span>Режим разработчика<small>Показывать кнопку Debug в шапке переписки.</small></span></label>
-        <div class="field" style="margin-top:18px"><label>Размер текста сцены: <span id="fs-out">${s.proseSize}</span> px</label><input type="range" min="14" max="22" step="1" data-set-range="proseSize" value="${s.proseSize}" style="accent-color:var(--accent)"></div>`;
+        <div class="field" style="margin-top:18px"><label>Размер текста сцены: <span id="fs-out">${esc(s.proseSize)}</span> px</label><input type="range" min="14" max="22" step="1" data-set-range="proseSize" value="${esc(s.proseSize)}" style="accent-color:var(--accent)"></div>`;
     } else {
       body = `<h3>Данные</h3><p class="lead">Всё хранится только в этом браузере. Бэкап переносит персонажей, чаты, опыт и настройки — в том числе на другую платформу.</p>
         <div class="row"><button class="btn" data-act="backup">${icon("download")}Скачать бэкап</button><button class="btn" data-act="restore">${icon("upload")}Загрузить бэкап</button></div>
@@ -9992,8 +9992,8 @@
       const th = OA.splitThink(text || "");
       const reasoning = live ? (m.gen.reasoning || th.reasoning) : msg.reasoning;
       const body = msg.role === "user" ? `<div class="bubble-plain">${esc(msg.text).replace(/\n/g, "<br>")}</div>`
-        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${msg.id}">${R.md(th.text)}</div>`;
-      return `<article class="aturn ${msg.role} ${last ? "last" : ""}" data-mid="${esc(msg.id)}">
+        : `${reasoning ? `<details class="think"><summary>${icon("think")}Рассуждение модели</summary><div>${esc(reasoning)}</div></details>` : ""}<div class="md ${live ? "cursor" : ""}" id="text-${esc(msg.id)}">${R.md(th.text)}</div>`;
+      return `<article class="aturn ${esc(msg.role)} ${last ? "last" : ""}" data-mid="${esc(msg.id)}">
         ${body}
         ${msg.error ? `<div class="err">${icon("alert")}<span>${esc(msg.error)}</span></div>` : ""}
         ${live ? "" : `<div class="tools">
