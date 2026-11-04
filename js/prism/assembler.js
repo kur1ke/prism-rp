@@ -109,7 +109,12 @@
     const vars = { char: DATA.oneLine(card.name) || "Персонаж", user: DATA.oneLine(o.userName) || "Пользователь" };
     const m = (x) => U.macros(x, vars);
     const tok = U.estimateTokens;
-    const budget = Math.max(512, o.contextTokens - o.reserveTokens);
+    // Input owns only the remainder of the configured window. A minimum here
+    // would invent tokens when the output reserve nearly fills the context.
+    const validLimits = Number.isFinite(o.contextTokens) && o.contextTokens > 0 &&
+      Number.isFinite(o.reserveTokens) && o.reserveTokens >= 0;
+    const budget = validLimits ? Math.max(0, o.contextTokens - o.reserveTokens) : 0;
+    const invalidBudget = !validLimits || o.reserveTokens >= o.contextTokens;
 
     const history = (o.history || []).filter((h) => h && h.text);
     const recentText = history.slice(-4).map((h) => h.text).join("\n");
@@ -262,7 +267,7 @@
       return { p, messages: out };
     }
     const cost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
-    const fits = () => cost(render().messages) <= budget;
+    const fits = () => !invalidBudget && cost(render().messages) <= budget;
 
     const truncated = [];
     const note = (layer, detail) => {
@@ -349,8 +354,11 @@
       messages,
       report: {
         budget,
+        contextTokens: o.contextTokens,
+        reserveTokens: o.reserveTokens,
+        invalidBudget,
         used,
-        fits: used <= budget,
+        fits: !invalidBudget && used <= budget,
         overflow,
         truncated,
         historyKept: keptHistory.length,

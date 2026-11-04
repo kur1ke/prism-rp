@@ -5434,7 +5434,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const vars = { char: DATA.oneLine(card.name) || "Персонаж", user: DATA.oneLine(o.userName) || "Пользователь" };
     const m = (x) => U.macros(x, vars);
     const tok = U.estimateTokens;
-    const budget = Math.max(512, o.contextTokens - o.reserveTokens);
+    // Input owns only the remainder of the configured window. A minimum here
+    // would invent tokens when the output reserve nearly fills the context.
+    const validLimits = Number.isFinite(o.contextTokens) && o.contextTokens > 0 &&
+      Number.isFinite(o.reserveTokens) && o.reserveTokens >= 0;
+    const budget = validLimits ? Math.max(0, o.contextTokens - o.reserveTokens) : 0;
+    const invalidBudget = !validLimits || o.reserveTokens >= o.contextTokens;
 
     const history = (o.history || []).filter((h) => h && h.text);
     const recentText = history.slice(-4).map((h) => h.text).join("\n");
@@ -5587,7 +5592,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return { p, messages: out };
     }
     const cost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
-    const fits = () => cost(render().messages) <= budget;
+    const fits = () => !invalidBudget && cost(render().messages) <= budget;
 
     const truncated = [];
     const note = (layer, detail) => {
@@ -5674,8 +5679,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       messages,
       report: {
         budget,
+        contextTokens: o.contextTokens,
+        reserveTokens: o.reserveTokens,
+        invalidBudget,
         used,
-        fits: used <= budget,
+        fits: !invalidBudget && used <= budget,
         overflow,
         truncated,
         historyKept: keptHistory.length,
@@ -13007,7 +13015,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     function preflightFailed(built, prov) {
       S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
       if (!built.report.overflow) return false;
-      ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+      ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста, уменьшите длину ответа в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
       if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
       ui.renderFeed();
       return true;
@@ -13293,6 +13301,17 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       // have no persistent effect.
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
       const roleProvider = ctx.provider();
+      // An unsaved user node is enough to budget the proposed RP history.
+      // Reject before storing the text or starting a new Observer request.
+      const draftOverflow = (provider) => {
+        if (!provider) return false;
+        const path = chat().path().concat(chat().newMsg("user", ctx.chat().leafId, body));
+        return preflightFailed(prism().build(path, "", SCN.forGeneration(path, { mode: "new" })), provider);
+      };
+      if (draftOverflow(roleProvider)) {
+        restore({ chatId: c.id, text: body });
+        return { outcome: "overflow" };
+      }
       const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
         observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
       let turn;
@@ -13310,6 +13329,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       }
       let reply = null;
       try {
+        // Waiting may have changed the visible state or the provider settings.
+        if (w0 && draftOverflow(ctx.provider())) {
+          restore(turn);
+          return { outcome: "overflow" };
+        }
         turn.phase = "user-state";
         renderComposer();
         const sent = await chat().addUserMessage(body, extra || null);

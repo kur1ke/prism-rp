@@ -300,7 +300,7 @@
     function preflightFailed(built, prov) {
       S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
       if (!built.report.overflow) return false;
-      ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+      ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста, уменьшите длину ответа в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
       if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
       ui.renderFeed();
       return true;
@@ -586,6 +586,17 @@
       // have no persistent effect.
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
       const roleProvider = ctx.provider();
+      // An unsaved user node is enough to budget the proposed RP history.
+      // Reject before storing the text or starting a new Observer request.
+      const draftOverflow = (provider) => {
+        if (!provider) return false;
+        const path = chat().path().concat(chat().newMsg("user", ctx.chat().leafId, body));
+        return preflightFailed(prism().build(path, "", SCN.forGeneration(path, { mode: "new" })), provider);
+      };
+      if (draftOverflow(roleProvider)) {
+        restore({ chatId: c.id, text: body });
+        return { outcome: "overflow" };
+      }
       const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
         observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
       let turn;
@@ -603,6 +614,11 @@
       }
       let reply = null;
       try {
+        // Waiting may have changed the visible state or the provider settings.
+        if (w0 && draftOverflow(ctx.provider())) {
+          restore(turn);
+          return { outcome: "overflow" };
+        }
         turn.phase = "user-state";
         renderComposer();
         const sent = await chat().addUserMessage(body, extra || null);

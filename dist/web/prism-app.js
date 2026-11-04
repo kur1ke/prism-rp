@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "55954d8431281d351efe4ae054a415831cc67009";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -4647,7 +4647,12 @@
     const vars = { char: DATA.oneLine(card.name) || "Персонаж", user: DATA.oneLine(o.userName) || "Пользователь" };
     const m = (x) => U.macros(x, vars);
     const tok = U.estimateTokens;
-    const budget = Math.max(512, o.contextTokens - o.reserveTokens);
+    // Input owns only the remainder of the configured window. A minimum here
+    // would invent tokens when the output reserve nearly fills the context.
+    const validLimits = Number.isFinite(o.contextTokens) && o.contextTokens > 0 &&
+      Number.isFinite(o.reserveTokens) && o.reserveTokens >= 0;
+    const budget = validLimits ? Math.max(0, o.contextTokens - o.reserveTokens) : 0;
+    const invalidBudget = !validLimits || o.reserveTokens >= o.contextTokens;
 
     const history = (o.history || []).filter((h) => h && h.text);
     const recentText = history.slice(-4).map((h) => h.text).join("\n");
@@ -4800,7 +4805,7 @@
       return { p, messages: out };
     }
     const cost = (msgs) => msgs.reduce((n, x) => n + tok(x.content) + 4, 0);
-    const fits = () => cost(render().messages) <= budget;
+    const fits = () => !invalidBudget && cost(render().messages) <= budget;
 
     const truncated = [];
     const note = (layer, detail) => {
@@ -4887,8 +4892,11 @@
       messages,
       report: {
         budget,
+        contextTokens: o.contextTokens,
+        reserveTokens: o.reserveTokens,
+        invalidBudget,
         used,
-        fits: used <= budget,
+        fits: !invalidBudget && used <= budget,
         overflow,
         truncated,
         historyKept: keptHistory.length,
@@ -12189,7 +12197,7 @@
     function preflightFailed(built, prov) {
       S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
       if (!built.report.overflow) return false;
-      ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
+      ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста, уменьшите длину ответа в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
       if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
       ui.renderFeed();
       return true;
@@ -12475,6 +12483,17 @@
       // have no persistent effect.
       const observerProvider = ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
       const roleProvider = ctx.provider();
+      // An unsaved user node is enough to budget the proposed RP history.
+      // Reject before storing the text or starting a new Observer request.
+      const draftOverflow = (provider) => {
+        if (!provider) return false;
+        const path = chat().path().concat(chat().newMsg("user", ctx.chat().leafId, body));
+        return preflightFailed(prism().build(path, "", SCN.forGeneration(path, { mode: "new" })), provider);
+      };
+      if (draftOverflow(roleProvider)) {
+        restore({ chatId: c.id, text: body });
+        return { outcome: "overflow" };
+      }
       const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
         observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
       let turn;
@@ -12492,6 +12511,11 @@
       }
       let reply = null;
       try {
+        // Waiting may have changed the visible state or the provider settings.
+        if (w0 && draftOverflow(ctx.provider())) {
+          restore(turn);
+          return { outcome: "overflow" };
+        }
         turn.phase = "user-state";
         renderComposer();
         const sent = await chat().addUserMessage(body, extra || null);
