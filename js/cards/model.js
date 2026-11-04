@@ -8,7 +8,8 @@
        у каждого явный флаг enabled; импортированные приходят выключенными;
      • метаданные: creator, creatorNotes, tags, version; картинки: image;
      • prismCore — необязательное ядро для Prism (prism/card-context): компактное представление, а не источник истины;
-       видно и правится в редакторе; нет ядра (null) — Prism собирает запасное из полей. Схему карточки не меняет;
+       включается отдельно; выбранные основные поля передаются целиком, без обязательного краткого ядра;
+     • contextFields — выбор description/personality/appearance (по умолчанию включены) и prismCore (выключен);
      • source — исходник и сведения импорта, ТОЛЬКО хранение: во время работы не читается.
    Чистый модуль: без DOM, хранилища и сети. */
 (function (root) {
@@ -16,6 +17,12 @@
   const PRP = (root.PRP = root.PRP || {});
 
   const SCHEMA = 2;
+  const CONTEXT_DEFAULTS = Object.freeze({ description: true, personality: true, appearance: true, prismCore: false });
+  function normalizeContextFields(input) {
+    const out = {};
+    for (const key of Object.keys(CONTEXT_DEFAULTS)) out[key] = input && typeof input[key] === "boolean" ? input[key] : CONTEXT_DEFAULTS[key];
+    return out;
+  }
 
   // Указание автора. Созданное в редакторе включено (отправляется, если в нём есть текст);
   // импортированное — выключено и не проверено, пока пользователь не включит его сам.
@@ -60,6 +67,7 @@
       creator: "", creatorNotes: "", tags: [], version: "",
       image: undefined,
       prismCore: null,
+      contextFields: normalizeContextFields(),
       avatar: null,
       source: null,
       createdAt: now, updatedAt: now,
@@ -106,6 +114,6 @@
     return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
   }
 
-  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  PRP.cardModel = { SCHEMA, CONTEXT_DEFAULTS, normalizeContextFields, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
 })(typeof window !== "undefined" ? window : globalThis);

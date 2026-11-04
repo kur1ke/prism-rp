@@ -69,6 +69,7 @@
     if (isObj(prism.image)) { d.image = clone(prism.image); if (isObj(d.image.loraAdvanced)) d.image.loraAdvanced.enabled = false; }
     // Import cannot enable new model-facing custom data without local user approval.
     d.customFields = CM.normalizeCustomFields(prism.customFields, true);
+    d.contextFields = CM.normalizeContextFields(prism.contextFields);
     // Source fields often survive in CCv3's standard data alongside Prism's
     // own custom-field extension. One origin path must not produce two entries.
     for (const f of customFromUnknown(data, known, "data", detection.format)) {

@@ -1,33 +1,13 @@
-/* Prism RP — карточка в Prism: устойчивое ядро + выборочные подробности (FOUNDATION-H). Чистый модуль.
-
-   Источник истины — сама карточка: её поля не меняются, не переписываются и не урезаются при хранении.
-   Prism на каждом ходе собирает из неё:
-
-   1. ЯДРО (Prism Core) — компактное устойчивое представление персонажа, подаётся всегда.
-      • Явное ядро — card.prismCore { schema: 1, identity, traits[], voice[], durableContext[], source, reviewed }.
-        Его видно и можно править в редакторе карточки. Модель его не пишет, генерация его не меняет,
-        вызовов модели для его сборки нет. Ядро из файла (extensions.prism_rp.prismCore) приходит
-        непроверенным (reviewed: false) и не используется, пока пользователь не сохранит его сам.
-      • Запасное ядро (нет явного) — детерминированно из полей карточки, без модели:
-        имя, начало описания и личность, каждое — по абзацам и целым предложениям не длиннее CAP символов.
-        Жёсткий предел: если уже первое предложение длиннее CAP (или знаков препинания нет), берётся начало
-        до последнего пробела (или ровно CAP символов) с «…» — явно и с пометкой в отчёте (cut: word | hard).
-        Что сокращено — в отчёте; остаток не теряется, а становится выборочными подробностями.
-   2. ВЫБОРОЧНЫЕ ПОДРОБНОСТИ — остаток описания и личности, прошлое, внешность, разбитые на куски по абзацам
-      (длинный абзац — по предложениям до CHUNK_MAX символов). Кусок входит только при положительной связи
-      с текущим ходом: имя или термин из куска прозвучал в разговоре, сцене или среде переписки; или не меньше
-      двух общих слов (одно слово в разных формах — по общему началу; без имён участников и служебных слов). Внешность — ещё и когда разговор или сцена касаются
-      внешности/одежды, либо операция требует зрительной опоры (начало сцены). Важность, порядок и свежесть
-      права войти не дают. Отбор решает только, войдёт ли кусок, — не то, верен ли он.
-   3. ПРИМЕРЫ РЕЧИ — по числу ответов персонажа на ветке (живая история уже показывает голос):
-      0–2 ответа — все примеры; 3–5 — только первый пример; 6 и больше — без примеров.
-   Без DOM, хранилища, сети, таймеров и S. */
+/* Prism RP — выбранные основные поля целиком, необязательное явное ядро,
+   выборочные дополнительные сведения и примеры. Чистый модуль.
+   Основные поля и включённое проверенное ядро защищены от обрезания:
+   если после сокращения остальных слоёв они не помещаются, сборщик сообщает overflow. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
 
+  const CM = PRP.cardModel || (typeof require !== "undefined" ? require("../cards/model.js") : null);
   const CORE_SCHEMA = 1;
-  const CAP = 600;            // запасное ядро: символов на поле (по абзацам и предложениям)
   const CHUNK_MAX = 500;      // символов в куске подробностей
   const CHUNK_LIMIT = 4;      // кусков подробностей за ход
   const EXAMPLES = { fullUntil: 2, oneUntil: 5 };
@@ -56,62 +36,41 @@
   const paragraphs = (t) => str(t).split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const sentences = (t) => (str(t).match(/[^.!?…]+[.!?…]+[»")\]]*\s*|[^.!?…]+$/g) || [str(t)]).map((s) => s.trim()).filter(Boolean);
 
-  /* Начало текста не длиннее cap: по абзацам и целым предложениям.
-     Жёсткий предел: если уже ПЕРВОЕ предложение длиннее cap (огромное предложение или текст без знаков препинания),
-     оно не входит в ядро целиком — берётся начало до последнего пробела в пределах cap (cut: "word"),
-     а если пробела нет — ровно cap символов (cut: "hard"); в конце ставится «…». Это явная, детерминированная
-     обрезка, видимая в отчёте; текст не пересказывается, остаток не теряется — он уходит в подробности.
-     → { kept, rest, truncated, cut: "" | "sentence" | "word" | "hard" } */
-  function capText(text, cap) {
-    const t = str(text).trim();
-    if (!t || t.length <= cap) return { kept: t, rest: "", truncated: false, cut: "" };
-    const first = sentences(paragraphs(t)[0])[0] || t;
-    if (first.length > cap) {
-      const lim = cap - 2; // место под « …»: итог не длиннее cap
-      const head = t.slice(0, lim);
-      const sp = head.search(/\s\S*$/);
-      const at = sp > lim * 0.5 ? sp : lim;
-      return { kept: t.slice(0, at).trimEnd() + " …", rest: t.slice(at).trim(), truncated: true, cut: at === lim ? "hard" : "word" };
-    }
-    // Предложения по порядку с границами абзацев; берём, пока помещаются (первое — всегда целиком).
-    const items = [];
-    paragraphs(t).forEach((p) => sentences(p).forEach((s, i) => items.push({ s, para: i === 0 })));
-    let used = 0, n = 0;
-    for (; n < items.length; n++) {
-      const add = items[n].s.length + (n ? (items[n].para ? 2 : 1) : 0);
-      if (n && used + add > cap) break;
-      used += add;
-    }
-    const join = (xs) => xs.map((x, i) => (i ? (x.para ? "\n\n" : " ") : "") + x.s).join("");
-    const rest = items.slice(n);
-    if (rest.length) rest[0] = Object.assign({}, rest[0], { para: true });
-    return { kept: join(items.slice(0, n)), rest: join(rest), truncated: rest.length > 0, cut: rest.length ? "sentence" : "" };
-  }
-
-  /* Ядро для этой карточки. m — подстановка макросов ({{char}}, {{user}}).
-     → { source: "explicit" | "fallback", reason, identity, personality, traits, voice, durableContext, truncated: [{field, kept, total}], rest: {description, personality} } */
+  // Full selected primary fields; a reviewed explicit Core is an opt-in addition.
   function core(card, m) {
-    const mm = m || ((x) => x);
-    const cd = card || {};
-    const desc = mm(str(cd.description)).trim(), pers = mm(str(cd.personality)).trim();
-    const ex = normCore(cd.prismCore);
-    if (ex && ex.reviewed) {
-      return { source: "explicit", reason: "задано в карточке", identity: mm(ex.identity), personality: "", traits: ex.traits.map(mm), voice: ex.voice.map(mm),
-        durableContext: ex.durableContext.map(mm), truncated: [], rest: { description: desc, personality: pers } };
-    }
-    const d = capText(desc, CAP), p = capText(pers, CAP);
-    const truncated = [];
-    if (d.truncated) truncated.push({ field: "description", kept: d.kept.length, total: desc.length, cut: d.cut });
-    if (p.truncated) truncated.push({ field: "personality", kept: p.kept.length, total: pers.length, cut: p.cut });
-    return { source: "fallback", reason: ex && !ex.reviewed ? "ядро из файла не проверено — собрано из полей карточки" : "собрано из полей карточки",
-      identity: d.kept, personality: p.kept, traits: [], voice: [], durableContext: [], truncated, rest: { description: d.rest, personality: p.rest } };
+    const mm = m || ((x) => x), cd = card || {}, fields = CM.normalizeContextFields(cd.contextFields);
+    const primary = {
+      description: fields.description ? mm(str(cd.description)).trim() : "",
+      personality: fields.personality ? mm(str(cd.personality)).trim() : "",
+      appearance: fields.appearance ? mm(str(cd.appearance)).trim() : "",
+    };
+    const ex = fields.prismCore ? normCore(cd.prismCore) : null;
+    const explicit = ex && ex.reviewed;
+    return { source: explicit ? "explicit" : "fallback",
+      reason: ex && !ex.reviewed ? "ядро из файла не проверено; выбранные основные поля передаются целиком" : "выбранные основные поля передаются целиком",
+      identity: explicit ? mm(ex.identity) : primary.description,
+      personality: explicit ? "" : primary.personality,
+      traits: explicit ? ex.traits.map(mm) : [], voice: explicit ? ex.voice.map(mm) : [],
+      durableContext: explicit ? ex.durableContext.map(mm) : [],
+      primary, fields, truncated: [], rest: { description: "", personality: "" } };
   }
 
-  // Явное ядро из полей карточки (кнопка «Собрать из карточки»): детерминированно, без модели. Пользователь правит и сохраняет сам.
+  // Optional manual Core starts from complete text, never from a character cap.
   function deriveCore(card) {
     const cd = card || {};
-    const d = capText(str(cd.description), CAP), p = capText(str(cd.personality), CAP);
-    return { schema: CORE_SCHEMA, identity: d.kept, traits: p.kept ? paragraphs(p.kept) : [], voice: [], durableContext: [], source: "derived", reviewed: true };
+    return { schema: CORE_SCHEMA, identity: str(cd.description).trim(), traits: paragraphs(cd.personality),
+      voice: [], durableContext: [], source: "derived", reviewed: true };
+  }
+
+  // Text-only estimate for the permanent selection, not the complete request.
+  // Colours use 20% / 40% of the configured input window (after output reserve).
+  function tokenUsage(card, budget) {
+    const k = core(card), estimate = PRP.util.estimateTokens, ex = normCore((card || {}).prismCore);
+    const fields = { description: estimate(str((card || {}).description)), personality: estimate(str((card || {}).personality)),
+      appearance: estimate(str((card || {}).appearance)), prismCore: estimate(ex ? [ex.identity, ...ex.traits, ...ex.voice, ...ex.durableContext].join("\n") : "") };
+    const total = Object.keys(fields).reduce((n, key) => n + (k.fields[key] && (key !== "prismCore" || k.source === "explicit") ? fields[key] : 0), 0);
+    const level = total === 0 || budget > 0 && total <= budget * .2 ? "normal" : budget > 0 && total <= budget * .4 ? "warn" : "danger";
+    return { fields, total, budget, level };
   }
 
   /* ── Подробности ──────────────────────────────────────────────────── */
@@ -128,11 +87,11 @@
     }
     return out;
   }
-  // Куски подробностей: остаток описания и личности (после ядра), прошлое, внешность. id — «поле#номер».
+  // Optional legacy background/custom details; primary fields never enter this selector.
   function chunks(card, k, m) {
     const mm = m || ((x) => x);
     const cd = card || {};
-    const src = { description: k.rest.description, personality: k.rest.personality, background: mm(str(cd.background)).trim(), appearance: mm(str(cd.appearance)).trim() };
+    const src = { description: "", personality: "", background: mm(str(cd.background)).trim(), appearance: "" };
     const out = [];
     for (const f of FIELDS) splitChunks(src[f]).forEach((text, i) => out.push({ id: `${f}#${i + 1}`, field: f, text, order: out.length }));
     // Custom fields are opt-in card facts. Never interpret their labels as prompt roles.
@@ -218,6 +177,6 @@
     return { keep: 0, rule: `ответов персонажа ${n} — голос уже виден в истории, примеры не подаются` };
   }
 
-  PRP.cardContext = { CORE_SCHEMA, CAP, CHUNK_MAX, CHUNK_LIMIT, EXAMPLES, FIELD_WORD, normCore, capText, core, deriveCore, chunks, select, exampleBlocks, examplesFor, sentences, paragraphs };
+  PRP.cardContext = { CORE_SCHEMA, CHUNK_MAX, CHUNK_LIMIT, EXAMPLES, FIELD_WORD, normCore, core, deriveCore, tokenUsage, chunks, select, exampleBlocks, examplesFor, sentences, paragraphs };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardContext;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -23,19 +23,27 @@
         <span class="help">${help}</span></div>`;
     };
     const state = m.modal || {};
+    const selection = PRP.cardModel.normalizeContextFields(d.contextFields);
+    const usage = PRP.cardContext.tokenUsage(d, m.cardInputBudget || 0);
+    const send = (key) => `<label class="check"><input type="checkbox" data-cf-send="${key}" ${selection[key] ? "checked" : ""}><span>Передавать в отыгрыш · ≈ <span data-card-field-tokens="${key}">${usage.fields[key]}</span> ток.</span></label>`;
     let body = "";
     if (section === "main") {
       body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${R.safeImageSrc(d.avatar) ? "" : R.artBg(d.name)}">${R.safeImageSrc(d.avatar) ? `<img src="${R.safeImageSrc(d.avatar)}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div>
           <div class="card-identity-name">${f("cf-name", "Имя", "name", d.name)}</div></div>
         <div class="card-fields">
+          <div class="card-token-summary ${usage.level}" id="card-token-summary" role="status">${tokenSummary(usage)}</div>
           ${f("cf-desc", "Описание", "description", d.description, 7, "Кто это — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
+          ${send("description")}
           ${f("cf-app", "Внешность", "", d.appearance, 3, "При экспорте в Character Card добавляется в description абзацем «Внешность».")}
+          ${send("appearance")}
           ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
+          ${send("personality")}
           ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>
         <details class="card-disclosure"><summary>Ядро для Prism — расширенная настройка</summary>
+          ${send("prismCore")}
           ${coreBlock(d)}</details>
         <details class="card-disclosure" ${(d.customFields || []).length ? "open" : ""}>
           <summary>Пользовательские поля (${(d.customFields || []).length})</summary>
@@ -137,28 +145,23 @@
       <nav class="modal-nav">${nav.map(([id, n, ic]) => `<button class="rail-item ${section === id ? "active" : ""}" data-act="card-section" data-section="${id}">${icon(ic)}${n}</button>`).join("")}</nav>
       <div class="modal-body">${body}</div></div></div>`;
   }
-  /* Ядро для Prism: что модель получает о персонаже на каждом ходе. Явное ядро правится здесь;
-     без него показывается запасное, собранное из полей (без модели). Остальное из карточки подаётся по ходу разговора. */
+  // Optional explicit Core; primary fields need no manual summary or character cap.
   function coreBlock(d) {
     const CC = PRP.cardContext;
     const ex = CC.normCore(d.prismCore);
-    const fb = CC.core(Object.assign({}, d, { prismCore: null }));
-    const state = !ex ? "Запасное — собрано из описания и личности" : ex.source === "imported" && !ex.reviewed ? "Из файла, не проверено — пока используется запасное" : "Задано явно";
+    const enabled = PRP.cardModel.normalizeContextFields(d.contextFields).prismCore;
+    const state = !ex ? "Не заполнено" : !enabled ? "Передача выключена" : !ex.reviewed ? "Из файла, не проверено" : "Включено";
     const lines = (a) => esc((a || []).join("\n"));
     const ta = (id, label, val, rows, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="${rows}" data-core="${id}" placeholder="${esc(ph)}">${val}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
-    const preview = !ex || !ex.reviewed ? `<div class="core-preview"><span class="label">Сейчас Prism использует</span>
-        <p class="hint"><b>Описание:</b> ${esc(fb.identity || "—")}</p><p class="hint"><b>Личность:</b> ${esc(fb.personality || "—")}</p>
-        ${fb.truncated.length ? `<p class="hint">Сокращено: ${fb.truncated.map((x) => `${x.field === "description" ? "описание" : "личность"} ${x.kept} из ${x.total} симв.${x.cut === "word" || x.cut === "hard" ? " (первое предложение слишком длинное — обрезано, «…»)" : ""}`).join(", ")}. Остальное подаётся, когда относится к разговору.</p>` : ""}</div>` : "";
     return `<div class="block core-block" id="prism-core"><div class="block-title" style="margin-top:22px">Ядро для Prism <span class="tag" id="core-state">${esc(state)}</span></div>
-      <p class="hint">Коротко о том, кто это: подаётся модели на каждом ходе. Прошлое, внешность и подробности описания подаются, только когда относятся к разговору. Поля карточки не меняются; модель ядро не пишет.</p>
-      ${preview}
+      <p class="hint">Необязательные дополнительные сведения. Заполнять ядро не требуется: выбранные описание, личность и внешность передаются целиком. Ядро отправляется только при включённой галочке; текст не обрезается. Совпадающие сведения пока могут повторяться.</p>
       ${ta("core-identity", "Кто это", esc(ex ? ex.identity : ""), 3, "Студентка второго курса, живёт одна в Каракуре…")}
       ${ta("core-traits", "Черты", ex ? lines(ex.traits) : "", 3, "по одной на строку", "По одной на строку.")}
       ${ta("core-voice", "Манера речи", ex ? lines(ex.voice) : "", 2, "по одной на строку")}
       ${ta("core-durable", "Устойчивое", ex ? lines(ex.durableContext) : "", 2, "постоянные обстоятельства, по одному на строку")}
       ${ex && ex.source === "imported" && !ex.reviewed ? `<label class="check"><input type="checkbox" data-core-reviewed><span>Проверено — использовать это ядро</span></label>` : ""}
       <div class="row wrap"><button class="btn btn-sm" data-act="core-derive">Собрать из карточки</button>
-        ${ex ? `<button class="btn btn-sm btn-ghost" data-act="core-clear">Сбросить — собирать автоматически</button>` : ""}</div></div>`;
+        ${ex ? `<button class="btn btn-sm btn-ghost" data-act="core-clear">Очистить ядро</button>` : ""}</div></div>`;
   }
   // Откуда карточка: формат исходника и то, что сохранено без использования. Только показ.
   function sourceBlock(s) {
@@ -171,5 +174,9 @@
       ${pres.length ? `<br>Сохранено без использования: ${pres.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}
       ${unm ? `<br>Неизвестные поля: ${s.unmapped.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}</p>`;
   }
-  Object.assign((PRP.views = PRP.views || {}), { cardModal });
+  function tokenSummary(usage) {
+    const label = { normal: "оптимальный объём", warn: "стоит сократить", danger: "очень большой объём" }[usage.level];
+    return `Выбранные основные поля: ≈ ${usage.total} ток. · ${label}<small>Оценка текста, без истории и служебных разделов. Цвет: до 20% входного окна — обычный, до 40% — жёлтый, выше — красный. Поля не обрезаются; если весь запрос не помещается, генерация не отправляется.</small>`;
+  }
+  Object.assign((PRP.views = PRP.views || {}), { cardModal, cardTokenSummary: tokenSummary });
 })(typeof window !== "undefined" ? window : globalThis);

@@ -182,6 +182,7 @@
         user: ctx.persona && ctx.persona() && ctx.persona().name || "Пользователь" };
       const canonical = PRP.cardContext.core(cd, (x) => U.macros(x, macroNames));
       const core = { name: cd.name, source: canonical.source,
+        primaryFields: canonical.source === "explicit" ? canonical.primary : { appearance: canonical.primary.appearance },
         identity: canonical.identity, personality: canonical.personality,
         traits: canonical.traits, voice: canonical.voice, durableContext: canonical.durableContext };
       const payload = { mode: initialChat.mode, coreGuide: core,

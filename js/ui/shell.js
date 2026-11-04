@@ -35,6 +35,7 @@
         branchTreeUi: S.branchTreeUi && ctx.chat() && S.branchTreeUi.chatId === ctx.chat().id ? S.branchTreeUi : null,
         dialogueMap: S.modal && S.modal.kind === "tree" && ctx.chat() ? TR.layout(S.messages.filter((x) => x.chatId === ctx.chat().id), ctx.chat().leafId) : null,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
+        cardInputBudget: Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 0)),
         observedMemories: svc().memory.visibleMemories(path), currentExperience: svc().memory.experience(path), memoryStatus: S.memoryStatus,
         memoryTimeline: S.drawerOpen && S.tab === "memory" && ctx.chat() ? svc().memory.timeline(path) : null,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.

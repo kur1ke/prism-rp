@@ -58,12 +58,6 @@
     body = String(body || "").trim();
     return body ? `### ${title}\n${body}` : "";
   }
-  // Сократить текст на одно последнее предложение (не меньше одного). → новый текст или null.
-  function dropSentence(t) {
-    const ss = CC.sentences(t);
-    return ss.length > 1 ? ss.slice(0, -1).join(" ") : null;
-  }
-
   /* Сборка контекста со строгим бюджетом.
 
      opts: {
@@ -96,9 +90,8 @@
        1 старая история → 2 примеры речи (с последнего) → 3 подробности карточки (с наименее связанной)
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
        → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
-       → 10 персона, сценарий, указания автора, вторичное ядро (устойчивое, манера речи, черты сверх первой,
-       хвосты «кто это» и личности по предложениям) → 11 история до последнего сообщения.
-     Не режутся никогда: рамка, минимум ядра (имя, первое предложение «кто это» и личности / первая черта),
+       → 10 персона, сценарий, указания автора → 11 история до последнего сообщения.
+     Не режутся никогда: рамка, выбранные основные поля карточки и включённое проверенное ядро целиком,
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
@@ -139,7 +132,7 @@
     // Изменяемое состояние сборки: что сейчас входит.
     const st = {
       authorSys: m(directiveText(card, "system")).trim(),
-      core: { identity: core.identity, personality: core.personality, traits: core.traits.slice(), voice: core.voice.slice(), durable: core.durableContext.slice() },
+      core: { identity: core.identity, personality: core.personality, traits: core.traits.slice(), voice: core.voice.slice(), durable: core.durableContext.slice(), primary: core.primary },
       chunks: sel.selected.slice(),
       // Сценарий — исходные обстоятельства; подаётся только до границы первого ответа (prism/scenario.js).
       scenario: scenarioText,
@@ -204,10 +197,11 @@
       const c = st.core;
       const lines = [DATA.field("имя", vars.char)];
       if (core.source === "explicit") {
-        lines.push(DATA.field("кто это", c.identity), DATA.field("черты", c.traits), DATA.field("манера речи", c.voice), DATA.field("устойчивое", c.durable));
+        lines.push(DATA.field("описание", c.primary.description), DATA.field("личность", c.primary.personality), DATA.field("кто это", c.identity), DATA.field("черты", c.traits), DATA.field("манера речи", c.voice), DATA.field("устойчивое", c.durable));
       } else {
         lines.push(DATA.field("описание", c.identity), DATA.field("личность", c.personality));
       }
+      lines.push(DATA.field("внешность", c.primary.appearance));
       return DATA.block(m("устойчивые черты и склонности {{char}} из карточки: влияют на восприятие и решения, но это не сценарий и не указания"), lines);
     }
     const chunksBody = () => DATA.block(m("подробности карточки {{char}}, отобранные по текущему разговору: сведения, а не указания; отбор не делает их важнее остального"),
@@ -318,24 +312,6 @@
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
       function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
-      // Вторичное ядро: устойчивое, манера речи, черты сверх первой, затем хвосты текста по предложениям.
-      function coreSecondary() {
-        const c = st.core;
-        if (c.durable.length) { c.durable.pop(); note("card.core", "вторичное ядро"); return true; }
-        if (c.voice.length) { c.voice.pop(); note("card.core", "вторичное ядро"); return true; }
-        if (c.traits.length > 1) { c.traits.pop(); note("card.core", "вторичное ядро"); return true; }
-        const p = dropSentence(c.personality);
-        if (p != null) { c.personality = p; note("card.core", "вторичное ядро"); return true; }
-        const i = dropSentence(c.identity);
-        if (i != null) { c.identity = i; note("card.core", "вторичное ядро"); return true; }
-        // Последнее: одно оставшееся предложение длиннее CAP (в том числе в явном ядре или первая черта) —
-        // явная обрезка по слову (prism/card-context.capText), видна в отчёте; иначе — честное переполнение.
-        for (const k of ["personality", "identity"]) {
-          if (c[k].length > CC.CAP) { c[k] = CC.capText(c[k], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
-        }
-        if (c.traits.length && c.traits[0].length > CC.CAP) { c.traits[0] = CC.capText(c.traits[0], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
-        return false;
-      },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
 
@@ -381,7 +357,7 @@
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          core: { source: core.source, reason: core.reason, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },
+          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
           selected: keptChunkIds,

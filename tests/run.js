@@ -487,29 +487,21 @@ t("PRISM1-18: огромный лорбук ≤ бюджета", () => {
   strict(r);
   assert.ok(r.report.loreDropped > 0 && r.report.loreKept < 50);
 });
-// FOUNDATION-H: огромное описание больше не урезается бюджетом с хвоста — в ядро идёт его начало (запасное ядро,
-// по абзацам и предложениям), остальное — выборочными подробностями только при связи с ходом.
-t("PRISM1-19: огромная карточка — детерминированно, ядро по абзацам и предложениям, имя на месте", () => {
+// F07: selected primary fields remain complete; insufficient context is explicit.
+t("PRISM1-19: huge selected card is deterministic and overflows without truncating character", () => {
   const desc = Array.from({ length: 40 }, (_, i) => `Абзац ${i}. ` + big(40, "текст ") + ".").join("\n\n");
-  const c = Object.assign({}, authorCard, { description: desc, scenario: big(300), mesExample: big(300) });
-  const r1 = A.build(Object.assign({ card: c, stateSnapshot: baseScene, history: hist(4, 20) }, BUD));
-  const r2 = A.build(Object.assign({ card: c, stateSnapshot: baseScene, history: hist(4, 20) }, BUD));
-  strict(r1);
-  assert.deepStrictEqual(r1.messages, r2.messages);
-  assert.strictEqual(c.description, desc, "карточка не меняется");
-  const h = r1.messages[0].content;
-  assert.ok(h.includes("### Характер Юки") && h.includes('- имя: "Юки"') && h.includes("Абзац 0."));
-  assert.ok(!h.includes("Абзац 39."), "нерелевантный остаток описания не подаётся");
-  const core = r1.report.card.core;
-  assert.strictEqual(core.source, "fallback");
-  assert.strictEqual(core.truncated[0].field, "description"); assert.strictEqual(core.truncated[0].total, desc.length);
-  assert.ok(core.truncated[0].kept <= globalThis.PRP.cardContext.CAP);
-  // Абзацы и предложения не режутся посередине: в ядре только целые «Абзац N. … .»
-  const line = h.split("\n").find((l) => l.startsWith("- описание: "));
-  const kept = JSON.parse(line.slice("- описание: ".length));
-  assert.ok(kept.split("\n\n").every((p) => /^Абзац \d+\./.test(p) && p.endsWith(".")), kept);
-  assert.ok(r1.report.card.candidates.some((x) => x.id === "description#1" && x.state === "no-relation"));
+  const c = Object.assign({}, authorCard, { description: desc });
+  const opts = Object.assign({ card: c, stateSnapshot: baseScene, history: hist(4,20) }, BUD);
+  const r1 = A.build(opts), r2 = A.build(opts);
+  assert.deepStrictEqual(r1.messages,r2.messages); assert.strictEqual(c.description,desc);
+  assert.strictEqual(r1.report.overflow,true);
+  const h=r1.messages[0].content;
+  assert.ok(h.includes('имя: "Юки"') && h.includes("Абзац 39."));
+  const line=h.split("\n").find(l=>l.startsWith("- описание: "));
+  assert.strictEqual(JSON.parse(line.slice("- описание: ".length)),desc);
+  assert.deepStrictEqual(r1.report.card.core.truncated,[]);
 });
+
 t("огромные указания после истории ≤ бюджета, уступают раньше карточки", () => {
   const c = Object.assign({}, authorCard, { directives: authored("always answer in first person", big(3000)) });
   const r = A.build(Object.assign({ card: c, stateSnapshot: baseScene, history: hist(4, 20) }, BUD));
@@ -1380,10 +1372,10 @@ t("FA unit: старые сохранённые карточки приводя�
 });
 // FOUNDATION-H изменил смысл: внешность и прошлое — выборочные подробности (входят при связи с ходом)
 // и уступают бюджету раньше ядра.
-t("FA unit: внешность и прошлое — подробности по связи с ходом, уступают бюджету раньше ядра", () => {
+t("FA unit: selected appearance is protected; optional background yields before character", () => {
   const c = Object.assign(CM.blank(), { name: "N", description: "DESC-CORE", appearance: "APP-X рыжие волосы", background: "BG-Y выросла в Каракуре" });
   const quiet = A.build({ card: c, history: [{ role: "user", text: "привет" }] }).messages[0].content;
-  assert.ok(quiet.includes("DESC-CORE") && !quiet.includes("APP-X") && !quiet.includes("BG-Y"), "без связи с ходом — только ядро");
+  assert.ok(quiet.includes("DESC-CORE") && quiet.includes("APP-X") && !quiet.includes("BG-Y"), "без связи с ходом — только ядро");
   const asked = A.build({ card: c, history: [{ role: "user", text: "Ты правда выросла в Каракуре? И какие у тебя волосы?" }] }).messages[0].content;
   assert.ok(asked.includes('- прошлое: "BG-Y выросла в Каракуре"') && asked.includes('- внешность: "APP-X рыжие волосы"'), asked);
   const fat = Object.assign(CM.blank(), { name: "N", description: "DESC-CORE", appearance: "APP-X волосы " + big(700), background: "BG-Y Каракура " + big(700) });
@@ -5733,13 +5725,13 @@ async function foundationH() {
   const CARD = { name: "Химэ", description: "Студентка второго курса. Живёт одна.", personality: "Ревнивая, но отходчивая.", background: "Выросла в Каракуре с братом Сорой.\n\nВ школе дружила с Тацуки.", appearance: "Рыжие волосы до пояса, карие глаза.",
     mesExample: "<START>\n{{char}}: Ну и ладно!\n<START>\n{{char}}: Ой.\n<START>\n{{char}}: Хм." };
   const sysOf = (card, history, extra) => A.build(Object.assign({ card, userName: "Кира", history }, extra)).messages[0].content;
-  await ta("H-F1: явное ядро используется; нет ядра — запасное; сброс — снова запасное; без вызовов модели; карточка не меняется", async () => {
-    const explicit = Object.assign({}, CARD, { prismCore: { schema: 1, identity: "CORE-ID", traits: ["CORE-T1", "CORE-T2"], voice: ["CORE-V"], durableContext: ["CORE-D"], source: "manual", reviewed: true } });
+  await ta("H-F1: явное ядро включается отдельно; выбранные поля остаются; без вызовов модели; карточка не меняется", async () => {
+    const explicit = Object.assign({}, CARD, { contextFields: { prismCore: true }, prismCore: { schema: 1, identity: "CORE-ID", traits: ["CORE-T1", "CORE-T2"], voice: ["CORE-V"], durableContext: ["CORE-D"], source: "manual", reviewed: true } });
     const before = JSON.stringify(explicit);
     const r = A.build({ card: explicit, history: [{ role: "user", text: "hi" }] });
     const s1 = r.messages[0].content;
     assert.ok(s1.includes('- кто это: "CORE-ID"') && s1.includes('- черты: "CORE-T1", "CORE-T2"') && s1.includes('- манера речи: "CORE-V"') && s1.includes('- устойчивое: "CORE-D"'));
-    assert.ok(!s1.includes("- описание: "), "явное ядро вместо запасного");
+    assert.ok(s1.includes("- описание: "), "выбранное описание остаётся рядом с дополнительным ядром");
     assert.strictEqual(r.report.card.core.source, "explicit");
     assert.strictEqual(JSON.stringify(explicit), before, "сборка карточку не меняет");
     const s2 = sysOf(CARD, [{ role: "user", text: "hi" }]);
@@ -5758,11 +5750,11 @@ async function foundationH() {
     const old = { id: "o", schema: 2, name: "Old", description: "d", lore: [], directives: authored("", "") };
     assert.strictEqual(CM.upgradeStored(old), old, "старая карточка без ядра не переписывается");
   });
-  await ta("H-F2: запасное ядро — по предложениям, отчёт о сокращении; «Собрать из карточки» детерминированно; экспорт и импорт ядра — данные в своём расширении", async () => {
+  await ta("H-F2: полные поля без сокращения; «Собрать из карточки» детерминированно; экспорт и импорт ядра — данные в своём расширении", async () => {
     const long = Array.from({ length: 30 }, (_, i) => `Предложение номер ${i} про героиню.`).join(" ");
     const k = CCX.core({ name: "X", description: long }, null);
-    assert.ok(k.identity.length <= CCX.CAP && k.identity.endsWith(".") && k.truncated[0].total === long.length);
-    assert.strictEqual(k.identity + " " + k.rest.description, long, "остаток не теряется");
+    assert.strictEqual(k.identity, long);
+    assert.strictEqual(k.rest.description, ""); assert.deepStrictEqual(k.truncated, []);
     assert.deepStrictEqual(CCX.deriveCore(CARD), CCX.deriveCore(CARD));
     assert.strictEqual(CCX.deriveCore(CARD).source, "derived");
     const withCore = Object.assign(CM.blank(), CARD, { prismCore: { schema: 1, identity: "CORE-ID", traits: ["T"], voice: [], durableContext: [], source: "manual", reviewed: true } });
@@ -5773,9 +5765,9 @@ async function foundationH() {
     assert.deepStrictEqual([back.prismCore.identity, back.prismCore.source, back.prismCore.reviewed], ["CORE-ID", "imported", false]);
     assert.ok(!back.directives.system.text.includes("CORE-ID"), "ядро из файла не становится указанием");
   });
-  await ta("H-G1: подробности — связанное прошлое входит, несвязанное нет; внешность — по разговору о внешности или для начала сцены", async () => {
+  await ta("H-G1: прошлое пока отбирается по связи; выбранная внешность передаётся всегда", async () => {
     const q = sysOf(CARD, [{ role: "user", text: "Как прошёл день?" }]);
-    assert.ok(!q.includes("Каракуре") && !q.includes("Тацуки") && !q.includes("Рыжие волосы"));
+    assert.ok(!q.includes("Каракуре") && !q.includes("Тацуки") && q.includes("Рыжие волосы"));
     const sora = A.build({ card: CARD, userName: "Кира", history: [{ role: "user", text: "Как там Сора?" }] });
     const ss = sora.messages[0].content;
     assert.ok(ss.includes("Выросла в Каракуре с братом Сорой.") && !ss.includes("дружила с Тацуки"), "только связанный кусок");
@@ -5788,7 +5780,7 @@ async function foundationH() {
     // важность/порядок не дают права войти: несвязанный кусок не входит, даже если он первый
     assert.ok(!sysOf(CARD, [{ role: "user", text: "ok" }]).includes("Выросла"));
     // признак внешности — только начало слова: «просто», «улица» внешность не тянут
-    assert.ok(!sysOf(CARD, [{ role: "user", text: "Просто гуляю, улица пустая." }]).includes("Рыжие волосы"));
+    assert.ok(sysOf(CARD, [{ role: "user", text: "Просто гуляю, улица пустая." }]).includes("Рыжие волосы"));
   });
   await ta("H-G2: примеры речи — все в начале, один при 3–5 ответах персонажа, ни одного после 6", async () => {
     const turns = (n) => Array.from({ length: n * 2 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", text: "t" + i }));
@@ -5819,99 +5811,28 @@ async function foundationH() {
   });
 }
 
-/* ── FOUNDATION-H (исправление): жёсткий предел запасного ядра и диагностический срез «вся карточка → ядро + подробности» ── */
-const BASELINE = [];
+/* ── F07: the old capped-Core diagnostic contract has been replaced. ── */
 async function foundationHFix() {
-  const PRP = globalThis.PRP, CCX = PRP.cardContext, U = PRP.util;
-  const noPunct = (n, w) => Array.from({ length: n }, (_, i) => (w || "слово") + i).join(" ");
-  await ta("H-FIX-1: первое предложение длиннее предела не входит в ядро целиком — обрезка по слову, явно и в отчёте", async () => {
-    const desc = noPunct(400), pers = noPunct(300, "черта");
-    const k = CCX.core({ name: "X", description: desc, personality: pers }, null);
-    for (const [kept, field] of [[k.identity, "description"], [k.personality, "personality"]]) {
-      assert.ok(kept.length <= CCX.CAP && kept.endsWith(" …"), field + ": " + kept.length);
-      const tr = k.truncated.find((x) => x.field === field);
-      assert.strictEqual(tr.cut, "word");
+  const CCX=globalThis.PRP.cardContext;
+  await ta("F07 no-punctuation text and full derived Core do not lose their endings",async()=>{
+    const card={description:"я".repeat(5000),personality:"черта ".repeat(1000)+"END"};
+    const k=CCX.core(card),derived=CCX.deriveCore(card);
+    assert.strictEqual(k.identity,card.description);assert.strictEqual(k.personality,card.personality);
+    assert.strictEqual(derived.identity,card.description);assert.ok(derived.traits.join(" ").endsWith("END"));
+  });
+  await ta("F07 oversized protected fields explicitly overflow without mutation",async()=>{
+    const card={name:"Химэ",description:"описание ".repeat(3000),personality:"черта ".repeat(3000)};
+    const before=JSON.stringify(card),r=A.build(Object.assign({card,history:hist(4,20)},BUD));
+    assert.strictEqual(r.report.overflow,true);assert.strictEqual(JSON.stringify(card),before);
+    assert.deepStrictEqual(r.report.card.core.truncated,[]);
+    assert.ok(!r.report.truncated.some(t=>t.layer==="card.core"));
+  });
+  await ta("F07 late defining trait remains present with unrelated or one-word user input",async()=>{
+    const card={name:"Дзюн",description:"Повар.",personality:"Любит порядок. ".repeat(100)+"Панически боится воды."};
+    for(const text of ["Что готовишь?","Пойдём купаться, вода тёплая!"]){
+      const r=A.build({card,history:[{role:"user",text}],contextTokens:16000});
+      assert.strictEqual(r.report.overflow,false);assert.ok(r.messages[0].content.includes("Панически боится воды."));
     }
-    // остаток не теряется: обрезанное начало + остаток = исходный текст
-    assert.strictEqual(k.identity.replace(/ …$/, "") + " " + k.rest.description, desc);
-    // совсем без пробелов — обрезка ровно по символам
-    const blob = "я".repeat(5000);
-    const kb = CCX.core({ name: "X", description: blob }, null);
-    assert.ok(kb.identity.length <= CCX.CAP && kb.truncated[0].cut === "hard");
-    assert.strictEqual(kb.identity.replace(/ …$/, "") + kb.rest.description, blob);
-    // обычные предложения по-прежнему не режутся посередине
-    const k2 = CCX.core({ name: "X", description: Array.from({ length: 40 }, (_, i) => `Фраза ${i} о героине.`).join(" ") }, null);
-    assert.strictEqual(k2.truncated[0].cut, "sentence"); assert.ok(k2.identity.endsWith("."));
-  });
-  await ta("H-FIX-2: огромные поля без знаков препинания — строгий бюджет держится, отчёт показывает обрезку; карточка не меняется", async () => {
-    const card = { name: "Химэ", description: noPunct(3000), personality: noPunct(3000, "черта"), background: noPunct(3000, "прошлое"), appearance: noPunct(2000, "вид") };
-    const before = JSON.stringify(card);
-    const r = A.build(Object.assign({ card, stateSnapshot: baseScene, history: hist(4, 20) }, BUD));
-    strict(r);
-    assert.strictEqual(JSON.stringify(card), before);
-    assert.deepStrictEqual(r.report.card.core.truncated.map((x) => x.cut), ["word", "word"]);
-    assert.ok(r.report.card.core.tokens < 450, "ядро ограничено: " + r.report.card.core.tokens);
-    // явное ядро с огромным единственным предложением — при нехватке места обрезается последним шагом ядра, без переполнения
-    const ex = Object.assign({}, card, { prismCore: { schema: 1, identity: noPunct(2500), traits: [], voice: [], durableContext: [], source: "manual", reviewed: true } });
-    const r2 = A.build(Object.assign({ card: ex, stateSnapshot: baseScene, history: hist(4, 20) }, BUD));
-    strict(r2);
-    assert.ok(r2.report.truncated.some((t) => t.layer === "card.core" && /обрезано до 600/.test(t.detail || "")), JSON.stringify(r2.report.truncated));
-  });
-
-  /* Диагностический срез: прежняя подача карточки целиком (описание, внешность, личность, прошлое, все примеры)
-     против FOUNDATION-H (ядро + отобранные подробности + примеры по правилу). Токены — оценка U.estimateTokens.
-     Это не доказательство смыслового равенства: только размер и что именно вошло. */
-  const oldTokens = (c) => U.estimateTokens([c.description, c.appearance ? "Внешность: " + c.appearance : "", c.personality ? "Личность: " + c.personality : "",
-    c.background ? "Прошлое: " + c.background : "", String(c.mesExample || "").replace(/<START>/gi, "")].filter(Boolean).join("\n\n"));
-  const measure = (id, card, history, extra) => {
-    const r = A.build(Object.assign({ card, userName: "Кира", history }, extra || {}));
-    const sys = r.messages[0].content;
-    const sec = (title) => { const i = sys.indexOf("### " + title); if (i < 0) return ""; const j = sys.indexOf("\n\n### ", i + 4); return sys.slice(i, j < 0 ? undefined : j); };
-    const row = { id, old: oldTokens(card), core: r.report.card.core.tokens, details: U.estimateTokens(sec("Подробности о " + card.name)), examples: U.estimateTokens(sec("Примеры манеры речи " + card.name)),
-      selected: r.report.card.selected, dropped: r.report.card.candidates.filter((x) => x.state !== "selected").map((x) => x.id), coreSource: r.report.card.core.source, cut: r.report.card.core.truncated.map((x) => x.field + ":" + x.cut) };
-    row.total = row.core + row.details + row.examples;
-    BASELINE.push(row);
-    return { r, sys, row };
-  };
-  const long = (n, s) => Array.from({ length: n }, (_, i) => s.replace("#", i)).join(" ");
-  await ta("H-FIX-3: срез A–F — прежняя карточка целиком против ядра и подробностей (диагностика)", async () => {
-    // A. Короткая карточка: всё помещается в ядро, ничего не теряется.
-    const A_ = { name: "Ая", description: "Тихая студентка-библиотекарь.", personality: "Застенчивая, наблюдательная." };
-    const a = measure("A concise", A_, [{ role: "user", text: "Привет" }]);
-    assert.ok(a.sys.includes("Тихая студентка-библиотекарь.") && a.sys.includes("Застенчивая, наблюдательная.") && !a.row.cut.length);
-    // B. Длинная карточка, важные черты в начале: черты в ядре.
-    const B_ = { name: "Бэн", description: "Бывший солдат, вспыльчивый и прямолинейный. " + long(60, "Подробность службы номер # в гарнизоне."), personality: "Честен до грубости." };
-    const b = measure("B traits early", B_, [{ role: "user", text: "Как дела?" }]);
-    assert.ok(b.sys.includes("вспыльчивый и прямолинейный") && b.sys.includes("Честен до грубости."));
-    // C. Длинная карточка, важная история в конце: входит, только когда о ней речь.
-    const C_ = { name: "Сэй", description: "Художница.", personality: "Мечтательная.", background: long(30, "Обычный год # в Токио.") + "\n\nВ детстве пережила пожар в доме на Хоккайдо и с тех пор боится огня." };
-    const c0 = measure("C history late (unrelated)", C_, [{ role: "user", text: "Что рисуешь?" }]);
-    const c1 = measure("C history late (asked)", C_, [{ role: "user", text: "Ты когда-нибудь была на Хоккайдо? Говорят, там был пожар." }]);
-    assert.ok(!c0.sys.includes("боится огня") && c1.sys.includes("боится огня"), "поздняя история — по связи с ходом");
-    // D. Многословная личность с редкой определяющей чертой в конце.
-    const D_ = { name: "Дзюн", description: "Повар.", personality: long(30, "Любит порядок на кухне, пункт #.") + " Определяющее: панически боится воды." };
-    const d0 = measure("D rare trait (unrelated)", D_, [{ role: "user", text: "Что готовишь?" }]);
-    const d1 = measure("D rare trait (asked)", D_, [{ role: "user", text: "Ты боишься воды?" }]);
-    const d2 = measure("D rare trait (one-word link)", D_, [{ role: "user", text: "Пойдём купаться, вода тёплая!" }]);
-    // Явный риск верности: определяющая черта поздно в длинной личности не попадает в запасное ядро и
-    // подаётся только при связи с ходом. Решение — явное ядро (пользователь выносит черту в «Черты»).
-    assert.ok(!d0.sys.includes("боится воды"), "РИСК: поздняя определяющая черта вне запасного ядра");
-    assert.ok(d1.sys.includes("боится воды"), "при прямой связи с ходом черта подаётся");
-    // РИСК: связь только по одному слову («вода») недостаточна — черта не подаётся там, где она важна по смыслу.
-    assert.ok(!d2.sys.includes("боится воды"), "РИСК зафиксирован: одно общее слово — не связь");
-    const dx = measure("D rare trait (explicit core)", Object.assign({}, D_, { prismCore: { schema: 1, identity: "Повар.", traits: ["панически боится воды"], voice: [], durableContext: [], source: "manual", reviewed: true } }), [{ role: "user", text: "Что готовишь?" }]);
-    assert.ok(dx.sys.includes("панически боится воды"), "явное ядро держит черту всегда");
-    // E. Внешность важна только в своих сценах.
-    const E_ = { name: "Эри", description: "Модель.", personality: "Уверенная.", appearance: "Серебристые волосы до пояса, шрам над левой бровью." };
-    const e0 = measure("E visual (unrelated)", E_, [{ role: "user", text: "Как прошёл день?" }]);
-    const e1 = measure("E visual (photo)", E_, [{ role: "user", text: "Скинь фото, как ты выглядишь" }]);
-    assert.ok(!e0.sys.includes("Серебристые волосы") && e1.sys.includes("Серебристые волосы"));
-    // F. Длинные примеры диалога: в начале все, с 6 ответов персонажа — ни одного.
-    const F_ = { name: "Фуми", description: "Болтушка.", personality: "Весёлая.", mesExample: Array.from({ length: 5 }, (_, i) => `<START>\n{{user}}: Вопрос ${i}?\n{{char}}: ` + long(15, "Длинный ответ #.")).join("\n") };
-    const turns = (n) => Array.from({ length: n * 2 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", text: "t" + i }));
-    const f0 = measure("F examples (start)", F_, turns(0).concat([{ role: "user", text: "Привет" }]));
-    const f6 = measure("F examples (6 turns)", F_, turns(6).concat([{ role: "user", text: "Ещё" }]));
-    assert.ok(f0.row.examples > 0 && f6.row.examples === 0);
   });
 }
 
@@ -8375,7 +8296,7 @@ t("CARD-Q: V3 nickname is custom info; technical V3 fields are not active", () =
     const context = { PRP: Object.assign({
       render: RN, scene: {}, tree: {}, openai: {}, messengerTime: { systemTimeZone: () => "UTC" },
       viewKit: { SAMPLER_PRESETS: [], THEMES: [], WEATHER: [], loraRows: () => "" },
-      cardContext: { normCore: () => null, core: () => ({ identity: "", personality: "", truncated: [] }) }, views: {}
+      cardModel: CM, cardContext: globalThis.PRP.cardContext, views: {}
     }, opts || {}) };
     context.globalThis = context;
     files.forEach((path) => vm.runInNewContext(fs.readFileSync(J(path), "utf8"), context));
@@ -9362,11 +9283,7 @@ const TR_ = globalThis.PRP.tree;
 // Do not let an unresolved async fixture finish Node with exit code 0.
 // The suite normally completes in seconds; a pending test must fail CI.
 setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
-foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./perchance-budget.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./image-result-commit.js")({ make: fbHarness, test: ta })).then(() => require("./image-initial-write.js")({ make: fbHarness, test: ta })).then(() => require("./generation-commit.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
-  if (BASELINE.length) {
-    console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
-    for (const r of BASELINE) console.log(`  ${r.id.padEnd(30)} было ${String(r.old).padStart(5)} → ядро ${String(r.core).padStart(4)} + подробн. ${String(r.details).padStart(4)} + примеры ${String(r.examples).padStart(4)} = ${String(r.total).padStart(5)}; ядро: ${r.coreSource}${r.cut.length ? " (" + r.cut.join(", ") + ")" : ""}; вошло: ${r.selected.join(", ") || "—"}; не вошло: ${r.dropped.length}`);
-  }
+foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./perchance-budget.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./card-fields.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./image-result-commit.js")({ make: fbHarness, test: ta })).then(() => require("./image-initial-write.js")({ make: fbHarness, test: ta })).then(() => require("./generation-commit.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
   console.log(`\n${passed} пройдено, ${failed} с ошибками`);
   process.exit(failed ? 1 : 0);
 });

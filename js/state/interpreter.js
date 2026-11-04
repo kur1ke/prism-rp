@@ -504,11 +504,16 @@
   // values are quoted data; nothing from them becomes an extra directive.
   function initialOutfitInstruction(card, setup) {
     const cd = card || {};
+    const selection = PRP.cardModel ? PRP.cardModel.normalizeContextFields(cd.contextFields) : { description: true, personality: true, appearance: true };
+    const explicit = selection.prismCore && PRP.cardContext ? PRP.cardContext.normCore(cd.prismCore) : null;
     const trim = (v, n) => String(v || "").slice(0, n);
     const input = {
       name: trim(cd.name, 160),
-      description: trim(cd.description, 1800),
-      personality: trim(cd.personality, 1100),
+      description: selection.description ? String(cd.description || "") : "",
+      personality: selection.personality ? String(cd.personality || "") : "",
+      appearance: selection.appearance ? String(cd.appearance || "") : "",
+      ...(explicit && explicit.reviewed ? { prismCore: { identity: explicit.identity, traits: explicit.traits,
+        voice: explicit.voice, durableContext: explicit.durableContext } } : {}),
       scenario: trim(cd.scenario, 1100),
       firstMessage: trim(cd.firstMes, 550),
       messenger: { timeZone: trim(setup && setup.timeZone, 80),

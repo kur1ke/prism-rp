@@ -203,6 +203,7 @@
     pr.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, pr.image.loraAdvanced && typeof pr.image.loraAdvanced === "object" && !Array.isArray(pr.image.loraAdvanced) ? pr.image.loraAdvanced : {});
     // Ядро Prism — только данные в своём расширении (никогда не в system_prompt): при импорте оно непроверенное.
     const core = PRP.cardContext && PRP.cardContext.normCore(card.prismCore);
+    pr.contextFields = PRP.cardModel.normalizeContextFields(card.contextFields);
     pr.prismCore = core ? { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext } : null;
     // Always include the Prism-specific slots, including empty fields.
     pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };

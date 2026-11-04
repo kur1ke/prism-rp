@@ -16,6 +16,8 @@
     // Поля открытого раздела редактора → черновик (S.modal.draft).
     function collectCard() {
       const d = S.modal.draft;
+      d.contextFields = PRP.cardModel.normalizeContextFields(d.contextFields);
+      $$("[data-cf-send]").forEach(el => { if (Object.prototype.hasOwnProperty.call(d.contextFields, el.dataset.cfSend)) d.contextFields[el.dataset.cfSend] = el.checked; });
       const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-bg": "background", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
       $$("[data-cf]").forEach((el) => {
         const id = el.dataset.cf;
@@ -153,6 +155,10 @@
     };
 
     async function change(t) {
+      if ((t.dataset.cfSend !== undefined || t.dataset.coreReviewed !== undefined) && S.modal && S.modal.kind === "card") {
+        updateTokenDisplay();
+        return true;
+      }
       if (t.id === "file-card") {
         const files = [...t.files];
         t.value = "";
@@ -182,6 +188,19 @@
       return false;
     }
 
-    return { actions, change };
+    function updateTokenDisplay() {
+      const d = collectCard();
+      const budget = Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 0));
+      const usage = PRP.cardContext.tokenUsage(d, budget);
+      const summary = $("#card-token-summary");
+      if (summary) { summary.innerHTML = PRP.views.cardTokenSummary(usage); summary.className = "card-token-summary " + usage.level; }
+      $$("[data-card-field-tokens]").forEach(el => { el.textContent = usage.fields[el.dataset.cardFieldTokens]; });
+      const state = $("#core-state"), ex = PRP.cardContext.normCore(d.prismCore);
+      if (state) state.textContent = !ex ? "Не заполнено" : !d.contextFields.prismCore ? "Передача выключена" : !ex.reviewed ? "Из файла, не проверено" : "Включено";
+    }
+    function input(t) {
+      if (S.modal && S.modal.kind === "card" && (t.dataset.cf || t.dataset.core)) updateTokenDisplay();
+    }
+    return { actions, change, input };
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -287,6 +287,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .editor { width: 100%; min-height: 140px; background: var(--sunken); border: 1px solid var(--accent); border-radius: var(--r-m); padding: 12px; resize: vertical; font-family: var(--read); font-size: 16px; line-height: 1.6; }
 
 /* Картинки */
+.card-token-summary { padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: var(--r-m); margin-bottom: 14px; }
+.card-token-summary small { display: block; margin-top: 5px; font-size: 12px; color: var(--muted); }
+.card-token-summary.warn { color: var(--warn); border-color: var(--warn); }
+.card-token-summary.danger { color: var(--danger); border-color: var(--danger); }
 .shots { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .shot { position: relative; margin: 0; width: min(100%, 440px); border-radius: var(--r-l); overflow: hidden; background: var(--sunken); border: 1px solid var(--line-soft); }
 .shot img { display: block; width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
@@ -1489,7 +1493,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        у каждого явный флаг enabled; импортированные приходят выключенными;
      • метаданные: creator, creatorNotes, tags, version; картинки: image;
      • prismCore — необязательное ядро для Prism (prism/card-context): компактное представление, а не источник истины;
-       видно и правится в редакторе; нет ядра (null) — Prism собирает запасное из полей. Схему карточки не меняет;
+       включается отдельно; выбранные основные поля передаются целиком, без обязательного краткого ядра;
+     • contextFields — выбор description/personality/appearance (по умолчанию включены) и prismCore (выключен);
      • source — исходник и сведения импорта, ТОЛЬКО хранение: во время работы не читается.
    Чистый модуль: без DOM, хранилища и сети. */
 (function (root) {
@@ -1497,6 +1502,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const PRP = (root.PRP = root.PRP || {});
 
   const SCHEMA = 2;
+  const CONTEXT_DEFAULTS = Object.freeze({ description: true, personality: true, appearance: true, prismCore: false });
+  function normalizeContextFields(input) {
+    const out = {};
+    for (const key of Object.keys(CONTEXT_DEFAULTS)) out[key] = input && typeof input[key] === "boolean" ? input[key] : CONTEXT_DEFAULTS[key];
+    return out;
+  }
 
   // Указание автора. Созданное в редакторе включено (отправляется, если в нём есть текст);
   // импортированное — выключено и не проверено, пока пользователь не включит его сам.
@@ -1541,6 +1552,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       creator: "", creatorNotes: "", tags: [], version: "",
       image: undefined,
       prismCore: null,
+      contextFields: normalizeContextFields(),
       avatar: null,
       source: null,
       createdAt: now, updatedAt: now,
@@ -1587,7 +1599,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
   }
 
-  PRP.cardModel = { SCHEMA, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  PRP.cardModel = { SCHEMA, CONTEXT_DEFAULTS, normalizeContextFields, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -1798,6 +1810,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     pr.image.loraAdvanced = Object.assign({ enabled: false, rules: "" }, pr.image.loraAdvanced && typeof pr.image.loraAdvanced === "object" && !Array.isArray(pr.image.loraAdvanced) ? pr.image.loraAdvanced : {});
     // Ядро Prism — только данные в своём расширении (никогда не в system_prompt): при импорте оно непроверенное.
     const core = PRP.cardContext && PRP.cardContext.normCore(card.prismCore);
+    pr.contextFields = PRP.cardModel.normalizeContextFields(card.contextFields);
     pr.prismCore = core ? { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext } : null;
     // Always include the Prism-specific slots, including empty fields.
     pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
@@ -2056,6 +2069,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     if (isObj(prism.image)) { d.image = clone(prism.image); if (isObj(d.image.loraAdvanced)) d.image.loraAdvanced.enabled = false; }
     // Import cannot enable new model-facing custom data without local user approval.
     d.customFields = CM.normalizeCustomFields(prism.customFields, true);
+    d.contextFields = CM.normalizeContextFields(prism.contextFields);
     // Source fields often survive in CCv3's standard data alongside Prism's
     // own custom-field extension. One origin path must not produce two entries.
     for (const f of customFromUnknown(data, known, "data", detection.format)) {
@@ -3790,36 +3804,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
 </script>
 <script>/* js/prism/card-context.js */
-/* Prism RP — карточка в Prism: устойчивое ядро + выборочные подробности (FOUNDATION-H). Чистый модуль.
-
-   Источник истины — сама карточка: её поля не меняются, не переписываются и не урезаются при хранении.
-   Prism на каждом ходе собирает из неё:
-
-   1. ЯДРО (Prism Core) — компактное устойчивое представление персонажа, подаётся всегда.
-      • Явное ядро — card.prismCore { schema: 1, identity, traits[], voice[], durableContext[], source, reviewed }.
-        Его видно и можно править в редакторе карточки. Модель его не пишет, генерация его не меняет,
-        вызовов модели для его сборки нет. Ядро из файла (extensions.prism_rp.prismCore) приходит
-        непроверенным (reviewed: false) и не используется, пока пользователь не сохранит его сам.
-      • Запасное ядро (нет явного) — детерминированно из полей карточки, без модели:
-        имя, начало описания и личность, каждое — по абзацам и целым предложениям не длиннее CAP символов.
-        Жёсткий предел: если уже первое предложение длиннее CAP (или знаков препинания нет), берётся начало
-        до последнего пробела (или ровно CAP символов) с «…» — явно и с пометкой в отчёте (cut: word | hard).
-        Что сокращено — в отчёте; остаток не теряется, а становится выборочными подробностями.
-   2. ВЫБОРОЧНЫЕ ПОДРОБНОСТИ — остаток описания и личности, прошлое, внешность, разбитые на куски по абзацам
-      (длинный абзац — по предложениям до CHUNK_MAX символов). Кусок входит только при положительной связи
-      с текущим ходом: имя или термин из куска прозвучал в разговоре, сцене или среде переписки; или не меньше
-      двух общих слов (одно слово в разных формах — по общему началу; без имён участников и служебных слов). Внешность — ещё и когда разговор или сцена касаются
-      внешности/одежды, либо операция требует зрительной опоры (начало сцены). Важность, порядок и свежесть
-      права войти не дают. Отбор решает только, войдёт ли кусок, — не то, верен ли он.
-   3. ПРИМЕРЫ РЕЧИ — по числу ответов персонажа на ветке (живая история уже показывает голос):
-      0–2 ответа — все примеры; 3–5 — только первый пример; 6 и больше — без примеров.
-   Без DOM, хранилища, сети, таймеров и S. */
+/* Prism RP — выбранные основные поля целиком, необязательное явное ядро,
+   выборочные дополнительные сведения и примеры. Чистый модуль.
+   Основные поля и включённое проверенное ядро защищены от обрезания:
+   если после сокращения остальных слоёв они не помещаются, сборщик сообщает overflow. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
 
+  const CM = PRP.cardModel || (typeof require !== "undefined" ? require("../cards/model.js") : null);
   const CORE_SCHEMA = 1;
-  const CAP = 600;            // запасное ядро: символов на поле (по абзацам и предложениям)
   const CHUNK_MAX = 500;      // символов в куске подробностей
   const CHUNK_LIMIT = 4;      // кусков подробностей за ход
   const EXAMPLES = { fullUntil: 2, oneUntil: 5 };
@@ -3848,62 +3842,41 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const paragraphs = (t) => str(t).split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const sentences = (t) => (str(t).match(/[^.!?…]+[.!?…]+[»")\]]*\s*|[^.!?…]+$/g) || [str(t)]).map((s) => s.trim()).filter(Boolean);
 
-  /* Начало текста не длиннее cap: по абзацам и целым предложениям.
-     Жёсткий предел: если уже ПЕРВОЕ предложение длиннее cap (огромное предложение или текст без знаков препинания),
-     оно не входит в ядро целиком — берётся начало до последнего пробела в пределах cap (cut: "word"),
-     а если пробела нет — ровно cap символов (cut: "hard"); в конце ставится «…». Это явная, детерминированная
-     обрезка, видимая в отчёте; текст не пересказывается, остаток не теряется — он уходит в подробности.
-     → { kept, rest, truncated, cut: "" | "sentence" | "word" | "hard" } */
-  function capText(text, cap) {
-    const t = str(text).trim();
-    if (!t || t.length <= cap) return { kept: t, rest: "", truncated: false, cut: "" };
-    const first = sentences(paragraphs(t)[0])[0] || t;
-    if (first.length > cap) {
-      const lim = cap - 2; // место под « …»: итог не длиннее cap
-      const head = t.slice(0, lim);
-      const sp = head.search(/\s\S*$/);
-      const at = sp > lim * 0.5 ? sp : lim;
-      return { kept: t.slice(0, at).trimEnd() + " …", rest: t.slice(at).trim(), truncated: true, cut: at === lim ? "hard" : "word" };
-    }
-    // Предложения по порядку с границами абзацев; берём, пока помещаются (первое — всегда целиком).
-    const items = [];
-    paragraphs(t).forEach((p) => sentences(p).forEach((s, i) => items.push({ s, para: i === 0 })));
-    let used = 0, n = 0;
-    for (; n < items.length; n++) {
-      const add = items[n].s.length + (n ? (items[n].para ? 2 : 1) : 0);
-      if (n && used + add > cap) break;
-      used += add;
-    }
-    const join = (xs) => xs.map((x, i) => (i ? (x.para ? "\n\n" : " ") : "") + x.s).join("");
-    const rest = items.slice(n);
-    if (rest.length) rest[0] = Object.assign({}, rest[0], { para: true });
-    return { kept: join(items.slice(0, n)), rest: join(rest), truncated: rest.length > 0, cut: rest.length ? "sentence" : "" };
-  }
-
-  /* Ядро для этой карточки. m — подстановка макросов ({{char}}, {{user}}).
-     → { source: "explicit" | "fallback", reason, identity, personality, traits, voice, durableContext, truncated: [{field, kept, total}], rest: {description, personality} } */
+  // Full selected primary fields; a reviewed explicit Core is an opt-in addition.
   function core(card, m) {
-    const mm = m || ((x) => x);
-    const cd = card || {};
-    const desc = mm(str(cd.description)).trim(), pers = mm(str(cd.personality)).trim();
-    const ex = normCore(cd.prismCore);
-    if (ex && ex.reviewed) {
-      return { source: "explicit", reason: "задано в карточке", identity: mm(ex.identity), personality: "", traits: ex.traits.map(mm), voice: ex.voice.map(mm),
-        durableContext: ex.durableContext.map(mm), truncated: [], rest: { description: desc, personality: pers } };
-    }
-    const d = capText(desc, CAP), p = capText(pers, CAP);
-    const truncated = [];
-    if (d.truncated) truncated.push({ field: "description", kept: d.kept.length, total: desc.length, cut: d.cut });
-    if (p.truncated) truncated.push({ field: "personality", kept: p.kept.length, total: pers.length, cut: p.cut });
-    return { source: "fallback", reason: ex && !ex.reviewed ? "ядро из файла не проверено — собрано из полей карточки" : "собрано из полей карточки",
-      identity: d.kept, personality: p.kept, traits: [], voice: [], durableContext: [], truncated, rest: { description: d.rest, personality: p.rest } };
+    const mm = m || ((x) => x), cd = card || {}, fields = CM.normalizeContextFields(cd.contextFields);
+    const primary = {
+      description: fields.description ? mm(str(cd.description)).trim() : "",
+      personality: fields.personality ? mm(str(cd.personality)).trim() : "",
+      appearance: fields.appearance ? mm(str(cd.appearance)).trim() : "",
+    };
+    const ex = fields.prismCore ? normCore(cd.prismCore) : null;
+    const explicit = ex && ex.reviewed;
+    return { source: explicit ? "explicit" : "fallback",
+      reason: ex && !ex.reviewed ? "ядро из файла не проверено; выбранные основные поля передаются целиком" : "выбранные основные поля передаются целиком",
+      identity: explicit ? mm(ex.identity) : primary.description,
+      personality: explicit ? "" : primary.personality,
+      traits: explicit ? ex.traits.map(mm) : [], voice: explicit ? ex.voice.map(mm) : [],
+      durableContext: explicit ? ex.durableContext.map(mm) : [],
+      primary, fields, truncated: [], rest: { description: "", personality: "" } };
   }
 
-  // Явное ядро из полей карточки (кнопка «Собрать из карточки»): детерминированно, без модели. Пользователь правит и сохраняет сам.
+  // Optional manual Core starts from complete text, never from a character cap.
   function deriveCore(card) {
     const cd = card || {};
-    const d = capText(str(cd.description), CAP), p = capText(str(cd.personality), CAP);
-    return { schema: CORE_SCHEMA, identity: d.kept, traits: p.kept ? paragraphs(p.kept) : [], voice: [], durableContext: [], source: "derived", reviewed: true };
+    return { schema: CORE_SCHEMA, identity: str(cd.description).trim(), traits: paragraphs(cd.personality),
+      voice: [], durableContext: [], source: "derived", reviewed: true };
+  }
+
+  // Text-only estimate for the permanent selection, not the complete request.
+  // Colours use 20% / 40% of the configured input window (after output reserve).
+  function tokenUsage(card, budget) {
+    const k = core(card), estimate = PRP.util.estimateTokens, ex = normCore((card || {}).prismCore);
+    const fields = { description: estimate(str((card || {}).description)), personality: estimate(str((card || {}).personality)),
+      appearance: estimate(str((card || {}).appearance)), prismCore: estimate(ex ? [ex.identity, ...ex.traits, ...ex.voice, ...ex.durableContext].join("\n") : "") };
+    const total = Object.keys(fields).reduce((n, key) => n + (k.fields[key] && (key !== "prismCore" || k.source === "explicit") ? fields[key] : 0), 0);
+    const level = total === 0 || budget > 0 && total <= budget * .2 ? "normal" : budget > 0 && total <= budget * .4 ? "warn" : "danger";
+    return { fields, total, budget, level };
   }
 
   /* ── Подробности ──────────────────────────────────────────────────── */
@@ -3920,11 +3893,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     }
     return out;
   }
-  // Куски подробностей: остаток описания и личности (после ядра), прошлое, внешность. id — «поле#номер».
+  // Optional legacy background/custom details; primary fields never enter this selector.
   function chunks(card, k, m) {
     const mm = m || ((x) => x);
     const cd = card || {};
-    const src = { description: k.rest.description, personality: k.rest.personality, background: mm(str(cd.background)).trim(), appearance: mm(str(cd.appearance)).trim() };
+    const src = { description: "", personality: "", background: mm(str(cd.background)).trim(), appearance: "" };
     const out = [];
     for (const f of FIELDS) splitChunks(src[f]).forEach((text, i) => out.push({ id: `${f}#${i + 1}`, field: f, text, order: out.length }));
     // Custom fields are opt-in card facts. Never interpret their labels as prompt roles.
@@ -4010,7 +3983,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     return { keep: 0, rule: `ответов персонажа ${n} — голос уже виден в истории, примеры не подаются` };
   }
 
-  PRP.cardContext = { CORE_SCHEMA, CAP, CHUNK_MAX, CHUNK_LIMIT, EXAMPLES, FIELD_WORD, normCore, capText, core, deriveCore, chunks, select, exampleBlocks, examplesFor, sentences, paragraphs };
+  PRP.cardContext = { CORE_SCHEMA, CHUNK_MAX, CHUNK_LIMIT, EXAMPLES, FIELD_WORD, normCore, core, deriveCore, tokenUsage, chunks, select, exampleBlocks, examplesFor, sentences, paragraphs };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardContext;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -5437,12 +5410,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     body = String(body || "").trim();
     return body ? `### ${title}\n${body}` : "";
   }
-  // Сократить текст на одно последнее предложение (не меньше одного). → новый текст или null.
-  function dropSentence(t) {
-    const ss = CC.sentences(t);
-    return ss.length > 1 ? ss.slice(0, -1).join(" ") : null;
-  }
-
   /* Сборка контекста со строгим бюджетом.
 
      opts: {
@@ -5475,9 +5442,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        1 старая история → 2 примеры речи (с последнего) → 3 подробности карточки (с наименее связанной)
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
        → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
-       → 10 персона, сценарий, указания автора, вторичное ядро (устойчивое, манера речи, черты сверх первой,
-       хвосты «кто это» и личности по предложениям) → 11 история до последнего сообщения.
-     Не режутся никогда: рамка, минимум ядра (имя, первое предложение «кто это» и личности / первая черта),
+       → 10 персона, сценарий, указания автора → 11 история до последнего сообщения.
+     Не режутся никогда: рамка, выбранные основные поля карточки и включённое проверенное ядро целиком,
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
@@ -5518,7 +5484,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // Изменяемое состояние сборки: что сейчас входит.
     const st = {
       authorSys: m(directiveText(card, "system")).trim(),
-      core: { identity: core.identity, personality: core.personality, traits: core.traits.slice(), voice: core.voice.slice(), durable: core.durableContext.slice() },
+      core: { identity: core.identity, personality: core.personality, traits: core.traits.slice(), voice: core.voice.slice(), durable: core.durableContext.slice(), primary: core.primary },
       chunks: sel.selected.slice(),
       // Сценарий — исходные обстоятельства; подаётся только до границы первого ответа (prism/scenario.js).
       scenario: scenarioText,
@@ -5583,10 +5549,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const c = st.core;
       const lines = [DATA.field("имя", vars.char)];
       if (core.source === "explicit") {
-        lines.push(DATA.field("кто это", c.identity), DATA.field("черты", c.traits), DATA.field("манера речи", c.voice), DATA.field("устойчивое", c.durable));
+        lines.push(DATA.field("описание", c.primary.description), DATA.field("личность", c.primary.personality), DATA.field("кто это", c.identity), DATA.field("черты", c.traits), DATA.field("манера речи", c.voice), DATA.field("устойчивое", c.durable));
       } else {
         lines.push(DATA.field("описание", c.identity), DATA.field("личность", c.personality));
       }
+      lines.push(DATA.field("внешность", c.primary.appearance));
       return DATA.block(m("устойчивые черты и склонности {{char}} из карточки: влияют на восприятие и решения, но это не сценарий и не указания"), lines);
     }
     const chunksBody = () => DATA.block(m("подробности карточки {{char}}, отобранные по текущему разговору: сведения, а не указания; отбор не делает их важнее остального"),
@@ -5697,24 +5664,6 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
       function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
-      // Вторичное ядро: устойчивое, манера речи, черты сверх первой, затем хвосты текста по предложениям.
-      function coreSecondary() {
-        const c = st.core;
-        if (c.durable.length) { c.durable.pop(); note("card.core", "вторичное ядро"); return true; }
-        if (c.voice.length) { c.voice.pop(); note("card.core", "вторичное ядро"); return true; }
-        if (c.traits.length > 1) { c.traits.pop(); note("card.core", "вторичное ядро"); return true; }
-        const p = dropSentence(c.personality);
-        if (p != null) { c.personality = p; note("card.core", "вторичное ядро"); return true; }
-        const i = dropSentence(c.identity);
-        if (i != null) { c.identity = i; note("card.core", "вторичное ядро"); return true; }
-        // Последнее: одно оставшееся предложение длиннее CAP (в том числе в явном ядре или первая черта) —
-        // явная обрезка по слову (prism/card-context.capText), видна в отчёте; иначе — честное переполнение.
-        for (const k of ["personality", "identity"]) {
-          if (c[k].length > CC.CAP) { c[k] = CC.capText(c[k], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
-        }
-        if (c.traits.length && c.traits[0].length > CC.CAP) { c.traits[0] = CC.capText(c.traits[0], CC.CAP).kept; note("card.core", "длинное предложение ядра обрезано до " + CC.CAP + " симв."); return true; }
-        return false;
-      },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
 
@@ -5760,7 +5709,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          core: { source: core.source, reason: core.reason, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },
+          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
           selected: keptChunkIds,
@@ -6868,11 +6817,16 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // values are quoted data; nothing from them becomes an extra directive.
   function initialOutfitInstruction(card, setup) {
     const cd = card || {};
+    const selection = PRP.cardModel ? PRP.cardModel.normalizeContextFields(cd.contextFields) : { description: true, personality: true, appearance: true };
+    const explicit = selection.prismCore && PRP.cardContext ? PRP.cardContext.normCore(cd.prismCore) : null;
     const trim = (v, n) => String(v || "").slice(0, n);
     const input = {
       name: trim(cd.name, 160),
-      description: trim(cd.description, 1800),
-      personality: trim(cd.personality, 1100),
+      description: selection.description ? String(cd.description || "") : "",
+      personality: selection.personality ? String(cd.personality || "") : "",
+      appearance: selection.appearance ? String(cd.appearance || "") : "",
+      ...(explicit && explicit.reviewed ? { prismCore: { identity: explicit.identity, traits: explicit.traits,
+        voice: explicit.voice, durableContext: explicit.durableContext } } : {}),
       scenario: trim(cd.scenario, 1100),
       firstMessage: trim(cd.firstMes, 550),
       messenger: { timeZone: trim(setup && setup.timeZone, 80),
@@ -9872,10 +9826,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // Карточка в Prism: ядро (явное или запасное), кандидаты подробностей, примеры речи.
   function cardDebug(c) {
     if (!c) return "";
-    const CUT = { sentence: "по предложениям", word: "длинное предложение обрезано по слову", hard: "текст без пробелов обрезан по символам" };
-    const tr = (c.core.truncated || []).map((x) => `${{ description: "описание", personality: "личность" }[x.field] || x.field} ${x.kept} из ${x.total} симв. (${CUT[x.cut] || "по предложениям"})`).join(", ");
     return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
-      <dl class="kv"><dt>Ядро</dt><dd>${c.core.source === "explicit" ? "задано в карточке" : "запасное — " + esc(c.core.reason)}; ${c.core.tokens} ток.${tr ? `; сокращено: ${esc(tr)} (остаток — в подробностях)` : ""}</dd>
+      <dl class="kv"><dt>Основные поля</dt><dd>${esc(c.core.reason)}${c.core.source === "explicit" ? "; дополнительное ядро включено" : ""}; ≈ ${c.core.tokens} ток.</dd>
         <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>
         <dt>Подробности</dt><dd>${c.selected.length ? esc(c.selected.join(", ")) : "нет"}${c.dropped.length ? `; не поместилось: ${esc(c.dropped.join(", "))}` : ""}</dd></dl>
       ${c.candidates.length ? `<table><thead><tr><th>Кусок</th><th>почему</th><th>итог</th></tr></thead><tbody>
@@ -10397,19 +10349,27 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <span class="help">${help}</span></div>`;
     };
     const state = m.modal || {};
+    const selection = PRP.cardModel.normalizeContextFields(d.contextFields);
+    const usage = PRP.cardContext.tokenUsage(d, m.cardInputBudget || 0);
+    const send = (key) => `<label class="check"><input type="checkbox" data-cf-send="${key}" ${selection[key] ? "checked" : ""}><span>Передавать в отыгрыш · ≈ <span data-card-field-tokens="${key}">${usage.fields[key]}</span> ток.</span></label>`;
     let body = "";
     if (section === "main") {
       body = `<div class="card-edit"><div class="card-identity"><div class="portrait" style="${R.safeImageSrc(d.avatar) ? "" : R.artBg(d.name)}">${R.safeImageSrc(d.avatar) ? `<img src="${R.safeImageSrc(d.avatar)}" alt="">` : esc((d.name || "?").charAt(0).toUpperCase())}
           <button class="btn btn-sm chg" data-act="avatar-pick">${icon("upload")}Портрет</button></div>
           <div class="card-identity-name">${f("cf-name", "Имя", "name", d.name)}</div></div>
         <div class="card-fields">
+          <div class="card-token-summary ${usage.level}" id="card-token-summary" role="status">${tokenSummary(usage)}</div>
           ${f("cf-desc", "Описание", "description", d.description, 7, "Кто это — всё, что постоянно. Prism подаёт это модели как склонности, а не как команды.", "Студентка второго курса, ревнивая, но отходчивая…")}
+          ${send("description")}
           ${f("cf-app", "Внешность", "", d.appearance, 3, "При экспорте в Character Card добавляется в description абзацем «Внешность».")}
+          ${send("appearance")}
           ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
+          ${send("personality")}
           ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>
         <details class="card-disclosure"><summary>Ядро для Prism — расширенная настройка</summary>
+          ${send("prismCore")}
           ${coreBlock(d)}</details>
         <details class="card-disclosure" ${(d.customFields || []).length ? "open" : ""}>
           <summary>Пользовательские поля (${(d.customFields || []).length})</summary>
@@ -10511,28 +10471,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       <nav class="modal-nav">${nav.map(([id, n, ic]) => `<button class="rail-item ${section === id ? "active" : ""}" data-act="card-section" data-section="${id}">${icon(ic)}${n}</button>`).join("")}</nav>
       <div class="modal-body">${body}</div></div></div>`;
   }
-  /* Ядро для Prism: что модель получает о персонаже на каждом ходе. Явное ядро правится здесь;
-     без него показывается запасное, собранное из полей (без модели). Остальное из карточки подаётся по ходу разговора. */
+  // Optional explicit Core; primary fields need no manual summary or character cap.
   function coreBlock(d) {
     const CC = PRP.cardContext;
     const ex = CC.normCore(d.prismCore);
-    const fb = CC.core(Object.assign({}, d, { prismCore: null }));
-    const state = !ex ? "Запасное — собрано из описания и личности" : ex.source === "imported" && !ex.reviewed ? "Из файла, не проверено — пока используется запасное" : "Задано явно";
+    const enabled = PRP.cardModel.normalizeContextFields(d.contextFields).prismCore;
+    const state = !ex ? "Не заполнено" : !enabled ? "Передача выключена" : !ex.reviewed ? "Из файла, не проверено" : "Включено";
     const lines = (a) => esc((a || []).join("\n"));
     const ta = (id, label, val, rows, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="${rows}" data-core="${id}" placeholder="${esc(ph)}">${val}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
-    const preview = !ex || !ex.reviewed ? `<div class="core-preview"><span class="label">Сейчас Prism использует</span>
-        <p class="hint"><b>Описание:</b> ${esc(fb.identity || "—")}</p><p class="hint"><b>Личность:</b> ${esc(fb.personality || "—")}</p>
-        ${fb.truncated.length ? `<p class="hint">Сокращено: ${fb.truncated.map((x) => `${x.field === "description" ? "описание" : "личность"} ${x.kept} из ${x.total} симв.${x.cut === "word" || x.cut === "hard" ? " (первое предложение слишком длинное — обрезано, «…»)" : ""}`).join(", ")}. Остальное подаётся, когда относится к разговору.</p>` : ""}</div>` : "";
     return `<div class="block core-block" id="prism-core"><div class="block-title" style="margin-top:22px">Ядро для Prism <span class="tag" id="core-state">${esc(state)}</span></div>
-      <p class="hint">Коротко о том, кто это: подаётся модели на каждом ходе. Прошлое, внешность и подробности описания подаются, только когда относятся к разговору. Поля карточки не меняются; модель ядро не пишет.</p>
-      ${preview}
+      <p class="hint">Необязательные дополнительные сведения. Заполнять ядро не требуется: выбранные описание, личность и внешность передаются целиком. Ядро отправляется только при включённой галочке; текст не обрезается. Совпадающие сведения пока могут повторяться.</p>
       ${ta("core-identity", "Кто это", esc(ex ? ex.identity : ""), 3, "Студентка второго курса, живёт одна в Каракуре…")}
       ${ta("core-traits", "Черты", ex ? lines(ex.traits) : "", 3, "по одной на строку", "По одной на строку.")}
       ${ta("core-voice", "Манера речи", ex ? lines(ex.voice) : "", 2, "по одной на строку")}
       ${ta("core-durable", "Устойчивое", ex ? lines(ex.durableContext) : "", 2, "постоянные обстоятельства, по одному на строку")}
       ${ex && ex.source === "imported" && !ex.reviewed ? `<label class="check"><input type="checkbox" data-core-reviewed><span>Проверено — использовать это ядро</span></label>` : ""}
       <div class="row wrap"><button class="btn btn-sm" data-act="core-derive">Собрать из карточки</button>
-        ${ex ? `<button class="btn btn-sm btn-ghost" data-act="core-clear">Сбросить — собирать автоматически</button>` : ""}</div></div>`;
+        ${ex ? `<button class="btn btn-sm btn-ghost" data-act="core-clear">Очистить ядро</button>` : ""}</div></div>`;
   }
   // Откуда карточка: формат исходника и то, что сохранено без использования. Только показ.
   function sourceBlock(s) {
@@ -10545,7 +10500,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       ${pres.length ? `<br>Сохранено без использования: ${pres.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}
       ${unm ? `<br>Неизвестные поля: ${s.unmapped.map((k) => `<span class="spec-key">${esc(k)}</span>`).join(" ")}.` : ""}</p>`;
   }
-  Object.assign((PRP.views = PRP.views || {}), { cardModal });
+  function tokenSummary(usage) {
+    const label = { normal: "оптимальный объём", warn: "стоит сократить", danger: "очень большой объём" }[usage.level];
+    return `Выбранные основные поля: ≈ ${usage.total} ток. · ${label}<small>Оценка текста, без истории и служебных разделов. Цвет: до 20% входного окна — обычный, до 40% — жёлтый, выше — красный. Поля не обрезаются; если весь запрос не помещается, генерация не отправляется.</small>`;
+  }
+  Object.assign((PRP.views = PRP.views || {}), { cardModal, cardTokenSummary: tokenSummary });
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -11445,6 +11404,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         user: ctx.persona && ctx.persona() && ctx.persona().name || "Пользователь" };
       const canonical = PRP.cardContext.core(cd, (x) => U.macros(x, macroNames));
       const core = { name: cd.name, source: canonical.source,
+        primaryFields: canonical.source === "explicit" ? canonical.primary : { appearance: canonical.primary.appearance },
         identity: canonical.identity, personality: canonical.personality,
         traits: canonical.traits, voice: canonical.voice, durableContext: canonical.durableContext };
       const payload = { mode: initialChat.mode, coreGuide: core,
@@ -13630,6 +13590,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       if (!d.name) return { error: "Дайте персонажу имя." };
       if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
       d.customFields = CM.normalizeCustomFields(d.customFields);
+      d.contextFields = CM.normalizeContextFields(d.contextFields);
       d.altGreetings = (d.altGreetings || []).map((g) => String(g || "").trim()).filter(Boolean);
       d.updatedAt = Date.now();
       const isNew = !d.id;
@@ -14409,6 +14370,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         branchTreeUi: S.branchTreeUi && ctx.chat() && S.branchTreeUi.chatId === ctx.chat().id ? S.branchTreeUi : null,
         dialogueMap: S.modal && S.modal.kind === "tree" && ctx.chat() ? TR.layout(S.messages.filter((x) => x.chatId === ctx.chat().id), ctx.chat().leafId) : null,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
+        cardInputBudget: Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 0)),
         observedMemories: svc().memory.visibleMemories(path), currentExperience: svc().memory.experience(path), memoryStatus: S.memoryStatus,
         memoryTimeline: S.drawerOpen && S.tab === "memory" && ctx.chat() ? svc().memory.timeline(path) : null,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
@@ -15083,6 +15045,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     // Поля открытого раздела редактора → черновик (S.modal.draft).
     function collectCard() {
       const d = S.modal.draft;
+      d.contextFields = PRP.cardModel.normalizeContextFields(d.contextFields);
+      $$("[data-cf-send]").forEach(el => { if (Object.prototype.hasOwnProperty.call(d.contextFields, el.dataset.cfSend)) d.contextFields[el.dataset.cfSend] = el.checked; });
       const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-bg": "background", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
       $$("[data-cf]").forEach((el) => {
         const id = el.dataset.cf;
@@ -15220,6 +15184,10 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     };
 
     async function change(t) {
+      if ((t.dataset.cfSend !== undefined || t.dataset.coreReviewed !== undefined) && S.modal && S.modal.kind === "card") {
+        updateTokenDisplay();
+        return true;
+      }
       if (t.id === "file-card") {
         const files = [...t.files];
         t.value = "";
@@ -15249,7 +15217,20 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       return false;
     }
 
-    return { actions, change };
+    function updateTokenDisplay() {
+      const d = collectCard();
+      const budget = Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 0));
+      const usage = PRP.cardContext.tokenUsage(d, budget);
+      const summary = $("#card-token-summary");
+      if (summary) { summary.innerHTML = PRP.views.cardTokenSummary(usage); summary.className = "card-token-summary " + usage.level; }
+      $$("[data-card-field-tokens]").forEach(el => { el.textContent = usage.fields[el.dataset.cardFieldTokens]; });
+      const state = $("#core-state"), ex = PRP.cardContext.normCore(d.prismCore);
+      if (state) state.textContent = !ex ? "Не заполнено" : !d.contextFields.prismCore ? "Передача выключена" : !ex.reviewed ? "Из файла, не проверено" : "Включено";
+    }
+    function input(t) {
+      if (S.modal && S.modal.kind === "card" && (t.dataset.cf || t.dataset.core)) updateTokenDisplay();
+    }
+    return { actions, change, input };
   };
 })(typeof window !== "undefined" ? window : globalThis);
 
