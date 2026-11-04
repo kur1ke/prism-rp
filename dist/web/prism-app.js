@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "82038d5528420fe77965bf5d644a78ae262aca4e";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -10351,11 +10351,15 @@
     // A failed deletion leaves the chat intact. Restore eligibility for NEW
     // cycles; in-flight cycles remain invalidated by the bumped revision.
     function restoreChat(chatId) { retiredChats.delete(chatId); }
-    async function load(chatId) {
+    async function read(chatId) {
       const [memories, reflections] = await Promise.all([
         DB.byIndex("memories", "chatId", chatId),
         DB.byIndex("reflections", "chatId", chatId)
       ]);
+      return { memories, reflections };
+    }
+    async function load(chatId) {
+      const { memories, reflections } = await read(chatId);
       if (S.chatId === chatId) {
         // A backup may restore the same chat ID. Old requests keep their prior
         // revision and cannot write into the restored chat.
@@ -10646,7 +10650,7 @@
       task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
       return task;
     }
-    return { load, visibleMemories, experience, timeline, observe, retireChat, restoreChat };
+    return { read, load, visibleMemories, experience, timeline, observe, retireChat, restoreChat };
   }
   PRP.memoryService = { create };
 })(typeof window !== "undefined" ? window : globalThis);
@@ -10858,12 +10862,16 @@
     }
 
     // Картинки чата в память; рисование, прерванное закрытием страницы, не должно висеть «в работе».
-    async function loadForChat(chatId) {
-      S.imgUrls = {};
-      (await DB.byIndex("images", "chatId", chatId)).forEach((x) => (S.imgUrls[x.id] = x.dataUrl));
-      for (const msg of S.messages) for (const sw of msg.swipes) for (const im of sw.images || []) {
+    async function readForChat(chatId, messages) {
+      const urls = {};
+      (await DB.byIndex("images", "chatId", chatId)).forEach((x) => (urls[x.id] = x.dataUrl));
+      for (const msg of messages) for (const sw of msg.swipes) for (const im of sw.images || []) {
         if (im.status === "pending" && !S.drawing.has(im.id)) { im.status = "error"; im.error = "Рисование прервано. Попробуйте ещё раз."; }
       }
+      return urls;
+    }
+    async function loadForChat(chatId) {
+      S.imgUrls = await readForChat(chatId, S.messages);
     }
 
     // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
@@ -11232,7 +11240,7 @@
       return out;
     }
 
-    return { textGen, loadForChat, draw, drawFromMessage, find, remove, pinSeed, fetchLists };
+    return { textGen, readForChat, loadForChat, draw, drawFromMessage, find, remove, pinSeed, fetchLists };
   }
 
   PRP.imageService = { create, dialogueImageContext, shouldAppendDialogue, imageOrigin };
@@ -12801,9 +12809,12 @@
     const { S, DB } = ctx;
     const chat = () => ctx.svc.chat, world = () => ctx.svc.world;
 
-    async function load(chatId) {
+    async function read(chatId) {
       const rec = chatId ? await DB.get(STORE, chatId) : null;
-      S.worldOverlay = rec ? OV.normalize(rec, chatId) : chatId ? OV.blank(chatId) : null;
+      return rec ? OV.normalize(rec, chatId) : chatId ? OV.blank(chatId) : null;
+    }
+    async function load(chatId) {
+      S.worldOverlay = await read(chatId);
       return S.worldOverlay;
     }
     // Наложение текущего чата (только из S, без хранилища). Чужое наложение не возвращается никогда.
@@ -12949,7 +12960,7 @@
         overlay: k.overlay, lens: k.lens, pack: k.pack, canBranch: path.length > 0 };
     }
 
-    return { load, current, canon, context, commit, setSelectors, removeForChat, checkBackup, view, STORE };
+    return { read, load, current, canon, context, commit, setSelectors, removeForChat, checkBackup, view, STORE };
   }
 
   PRP.worldOverlayService = { create };
@@ -12982,11 +12993,14 @@
     const chat = () => ctx.svc.chat;
     const clock = () => (typeof ctx.clock === "function" ? ctx.clock() : Date.now());
 
-    async function load(chatId) {
+    async function read(chatId) {
       const c = (S.chats || []).find((x) => x.id === chatId);
-      if (!isMessenger(c)) { S.messengerEnv = null; return null; }
+      if (!isMessenger(c)) return null;
       const rec = await DB.get(STORE, chatId);
-      S.messengerEnv = rec ? Object.assign(ENV.normalize(rec, chatId), { persisted: true }) : Object.assign(ENV.blank(chatId), { persisted: false });
+      return rec ? Object.assign(ENV.normalize(rec, chatId), { persisted: true }) : Object.assign(ENV.blank(chatId), { persisted: false });
+    }
+    async function load(chatId) {
+      S.messengerEnv = await read(chatId);
       return S.messengerEnv;
     }
     // Среда текущего чата: только своя; у сцены — null. Без записи — пустая среда в памяти (ничего не придумано).
@@ -13173,7 +13187,7 @@
         statePending: !!(ctx.svc.state && ctx.svc.state.pending && ctx.chat() ? ctx.svc.state.pending(ctx.chat().id) : S.tracking) && !(stateStatus && last && stateStatus.sourceText === last.swipes[last.swipeIdx || 0].text) };
     }
 
-    return { load, current, now, worldAt, context, snapshot, stampForNew, createFor, checkSetup, setTime, advance, commitEvent, addMarker, markerStatus, removeForChat, checkBackup, view, STORE };
+    return { read, load, current, now, worldAt, context, snapshot, stampForNew, createFor, checkSetup, setTime, advance, commitEvent, addMarker, markerStatus, removeForChat, checkBackup, view, STORE };
   }
 
   PRP.messengerService = { create };
@@ -13690,7 +13704,7 @@
       if (S.view === "assist") { if (S.gen) return; input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
       const c = ctx.chat();
       // Ход этого чата уже принят или идёт ответ: второе нажатие ничего не отправляет, текст остаётся в поле.
-      if (!c || S.gen || (S.turn && S.turn.chatId === c.id)) return;
+      if (S.view !== "chat" || !c || input.dataset.chat !== c.id || S.gen || (S.turn && S.turn.chatId === c.id)) return;
       input.value = "";
       ui.autoGrow(input);
       ui.clearDraft(c.id);
@@ -13731,7 +13745,8 @@
           bitmap.close();
           const imageDataUrl = canvas.toDataURL("image/jpeg", 0.78);
           const textArea = $("#input");
-          const caption = textArea ? textArea.value.trim() : "";
+          if (S.view !== "chat" || S.chatId !== c.id || !textArea || textArea.dataset.chat !== c.id) return;
+          const caption = textArea.value.trim();
           const message = caption || "[Отправлена фотография]";
           const stamp = svc.messenger.stampForNew();
           const result = await svc.gen.send(message, { messengerAt: stamp, imageDataUrl });
@@ -13830,7 +13845,7 @@
     };
 
     function input(t) {
-      if (t.id === "input") { ui.autoGrow(t); if (S.chatId) ui.clearDraft(S.chatId); }
+      if (t.id === "input") { ui.autoGrow(t); if (S.view === "chat" && t.dataset.chat === S.chatId) ui.clearDraft(S.chatId); }
       if (t.id === "find-q") { S.find.q = t.value; S.find.idx = 0; ui.runFind(true); }
     }
     function key(e, t) {
@@ -14866,18 +14881,27 @@
     if (ticket !== navigationIntent) return;
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
+    // Prepare off-screen. No active id or shared chat data changes until all
+    // reads succeed and this navigation is still the latest accepted request.
+    if (S.gen || S.turn) return;
+    const messages = await svc.chat.loadMessages(chatId);
+    const memory = await svc.memory.read(chatId);
+    const worldOverlay = await svc.worldChat.read(chatId);
+    const messengerEnv = await svc.messenger.read(chatId);
+    const imgUrls = await svc.images.readForChat(chatId, messages);
+    if (ticket !== navigationIntent || !S.chats.includes(c)) return;
+    // A send may have started in the still-visible old chat during the reads.
+    if (S.gen || S.turn) {
+      ui.toast("Дождитесь окончания ответа или отмените текущую операцию перед переключением чата.", true);
+      return;
+    }
     PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
-    S.chatId = chatId;
-    S.memoryStatus = "";
-    S.lastSelectedChatId = chatId;
-    S.cardId = c.cardId;
-    S.view = "chat";
-    S.messages = await svc.chat.loadMessages(chatId);
-    await svc.memory.load(chatId);
-    await svc.worldChat.load(chatId);
-    await svc.messenger.load(chatId);
-    await svc.images.loadForChat(chatId);
-    if (ticket !== navigationIntent || S.chatId !== chatId || S.view !== "chat") return;
+    Object.assign(S, {
+      chatId, cardId: c.cardId, view: "chat", lastSelectedChatId: chatId,
+      messages, memories: memory.memories, reflections: memory.reflections,
+      memoryStatus: "", worldOverlay, messengerEnv, imgUrls,
+    });
+    svc.memory.restoreChat(chatId);
     S.editingMsg = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();

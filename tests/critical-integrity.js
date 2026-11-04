@@ -11,6 +11,7 @@ load("prism/data.js");
 load("chat/tree.js");
 load("chat/service.js");
 load("ui/render.js");
+load("ui/controllers/chat.js");
 const PRP = globalThis.PRP;
 const unsafe = 'https://example.test/p.png" onerror="alert(1)';
 assert.ok(PRP.render.safeImageSrc(unsafe).includes("&quot;"));
@@ -72,16 +73,16 @@ function navigationHarness() {
   };
   const service = (name, extra) => { factories[name] = { create: c => (ctx = c, extra || {}) }; };
   service("chatService", { loadMessages: async () => [] });
-  service("memoryService", { load: async () => {} });
+  service("memoryService", { read: async () => ({memories:[],reflections:[]}), restoreChat: noop });
   service("prismService", { refresh: noop });
-  service("imageService", { loadForChat: async () => {} });
+  service("imageService", { readForChat: async () => ({}) });
   service("stateService");
   service("generationService");
   service("cardService");
   service("assistService");
   service("worldService");
-  service("worldOverlayService", { load: async () => {} });
-  service("messengerService", { load: async () => {} });
+  service("worldOverlayService", { read: async () => null });
+  service("messengerService", { read: async () => null });
   const controllers = {};
   for (const name of ["chat", "drawer", "cards", "settings", "images", "assist", "world", "messenger"])
     controllers[name] = () => ({ actions: {}, shortcut: () => false });
@@ -112,13 +113,14 @@ async function navigation() {
     active--;
     return [{ id: "message-" + id }];
   };
-  h.svc.memory.load = async id => { h.S.memories = [{ id: "memory-" + id }]; };
-  h.svc.worldChat.load = async id => { h.S.worldOverlay = { chatId: id }; };
-  h.svc.messenger.load = async id => { h.S.messengerEnv = { chatId: id }; };
-  h.svc.images.loadForChat = async id => { h.S.imgUrls = { [id]: "image" }; };
+  h.svc.memory.read = async id => ({memories:[{id:"memory-"+id}],reflections:[]});
+  h.svc.worldChat.read = async id => ({chatId:id});
+  h.svc.messenger.read = async id => ({chatId:id});
+  h.svc.images.readForChat = async id => ({[id]:"image"});
   const first = h.nav.openChat("a");
   await Promise.resolve();
   await Promise.resolve();
+  assert.equal(h.S.chatId, null, "pending reads must not activate a partially loaded chat");
   const second = h.nav.openChat("b");
   release();
   await Promise.all([first, second]);
@@ -130,13 +132,45 @@ async function navigation() {
   assert.equal(h.S.worldOverlay.chatId, "b");
   assert.equal(h.S.messengerEnv.chatId, "b");
   assert.deepEqual(Object.keys(h.S.imgUrls), ["b"]);
+  const before=JSON.stringify(h.S);
+  h.svc.images.readForChat=async()=>{throw Error("read failed");};
+  await assert.rejects(h.nav.openChat("a"),/read failed/);
+  assert.equal(JSON.stringify(h.S),before,"failed activation keeps the entire previous context");
+
+  const g=navigationHarness();
+  let releaseLoad;
+  const loadGate=new Promise(resolve=>{releaseLoad=resolve;});
+  g.svc.chat.loadMessages=async()=>{await loadGate;return [];};
+  const pending=g.nav.openChat("a");
+  await Promise.resolve();await Promise.resolve();
+  g.S.turn={chatId:"previous"};
+  releaseLoad();await pending;
+  assert.equal(g.S.chatId,null,"a turn started during reads prevents activation");
+  assert.ok(g.toasts.length);
+
   h.S.gen = { ctrl: {} };
   await h.nav.openChat("a");
   assert.equal(h.S.chatId, "b", "a running generation must not be redirected to a different chat");
   assert.ok(h.toasts.length > 0);
 }
+async function composerOwnership() {
+  const field={id:"input",value:"for-a",dataset:{chat:"a"}},sent=[],cleared=[];
+  const S={view:"chat",chatId:"b"};
+  const ctx={S,chat:()=>({id:S.chatId,mode:"rp"}),
+    ui:{$:()=>field,autoGrow:()=>{},clearDraft:id=>cleared.push(id)},
+    svc:{gen:{send:async text=>sent.push({id:S.chatId,text})}},nav:{}};
+  const ctl=PRP.controllers.chat(ctx);
+  ctl.input(field);await ctl.actions.send();
+  assert.equal(sent.length,0);
+  assert.equal(cleared.length,0);
+  assert.equal(field.value,"for-a","rejected foreign text remains available");
+  field.dataset.chat="b";ctl.input(field);await ctl.actions.send();
+  assert.deepEqual(sent,[{id:"b",text:"for-a"}]);
+  assert.equal(field.value,"");
+}
 (async () => {
   await persistence();
   await navigation();
+  await composerOwnership();
   console.log("Critical integrity checks: image URL safety, atomic chat roots, navigation races — OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

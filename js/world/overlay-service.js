@@ -19,9 +19,12 @@
     const { S, DB } = ctx;
     const chat = () => ctx.svc.chat, world = () => ctx.svc.world;
 
-    async function load(chatId) {
+    async function read(chatId) {
       const rec = chatId ? await DB.get(STORE, chatId) : null;
-      S.worldOverlay = rec ? OV.normalize(rec, chatId) : chatId ? OV.blank(chatId) : null;
+      return rec ? OV.normalize(rec, chatId) : chatId ? OV.blank(chatId) : null;
+    }
+    async function load(chatId) {
+      S.worldOverlay = await read(chatId);
       return S.worldOverlay;
     }
     // Наложение текущего чата (только из S, без хранилища). Чужое наложение не возвращается никогда.
@@ -167,7 +170,7 @@
         overlay: k.overlay, lens: k.lens, pack: k.pack, canBranch: path.length > 0 };
     }
 
-    return { load, current, canon, context, commit, setSelectors, removeForChat, checkBackup, view, STORE };
+    return { read, load, current, canon, context, commit, setSelectors, removeForChat, checkBackup, view, STORE };
   }
 
   PRP.worldOverlayService = { create };

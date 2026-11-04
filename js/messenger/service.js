@@ -24,11 +24,14 @@
     const chat = () => ctx.svc.chat;
     const clock = () => (typeof ctx.clock === "function" ? ctx.clock() : Date.now());
 
-    async function load(chatId) {
+    async function read(chatId) {
       const c = (S.chats || []).find((x) => x.id === chatId);
-      if (!isMessenger(c)) { S.messengerEnv = null; return null; }
+      if (!isMessenger(c)) return null;
       const rec = await DB.get(STORE, chatId);
-      S.messengerEnv = rec ? Object.assign(ENV.normalize(rec, chatId), { persisted: true }) : Object.assign(ENV.blank(chatId), { persisted: false });
+      return rec ? Object.assign(ENV.normalize(rec, chatId), { persisted: true }) : Object.assign(ENV.blank(chatId), { persisted: false });
+    }
+    async function load(chatId) {
+      S.messengerEnv = await read(chatId);
       return S.messengerEnv;
     }
     // Среда текущего чата: только своя; у сцены — null. Без записи — пустая среда в памяти (ничего не придумано).
@@ -215,7 +218,7 @@
         statePending: !!(ctx.svc.state && ctx.svc.state.pending && ctx.chat() ? ctx.svc.state.pending(ctx.chat().id) : S.tracking) && !(stateStatus && last && stateStatus.sourceText === last.swipes[last.swipeIdx || 0].text) };
     }
 
-    return { load, current, now, worldAt, context, snapshot, stampForNew, createFor, checkSetup, setTime, advance, commitEvent, addMarker, markerStatus, removeForChat, checkBackup, view, STORE };
+    return { read, load, current, now, worldAt, context, snapshot, stampForNew, createFor, checkSetup, setTime, advance, commitEvent, addMarker, markerStatus, removeForChat, checkBackup, view, STORE };
   }
 
   PRP.messengerService = { create };

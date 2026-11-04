@@ -26,11 +26,15 @@
     // A failed deletion leaves the chat intact. Restore eligibility for NEW
     // cycles; in-flight cycles remain invalidated by the bumped revision.
     function restoreChat(chatId) { retiredChats.delete(chatId); }
-    async function load(chatId) {
+    async function read(chatId) {
       const [memories, reflections] = await Promise.all([
         DB.byIndex("memories", "chatId", chatId),
         DB.byIndex("reflections", "chatId", chatId)
       ]);
+      return { memories, reflections };
+    }
+    async function load(chatId) {
+      const { memories, reflections } = await read(chatId);
       if (S.chatId === chatId) {
         // A backup may restore the same chat ID. Old requests keep their prior
         // revision and cannot write into the restored chat.
@@ -321,7 +325,7 @@
       task.finally(() => { if (pendingByChat.get(chatId) === task) pendingByChat.delete(chatId); });
       return task;
     }
-    return { load, visibleMemories, experience, timeline, observe, retireChat, restoreChat };
+    return { read, load, visibleMemories, experience, timeline, observe, retireChat, restoreChat };
   }
   PRP.memoryService = { create };
 })(typeof window !== "undefined" ? window : globalThis);

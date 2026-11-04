@@ -20,7 +20,7 @@
       if (S.view === "assist") { if (S.gen) return; input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
       const c = ctx.chat();
       // Ход этого чата уже принят или идёт ответ: второе нажатие ничего не отправляет, текст остаётся в поле.
-      if (!c || S.gen || (S.turn && S.turn.chatId === c.id)) return;
+      if (S.view !== "chat" || !c || input.dataset.chat !== c.id || S.gen || (S.turn && S.turn.chatId === c.id)) return;
       input.value = "";
       ui.autoGrow(input);
       ui.clearDraft(c.id);
@@ -61,7 +61,8 @@
           bitmap.close();
           const imageDataUrl = canvas.toDataURL("image/jpeg", 0.78);
           const textArea = $("#input");
-          const caption = textArea ? textArea.value.trim() : "";
+          if (S.view !== "chat" || S.chatId !== c.id || !textArea || textArea.dataset.chat !== c.id) return;
+          const caption = textArea.value.trim();
           const message = caption || "[Отправлена фотография]";
           const stamp = svc.messenger.stampForNew();
           const result = await svc.gen.send(message, { messengerAt: stamp, imageDataUrl });
@@ -160,7 +161,7 @@
     };
 
     function input(t) {
-      if (t.id === "input") { ui.autoGrow(t); if (S.chatId) ui.clearDraft(S.chatId); }
+      if (t.id === "input") { ui.autoGrow(t); if (S.view === "chat" && t.dataset.chat === S.chatId) ui.clearDraft(S.chatId); }
       if (t.id === "find-q") { S.find.q = t.value; S.find.idx = 0; ui.runFind(true); }
     }
     function key(e, t) {

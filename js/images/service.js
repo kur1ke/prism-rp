@@ -102,12 +102,16 @@
     }
 
     // Картинки чата в память; рисование, прерванное закрытием страницы, не должно висеть «в работе».
-    async function loadForChat(chatId) {
-      S.imgUrls = {};
-      (await DB.byIndex("images", "chatId", chatId)).forEach((x) => (S.imgUrls[x.id] = x.dataUrl));
-      for (const msg of S.messages) for (const sw of msg.swipes) for (const im of sw.images || []) {
+    async function readForChat(chatId, messages) {
+      const urls = {};
+      (await DB.byIndex("images", "chatId", chatId)).forEach((x) => (urls[x.id] = x.dataUrl));
+      for (const msg of messages) for (const sw of msg.swipes) for (const im of sw.images || []) {
         if (im.status === "pending" && !S.drawing.has(im.id)) { im.status = "error"; im.error = "Рисование прервано. Попробуйте ещё раз."; }
       }
+      return urls;
+    }
+    async function loadForChat(chatId) {
+      S.imgUrls = await readForChat(chatId, S.messages);
     }
 
     // reuse — существующая запись картинки (перерисовать); opts.seed — свой seed.
@@ -476,7 +480,7 @@
       return out;
     }
 
-    return { textGen, loadForChat, draw, drawFromMessage, find, remove, pinSeed, fetchLists };
+    return { textGen, readForChat, loadForChat, draw, drawFromMessage, find, remove, pinSeed, fetchLists };
   }
 
   PRP.imageService = { create, dialogueImageContext, shouldAppendDialogue, imageOrigin };

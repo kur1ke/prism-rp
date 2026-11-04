@@ -112,18 +112,27 @@
     if (ticket !== navigationIntent) return;
     const c = S.chats.find((x) => x.id === chatId);
     if (!c) return;
+    // Prepare off-screen. No active id or shared chat data changes until all
+    // reads succeed and this navigation is still the latest accepted request.
+    if (S.gen || S.turn) return;
+    const messages = await svc.chat.loadMessages(chatId);
+    const memory = await svc.memory.read(chatId);
+    const worldOverlay = await svc.worldChat.read(chatId);
+    const messengerEnv = await svc.messenger.read(chatId);
+    const imgUrls = await svc.images.readForChat(chatId, messages);
+    if (ticket !== navigationIntent || !S.chats.includes(c)) return;
+    // A send may have started in the still-visible old chat during the reads.
+    if (S.gen || S.turn) {
+      ui.toast("Дождитесь окончания ответа или отмените текущую операцию перед переключением чата.", true);
+      return;
+    }
     PRP.perfLog.resetOnChatChange(S.perf, S.chatId, chatId);
-    S.chatId = chatId;
-    S.memoryStatus = "";
-    S.lastSelectedChatId = chatId;
-    S.cardId = c.cardId;
-    S.view = "chat";
-    S.messages = await svc.chat.loadMessages(chatId);
-    await svc.memory.load(chatId);
-    await svc.worldChat.load(chatId);
-    await svc.messenger.load(chatId);
-    await svc.images.loadForChat(chatId);
-    if (ticket !== navigationIntent || S.chatId !== chatId || S.view !== "chat") return;
+    Object.assign(S, {
+      chatId, cardId: c.cardId, view: "chat", lastSelectedChatId: chatId,
+      messages, memories: memory.memories, reflections: memory.reflections,
+      memoryStatus: "", worldOverlay, messengerEnv, imgUrls,
+    });
+    svc.memory.restoreChat(chatId);
     S.editingMsg = null; S.worldEdit = null; S.envEdit = null; S.find = null;
     svc.prism.refresh();
     ui.rememberUi();
