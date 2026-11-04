@@ -190,6 +190,41 @@
         }
       });
     },
+    // Read and conditionally replace records in ONE transaction. prepare is
+    // synchronous: it receives rows in read order and returns [[store, row], …]
+    // or null to skip. Domain/source rules belong to the calling service.
+    async readModifyWrite(stores, reads, prepare) {
+      const db = await open();
+      return new Promise((ok, fail) => {
+        let t, failure = null, written = false;
+        try { t = db.transaction(stores, "readwrite"); } catch (e) { fail(e); return; }
+        const abort = (e) => { failure = e; try { t.abort(); } catch (_) {} };
+        t.oncomplete = () => ok(written);
+        t.onerror = () => { if (!failure) failure = t.error; };
+        t.onabort = () => fail(failure || t.error || new Error("Условная запись прервана"));
+        const rows = new Array(reads.length);
+        let remaining = reads.length;
+        const commit = () => {
+          try {
+            const puts = prepare(rows);
+            if (puts == null) return;
+            if (!Array.isArray(puts)) throw new TypeError("Подготовка транзакции должна быть синхронной и возвращать список записей");
+            for (const [store, row] of puts) {
+              if (store !== "settings") row.updatedAt = Date.now();
+              t.objectStore(store).put(row);
+            }
+            written = puts.length > 0;
+          } catch (e) { abort(e); }
+        };
+        try {
+          if (!remaining) commit();
+          reads.forEach(([store, id], i) => {
+            const req = t.objectStore(store).get(id);
+            req.onsuccess = () => { rows[i] = req.result; if (!--remaining) commit(); };
+          });
+        } catch (e) { abort(e); }
+      });
+    },
     del: (store, id) => tx(store, "readwrite", (s) => wrap(s.delete(id))),
     delMany: (store, ids) => tx(store, "readwrite", (s) => Promise.all(ids.map((id) => wrap(s.delete(id))))),
 

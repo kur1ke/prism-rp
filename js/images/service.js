@@ -204,7 +204,8 @@
         st.chars = st.chars || {};
         st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
       }
-      const pendingEntry = Object.assign({}, entry, { status: "pending", stage: "Готовлю промпт…" });
+      const operationId = U.uid("draw");
+      const pendingEntry = Object.assign({}, entry, { operationId, status: "pending", stage: "Готовлю промпт…" });
       delete pendingEntry.error;
       delete pendingEntry.translationFailure;
       const pendingMessage = JSON.parse(JSON.stringify(msg));
@@ -416,44 +417,47 @@
           ...(translationFailure ? { translationFailure } : {}) };
       }
       try {
-        const latest = await DB.get("messages", origin.messageId);
-        const savedSwipe = latest && latest.chatId === origin.chatId && latest.swipes && latest.swipes[origin.swipeIdx];
-        const savedImage = savedSwipe && (savedSwipe.images || []).find((im) => im.id === entry.id);
-        // Do not attach an image built from obsolete ancestor physical facts.
-        // A changed source state's events also invalidate it, even if its
-        // visible text has not changed.
-        const currentSource = latest && JSON.parse(JSON.stringify(latest));
-        if (currentSource) currentSource.swipeIdx = origin.swipeIdx;
-        const originValid = currentSource && (shotOnlyGate
-          ? stateVersion(currentSource, origin.swipeIdx, true) === origin.sourceDrawVersion
-          : stateVersion(currentSource, origin.swipeIdx) === origin.sourceStateVersion) &&
-          await imageOriginStillCurrent(DB, origin, shotOnlyGate);
-        if (finalPatch.status === "done" && !originValid) {
-          finalPatch = { status: "error", error: "Исходное состояние ветки или свайпа изменилось. Повторите рисование." };
-          imageData = null;
-        }
-        // Deleted/edited messages and images cannot be resurrected by a late callback.
-        if (savedSwipe && savedSwipe.text === origin.sourceText && savedImage) {
+        // Read source, ancestry and operation ownership under the same write
+        // transaction that attaches the result. No stale full-message put.
+        const reads = origin.path.map(m => ["messages", m.id]);
+        const committed = await DB.readModifyWrite(["messages", "images"], reads, (rows) => {
+          const latest = rows[rows.length - 1];
+          const savedSwipe = latest && latest.chatId === origin.chatId && latest.swipes && latest.swipes[origin.swipeIdx];
+          const savedImage = savedSwipe && (savedSwipe.images || []).find(im => im.id === entry.id);
+          if (!savedSwipe || savedSwipe.text !== origin.sourceText || !savedImage ||
+              savedImage.operationId !== operationId || savedImage.status !== "pending") return null;
+          const originValid = stateVersion(latest, origin.swipeIdx, shotOnlyGate) ===
+              (shotOnlyGate ? origin.sourceDrawVersion : origin.sourceStateVersion) &&
+            origin.path.slice(0, -1).every((before, i) => rows[i] &&
+              stateVersion(rows[i], null, shotOnlyGate) === stateVersion(before, null, shotOnlyGate));
+          if (finalPatch.status === "done" && !originValid) {
+            finalPatch = { status: "error", error: "Исходное состояние ветки или свайпа изменилось. Повторите рисование." };
+            imageData = null;
+          }
           delete savedImage.translationFailure;
           Object.assign(savedImage, finalPatch);
           delete savedImage.stage;
           if (finalPatch.status === "done") delete savedImage.error;
           const writes = [["messages", latest]];
           if (imageData) writes.push(["images", imageData]);
-          await DB.putAll(writes);
-          Object.assign(entry, finalPatch);
-          delete entry.stage;
-          if (finalPatch.status === "done") delete entry.error;
+          return writes;
+        });
+        if (committed) {
+          if (entry.operationId === operationId) {
+            Object.assign(entry, finalPatch);
+            delete entry.stage;
+            if (finalPatch.status === "done") delete entry.error;
+          }
           if (ctx.chat() && ctx.chat().id === origin.chatId) {
             const live = S.messages.find((m) => m.id === origin.messageId && m.chatId === origin.chatId);
             const liveSwipe = live && live.swipes && live.swipes[origin.swipeIdx];
             const liveImage = liveSwipe && liveSwipe.text === origin.sourceText && (liveSwipe.images || []).find((im) => im.id === entry.id);
-            if (liveImage) {
+            if (liveImage && liveImage.operationId === operationId) {
               Object.assign(liveImage, finalPatch);
               delete liveImage.stage;
               if (finalPatch.status === "done") delete liveImage.error;
+              if (imageData) S.imgUrls[entry.id] = imageData.dataUrl;
             }
-            if (imageData) S.imgUrls[entry.id] = imageData.dataUrl;
           }
         }
       } finally {

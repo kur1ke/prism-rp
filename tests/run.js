@@ -1910,6 +1910,13 @@ function fbHarness(card, opts) {
       for (const [st, x] of (batch.puts || [])) await DB.put(st, x);
       for (const [st, x] of patches) await DB.put(st, x);
     },
+    readModifyWrite: async (_stores, reads, prepare) => {
+      const rows = await Promise.all(reads.map(([st, id]) => DB.get(st, id)));
+      const puts = prepare(rows);
+      if (!puts) return false;
+      await DB.putAll(puts);
+      return puts.length > 0;
+    },
     get: async (st, id) => { const v = (store[st] || new Map()).get(id); return v ? JSON.parse(JSON.stringify(v)) : undefined; },
     byIndex: async (st, idx, v) => [...((store[st] || new Map()).values())].filter((x) => x[idx] === v),
     all: async (st) => [...((store[st] || new Map()).values())].map((x) => JSON.parse(JSON.stringify(x))),
@@ -9355,7 +9362,7 @@ const TR_ = globalThis.PRP.tree;
 // Do not let an unresolved async fixture finish Node with exit code 0.
 // The suite normally completes in seconds; a pending test must fail CI.
 setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
-foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./perchance-budget.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./image-initial-write.js")({ make: fbHarness, test: ta })).then(() => require("./generation-commit.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
+foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./perchance-budget.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./image-result-commit.js")({ make: fbHarness, test: ta })).then(() => require("./image-initial-write.js")({ make: fbHarness, test: ta })).then(() => require("./generation-commit.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
   if (BASELINE.length) {
     console.log("\nСрез карточки (токены, оценка): прежняя подача целиком → ядро + подробности + примеры");
     for (const r of BASELINE) console.log(`  ${r.id.padEnd(30)} было ${String(r.old).padStart(5)} → ядро ${String(r.core).padStart(4)} + подробн. ${String(r.details).padStart(4)} + примеры ${String(r.examples).padStart(4)} = ${String(r.total).padStart(5)}; ядро: ${r.coreSource}${r.cut.length ? " (" + r.cut.join(", ") + ")" : ""}; вошло: ${r.selected.join(", ") || "—"}; не вошло: ${r.dropped.length}`);
