@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "8988188822f4832ef2bbfb4914c43e64d3888c98";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -309,9 +309,28 @@
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 8, exportedAt: new Date().toISOString() };
-      for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
-      return out;
+      const stores = STORES.filter(s => !(opts && opts.noImages && s === "images"));
+      const db = await open();
+      return new Promise((ok, fail) => {
+        let t, failure = null;
+        try { t = db.transaction(stores, "readonly"); } catch (e) { fail(e); return; }
+        const out = { app: "prism-rp", version: 8, exportedAt: new Date().toISOString() };
+        t.oncomplete = () => ok(out);
+        t.onerror = () => { if (!failure) failure = t.error; };
+        t.onabort = () => fail(failure || t.error || new Error("Экспорт прерван — бэкап не создан"));
+        try {
+          // Queue every read before yielding. One transaction sees a coherent
+          // snapshot across collections, even while another tab saves data.
+          for (const s of stores) {
+            const req = t.objectStore(s).getAll();
+            req.onsuccess = () => { out[s] = req.result; };
+            req.onerror = () => { failure = failure || req.error; };
+          }
+        } catch (e) {
+          failure = e;
+          try { t.abort(); } catch (_) { /* already aborted */ }
+        }
+      });
     },
     /* Восстановление (данные уже проверены ДО вызова: chat.checkBackupChats → core/backup.check →
        worldChat.checkBackup → messenger.checkBackup). ОДНА транзакция readwrite на ВСЕ известные коллекции:

@@ -24,6 +24,8 @@ jobs:
         run: node tests/run.js
       - name: Check chat navigation, persistence and imported URL safety
         run: node tests/critical-integrity.js
+      - name: Check coherent backup snapshot and failed export
+        run: node tests/backup-snapshot.js
       - name: Check Observer provider window and full request budget
         run: node tests/observer-budget.js
       - name: Check assistant budget and mutation-free preflight

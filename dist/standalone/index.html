@@ -1069,9 +1069,28 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     setSetting: (key, value) => api.put("settings", { key, value }),
 
     async exportAll(opts) {
-      const out = { app: "prism-rp", version: 8, exportedAt: new Date().toISOString() };
-      for (const s of STORES) if (!(opts && opts.noImages && s === "images")) out[s] = await api.all(s);
-      return out;
+      const stores = STORES.filter(s => !(opts && opts.noImages && s === "images"));
+      const db = await open();
+      return new Promise((ok, fail) => {
+        let t, failure = null;
+        try { t = db.transaction(stores, "readonly"); } catch (e) { fail(e); return; }
+        const out = { app: "prism-rp", version: 8, exportedAt: new Date().toISOString() };
+        t.oncomplete = () => ok(out);
+        t.onerror = () => { if (!failure) failure = t.error; };
+        t.onabort = () => fail(failure || t.error || new Error("Экспорт прерван — бэкап не создан"));
+        try {
+          // Queue every read before yielding. One transaction sees a coherent
+          // snapshot across collections, even while another tab saves data.
+          for (const s of stores) {
+            const req = t.objectStore(s).getAll();
+            req.onsuccess = () => { out[s] = req.result; };
+            req.onerror = () => { failure = failure || req.error; };
+          }
+        } catch (e) {
+          failure = e;
+          try { t.abort(); } catch (_) { /* already aborted */ }
+        }
+      });
     },
     /* Восстановление (данные уже проверены ДО вызова: chat.checkBackupChats → core/backup.check →
        worldChat.checkBackup → messenger.checkBackup). ОДНА транзакция readwrite на ВСЕ известные коллекции:
