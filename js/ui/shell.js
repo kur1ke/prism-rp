@@ -354,6 +354,13 @@
       });
     }
 
+    function acceptAssistInput(text) {
+      const input = $("#input");
+      if (S.view === "assist" && input && !input.dataset.chat && input.value.trim() === text) {
+        input.value = ""; autoGrow(input);
+      }
+    }
+
     // Запомнить, что открыто, чтобы после перезагрузки вернуться туда же.
     function rememberUi() {
       ctx.DB.setSetting("ui", { chatId: S.view === "chat" ? S.chatId : null, drawerOpen: S.drawerOpen, view: S.view, assistId: S.view === "assist" && S.assist && S.assist.messages.length ? S.assist.id : null });
@@ -362,7 +369,7 @@
     return {
       $, $$, narrow, toast, vm, applyLook, autoGrow,
       renderRail, renderStage, renderFeed, renderHead, renderComposer, restoreDraft, clearDraft, renderDrawer, renderModal, renderAll, scrollBottom, syncScrim,
-      openSettings, refreshAfterSettings, openPop, closePop, applyFind, runFind, paintStreaming, paintAssist, rememberUi,
+      openSettings, refreshAfterSettings, openPop, closePop, applyFind, runFind, paintStreaming, paintAssist, rememberUi, acceptAssistInput,
     };
   }
 

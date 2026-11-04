@@ -26,6 +26,8 @@ jobs:
         run: node tests/critical-integrity.js
       - name: Check Observer provider window and full request budget
         run: node tests/observer-budget.js
+      - name: Check assistant budget and mutation-free preflight
+        run: node tests/assist-budget.js
       - name: Check imported values at HTML boundaries
         run: node tests/render-import-safety.js
       - name: Check StateTracker photographed outfit continuity

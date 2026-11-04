@@ -17,7 +17,7 @@
       if (!input) return;
       const text = input.value.trim();
       if (!text) return;
-      if (S.view === "assist") { if (S.gen) return; input.value = ""; ui.autoGrow(input); return svc.assist.send(text); }
+      if (S.view === "assist") { if (S.gen) return; return svc.assist.send(text); }
       const c = ctx.chat();
       // Ход этого чата уже принят или идёт ответ: второе нажатие ничего не отправляет, текст остаётся в поле.
       if (S.view !== "chat" || !c || input.dataset.chat !== c.id || S.gen || (S.turn && S.turn.chatId === c.id)) return;

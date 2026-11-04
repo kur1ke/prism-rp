@@ -74,33 +74,43 @@
     return (cut > 0 ? `(ранние ${cut} сообщ. не поместились)\n\n` : "") + out.join("\n\n");
   }
 
-  /* o: { system, card, chatLines, sceneLine, userName, history:[{role,text}], contextTokens, reserveTokens }
+  /* o: { system, card, chatLines, sceneLine, userName, history:[{role,text}], contextTokens, reserveTokens, inputCost? }
      → { messages, report } */
   function build(o) {
-    const budget = Math.max(1024, (o.contextTokens || 8192) - (o.reserveTokens || 1200));
+    const contextTokens = o.contextTokens == null ? 8192 : o.contextTokens;
+    const reserveTokens = o.reserveTokens == null ? 1200 : o.reserveTokens;
+    const invalidBudget = !Number.isFinite(contextTokens) || contextTokens <= 0 ||
+      !Number.isFinite(reserveTokens) || reserveTokens < 0 || reserveTokens >= contextTokens;
+    const budget = invalidBudget ? 0 : contextTokens - reserveTokens;
     const sys = [o.system || SYSTEM];
     if (o.userName) sys.push(`Собеседника зовут ${o.userName}.`);
-    let used = U.estimateTokens(sys.join("\n\n"));
     const ct = cardText(o.card);
-    if (ct) { const b = `### Карточка персонажа, о котором идёт речь\n${ct}`; sys.push(b); used += U.estimateTokens(b); }
-    const hist = o.history || [];
-    // История разговора с ассистентом: от новых к старым.
-    const kept = [];
-    let histBudget = Math.max(600, Math.floor((budget - used) * (o.chatLines && o.chatLines.length ? 0.5 : 1)));
-    for (let i = hist.length - 1; i >= 0; i--) {
-      const c = U.estimateTokens(hist[i].text) + 4;
-      if (c > histBudget && kept.length) break;
-      kept.unshift(hist[i]); histBudget -= c; used += c;
+    // The selected card and last question are protected; never silently slice either.
+    if (ct) sys.push(`### Карточка персонажа, о котором идёт речь\n${ct}`);
+    const hist = o.history || [], lines = o.chatLines || [];
+    let firstHistory = 0, firstChat = 0;
+    function render() {
+      const head = sys.slice();
+      if (firstChat < lines.length) {
+        const omitted = firstChat ? `(ранние ${firstChat} сообщ. не поместились)\n\n` : "";
+        head.push(`### Выдержка из ролевого чата${o.sceneLine ? ` (сцена сейчас: ${o.sceneLine})` : ""}\n${omitted}${chatText(lines.slice(firstChat), Infinity)}`);
+      }
+      return [{ role: "system", content: head.join("\n\n") }]
+        .concat(hist.slice(firstHistory).map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text })));
     }
-    let chatBlock = "";
-    if (o.chatLines && o.chatLines.length) {
-      chatBlock = `### Выдержка из ролевого чата${o.sceneLine ? ` (сцена сейчас: ${o.sceneLine})` : ""}\n${chatText(o.chatLines, Math.max(300, budget - used))}`;
-      sys.push(chatBlock);
-      used += U.estimateTokens(chatBlock);
-    }
-    const messages = [{ role: "system", content: sys.join("\n\n") }]
-      .concat(kept.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text })));
-    return { messages, report: { budget, used, historyKept: kept.length, historyTotal: hist.length, card: !!ct, chat: !!chatBlock } };
+    const messageCost = (messages) => messages.reduce((n, m) => n + U.estimateTokens(m.content) + 4, 0);
+    const cost = typeof o.inputCost === "function" ? o.inputCost : messageCost;
+    const fits = () => !invalidBudget && cost(render()) <= budget;
+    // Only read-only projections shrink: old assistant turns, then old RP excerpt lines.
+    while (!invalidBudget && !fits() && firstHistory < hist.length - 1) firstHistory++;
+    while (!invalidBudget && !fits() && firstChat < lines.length) firstChat++;
+    const messages = render(), used = cost(messages), fit = !invalidBudget && used <= budget;
+    return { messages, report: {
+      contextTokens, reserveTokens, budget, used, messageUsed: messageCost(messages),
+      fits: fit, overflow: !fit, invalidBudget,
+      historyKept: hist.length - firstHistory, historyTotal: hist.length,
+      chatKept: lines.length - firstChat, chatTotal: lines.length, card: !!ct, chat: firstChat < lines.length,
+    } };
   }
 
   // Заголовок разговора по первой реплике.

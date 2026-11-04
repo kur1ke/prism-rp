@@ -64,7 +64,7 @@
       "assist-starter": (t) => { if (S.gen) return; svc.assist.send(t.dataset.q); },
       "assist-copy": (t) => { const m = S.assist.messages.find((x) => x.id === t.dataset.id); if (m) copy(m.text); },
       "copy-code": (t) => { const c = t.parentElement.querySelector("code"); if (c) copy(c.textContent); },
-      "assist-regen": async (t) => { if (S.gen) return; await svc.assist.cutFrom(t.dataset.id); await svc.assist.generate(); },
+      "assist-regen": async (t) => { if (S.gen) return; await svc.assist.generate(t.dataset.id); },
       "assist-edit": async (t) => {
         if (S.gen) return;
         const removed = await svc.assist.cutFrom(t.dataset.id);

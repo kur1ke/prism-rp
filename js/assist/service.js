@@ -46,55 +46,88 @@
       return { lines, scene: TRACK.summary(st) };
     }
 
-    async function send(text) {
-      const a = S.assist;
-      if (!a || S.gen) return;
-      if (!a.messages.length) a.title = AST.title(text);
-      a.messages.push({ id: U.uid("am"), role: "user", text, at: Date.now() });
-      await save(); ui.rememberUi();
-      await generate();
-    }
+    async function send(text) { return generate(null, String(text || "").trim()); }
 
-    async function generate() {
+    async function generate(regenId, text) {
       const a = S.assist;
+      if (!a || S.gen) return { outcome: "busy" };
+      if (text !== undefined && !text) return { outcome: "empty" };
       const prov = ctx.provider();
-      if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return; }
-      const cd = a.ctx.cardId ? S.cards.find((c) => c.id === a.ctx.cardId) : null;
-      const chatCtx = a.ctx.chatId ? await chatLines(a.ctx.chatId) : { lines: [], scene: "" };
-      const target = { id: U.uid("am"), role: "assistant", text: "", at: Date.now() };
-      const history = a.messages.map((x) => ({ role: x.role, text: x.text }));
-      a.messages.push(target);
-      const built = AST.build({
-        system: (S.settings.assistSystem || "").trim() || AST.SYSTEM, card: cd, chatLines: chatCtx.lines, sceneLine: chatCtx.scene,
-        userName: ctx.persona().name, history, contextTokens: ctx.contextTokens(), reserveTokens: 1500,
+      if (!prov) { ui.toast("Модель не подключена. Откройте «Настройки → Модели».", true); ui.openSettings("models"); return { outcome: "no-provider" }; }
+      const at = regenId != null ? a.messages.findIndex((m) => m.id === regenId) : -1;
+      if (regenId != null && (at < 0 || at !== a.messages.length - 1 || a.messages[at].role !== "assistant"))
+        return { outcome: "invalid" };
+      const sourceKey = JSON.stringify([a.ctx, a.messages]);
+      const proposed = (regenId != null ? a.messages.slice(0, at) : a.messages.slice());
+      if (text !== undefined) proposed.push({ id: U.uid("am"), role: "user", text, at: Date.now() });
+      const sp = S.settings.sampler;
+      const sampler = Object.assign({}, sp, {
+        temperature: Math.min(sp.temperature || 0.7, 0.8),
+        max_tokens: Math.max(sp.max_tokens || 0, 1500),
       });
+      const names = { char: "Ассистент", user: ctx.persona().name };
       const ctrl = new AbortController();
-      S.gen = { ctrl, msgId: target.id, raw: "", reasoning: "", assist: true };
-      ui.renderStage();
-      ui.scrollBottom();
-      const onDelta = (d) => { if (!S.gen) return; S.gen.raw += d.text || ""; S.gen.reasoning += d.reasoning || ""; ui.paintAssist(); };
-      let raw = "", reasoning = "", error = null;
+      // Hold the accepted operation while reading attached chat context; no message exists yet.
+      const lock = S.gen = { ctrl, msgId: "pending-assist", raw: "", reasoning: "", assist: true };
+      let accepted = false;
       try {
-        const sp = S.settings.sampler;
-        const res = await LLM.chat(prov, built.messages, {
-          names: { char: "Ассистент", user: ctx.persona().name },
-          sampler: Object.assign({}, sp, { temperature: Math.min(sp.temperature || 0.7, 0.8), max_tokens: Math.max(sp.max_tokens || 0, 1500) }),
-          signal: ctrl.signal, onDelta,
+        const cd = a.ctx.cardId ? S.cards.find((c) => c.id === a.ctx.cardId) : null;
+        const chatCtx = a.ctx.chatId ? await chatLines(a.ctx.chatId) : { lines: [], scene: "" };
+        const built = AST.build({
+          system: (S.settings.assistSystem || "").trim() || AST.SYSTEM, card: cd,
+          chatLines: chatCtx.lines, sceneLine: chatCtx.scene, userName: names.user,
+          history: proposed, contextTokens: ctx.contextTokens(prov), reserveTokens: sampler.max_tokens,
+          inputCost: prov.kind === "perchance" ? (messages) => PRP.perchance.inputCost(names, messages) : undefined,
         });
-        raw = res.text; reasoning = res.reasoning;
-      } catch (e) {
-        raw = e.partial != null ? e.partial : (S.gen ? S.gen.raw : "");
-        reasoning = S.gen ? S.gen.reasoning : "";
-        if (e.name !== "AbortError") error = e.message || String(e);
+        S.lastAssistBudget = built.report;
+        if (built.report.overflow) {
+          ui.toast("Контекст ассистента не помещается (" + built.report.used + " из " + built.report.budget +
+            " токенов), запрос не отправлен. Увеличьте окно, уменьшите длину ответа или объём выбранной карточки/вопроса.", true);
+          return { outcome: "overflow", report: built.report };
+        }
+        if (S.assist !== a || sourceKey !== JSON.stringify([a.ctx, a.messages]) || ctrl.signal.aborted)
+          return { outcome: "stale" };
+        const target = { id: U.uid("am"), role: "assistant", text: "", at: Date.now() };
+        const next = Object.assign({}, a, {
+          title: !a.messages.length && text !== undefined ? AST.title(text) : a.title,
+          messages: proposed.concat(target),
+        });
+        await DB.put("assist", next);
+        Object.assign(a, next);
+        accepted = true;
+        if (!S.assistList.includes(a)) S.assistList.push(a);
+        if (text !== undefined && typeof ui.acceptAssistInput === "function") ui.acceptAssistInput(text);
+        lock.msgId = target.id;
+        ui.rememberUi(); ui.renderStage(); ui.scrollBottom();
+        const onDelta = (d) => {
+          if (S.gen !== lock) return;
+          lock.raw += d.text || ""; lock.reasoning += d.reasoning || ""; ui.paintAssist();
+        };
+        let raw = "", reasoning = "", error = null;
+        try {
+          const res = await LLM.chat(prov, built.messages, { names, sampler, signal: ctrl.signal, onDelta });
+          raw = res.text; reasoning = res.reasoning;
+        } catch (e) {
+          raw = e.partial != null ? e.partial : lock.raw;
+          reasoning = lock.reasoning;
+          if (e.name !== "AbortError") error = e.message || String(e);
+        }
+        const th = OA.splitThink(raw || "");
+        const response = Object.assign({}, target, {
+          text: th.text.trim(), reasoning: [reasoning, th.reasoning].filter(Boolean).join("\n").trim(),
+          ...(error ? { error } : {}),
+        });
+        const completed = Object.assign({}, a, {
+          messages: a.messages.filter((m) => m.id !== target.id).concat(response.text || error ? [response] : []),
+        });
+        await DB.put("assist", completed);
+        Object.assign(a, completed);
+        ui.rememberUi();
+        return { outcome: "sent", report: built.report };
+      } finally {
+        if (S.gen === lock) S.gen = null;
+        if (S.view === "assist") { ui.renderStage(); if (accepted) ui.scrollBottom(); }
       }
-      const th = OA.splitThink(raw || "");
-      target.text = th.text.trim();
-      target.reasoning = [reasoning, th.reasoning].filter(Boolean).join("\n").trim();
-      if (error) target.error = error;
-      S.gen = null;
-      if (!target.text && !error) a.messages.pop();
-      await save(); ui.rememberUi();
-      if (S.view === "assist") { ui.renderStage(); ui.scrollBottom(); }
     }
 
     // Убрать сообщение и всё после него. → удалённые сообщения или null.
