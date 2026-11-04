@@ -190,7 +190,7 @@
 
     function updateTokenDisplay() {
       const d = collectCard();
-      const budget = Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 0));
+      const budget = Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 700));
       const usage = PRP.cardContext.tokenUsage(d, budget);
       const summary = $("#card-token-summary");
       if (summary) { summary.innerHTML = PRP.views.cardTokenSummary(usage); summary.className = "card-token-summary " + usage.level; }

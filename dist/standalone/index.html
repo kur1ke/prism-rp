@@ -14377,7 +14377,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         branchTreeUi: S.branchTreeUi && ctx.chat() && S.branchTreeUi.chatId === ctx.chat().id ? S.branchTreeUi : null,
         dialogueMap: S.modal && S.modal.kind === "tree" && ctx.chat() ? TR.layout(S.messages.filter((x) => x.chatId === ctx.chat().id), ctx.chat().leafId) : null,
         provider: ctx.provider(), providers: ctx.providers(), settings: S.settings,
-        cardInputBudget: Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 0)),
+        cardInputBudget: Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 700)),
         observedMemories: svc().memory.visibleMemories(path), currentExperience: svc().memory.experience(path), memoryStatus: S.memoryStatus,
         memoryTimeline: S.drawerOpen && S.tab === "memory" && ctx.chat() ? svc().memory.timeline(path) : null,
         // «Мир чата» собирает сервис мира чата (только чтение); считается, только когда вкладка открыта.
@@ -15226,7 +15226,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 
     function updateTokenDisplay() {
       const d = collectCard();
-      const budget = Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 0));
+      const budget = Math.max(0, ctx.contextTokens() - (S.settings.sampler.max_tokens || 700));
       const usage = PRP.cardContext.tokenUsage(d, budget);
       const summary = $("#card-token-summary");
       if (summary) { summary.innerHTML = PRP.views.cardTokenSummary(usage); summary.className = "card-token-summary " + usage.level; }
