@@ -24,6 +24,8 @@ jobs:
         run: node tests/run.js
       - name: Check chat navigation, persistence and imported URL safety
         run: node tests/critical-integrity.js
+      - name: Check Observer provider window and full request budget
+        run: node tests/observer-budget.js
       - name: Check imported values at HTML boundaries
         run: node tests/render-import-safety.js
       - name: Check StateTracker photographed outfit continuity

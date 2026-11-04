@@ -1288,7 +1288,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const m = typeof perchanceMeta === "function" ? perchanceMeta() : perchanceMeta;
       if (m && m.idealMaxContextTokens) return m.idealMaxContextTokens;
     }
-    return s.contextTokens || 8192;
+    return s.contextTokens == null ? 8192 : s.contextTokens;
   }
   function imagesOn(s, perchanceImagesAvailable) {
     const ic = s.images;
@@ -8526,6 +8526,35 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script>/* js/providers/simple-request.js */
+/* Pure preparation/cost of a simple text request; shared with the transport. */
+(function (root) {
+  "use strict";
+  const PRP = (root.PRP = root.PRP || {});
+  const U = PRP.util || (typeof require !== "undefined" ? require("../core/util.js") : null);
+  function prepare(provider, instruction, options) {
+    const text = String(instruction == null ? "" : instruction);
+    const reserveTokens = Math.max(120, Math.min(1000, Number(options && options.maxTokens) || 400));
+    return {
+      instruction: text, messages: [{ role: "user", content: text }],
+      sampler: { temperature: 0.3, max_tokens: reserveTokens },
+      inputTokens: U.estimateTokens(text) + (provider && provider.kind === "perchance" ? 0 : 4),
+      reserveTokens,
+    };
+  }
+  function budget(provider, instruction, options, contextTokens) {
+    const request = prepare(provider, instruction, options);
+    const invalidContext = !Number.isFinite(contextTokens) || contextTokens <= 0;
+    const fits = !invalidContext &&
+      request.inputTokens + request.reserveTokens <= contextTokens;
+    return { contextTokens, inputTokens: request.inputTokens,
+      reserveTokens: request.reserveTokens, invalidContext, fits, overflow: !fits };
+  }
+  PRP.simpleRequest = { prepare, budget };
+  if (typeof module !== "undefined" && module.exports) module.exports = PRP.simpleRequest;
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
 <script>/* js/providers/openai.js */
 /* Prism RP — текстовый провайдер, OpenAI-совместимый /chat/completions.
    Покрывает облачные API (DeepSeek, OpenRouter и др.) и локальные серверы
@@ -8899,6 +8928,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const PC = PRP.perchance, OA = PRP.openai;
+  const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("./simple-request.js") : null);
 
   /* prov — элемент settings.providerList; messages — [{role, content}].
      opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
@@ -8915,8 +8945,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   // Короткий служебный вызов без стриминга (перевод сцены в промпт картинки).
   async function simple(prov, instruction, options) {
     if (!prov) throw new Error("нет текстовой модели");
-    if (prov.kind === "perchance") return PC.simple(instruction);
-    const r = await OA.chat(prov, [{ role: "user", content: instruction }], { temperature: 0.3, max_tokens: Math.max(120, Math.min(1000, Number(options && options.maxTokens) || 400)) }, {});
+    const request = SIMPLE.prepare(prov, instruction, options);
+    if (prov.kind === "perchance") return PC.simple(request.instruction);
+    const r = await OA.chat(prov, request.messages, request.sampler, {});
     return OA.splitThink(r.text).text;
   }
 
@@ -12119,6 +12150,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   const PRP = (root.PRP = root.PRP || {});
   const TR = PRP.tree, TRACK = PRP.stateTracker, INT = PRP.stateInterpreter, WI = PRP.wearInquiry;
   const MAX_TEXT = 4500;
+  const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("../providers/simple-request.js") : null);
   function create(ctx) {
     const { S } = ctx;
     const chat = () => ctx.svc.chat;
@@ -12179,15 +12211,12 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         return { status: "error", reason };
       }
       const instruction = INT.initialOutfitInstruction(card, setup || {});
-      const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
-        ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
-      if (tokens + 650 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
-        return Promise.resolve({ status: "overflow" });
       const started = clock();
       const task = (async () => {
         let raw;
         try { raw = await simpleWithLimit(provider, instruction); }
         catch (e) {
+          if (e && e.code === "CONTEXT_OVERFLOW") return { status: "overflow", reason: "overflow", budget: e.budget };
           const message = String(e && e.message || e || "");
           return failed(/превышено время ожидания/i.test(message) ? "timeout"
             : /ai-text-plugin недоступен/i.test(message) ? "plugin-unavailable"
@@ -12292,10 +12321,23 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     function observerLimit(defaultMs) {
       return Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || defaultMs));
     }
+    function requestBudget(provider, instruction, maxTokens) {
+      const windowTokens = typeof ctx.contextTokens === "function" ? ctx.contextTokens(provider) : 8192;
+      return SIMPLE.budget(provider, instruction, { maxTokens }, windowTokens);
+    }
     async function simpleWithLimit(provider, instruction, defaultMs) {
       // Служебный запрос не может бесконечно блокировать обычную переписку.
       // Таймаут не создаёт факты и не применяет запоздалый ответ.
       const maxMs = observerLimit(defaultMs || 20000);
+      const budget = requestBudget(provider, instruction, 650);
+      if (budget.overflow) {
+        const error = new Error(budget.invalidContext
+          ? "Некорректный размер окна модели обработки: " + budget.contextTokens
+          : "Запрос наблюдателя не помещается в окно модели обработки: " +
+            budget.inputTokens + " + " + budget.reserveTokens + " > " + budget.contextTokens);
+        error.code = "CONTEXT_OVERFLOW"; error.budget = budget;
+        throw error;
+      }
       let timer;
       try {
         return await Promise.race([
@@ -12318,10 +12360,11 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           const raw = await simpleWithLimit(provider, instruction, OBSERVER_DEFAULT_MS);
           result = INT.parse(raw, options);
         } catch (e) {
-          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
+          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)],
+            ...(e && e.code === "CONTEXT_OVERFLOW" ? { overflow: true, budget: e.budget } : {}) };
         } finally {
           measure("observerModelMs", started, chatId, options && options.messageId || "",
-            result.valid ? "accepted" : "error");
+            result.overflow ? "overflow" : result.valid ? "accepted" : "error");
         }
       }
       return result;
@@ -12335,10 +12378,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       const roleProvider = typeof ctx.provider === "function" ? ctx.provider() : null;
       if (!roleProvider) return { skipped: "no-rp-provider" };
       const instruction = WI.instruction(o);
-      const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
-        ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
-      if (tokens + 450 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
-        return { skipped: "budget" };
+      const budget = requestBudget(roleProvider, instruction, 450);
+      if (budget.overflow) return { skipped: "budget", budget };
       let timer, outcome = "error";
       const started = clock(), chatId = (ctx.chat() || {}).id;
       try {
@@ -12484,6 +12525,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           early.issues.some((issue) => issue.startsWith("Неоднозначная ссылка:")));
         result = refsSame || !mayNeedReferences ? early : await analyse(options, provider);
       } else result = await analyse(options, provider);
+      // A budget refusal is not evidence. Do not run grounded fallback, issue
+      // another model inquiry, replace prior facts, or mark this source processed.
+      if (result.overflow) {
+        if (S.chatId === chatId && ctx.ui && typeof ctx.ui.toast === "function")
+          ctx.ui.toast(result.issues[0], true);
+        return { status: "overflow", events: [], issues: result.issues, budget: result.budget };
+      }
       // Fallback never invents frame objects; semantic photo references
       // are determined only by the validated main Observer result.
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
@@ -15719,7 +15767,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     providers: () => ST.providerList(S.settings, PC.available()),
     provider: () => ST.activeProvider(S.settings, ctx.providers()),
     processingProvider: () => ST.processingProvider(S.settings, ctx.providers()),
-    contextTokens: () => ST.contextTokens(S.settings, ctx.provider(), () => PC.meta()),
+    contextTokens: (provider) => ST.contextTokens(S.settings, provider || ctx.provider(), () => PC.meta()),
     saveSettings: () => DB.setSetting("app", S.settings),
     // PERF-01: длительности этапов хода — только в памяти (S.perf), показ в Debug → «Тайминги».
     perf: (metric, ms, meta) => {

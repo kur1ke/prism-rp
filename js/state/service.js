@@ -7,6 +7,7 @@
   const PRP = (root.PRP = root.PRP || {});
   const TR = PRP.tree, TRACK = PRP.stateTracker, INT = PRP.stateInterpreter, WI = PRP.wearInquiry;
   const MAX_TEXT = 4500;
+  const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("../providers/simple-request.js") : null);
   function create(ctx) {
     const { S } = ctx;
     const chat = () => ctx.svc.chat;
@@ -67,15 +68,12 @@
         return { status: "error", reason };
       }
       const instruction = INT.initialOutfitInstruction(card, setup || {});
-      const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
-        ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
-      if (tokens + 650 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
-        return Promise.resolve({ status: "overflow" });
       const started = clock();
       const task = (async () => {
         let raw;
         try { raw = await simpleWithLimit(provider, instruction); }
         catch (e) {
+          if (e && e.code === "CONTEXT_OVERFLOW") return { status: "overflow", reason: "overflow", budget: e.budget };
           const message = String(e && e.message || e || "");
           return failed(/превышено время ожидания/i.test(message) ? "timeout"
             : /ai-text-plugin недоступен/i.test(message) ? "plugin-unavailable"
@@ -180,10 +178,23 @@
     function observerLimit(defaultMs) {
       return Math.max(300, Math.min(60000, Number(ctx.observerTimeoutMs) || defaultMs));
     }
+    function requestBudget(provider, instruction, maxTokens) {
+      const windowTokens = typeof ctx.contextTokens === "function" ? ctx.contextTokens(provider) : 8192;
+      return SIMPLE.budget(provider, instruction, { maxTokens }, windowTokens);
+    }
     async function simpleWithLimit(provider, instruction, defaultMs) {
       // Служебный запрос не может бесконечно блокировать обычную переписку.
       // Таймаут не создаёт факты и не применяет запоздалый ответ.
       const maxMs = observerLimit(defaultMs || 20000);
+      const budget = requestBudget(provider, instruction, 650);
+      if (budget.overflow) {
+        const error = new Error(budget.invalidContext
+          ? "Некорректный размер окна модели обработки: " + budget.contextTokens
+          : "Запрос наблюдателя не помещается в окно модели обработки: " +
+            budget.inputTokens + " + " + budget.reserveTokens + " > " + budget.contextTokens);
+        error.code = "CONTEXT_OVERFLOW"; error.budget = budget;
+        throw error;
+      }
       let timer;
       try {
         return await Promise.race([
@@ -206,10 +217,11 @@
           const raw = await simpleWithLimit(provider, instruction, OBSERVER_DEFAULT_MS);
           result = INT.parse(raw, options);
         } catch (e) {
-          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)] };
+          result = { valid: false, events: [], issues: ["Ошибка наблюдателя: " + String(e && e.message || e).slice(0, 200)],
+            ...(e && e.code === "CONTEXT_OVERFLOW" ? { overflow: true, budget: e.budget } : {}) };
         } finally {
           measure("observerModelMs", started, chatId, options && options.messageId || "",
-            result.valid ? "accepted" : "error");
+            result.overflow ? "overflow" : result.valid ? "accepted" : "error");
         }
       }
       return result;
@@ -223,10 +235,8 @@
       const roleProvider = typeof ctx.provider === "function" ? ctx.provider() : null;
       if (!roleProvider) return { skipped: "no-rp-provider" };
       const instruction = WI.instruction(o);
-      const tokens = PRP.util && typeof PRP.util.estimateTokens === "function"
-        ? PRP.util.estimateTokens(instruction) : Math.ceil(instruction.length / 3);
-      if (tokens + 450 > (typeof ctx.contextTokens === "function" ? ctx.contextTokens() : 8192))
-        return { skipped: "budget" };
+      const budget = requestBudget(roleProvider, instruction, 450);
+      if (budget.overflow) return { skipped: "budget", budget };
       let timer, outcome = "error";
       const started = clock(), chatId = (ctx.chat() || {}).id;
       try {
@@ -372,6 +382,13 @@
           early.issues.some((issue) => issue.startsWith("Неоднозначная ссылка:")));
         result = refsSame || !mayNeedReferences ? early : await analyse(options, provider);
       } else result = await analyse(options, provider);
+      // A budget refusal is not evidence. Do not run grounded fallback, issue
+      // another model inquiry, replace prior facts, or mark this source processed.
+      if (result.overflow) {
+        if (S.chatId === chatId && ctx.ui && typeof ctx.ui.toast === "function")
+          ctx.ui.toast(result.issues[0], true);
+        return { status: "overflow", events: [], issues: result.issues, budget: result.budget };
+      }
       // Fallback never invents frame objects; semantic photo references
       // are determined only by the validated main Observer result.
       const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);

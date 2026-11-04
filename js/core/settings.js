@@ -73,7 +73,7 @@
       const m = typeof perchanceMeta === "function" ? perchanceMeta() : perchanceMeta;
       if (m && m.idealMaxContextTokens) return m.idealMaxContextTokens;
     }
-    return s.contextTokens || 8192;
+    return s.contextTokens == null ? 8192 : s.contextTokens;
   }
   function imagesOn(s, perchanceImagesAvailable) {
     const ic = s.images;

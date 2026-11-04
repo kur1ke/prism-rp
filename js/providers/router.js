@@ -6,6 +6,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const PC = PRP.perchance, OA = PRP.openai;
+  const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("./simple-request.js") : null);
 
   /* prov — элемент settings.providerList; messages — [{role, content}].
      opts: { names: {char, user} (для Perchance), sampler (для API), signal, onDelta, continueFrom,
@@ -22,8 +23,9 @@
   // Короткий служебный вызов без стриминга (перевод сцены в промпт картинки).
   async function simple(prov, instruction, options) {
     if (!prov) throw new Error("нет текстовой модели");
-    if (prov.kind === "perchance") return PC.simple(instruction);
-    const r = await OA.chat(prov, [{ role: "user", content: instruction }], { temperature: 0.3, max_tokens: Math.max(120, Math.min(1000, Number(options && options.maxTokens) || 400)) }, {});
+    const request = SIMPLE.prepare(prov, instruction, options);
+    if (prov.kind === "perchance") return PC.simple(request.instruction);
+    const r = await OA.chat(prov, request.messages, request.sampler, {});
     return OA.splitThink(r.text).text;
   }
 

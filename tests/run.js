@@ -1167,6 +1167,7 @@ t("настройки: список моделей, активная, объём
   assert.strictEqual(STG.activeProvider(s, noP).id, "p1");
   assert.strictEqual(STG.activeProvider(Object.assign({}, s, { activeProvider: "нет" }), noP).id, "p1", "неизвестная → первая");
   assert.strictEqual(STG.contextTokens(s, withP[1], null), 4096);
+  assert.strictEqual(STG.contextTokens(Object.assign({}, s, { contextTokens: 0 }), withP[1], null), 0, "invalid zero window must reach preflight instead of becoming 8192");
   let called = 0;
   assert.strictEqual(STG.contextTokens(s, withP[1], () => { called++; return { idealMaxContextTokens: 9 }; }), 4096);
   assert.strictEqual(called, 0, "метаданные Perchance не запрашиваются для API");
