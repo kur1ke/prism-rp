@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "15ff29ac2ea3301a1ee116ffe043d8a2e5270b6e";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -11043,14 +11043,34 @@
         st.chars = st.chars || {};
         st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
       }
-      Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
-      delete entry.error;
-      delete entry.translationFailure;
-      if (!reuse) (sw.images = sw.images || []).push(entry);
+      const pendingEntry = Object.assign({}, entry, { status: "pending", stage: "Готовлю промпт…" });
+      delete pendingEntry.error;
+      delete pendingEntry.translationFailure;
+      const pendingMessage = JSON.parse(JSON.stringify(msg));
+      const pendingSwipe = pendingMessage.swipes[origin.swipeIdx];
+      if (reuse) pendingSwipe.images[pendingSwipe.images.findIndex(im => im.id === entry.id)] = pendingEntry;
+      else (pendingSwipe.images = pendingSwipe.images || []).push(pendingEntry);
       S.drawing.add(entry.id);
       const repaint = () => { if (ctx.chat() && ctx.chat().id === origin.chatId) ui.renderFeed(); };
       // Persist only the image entry; never repopulate the active chat's message list.
-      await DB.put("messages", msg);
+      try {
+        // Publish pending only after persistence; the adapter's updatedAt
+        // stamp and a failed write must not change the live message either.
+        await DB.put("messages", pendingMessage);
+      } catch (e) {
+        // No image work or live mutation has started. Release the reservation
+        // so the existing controls can retry without reloading the page.
+        S.drawing.delete(entry.id);
+        perf("imagePrepareMs", prepT0, origin, "error");
+        perf("imageTotalMs", prepT0, origin, "error");
+        repaint();
+        ui.toast("Не удалось сохранить начало рисования: " + (e.message || String(e)) + ". Попробуйте ещё раз.", true);
+        return;
+      }
+      Object.assign(entry, pendingEntry);
+      delete entry.error;
+      delete entry.translationFailure;
+      if (!reuse) (sw.images = sw.images || []).push(entry);
       repaint();
       let finalPatch, imageData, translationFailure;
       let preparationRecorded = false;

@@ -11860,14 +11860,34 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         st.chars = st.chars || {};
         st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
       }
-      Object.assign(entry, { status: "pending", stage: "Готовлю промпт…" });
-      delete entry.error;
-      delete entry.translationFailure;
-      if (!reuse) (sw.images = sw.images || []).push(entry);
+      const pendingEntry = Object.assign({}, entry, { status: "pending", stage: "Готовлю промпт…" });
+      delete pendingEntry.error;
+      delete pendingEntry.translationFailure;
+      const pendingMessage = JSON.parse(JSON.stringify(msg));
+      const pendingSwipe = pendingMessage.swipes[origin.swipeIdx];
+      if (reuse) pendingSwipe.images[pendingSwipe.images.findIndex(im => im.id === entry.id)] = pendingEntry;
+      else (pendingSwipe.images = pendingSwipe.images || []).push(pendingEntry);
       S.drawing.add(entry.id);
       const repaint = () => { if (ctx.chat() && ctx.chat().id === origin.chatId) ui.renderFeed(); };
       // Persist only the image entry; never repopulate the active chat's message list.
-      await DB.put("messages", msg);
+      try {
+        // Publish pending only after persistence; the adapter's updatedAt
+        // stamp and a failed write must not change the live message either.
+        await DB.put("messages", pendingMessage);
+      } catch (e) {
+        // No image work or live mutation has started. Release the reservation
+        // so the existing controls can retry without reloading the page.
+        S.drawing.delete(entry.id);
+        perf("imagePrepareMs", prepT0, origin, "error");
+        perf("imageTotalMs", prepT0, origin, "error");
+        repaint();
+        ui.toast("Не удалось сохранить начало рисования: " + (e.message || String(e)) + ". Попробуйте ещё раз.", true);
+        return;
+      }
+      Object.assign(entry, pendingEntry);
+      delete entry.error;
+      delete entry.translationFailure;
+      if (!reuse) (sw.images = sw.images || []).push(entry);
       repaint();
       let finalPatch, imageData, translationFailure;
       let preparationRecorded = false;
