@@ -28,6 +28,8 @@ jobs:
         run: node tests/backup-snapshot.js
       - name: Check complete selected character fields and budget
         run: node tests/card-fields.js
+      - name: Check removed background field and lore preservation
+        run: node tests/no-background.js
       - name: Check Observer provider window and full request budget
         run: node tests/observer-budget.js
       - name: Check assistant budget and mutation-free preflight

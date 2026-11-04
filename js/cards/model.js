@@ -1,7 +1,7 @@
 /* Prism RP — каноническая модель карточки персонажа (CardDraft / сохранённая карточка).
    Один формат для всех источников (CC V1/V2/V3, URV v2, созданные в редакторе).
    Смысл полей разведён:
-     • личность (постоянная основа): description, appearance, personality, background;
+     • личность (постоянная основа): description, appearance, personality;
      • начало мира: scenario; авторское начало: firstMes, altGreetings;
      • манера: mesExample; справочные сведения: lore (не указания);
      • указания автора: directives.system / directives.postHistory — отдельный уровень власти,
@@ -58,7 +58,7 @@
     return {
       id: null, schema: SCHEMA,
       name: "",
-      description: "", appearance: "", personality: "", background: "",
+      description: "", appearance: "", personality: "",
       scenario: "",
       firstMes: "", altGreetings: [],
       mesExample: "",
@@ -86,15 +86,29 @@
     return !!(d && !d.enabled && String(d.text || "").trim());
   }
 
+  // Retire the old slot without losing text or enabling it as context.
+  // Once converted, this is an ordinary editable, disabled lore entry.
+  function retireBackground(card) {
+    if (!card || !Object.prototype.hasOwnProperty.call(card, "background")) return card;
+    const next = Object.assign({}, card);
+    delete next.background;
+    const text = String(card.background || "");
+    if (text.trim()) next.lore = (Array.isArray(card.lore) ? card.lore : []).concat([{
+      comment: "Из прежнего поля «Прошлое»", content: text,
+      keys: [], secondary_keys: [], enabled: false, constant: false,
+      selective: false, case_sensitive: false, position: "after_char", insertion_order: 0,
+    }]);
+    return next;
+  }
+
   /* Приведение карточки, сохранённой в 0.5.0 и раньше (поля systemPrompt / postHistory / raw / spec).
      Старые указания были видны в редакторе и уходили в модель — поэтому они становятся
      авторскими включёнными, поведение не меняется. Исходник переезжает в source. */
   function upgradeStored(card) {
-    if (!card || card.schema === SCHEMA) return card;
+    if (!card || card.schema === SCHEMA) return retireBackground(card);
     const c = Object.assign(blank(), card);
     c.schema = SCHEMA;
     c.appearance = card.appearance || "";
-    c.background = card.background || "";
     c.altGreetings = Array.isArray(card.altGreetings) ? card.altGreetings : [];
     c.lore = Array.isArray(card.lore) ? card.lore : [];
     c.tags = Array.isArray(card.tags) ? card.tags : [];
@@ -105,15 +119,15 @@
     };
     if (!card.source && card.raw) c.source = { format: card.spec === "chara_card_v3" ? "ccv3" : card.spec === "chara_card_v2" ? "ccv2" : "ccv1", version: "", sourceType: "json", raw: card.raw, importedAt: card.createdAt || null, unmapped: [], compiled: [], preserved: {} };
     delete c.systemPrompt; delete c.postHistory; delete c.raw; delete c.spec;
-    return c;
+    return retireBackground(c);
   }
 
   // Поля, по которым видно, что в карточке есть содержание (не только имя).
-  const CONTENT_FIELDS = ["description", "appearance", "personality", "background", "scenario", "firstMes", "mesExample"];
+  const CONTENT_FIELDS = ["description", "appearance", "personality", "scenario", "firstMes", "mesExample"];
   function hasContent(card) {
-    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
+    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.lore || []).some(e => e && String(e.content || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
   }
 
-  PRP.cardModel = { SCHEMA, CONTEXT_DEFAULTS, normalizeContextFields, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  PRP.cardModel = { SCHEMA, CONTEXT_DEFAULTS, normalizeContextFields, retireBackground, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
 })(typeof window !== "undefined" ? window : globalThis);

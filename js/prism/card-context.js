@@ -11,8 +11,7 @@
   const CHUNK_MAX = 500;      // символов в куске подробностей
   const CHUNK_LIMIT = 4;      // кусков подробностей за ход
   const EXAMPLES = { fullUntil: 2, oneUntil: 5 };
-  const FIELDS = ["description", "personality", "background", "appearance"];
-  const FIELD_WORD = { description: "описание", personality: "личность", background: "прошлое", appearance: "внешность", custom: "дополнительные сведения" };
+  const FIELD_WORD = { description: "описание", personality: "личность", appearance: "внешность", custom: "дополнительные сведения" };
   // Признаки разговора о внешности (по основам слов; рус. и англ.).
   // Только начало слова: «рост» не должен находиться в «просто», «лица» — в «улица».
   const VISUAL = /(?:^|[^\p{L}])(?:внешн|выгляд|одежд|одет|оделас|наряд|плать|юбк|рубашк|футболк|джинс|волос|причёс|причес|глаз|лицо|лица|фигур|рост[ау]?(?![\p{L}])|фото|селфи|снимок|снимк|портрет|похож|look|hair|eyes|outfit|dress|wear|photo|selfie|picture)/iu;
@@ -87,13 +86,11 @@
     }
     return out;
   }
-  // Optional legacy background/custom details; primary fields never enter this selector.
+  // Optional custom details; primary fields never enter this selector.
   function chunks(card, k, m) {
     const mm = m || ((x) => x);
     const cd = card || {};
-    const src = { description: "", personality: "", background: mm(str(cd.background)).trim(), appearance: "" };
     const out = [];
-    for (const f of FIELDS) splitChunks(src[f]).forEach((text, i) => out.push({ id: `${f}#${i + 1}`, field: f, text, order: out.length }));
     // Custom fields are opt-in card facts. Never interpret their labels as prompt roles.
     (Array.isArray(cd.customFields) ? cd.customFields : []).forEach((f, i) => {
       if (!f || f.enabled !== true || !str(f.label).trim() || !str(f.text).trim()) return;

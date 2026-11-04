@@ -97,7 +97,6 @@
     if (facts) notes.push(note("info", "profile-facts", "Возраст и пол из профиля добавлены в начало описания."));
     d.appearance = str(prof.appearance);
     d.personality = str(prof.personality);
-    d.background = str(prof.background);
     d.scenario = str(prof.scenario);
 
     // Первые сообщения: первое — основное, остальные — альтернативные приветствия.
@@ -114,7 +113,8 @@
     d.mesExample = blocks.filter(Boolean).join("\n");
     if (bad) notes.push(note("warning", "examples-shape", `Примеров диалога в незнакомом виде: ${bad}. Они сохранены в исходнике, но не перенесены.`));
 
-    d.lore = loreFromUrv(data.lorebook, notes);
+    d.lore = CM.retireBackground({ lore: loreFromUrv(data.lorebook, notes), background: str(prof.background) }).lore;
+    if (str(prof.background).trim()) notes.push(note("info", "biography-lore", "Биография из профиля сохранена выключенной записью лорбука."));
 
     // Указания: заметка и напоминание — импортированные, выключенные.
     d.directives.system = CM.importedDirective(str(prof.systemNote));
@@ -128,7 +128,7 @@
     // Собранный systemPrompt.
     const sp = str(data.systemPrompt);
     if (sp.trim()) {
-      const chk = compiledCheck(sp, { appearance: d.appearance, personality: d.personality, background: d.background, scenario: d.scenario, systemNote: str(prof.systemNote) });
+      const chk = compiledCheck(sp, { appearance: d.appearance, personality: d.personality, background: str(prof.background), scenario: d.scenario, systemNote: str(prof.systemNote) });
       if (chk.compiled) {
         source.compiled.push({ field: "data.systemPrompt", text: sp, matched: chk.hits });
         notes.push(note("warning", "compiled-prompt", "Собранный промпт источника (data.systemPrompt) сохранён, но не включён: те же поля импортированы по отдельности."));

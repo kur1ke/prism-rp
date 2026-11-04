@@ -15,16 +15,15 @@
   // Do not guess appearance from prose in a foreign card.
   function splitCompatDescription(value) {
     const text = str(value);
-    const out = { description: [], appearance: [], background: [] };
+    const out = { description: [], appearance: [] };
     let found = false;
     for (const p of text.split(/\n\s*\n/)) {
-      const match = p.match(/^(Внешность|Прошлое):\s*\n([\s\S]*)$/);
+      const match = p.match(/^(Внешность):\s*\n([\s\S]*)$/);
       if (match) {
-        const key = match[1] === "Внешность" ? "appearance" : "background";
-        out[key].push(match[2]); found = true;
+        out.appearance.push(match[2]); found = true;
       } else if (p.trim()) out.description.push(p);
     }
-    return found ? { description: out.description.join("\n\n"), appearance: out.appearance.join("\n\n"), background: out.background.join("\n\n") } : null;
+    return found ? { description: out.description.join("\n\n"), appearance: out.appearance.join("\n\n") } : null;
   }
 
   // data (V2/V3) → черновик; notes дополняются. known — разобранные ключи (V3 добавляет свои).
@@ -34,22 +33,20 @@
     const ext = isObj(data.extensions) ? data.extensions : {};
     const prism = isObj(ext.prism_rp) ? ext.prism_rp : {};
     d.name = str(data.name).trim();
-    // Раздельные поля Prism (наш экспорт складывает внешность и прошлое в description для других приложений).
+    // Раздельные поля Prism (наш экспорт складывает внешность в description для других приложений).
     // Поля берутся раздельно, только если description не правили после экспорта (совпадает со сборкой из них).
     const pf = isObj(prism.fields) ? prism.fields : null;
-    const composed = pf && [pf.description, pf.appearance ? "Внешность:\n" + pf.appearance : "", pf.background ? "Прошлое:\n" + pf.background : ""]
+    const composed = pf && [pf.description, pf.appearance ? "Внешность:\n" + pf.appearance : ""]
       .map((x) => str(x).trim()).filter(Boolean).join("\n\n");
     if (pf && composed === str(data.description).trim()) {
       d.description = str(pf.description);
       d.appearance = str(pf.appearance);
-      d.background = str(pf.background);
     } else {
       const split = splitCompatDescription(data.description);
       if (split) {
         d.description = split.description;
         d.appearance = split.appearance;
-        d.background = split.background;
-        notes.push(note("info", "compat-paragraphs", "Раздельные внешность и прошлое восстановлены из явных секций стандартного description."));
+        notes.push(note("info", "compat-paragraphs", "Раздельная внешность восстановлена из явных секций стандартного description."));
       } else {
         d.description = str(data.description);
         if (pf) notes.push(note("warning", "prism-fields-stale", "Стандартное описание изменено: раздельные поля не совпадают. Данные сохранены в исходнике — проверьте соответствие."));

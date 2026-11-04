@@ -130,7 +130,7 @@
 
   /* ── Экспорт ────────────────────────────────────────────────────────────
      Каноническая карточка Prism (cards/model.js) → Character Card V2/V3.
-     • Внешность и прошлое, которых нет в стандарте, складываются в description абзацами;
+     • Внешность, которой нет в стандарте, складывается в description абзацами;
        раздельные поля Prism едут в extensions.prism_rp.fields (для обратного импорта в Prism).
      • В system_prompt / post_history_instructions попадают только ВКЛЮЧЁННЫЕ указания.
        Выключенные (например, непроверенные импортированные) хранятся в
@@ -146,11 +146,12 @@
        Исходники других форматов (V1, URV) в экспорт не переносятся. */
   function toSpec(card, ver) {
     const CM = PRP.cardModel;
+    card = CM.retireBackground(card);
     const v3 = ver === "v3";
     const src = card.source && (card.source.format === "ccv2" || card.source.format === "ccv3") && card.source.raw && card.source.raw.data;
     const base = src ? JSON.parse(JSON.stringify(src)) : {};
     const oldBook = base.character_book || {};
-    const description = [card.description, card.appearance ? "Внешность:\n" + card.appearance : "", card.background ? "Прошлое:\n" + card.background : ""]
+    const description = [card.description, card.appearance ? "Внешность:\n" + card.appearance : ""]
       .map((x) => String(x || "").trim()).filter(Boolean).join("\n\n");
     const data = Object.assign(base, {
       name: card.name,
@@ -206,7 +207,7 @@
     pr.contextFields = PRP.cardModel.normalizeContextFields(card.contextFields);
     pr.prismCore = core ? { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext } : null;
     // Always include the Prism-specific slots, including empty fields.
-    pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    pr.fields = { description: card.description || "", appearance: card.appearance || "" };
     pr.customFields = CM.normalizeCustomFields(card.customFields);
     const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
     const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};

@@ -18,7 +18,7 @@
       const d = S.modal.draft;
       d.contextFields = PRP.cardModel.normalizeContextFields(d.contextFields);
       $$("[data-cf-send]").forEach(el => { if (Object.prototype.hasOwnProperty.call(d.contextFields, el.dataset.cfSend)) d.contextFields[el.dataset.cfSend] = el.checked; });
-      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-bg": "background", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
+      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
       $$("[data-cf]").forEach((el) => {
         const id = el.dataset.cf;
         if (map[id]) d[map[id]] = el.value;

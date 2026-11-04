@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "f0ae1ca23c2a28f399f04960b9ea7760a90a8213";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -724,7 +724,7 @@
 /* Prism RP — каноническая модель карточки персонажа (CardDraft / сохранённая карточка).
    Один формат для всех источников (CC V1/V2/V3, URV v2, созданные в редакторе).
    Смысл полей разведён:
-     • личность (постоянная основа): description, appearance, personality, background;
+     • личность (постоянная основа): description, appearance, personality;
      • начало мира: scenario; авторское начало: firstMes, altGreetings;
      • манера: mesExample; справочные сведения: lore (не указания);
      • указания автора: directives.system / directives.postHistory — отдельный уровень власти,
@@ -781,7 +781,7 @@
     return {
       id: null, schema: SCHEMA,
       name: "",
-      description: "", appearance: "", personality: "", background: "",
+      description: "", appearance: "", personality: "",
       scenario: "",
       firstMes: "", altGreetings: [],
       mesExample: "",
@@ -809,15 +809,29 @@
     return !!(d && !d.enabled && String(d.text || "").trim());
   }
 
+  // Retire the old slot without losing text or enabling it as context.
+  // Once converted, this is an ordinary editable, disabled lore entry.
+  function retireBackground(card) {
+    if (!card || !Object.prototype.hasOwnProperty.call(card, "background")) return card;
+    const next = Object.assign({}, card);
+    delete next.background;
+    const text = String(card.background || "");
+    if (text.trim()) next.lore = (Array.isArray(card.lore) ? card.lore : []).concat([{
+      comment: "Из прежнего поля «Прошлое»", content: text,
+      keys: [], secondary_keys: [], enabled: false, constant: false,
+      selective: false, case_sensitive: false, position: "after_char", insertion_order: 0,
+    }]);
+    return next;
+  }
+
   /* Приведение карточки, сохранённой в 0.5.0 и раньше (поля systemPrompt / postHistory / raw / spec).
      Старые указания были видны в редакторе и уходили в модель — поэтому они становятся
      авторскими включёнными, поведение не меняется. Исходник переезжает в source. */
   function upgradeStored(card) {
-    if (!card || card.schema === SCHEMA) return card;
+    if (!card || card.schema === SCHEMA) return retireBackground(card);
     const c = Object.assign(blank(), card);
     c.schema = SCHEMA;
     c.appearance = card.appearance || "";
-    c.background = card.background || "";
     c.altGreetings = Array.isArray(card.altGreetings) ? card.altGreetings : [];
     c.lore = Array.isArray(card.lore) ? card.lore : [];
     c.tags = Array.isArray(card.tags) ? card.tags : [];
@@ -828,16 +842,16 @@
     };
     if (!card.source && card.raw) c.source = { format: card.spec === "chara_card_v3" ? "ccv3" : card.spec === "chara_card_v2" ? "ccv2" : "ccv1", version: "", sourceType: "json", raw: card.raw, importedAt: card.createdAt || null, unmapped: [], compiled: [], preserved: {} };
     delete c.systemPrompt; delete c.postHistory; delete c.raw; delete c.spec;
-    return c;
+    return retireBackground(c);
   }
 
   // Поля, по которым видно, что в карточке есть содержание (не только имя).
-  const CONTENT_FIELDS = ["description", "appearance", "personality", "background", "scenario", "firstMes", "mesExample"];
+  const CONTENT_FIELDS = ["description", "appearance", "personality", "scenario", "firstMes", "mesExample"];
   function hasContent(card) {
-    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
+    return CONTENT_FIELDS.some((k) => String(card[k] || "").trim()) || (card.lore || []).some(e => e && String(e.content || "").trim()) || (card.altGreetings || []).some((g) => String(g || "").trim()) || (card.customFields || []).some((f) => f && String(f.text || "").trim());
   }
 
-  PRP.cardModel = { SCHEMA, CONTEXT_DEFAULTS, normalizeContextFields, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
+  PRP.cardModel = { SCHEMA, CONTEXT_DEFAULTS, normalizeContextFields, retireBackground, blank, directive, importedDirective, normalizeCustomFields, activeText, hasDisabledText, upgradeStored, hasContent, CONTENT_FIELDS };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.cardModel;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -974,7 +988,7 @@
 
   /* ── Экспорт ────────────────────────────────────────────────────────────
      Каноническая карточка Prism (cards/model.js) → Character Card V2/V3.
-     • Внешность и прошлое, которых нет в стандарте, складываются в description абзацами;
+     • Внешность, которой нет в стандарте, складывается в description абзацами;
        раздельные поля Prism едут в extensions.prism_rp.fields (для обратного импорта в Prism).
      • В system_prompt / post_history_instructions попадают только ВКЛЮЧЁННЫЕ указания.
        Выключенные (например, непроверенные импортированные) хранятся в
@@ -990,11 +1004,12 @@
        Исходники других форматов (V1, URV) в экспорт не переносятся. */
   function toSpec(card, ver) {
     const CM = PRP.cardModel;
+    card = CM.retireBackground(card);
     const v3 = ver === "v3";
     const src = card.source && (card.source.format === "ccv2" || card.source.format === "ccv3") && card.source.raw && card.source.raw.data;
     const base = src ? JSON.parse(JSON.stringify(src)) : {};
     const oldBook = base.character_book || {};
-    const description = [card.description, card.appearance ? "Внешность:\n" + card.appearance : "", card.background ? "Прошлое:\n" + card.background : ""]
+    const description = [card.description, card.appearance ? "Внешность:\n" + card.appearance : ""]
       .map((x) => String(x || "").trim()).filter(Boolean).join("\n\n");
     const data = Object.assign(base, {
       name: card.name,
@@ -1050,7 +1065,7 @@
     pr.contextFields = PRP.cardModel.normalizeContextFields(card.contextFields);
     pr.prismCore = core ? { schema: core.schema, identity: core.identity, traits: core.traits, voice: core.voice, durableContext: core.durableContext } : null;
     // Always include the Prism-specific slots, including empty fields.
-    pr.fields = { description: card.description || "", appearance: card.appearance || "", background: card.background || "" };
+    pr.fields = { description: card.description || "", appearance: card.appearance || "" };
     pr.customFields = CM.normalizeCustomFields(card.customFields);
     const kept = card.source && card.source.preserved && card.source.preserved.disabledDirectives;
     const dis = kept && typeof kept === "object" && !Array.isArray(kept) ? JSON.parse(JSON.stringify(kept)) : {};
@@ -1248,16 +1263,15 @@
   // Do not guess appearance from prose in a foreign card.
   function splitCompatDescription(value) {
     const text = str(value);
-    const out = { description: [], appearance: [], background: [] };
+    const out = { description: [], appearance: [] };
     let found = false;
     for (const p of text.split(/\n\s*\n/)) {
-      const match = p.match(/^(Внешность|Прошлое):\s*\n([\s\S]*)$/);
+      const match = p.match(/^(Внешность):\s*\n([\s\S]*)$/);
       if (match) {
-        const key = match[1] === "Внешность" ? "appearance" : "background";
-        out[key].push(match[2]); found = true;
+        out.appearance.push(match[2]); found = true;
       } else if (p.trim()) out.description.push(p);
     }
-    return found ? { description: out.description.join("\n\n"), appearance: out.appearance.join("\n\n"), background: out.background.join("\n\n") } : null;
+    return found ? { description: out.description.join("\n\n"), appearance: out.appearance.join("\n\n") } : null;
   }
 
   // data (V2/V3) → черновик; notes дополняются. known — разобранные ключи (V3 добавляет свои).
@@ -1267,22 +1281,20 @@
     const ext = isObj(data.extensions) ? data.extensions : {};
     const prism = isObj(ext.prism_rp) ? ext.prism_rp : {};
     d.name = str(data.name).trim();
-    // Раздельные поля Prism (наш экспорт складывает внешность и прошлое в description для других приложений).
+    // Раздельные поля Prism (наш экспорт складывает внешность в description для других приложений).
     // Поля берутся раздельно, только если description не правили после экспорта (совпадает со сборкой из них).
     const pf = isObj(prism.fields) ? prism.fields : null;
-    const composed = pf && [pf.description, pf.appearance ? "Внешность:\n" + pf.appearance : "", pf.background ? "Прошлое:\n" + pf.background : ""]
+    const composed = pf && [pf.description, pf.appearance ? "Внешность:\n" + pf.appearance : ""]
       .map((x) => str(x).trim()).filter(Boolean).join("\n\n");
     if (pf && composed === str(data.description).trim()) {
       d.description = str(pf.description);
       d.appearance = str(pf.appearance);
-      d.background = str(pf.background);
     } else {
       const split = splitCompatDescription(data.description);
       if (split) {
         d.description = split.description;
         d.appearance = split.appearance;
-        d.background = split.background;
-        notes.push(note("info", "compat-paragraphs", "Раздельные внешность и прошлое восстановлены из явных секций стандартного description."));
+        notes.push(note("info", "compat-paragraphs", "Раздельная внешность восстановлена из явных секций стандартного description."));
       } else {
         d.description = str(data.description);
         if (pf) notes.push(note("warning", "prism-fields-stale", "Стандартное описание изменено: раздельные поля не совпадают. Данные сохранены в исходнике — проверьте соответствие."));
@@ -1473,7 +1485,6 @@
     if (facts) notes.push(note("info", "profile-facts", "Возраст и пол из профиля добавлены в начало описания."));
     d.appearance = str(prof.appearance);
     d.personality = str(prof.personality);
-    d.background = str(prof.background);
     d.scenario = str(prof.scenario);
 
     // Первые сообщения: первое — основное, остальные — альтернативные приветствия.
@@ -1490,7 +1501,8 @@
     d.mesExample = blocks.filter(Boolean).join("\n");
     if (bad) notes.push(note("warning", "examples-shape", `Примеров диалога в незнакомом виде: ${bad}. Они сохранены в исходнике, но не перенесены.`));
 
-    d.lore = loreFromUrv(data.lorebook, notes);
+    d.lore = CM.retireBackground({ lore: loreFromUrv(data.lorebook, notes), background: str(prof.background) }).lore;
+    if (str(prof.background).trim()) notes.push(note("info", "biography-lore", "Биография из профиля сохранена выключенной записью лорбука."));
 
     // Указания: заметка и напоминание — импортированные, выключенные.
     d.directives.system = CM.importedDirective(str(prof.systemNote));
@@ -1504,7 +1516,7 @@
     // Собранный systemPrompt.
     const sp = str(data.systemPrompt);
     if (sp.trim()) {
-      const chk = compiledCheck(sp, { appearance: d.appearance, personality: d.personality, background: d.background, scenario: d.scenario, systemNote: str(prof.systemNote) });
+      const chk = compiledCheck(sp, { appearance: d.appearance, personality: d.personality, background: str(prof.background), scenario: d.scenario, systemNote: str(prof.systemNote) });
       if (chk.compiled) {
         source.compiled.push({ field: "data.systemPrompt", text: sp, matched: chk.hits });
         notes.push(note("warning", "compiled-prompt", "Собранный промпт источника (data.systemPrompt) сохранён, но не включён: те же поля импортированы по отдельности."));
@@ -3032,8 +3044,7 @@
   const CHUNK_MAX = 500;      // символов в куске подробностей
   const CHUNK_LIMIT = 4;      // кусков подробностей за ход
   const EXAMPLES = { fullUntil: 2, oneUntil: 5 };
-  const FIELDS = ["description", "personality", "background", "appearance"];
-  const FIELD_WORD = { description: "описание", personality: "личность", background: "прошлое", appearance: "внешность", custom: "дополнительные сведения" };
+  const FIELD_WORD = { description: "описание", personality: "личность", appearance: "внешность", custom: "дополнительные сведения" };
   // Признаки разговора о внешности (по основам слов; рус. и англ.).
   // Только начало слова: «рост» не должен находиться в «просто», «лица» — в «улица».
   const VISUAL = /(?:^|[^\p{L}])(?:внешн|выгляд|одежд|одет|оделас|наряд|плать|юбк|рубашк|футболк|джинс|волос|причёс|причес|глаз|лицо|лица|фигур|рост[ау]?(?![\p{L}])|фото|селфи|снимок|снимк|портрет|похож|look|hair|eyes|outfit|dress|wear|photo|selfie|picture)/iu;
@@ -3108,13 +3119,11 @@
     }
     return out;
   }
-  // Optional legacy background/custom details; primary fields never enter this selector.
+  // Optional custom details; primary fields never enter this selector.
   function chunks(card, k, m) {
     const mm = m || ((x) => x);
     const cd = card || {};
-    const src = { description: "", personality: "", background: mm(str(cd.background)).trim(), appearance: "" };
     const out = [];
-    for (const f of FIELDS) splitChunks(src[f]).forEach((text, i) => out.push({ id: `${f}#${i + 1}`, field: f, text, order: out.length }));
     // Custom fields are opt-in card facts. Never interpret their labels as prompt roles.
     (Array.isArray(cd.customFields) ? cd.customFields : []).forEach((f, i) => {
       if (!f || f.enabled !== true || !str(f.label).trim() || !str(f.text).trim()) return;
@@ -5005,7 +5014,6 @@
       f("Описание (description)", card.description),
       f("Внешность", card.appearance),
       f("Личность (personality)", card.personality),
-      f("Прошлое", card.background),
       f("Сценарий (scenario)", card.scenario),
       f("Первое сообщение (first_mes)", card.firstMes),
       alts.length ? `Альтернативные приветствия: ${alts.length}` : "",
@@ -9552,7 +9560,6 @@
           ${send("appearance")}
           ${f("cf-pers", "Личность", "personality", d.personality, 3, "Черты характера, манера держаться.")}
           ${send("personality")}
-          ${f("cf-bg", "Прошлое", "", d.background, 3, "При экспорте в Character Card добавляется в description абзацем «Прошлое».")}
           ${f("cf-scen", "Сценарий", "scenario", d.scenario, 3, "Обстоятельства: где и почему всё происходит.")}
           ${f("cf-tags", "Теги", "tags", (d.tags || []).join(", "), 0, "Через запятую.")}</div></div>
         <details class="card-disclosure"><summary>Ядро для Prism — расширенная настройка</summary>
@@ -9713,7 +9720,7 @@
     const has = (v) => !!String(v || "").trim();
     const alts = (d.altGreetings || []).length;
     const rows = [
-      ["Описание", has(d.description)], ["Внешность", has(d.appearance)], ["Личность", has(d.personality)], ["Прошлое", has(d.background)],
+      ["Описание", has(d.description)], ["Внешность", has(d.appearance)], ["Личность", has(d.personality)],
       ["Сценарий", has(d.scenario)],
       ["Первое сообщение" + (alts ? ` + ${alts} альтернативн.` : ""), has(d.firstMes)],
       ["Примеры диалога", has(d.mesExample)],
@@ -12714,6 +12721,19 @@
 
     // Черновик для редактора: копия карточки или новая пустая.
     function draft(cd) { return U.clone(cd ? CM.upgradeStored(cd) : CM.blank()); }
+    async function loadAll() {
+      const saved = await DB.all("cards");
+      const hasBackground = card => card && Object.prototype.hasOwnProperty.call(card, "background");
+      const retired = saved.filter(hasBackground);
+      if (!retired.length) return saved.map(CM.upgradeStored);
+      // Convert current rows, not stale copies from the initial load. Another
+      // tab may have edited/deleted the card while opening this library.
+      await DB.readModifyWrite(["cards"], retired.map(card => ["cards", card.id]), rows => {
+        const puts = rows.filter(hasBackground).map(card => ["cards", CM.upgradeStored(card)]);
+        return puts.length ? puts : null;
+      });
+      return (await DB.all("cards")).map(CM.upgradeStored);
+    }
 
     /* Шаг 1 импорта: файлы → результаты проверки, без сохранения.
        → [{ ok, fileName, detection, draft | null, issues, avatar }] */
@@ -12744,7 +12764,7 @@
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (!it || !it.ok || !it.draft) continue;
-        const cd = U.clone(it.draft);
+        const cd = CM.retireBackground(U.clone(it.draft));
         const ch = (choices && choices[i]) || {};
         for (const k of ["system", "postHistory"]) {
           const dv = cd.directives[k];
@@ -12762,6 +12782,7 @@
 
     // Сохранить черновик редактора. → { error } или { card, isNew }.
     async function save(d) {
+      d = CM.retireBackground(d);
       d.name = (d.name || "").trim();
       if (!d.name) return { error: "Дайте персонажу имя." };
       if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
@@ -12823,7 +12844,7 @@
       return { name: `${d.name || "персонаж"}.png`, blob: new Blob([CC.embedInPng(await F().avatarPngBytes(d), d)], { type: "image/png" }) };
     }
 
-    return { draft, prepareImport, commitImport, save, remove, exportJson, exportPng };
+    return { draft, loadAll, prepareImport, commitImport, save, remove, exportJson, exportPng };
   }
 
   PRP.cardService = { create };
@@ -14215,7 +14236,7 @@
       const d = S.modal.draft;
       d.contextFields = PRP.cardModel.normalizeContextFields(d.contextFields);
       $$("[data-cf-send]").forEach(el => { if (Object.prototype.hasOwnProperty.call(d.contextFields, el.dataset.cfSend)) d.contextFields[el.dataset.cfSend] = el.checked; });
-      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-bg": "background", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
+      const map = { "cf-name": "name", "cf-desc": "description", "cf-pers": "personality", "cf-scen": "scenario", "cf-first": "firstMes", "cf-ex": "mesExample", "cf-app": "appearance", "cf-creator": "creator", "cf-version": "version", "cf-notes": "creatorNotes" };
       $$("[data-cf]").forEach((el) => {
         const id = el.dataset.cf;
         if (map[id]) d[map[id]] = el.value;
@@ -15075,7 +15096,7 @@
     S.settings = ST.merge(saved, { perchanceImages: IB.available("perchance") });
     S.imgLists = (await DB.getSetting("imgLists", {})) || {};
     ICP.setStore({ load: () => DB.getSetting("imgPromptCache", {}), save: (o) => DB.setSetting("imgPromptCache", o) });
-    S.cards = (await DB.all("cards")).map(PRP.cardModel.upgradeStored).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    S.cards = (await svc.cards.loadAll()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     S.chats = await DB.all("chats");
     S.assistList = await svc.assist.loadAll();
     await svc.world.loadAll();

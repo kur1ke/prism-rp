@@ -47,7 +47,6 @@
       f("Описание (description)", card.description),
       f("Внешность", card.appearance),
       f("Личность (personality)", card.personality),
-      f("Прошлое", card.background),
       f("Сценарий (scenario)", card.scenario),
       f("Первое сообщение (first_mes)", card.firstMes),
       alts.length ? `Альтернативные приветствия: ${alts.length}` : "",

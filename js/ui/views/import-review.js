@@ -16,7 +16,7 @@
     const has = (v) => !!String(v || "").trim();
     const alts = (d.altGreetings || []).length;
     const rows = [
-      ["Описание", has(d.description)], ["Внешность", has(d.appearance)], ["Личность", has(d.personality)], ["Прошлое", has(d.background)],
+      ["Описание", has(d.description)], ["Внешность", has(d.appearance)], ["Личность", has(d.personality)],
       ["Сценарий", has(d.scenario)],
       ["Первое сообщение" + (alts ? ` + ${alts} альтернативн.` : ""), has(d.firstMes)],
       ["Примеры диалога", has(d.mesExample)],

@@ -16,6 +16,19 @@
 
     // Черновик для редактора: копия карточки или новая пустая.
     function draft(cd) { return U.clone(cd ? CM.upgradeStored(cd) : CM.blank()); }
+    async function loadAll() {
+      const saved = await DB.all("cards");
+      const hasBackground = card => card && Object.prototype.hasOwnProperty.call(card, "background");
+      const retired = saved.filter(hasBackground);
+      if (!retired.length) return saved.map(CM.upgradeStored);
+      // Convert current rows, not stale copies from the initial load. Another
+      // tab may have edited/deleted the card while opening this library.
+      await DB.readModifyWrite(["cards"], retired.map(card => ["cards", card.id]), rows => {
+        const puts = rows.filter(hasBackground).map(card => ["cards", CM.upgradeStored(card)]);
+        return puts.length ? puts : null;
+      });
+      return (await DB.all("cards")).map(CM.upgradeStored);
+    }
 
     /* Шаг 1 импорта: файлы → результаты проверки, без сохранения.
        → [{ ok, fileName, detection, draft | null, issues, avatar }] */
@@ -46,7 +59,7 @@
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         if (!it || !it.ok || !it.draft) continue;
-        const cd = U.clone(it.draft);
+        const cd = CM.retireBackground(U.clone(it.draft));
         const ch = (choices && choices[i]) || {};
         for (const k of ["system", "postHistory"]) {
           const dv = cd.directives[k];
@@ -64,6 +77,7 @@
 
     // Сохранить черновик редактора. → { error } или { card, isNew }.
     async function save(d) {
+      d = CM.retireBackground(d);
       d.name = (d.name || "").trim();
       if (!d.name) return { error: "Дайте персонажу имя." };
       if (d.image && d.image.loras) d.image.loras = d.image.loras.filter((l) => l.name);
@@ -125,7 +139,7 @@
       return { name: `${d.name || "персонаж"}.png`, blob: new Blob([CC.embedInPng(await F().avatarPngBytes(d), d)], { type: "image/png" }) };
     }
 
-    return { draft, prepareImport, commitImport, save, remove, exportJson, exportPng };
+    return { draft, loadAll, prepareImport, commitImport, save, remove, exportJson, exportPng };
   }
 
   PRP.cardService = { create };
