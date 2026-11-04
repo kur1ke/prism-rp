@@ -13004,17 +13004,18 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       let target, prefix = "";
       try {
         if (mode === "regen") {
-          target = S.messages.find((m) => m.id === msgId);
+          // Keep the selected reply authoritative until the replacement and
+          // chat preview commit together. Streaming lives only in S.gen.
+          target = JSON.parse(JSON.stringify(target0));
           target.swipes.push({ text: "", createdAt: Date.now() });
           target.swipeIdx = target.swipes.length - 1;
         } else if (mode === "continue") {
-          target = S.messages.find((m) => m.id === msgId);
+          target = JSON.parse(JSON.stringify(target0));
           prefix = TR.activeSwipe(target).text;
         } else {
           const draft = chat().newMsg("assistant", c.leafId, "");
-          target = await chat().commitMessage(draft, draft.id);
+          target = JSON.parse(JSON.stringify(await chat().commitMessage(draft, draft.id)));
         }
-        if (mode !== "new") await chat().putMsg(target);
       } catch (e) {
         if (S.gen === lock) S.gen = null;
         throw e;
@@ -13083,8 +13084,15 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       // Do not release the generation lock until the final message and preview
       // have reached IndexedDB. Otherwise a second operation can interleave.
       try {
-        await chat().putMsg(target);
-        await chat().touch();
+        target = await chat().commitMessage(target);
+      } catch (e) {
+        // Drop the transient stream and repaint the still-saved reply. No
+        // Observer, Memory or image work may consume an uncommitted variant.
+        S.gen = null;
+        ui.renderFeed();
+        ui.renderRail();
+        if (S.drawerOpen) ui.renderDrawer();
+        throw e;
       } finally {
         S.gen = null;
       }

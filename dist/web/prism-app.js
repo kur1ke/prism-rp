@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "1ace73b9950864ab8cc15d7583bbd517f0d24dfb";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -12185,17 +12185,18 @@
       let target, prefix = "";
       try {
         if (mode === "regen") {
-          target = S.messages.find((m) => m.id === msgId);
+          // Keep the selected reply authoritative until the replacement and
+          // chat preview commit together. Streaming lives only in S.gen.
+          target = JSON.parse(JSON.stringify(target0));
           target.swipes.push({ text: "", createdAt: Date.now() });
           target.swipeIdx = target.swipes.length - 1;
         } else if (mode === "continue") {
-          target = S.messages.find((m) => m.id === msgId);
+          target = JSON.parse(JSON.stringify(target0));
           prefix = TR.activeSwipe(target).text;
         } else {
           const draft = chat().newMsg("assistant", c.leafId, "");
-          target = await chat().commitMessage(draft, draft.id);
+          target = JSON.parse(JSON.stringify(await chat().commitMessage(draft, draft.id)));
         }
-        if (mode !== "new") await chat().putMsg(target);
       } catch (e) {
         if (S.gen === lock) S.gen = null;
         throw e;
@@ -12264,8 +12265,15 @@
       // Do not release the generation lock until the final message and preview
       // have reached IndexedDB. Otherwise a second operation can interleave.
       try {
-        await chat().putMsg(target);
-        await chat().touch();
+        target = await chat().commitMessage(target);
+      } catch (e) {
+        // Drop the transient stream and repaint the still-saved reply. No
+        // Observer, Memory or image work may consume an uncommitted variant.
+        S.gen = null;
+        ui.renderFeed();
+        ui.renderRail();
+        if (S.drawerOpen) ui.renderDrawer();
+        throw e;
       } finally {
         S.gen = null;
       }
