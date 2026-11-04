@@ -12,6 +12,7 @@ const PRP = (globalThis.PRP = {
   },
   cardContext: { core: () => ({
     source: "fallback", identity: "Надёжный собеседник", personality: "Любит беседовать",
+    primary: { description: "Надёжный собеседник", personality: "Любит беседовать", appearance: "" },
     traits: [], voice: [], durableContext: []
   }) },
   openai: { splitThink: (text) => ({ text }) },
