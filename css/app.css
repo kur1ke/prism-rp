@@ -192,7 +192,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .av-me { background: var(--sunken); color: var(--accent); border: 1px solid var(--line); }
 
 /* ── Главный экран ──────────────────────────────────────────────────── */
-.home { flex: 1; overflow: auto; }
+.home { flex: 1; overflow: auto; position: relative; }
+.home-menu { position: absolute; top: 12px; left: 12px; }
 .home-inner { max-width: 1180px; margin: 0 auto; padding: 34px 32px 60px; }
 .home-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
 .home h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.02em; font-weight: 700; }
@@ -301,12 +302,13 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .shots.in-bubble .shot { width: min(78%, 360px); }
 .msg-row.them .shots.in-bubble { justify-content: flex-start; }
 @media (hover: none) { .shot-tools { opacity: 1; } }
-.lightbox { background: rgba(6, 4, 12, .88); }
-.lb-fig { margin: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }
-.lb-fig img { max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }
+/* Длинная подпись не должна расширять колонки сетки за пределы окна. */
+.lightbox { background: rgba(6, 4, 12, .88); grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.lb-fig { margin: 0; min-width: 0; min-height: 0; max-width: min(1200px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 10px; }
+.lb-fig img { min-height: 0; max-width: 100%; max-height: calc(100dvh - 120px); object-fit: contain; border-radius: var(--r-m); }
 .lb-fig figcaption { display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #d9d3ea; font-size: 13.5px; }
-.lb-fig figcaption > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lb-tools { display: flex; gap: 6px; flex: none; }
+.lb-fig figcaption > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-tools { display: flex; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
 .lb-tools .icon-btn { color: #f2eefc; }
 .lora-rows { display: flex; flex-direction: column; gap: 6px; }
 .lora-row { flex-wrap: nowrap; align-items: center; }
@@ -471,6 +473,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   .rail { position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 45; transform: translateX(-102%); transition: transform .26s cubic-bezier(.2,.7,.2,1); box-shadow: var(--shadow); }
   .rail.open { transform: none; }
   .only-narrow { display: inline-grid !important; }
+  .home:not(.home-welcome) .home-inner { padding-top: 64px; }
   /* Одна колонка: шапка, лента разделов и тело — три строки. Без третьей строки лента попадала в
      строку minmax(0, 1fr) высотой 0, а тело (неявная строка) начиналось сразу под шапкой и перекрывало ленту. */
   .modal { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }

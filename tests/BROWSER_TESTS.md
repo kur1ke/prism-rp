@@ -47,13 +47,14 @@ successful provenance and reload. Each runs at 1440 and 390 pixels.
 with their original lines, current evidence or pending disposition. These are
 call sites, not the number of executed scenarios. Ported entries describe current
 semantic coverage; obsolete labels and removed controls are not recreated.
-The mobile settings fixture enters the existing Assistant view to access its
-menu button. It does not prove mobile welcome/catalog navigation: those views
-currently lack that button while the rail is off-screen. Keep that UI issue as
-separate follow-up work rather than hiding it with forced clicks. The image
-viewer scenario closes with the supported Escape shortcut and logs whether its
-close button fits the viewport; the button can fall outside the screen with the
-fixture prompt. This gate does not claim that button is usable in that case.
+Mobile settings now enter directly from the welcome screen. The catalog suite
+checks the visible menu and settings from welcome, empty catalog and populated
+catalog at 320, 390 and the 900-pixel responsive boundary, with desktop controls
+hidden at 1440. The image workflow clicks the viewer close button rather than
+using Escape to bypass its former offscreen position. `e2e-viewer-layout.py`
+checks all three controls by viewport bounds and hit testing after actual image
+loading: four viewport sizes, three image shapes and two long captions (24 cases).
+The full caption remains intact; only its visible label is truncated.
 
 ## Remaining F29 work
 

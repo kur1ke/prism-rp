@@ -41,8 +41,12 @@
   }
 
   /* ── Главная: активный диалог отрисовывает chat view; иначе — приветствие ── */
+  function mobileMenu() {
+    return `<button class="icon-btn only-narrow home-menu" data-act="rail" title="Меню" aria-label="Открыть меню">${icon("menu")}</button>`;
+  }
+
   function home(m) {
-    return `<div class="home home-welcome"><div class="home-inner">
+    return `<div class="home home-welcome">${mobileMenu()}<div class="home-inner">
       <div class="home-greeting">
         <div class="home-greeting-mark">${R.GLYPH}</div>
         <h1>Добро пожаловать в Prism RP</h1>
@@ -61,7 +65,7 @@
   function characters(m) {
     const q = (m.homeQuery || "").toLowerCase();
     const cards = m.cards.filter((c) => !q || c.name.toLowerCase().includes(q) || (c.tags || []).join(" ").toLowerCase().includes(q));
-    return `<div class="home"><div class="home-inner">
+    return `<div class="home">${mobileMenu()}<div class="home-inner">
       <div class="home-top">
         <div><h1>Персонажи</h1>
           <p class="sub">${m.cards.length} ${R.plural(m.cards.length, "персонаж", "персонажа", "персонажей")}. Выберите карточку или начните новый чат.</p></div>

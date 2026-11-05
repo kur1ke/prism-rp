@@ -93,7 +93,8 @@ try:
             close_bounds=page.locator('.lightbox [data-act=modal-close]').bounding_box()
             close_visible=bool(close_bounds and 0 <= close_bounds['x'] and close_bounds['x']+close_bounds['width'] <= width)
             print(json.dumps({'width':width,'lightboxCloseInViewport':close_visible}),flush=True)
-            page.keyboard.press('Escape')
+            assert close_visible, close_bounds
+            page.click('.lightbox [data-act=modal-close]')
             page.wait_for_selector('.lightbox',state='detached')
             image_seed=page.evaluate("()=>{const p=PRP.app.ctx.svc.chat.path(),m=p[p.length-1];return m.swipes[m.swipeIdx||0].images[0].seed;}")
             page.click('.turn.last [data-act=img-regen]')

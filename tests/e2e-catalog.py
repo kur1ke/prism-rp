@@ -19,18 +19,35 @@ server = subprocess.Popen([sys.executable, '-m', 'http.server', str(port), '--bi
                            '127.0.0.1', '--directory', str(root)],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 results = []
+def check_menu(page, width):
+    menu = page.locator('.home [data-act=rail]')
+    if width > 900:
+        assert not menu.is_visible()
+        return
+    bounds = menu.bounding_box()
+    assert bounds and bounds['x'] >= 0 and bounds['y'] >= 0
+    assert bounds['x'] + bounds['width'] <= width
+    menu.click()
+    page.click('.rail [data-act=settings]')
+    page.wait_for_selector('.modal')
+    page.click('[data-act=modal-close]')
+    page.click('#scrim', position={'x': width - 5, 'y': 100})
+    page.wait_for_selector('.rail.open', state='detached')
+
 try:
     with sync_playwright() as p:
         browser = launch_chromium(p)
-        for width in [1440, 390]:
+        for width in [1440, 900, 390, 320]:
             context = browser_context(browser, viewport={'width': width, 'height': 900})
             page = context.new_page()
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.goto(f'http://127.0.0.1:{port}/dist/standalone/index.html')
             page.wait_for_selector('.home-welcome')
+            check_menu(page, width)
             page.click('.home-greeting-actions [data-act=characters]')
             page.wait_for_selector('.welcome .step')
+            check_menu(page, width)
             page.set_input_files('#file-card', str(card))
             page.wait_for_selector('.imp-modal')
             assert 'Химэ' in page.inner_text('.imp-modal')
@@ -39,6 +56,7 @@ try:
             page.wait_for_selector('.imp-modal', state='detached')
             page.click('.home-greeting-actions [data-act=characters]')
             page.wait_for_selector('.tile[data-id]')
+            check_menu(page, width)
             assert 'Химэ' in page.inner_text('.gallery')
             page.click('.home-tools [data-act=new-card]')
             page.wait_for_function("document.activeElement && document.activeElement.id === 'cf-name'")

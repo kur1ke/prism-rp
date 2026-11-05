@@ -30,10 +30,8 @@ try:
             page.goto(f'http://127.0.0.1:{port}/dist/standalone/index.html')
             page.wait_for_selector('.home-welcome')
             # Open the actual settings action through the responsive rail.
-            if width < 700:
-                # Fixture opens a view with the existing mobile menu button.
-                page.evaluate('PRP.app.ctx.nav.openAssist(null)')
-                page.click('[data-act=rail]')
+            if width <= 900:
+                page.click('.home [data-act=rail]')
             page.click('.rail [data-act=settings]')
             page.click('[data-act=prov-add][data-preset=custom]')
             page.fill('#prov-url', 'https://fixture.invalid/v1')
