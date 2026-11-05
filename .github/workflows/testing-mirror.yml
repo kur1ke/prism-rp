@@ -52,6 +52,8 @@ jobs:
         run: node tests/memory-autonomy.js
       - name: Check independent Memory episodes from the same source
         run: node tests/memory-episodes.js
+      - name: Check Memory timeout, late results and FIFO recovery
+        run: node tests/memory-timeout.js
       - name: Check Memory JSON through the Perchance transport
         run: node tests/memory-perchance-json.js
       - name: Check unified state, source ownership and extraction modes

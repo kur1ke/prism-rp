@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "b055410812c7c1a0279d4c0922335d849218a52d";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -10444,6 +10444,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const M = PRP.memoryCycle, U = PRP.util, LLM = PRP.llm;
+  const REQUEST_TIMEOUT_MS = 40000;
 
   function create(ctx) {
     const { S, DB } = ctx;
@@ -10570,17 +10571,33 @@
       if (!fits(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT))
         return finish("overflow-extract");
       const call = async (system, user, max_tokens) => {
-        const response = await LLM.chat(model, [
-          { role: "system", content: system },
-          { role: "user", content: user }
-        ], { names: { char: "Анализатор", user: "История" },
-          outputFormat: "json", sampler: { temperature: 0.35, max_tokens } });
-        return PRP.openai.splitThink(response.text || "").text;
+        const configured = Number(ctx.memoryTimeoutMs);
+        const timeoutMs = Number.isFinite(configured) && configured > 0 ? configured : REQUEST_TIMEOUT_MS;
+        const controller = new AbortController();
+        let timer;
+        try {
+          const response = await Promise.race([
+            LLM.chat(model, [
+              { role: "system", content: system },
+              { role: "user", content: user }
+            ], { names: { char: "Анализатор", user: "История" },
+              signal: controller.signal, outputFormat: "json", sampler: { temperature: 0.35, max_tokens } }),
+            new Promise((_, reject) => { timer = setTimeout(() => {
+              const error = new Error("Превышено время ожидания Memory: " + timeoutMs + " мс");
+              error.code = "MEMORY_TIMEOUT";
+              // Reject first so an abort-aware adapter cannot mask the timeout.
+              // Even an adapter ignoring abort cannot resume this call later.
+              reject(error);
+              controller.abort();
+            }, timeoutMs); })
+          ]);
+          return PRP.openai.splitThink(response.text || "").text;
+        } finally { clearTimeout(timer); }
       };
       let proposed;
       try {
         proposed = M.parseExtraction(await call(M.EXTRACT_SYSTEM, extractionUser, MAX_EXTRACT_OUT), sources, path, initialChat.mode);
-      } catch (e) { return finish("extract-error"); }
+      } catch (e) { return finish(e && e.code === "MEMORY_TIMEOUT" ? "extract-timeout" : "extract-error"); }
       if (!relevant()) return finish("stale");
       if (!proposed) return finish("invalid-extract");
       // Only branch-visible prior episodes may suppress an exact repeat.
@@ -10672,7 +10689,7 @@
       const includedMemoryIds = candidates.slice(0, payload.memories.length).map((m) => m.id);
       let result;
       try { result = M.parseReflection(await call(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)); }
-      catch (_) { return finish("reflect-error"); }
+      catch (e) { return finish(e && e.code === "MEMORY_TIMEOUT" ? "reflect-timeout" : "reflect-error"); }
       if (!relevant()) return finish("stale");
       if (!result) return finish("invalid-reflection");
       const record = result.change === "changed" && (!prior || result.perspective !== prior.perspective) ? {
@@ -10709,7 +10726,10 @@
         if (fits(M.BATCH_SYSTEM, batchUser, MAX_REFLECT_OUT)) {
           let batch;
           try { batch = M.parseReflection(await call(M.BATCH_SYSTEM, batchUser, MAX_REFLECT_OUT)); }
-          catch (_) { batch = null; }
+          catch (e) {
+            if (e && e.code === "MEMORY_TIMEOUT") return finish("batch-timeout");
+            batch = null;
+          }
           if (!relevant()) return finish("stale");
           if (batch) {
             const checkpoint = {
@@ -10749,7 +10769,10 @@
         if (fits(M.INTEGRATE_SYSTEM, integrateUser, MAX_REFLECT_OUT)) {
           let merged;
           try { merged = M.parseReflection(await call(M.INTEGRATE_SYSTEM, integrateUser, MAX_REFLECT_OUT)); }
-          catch (_) { merged = null; }
+          catch (e) {
+            if (e && e.code === "MEMORY_TIMEOUT") return finish("integrate-timeout");
+            merged = null;
+          }
           if (!relevant()) return finish("stale");
           if (merged) {
             const previousText = integration.previous && integration.previous.perspective || "";
@@ -10795,7 +10818,7 @@
     }
     return { read, load, visibleMemories, experience, timeline, observe, retireChat, restoreChat };
   }
-  PRP.memoryService = { create };
+  PRP.memoryService = { create, REQUEST_TIMEOUT_MS };
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/prism/service.js */

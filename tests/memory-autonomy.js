@@ -944,4 +944,5 @@ async function run() {
   extractionSelectionContract();
   backupJournalValidation();
 }
-run().catch((e) => { console.error(e); process.exitCode = 1; });
+if (require.main === module) run().catch((e) => { console.error(e); process.exitCode = 1; });
+module.exports = { harness, message, extraction, changed, unchanged, setModel: (fn) => { modelReply = fn; } };
