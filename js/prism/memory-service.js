@@ -147,11 +147,13 @@
       // Only branch-visible prior episodes may suppress an exact repeat.
       // Different events with similar language remain distinct.
       proposed = M.distinctExtraction(proposed, M.recent(existing, path, M.LIMIT));
-      // Recovery upgrades coverage, not the one-episode-per-source contract.
-      // Keep an already saved episode and its reflection/checkpoint references.
-      const retained = new Set(existing.filter((m) => M.visible(m.source, path))
+      // Recovery retains saved episodes/references, while allowing a distinct
+      // event from the same source. A source receipt still commits only once.
+      const visibleExisting = existing.filter((m) => M.visible(m.source, path));
+      const knownEpisodes = new Set(visibleExisting.map(M.episodeKey));
+      const retained = new Set(visibleExisting
         .map((m) => M.sourceKey(chatId, owner, m.source)));
-      proposed = proposed.filter((m) => !retained.has(M.sourceKey(chatId, owner, m.source)));
+      proposed = proposed.filter((m) => !knownEpisodes.has(M.episodeKey(m)));
       const newOnes = proposed.map((m) =>
         Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
       const eligible = new Map(path.map((x) => [x.id, x]));

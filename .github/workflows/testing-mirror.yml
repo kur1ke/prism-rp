@@ -48,6 +48,8 @@ jobs:
         run: node tests/messenger-return-gap.js
       - name: Check automatic Memory concurrency and deletion
         run: node tests/memory-autonomy.js
+      - name: Check independent Memory episodes from the same source
+        run: node tests/memory-episodes.js
       - name: Check Memory JSON through the Perchance transport
         run: node tests/memory-perchance-json.js
       - name: Check unified state, source ownership and extraction modes

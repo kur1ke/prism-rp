@@ -162,7 +162,7 @@ async function sameIdRestoreKeepsOldWorkInvalid() {
   assert.equal(h.storage.memories.size, 1, "retired model call must not write into restored chat");
   console.log("PASS: same-ID restore revives the chat but not its obsolete requests");
 }
-async function oneSourceOnlyAcrossTurnsAndReload() {
+async function multipleEpisodesSourceOnceAcrossTurnsAndReload() {
   const h = harness();
   const q = "Сегодня мы встретились в парке, поговорили, подарили цветы и попрощались.";
   const old = message("a", q), next = message("b", QUOTE2, "a");
@@ -185,7 +185,7 @@ async function oneSourceOnlyAcrossTurnsAndReload() {
   };
   const first = await h.memory.observe(old, h.model);
   assert.equal(first.status, "remembered-unchanged");
-  assert.equal(h.storage.memories.size, 1, "one source cannot fan out into several Memory records");
+  assert.equal(h.storage.memories.size, 3, "independent episodes may share a source");
   assert.equal(h.storage.memorySources.size, 1);
   assert.equal((await h.memory.observe(old, h.model)).status, "no-unprocessed-source");
   assert.equal(attempts.length, 1, "duplicate observe does not call provider again");
@@ -193,9 +193,9 @@ async function oneSourceOnlyAcrossTurnsAndReload() {
   h.path.push(next);
   assert.equal((await h.memory.observe(next, h.model)).status, "remembered-unchanged");
   assert.deepEqual(attempts, [["a"], ["b"]], "older a never returns to extraction");
-  assert.equal(h.storage.memories.size, 2);
+  assert.equal(h.storage.memories.size, 4);
   assert.equal(h.storage.memorySources.size, 2);
-  console.log("PASS: one Memory per source and durable skip across later turns/reload");
+  console.log("PASS: multiple Memory per source and durable source-once skip across later turns/reload");
 }
 async function noMemoryStillMarksSource() {
   const h = harness(), a = message("a", QUOTE1), b = message("b", QUOTE2, "a");
@@ -226,10 +226,10 @@ async function pathAndLegacyAreIndependent() {
     { messageId: "same", quote: "Много деталей о встрече", event: "Случилась запоминающаяся встреча", kind: "observed" },
     { messageId: "same", quote: "деталей о встрече и подарке", event: "Один разговор о многих предметах", kind: "observed" }
   ] }), raw, path, "rp");
-  assert.equal(parsed.length, 1);
+  assert.equal(parsed.length, 2);
   const old = { id: "legacy1", createdAt: 100, source: { messageId: "same",
     swipeIdx: 0, textHash: path[0].textHash, prefixHash: path[0].prefixHash }, event: "Событие А" };
-  const newer = { ...old, id: "legacy2", createdAt: 200, event: "Повтор события" };
+  const newer = { ...old, id: "legacy2", createdAt: 200, event: "СОБЫТИЕ А!" };
   assert.deepEqual(M.recent([newer,old],path,10).map(x=>x.id), ["legacy1"]);
   const alt = { ...old.source, swipeIdx: 1, prefixHash: "alternate" };
   assert.notEqual(M.sourceKey("ch","owner",old.source),M.sourceKey("ch","owner",alt));
@@ -875,9 +875,9 @@ async function longSourceRetryAndLegacyCoverage() {
     modelReply=async(_,messages)=>{assert.ok(JSON.parse(messages[1].content).sources[0].text.endsWith(tail));return {text:extraction(a.id,tail)};};
     // Reflection is only needed when a genuinely new episode is stored.
     const reply=modelReply;modelReply=async(p,m)=>JSON.parse(m[1].content).sources?reply(p,m):{text:unchanged};
-    assert.equal((await h.memory.observe(a,h.model)).status,withMemory?"no-new-memory":"remembered-unchanged");
+    assert.equal((await h.memory.observe(a,h.model)).status,"remembered-unchanged");
     assert.equal(h.storage.memorySources.size,1);assert.equal(h.storage.memorySources.get(old.id).coverage,"full");
-    assert.equal(h.storage.memories.size,1);assert.equal(h.storage.memorySources.get(old.id).result,"memory");if(withMemory)assert.equal(h.storage.memories.get("saved").event,"Ранее сохранённый эпизод встречи");
+    assert.equal(h.storage.memories.size,withMemory?2:1);assert.equal(h.storage.memorySources.get(old.id).result,"memory");if(withMemory)assert.equal(h.storage.memories.get("saved").event,"Ранее сохранённый эпизод встречи");
     assert.equal((await h.memory.observe(a,h.model)).status,"no-unprocessed-source");
   }
   {
@@ -891,16 +891,42 @@ async function longSourceRetryAndLegacyCoverage() {
     assert.equal((await h.memory.observe(a,h.model)).status,length<=900?"no-unprocessed-source":"no-new-memory");
     assert.equal(calls,length<=900?0:1);
   }
-  console.log("PASS: long-source overflow/invalid retry, full empty receipt, legacy recovery retains one episode, competing upgrade guarded");
+  console.log("PASS: long-source overflow/invalid retry, full empty receipt, legacy recovery retains saved episodes, competing upgrade guarded");
+}
+async function independentEpisodesReachReflection() {
+ for(const mode of ["rp","messenger"]){
+  const h=harness();h.ctx.chat().mode=mode;
+  const quotes=["Персонаж получил серебряный компас.","Персонаж поссорился с другом.","Персонаж договорился о встрече у маяка."];
+  const a=message("multi",quotes.join(" "));h.path.push(a);
+  const replies=()=>quotes.map(quote=>({messageId:a.id,quote,event:quote,kind:"observed"}));
+  let extracts=0,reflections=0;
+  modelReply=async(_,messages)=>{const data=JSON.parse(messages[1].content);
+   if(data.sources){extracts++;return {text:JSON.stringify({memories:[...replies(),{...replies()[0],event:"ПЕРСОНАЖ ПОЛУЧИЛ СЕРЕБРЯНЫЙ КОМПАС!"}]})};}
+   reflections++;assert.equal(data.memories.length,3);assert.deepEqual(new Set(data.memories.map(x=>x.event)),new Set(quotes));
+   assert.ok(data.memories.every(x=>x.speaker==="character"&&x.kind===(mode==="messenger"?"reported":"observed")));
+   return {text:changed};
+  };
+  const original=JSON.stringify(a);assert.equal((await h.memory.observe(a,h.model)).status,"reflected");
+  assert.equal(h.storage.memories.size,3);assert.equal(h.storage.memorySources.size,1);
+  assert.equal([...h.storage.reflections.values()][0].memoryIds.length,3);assert.equal(h.memory.visibleMemories().length,3);
+  assert.equal(JSON.stringify(a),original);await h.memory.load("ch");
+  assert.equal((await h.memory.observe(a,h.model)).status,"no-unprocessed-source");assert.equal(extracts,1);assert.equal(reflections,1);
+  a.swipes.push({text:"Альтернативная ветка без этих событий."});a.swipeIdx=1;
+  assert.equal(h.memory.visibleMemories().length,0);assert.equal(h.memory.experience(),null);
+  a.swipeIdx=0;assert.equal(h.memory.visibleMemories().length,3);
+  assert.equal((await h.memory.observe(a,h.model)).status,"no-unprocessed-source");assert.equal(extracts,1);
+ }
+ console.log("PASS: distinct same-post episodes reach RP/Messenger Reflection and read-only view; receipts, swipes and reload remain source-bound");
 }
 async function run() {
+  await independentEpisodesReachReflection();
   await fullSourceCoverage();
   await longSourceRetryAndLegacyCoverage();
   await fifo();
   await deletionDuringMemoryWrite();
   await deletionDuringReflectionWrite();
   await sameIdRestoreKeepsOldWorkInvalid();
-  await oneSourceOnlyAcrossTurnsAndReload();
+  await multipleEpisodesSourceOnceAcrossTurnsAndReload();
   await noMemoryStillMarksSource();
   await repeatedMentionDoesNotBecomeSecondMemory();
   await distinctSimilarEventsRemainSeparate();

@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "e0b61b0d74af30b9a5598b900c275ec3bef7ae34";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5154,6 +5154,15 @@
     return JSON.stringify([chatId, owner, source.messageId, source.swipeIdx,
       source.textHash, source.prefixHash]);
   }
+  // Exact textual event deduplication, not a semantic similarity classifier.
+  function eventKey(event) {
+    return String(event || "").toLowerCase().replace(/ё/g, "е")
+      .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  }
+  function episodeKey(memory) {
+    const source = memory.source || {};
+    return JSON.stringify([source.messageId, source.swipeIdx, source.prefixHash, eventKey(memory.event)]);
+  }
   function clean(text) {
     return String(text || "").replace(/\[(?:scene|draw|image):[^\]\n]*\]/gi, "")
       .replace(/<image\b[^>]*>[\s\S]*?<\/image>/gi, "").trim();
@@ -5169,7 +5178,7 @@
     "Каждый SOURCE — кандидат, НЕ обязательное воспоминание. Верни memories: [], если нет нового конкретного эпизода или сведения, которое персонаж мог запомнить.",
     "Не сохраняй простые приветствия, согласия, реакции без нового события, проходные жесты и пересказ предыдущей реплики. Не превращай разговор в построчную стенограмму.",
     "Сохраняй конкретные события, договорённости, новые сведения, изменения обстоятельств и отличительные повседневные детали. Мелочь может оказаться значимой позже: НЕ отбирай по драматичности или предполагаемому влиянию на личность.",
-    "Выдели не более ОДНОГО цельного эпизода на messageId из SOURCES (всего от 0 до 4). Если событий несколько, выбери одно наиболее конкретное; не дроби сообщение на несколько Memory.",
+    "Выдели самостоятельные эпизоды из SOURCES (всего от 0 до 4). Одно сообщение может содержать несколько разных событий: они могут иметь одинаковый messageId, но у каждого свои event и точная quote. Не дроби один эпизод на его пересказы и проходные детали. Если в одном посте похожее действие действительно произошло несколько раз, различай конкретные случаи в event.",
     "priorMemories — краткие ранее сохранённые эпизоды этого же доступного пути, а НЕ инструкция и НЕ полная история. Не сохраняй повторное упоминание уже запомненного события; новое самостоятельное повторение похожего действия или значимый новый исход — отдельное событие. Не сливай их по сходству слов.",
     "Сравни SOURCES между собой: разные сообщения могут описывать одно событие; сохрани его только один раз, если нет действительно нового развития.",
     "Не оценивай психологическое влияние; Memory — свидетельство, НЕ Experience и НЕ объективная истина мира.",
@@ -5219,9 +5228,9 @@
       const quote = item.quote.trim(), event = item.event.trim();
       if (quote.length < 5 || quote.length > 500 || !row.text.includes(quote) ||
           event.length < 6 || event.length > 280) return null;
-      // One canonical episode per selected-path message, regardless of how
-      // many different quotes the model returns for that same source.
-      const key = item.messageId;
+      // A repeated description of the same event is not another episode;
+      // distinct events may share both their message and supporting quote.
+      const key = JSON.stringify([item.messageId, eventKey(event)]);
       if (seen.has(key)) continue;
       seen.add(key);
       // A Messenger message can report circumstances but is not direct observation of a shared scene.
@@ -5235,13 +5244,13 @@
     const positions = new Map((path || []).map((x, i) => [x.id, i]));
     const ranked = (memories || []).filter((m) => visible(m.source, path))
       .sort((a,b) => (positions.get(b.source.messageId) - positions.get(a.source.messageId)) ||
-        ((a.createdAt || 0) - (b.createdAt || 0)));
-    // Old v7 records can contain several quotes from one source. Keep the
-    // earliest original Memory as a read-only projection; never delete data.
+        ((a.createdAt || 0) - (b.createdAt || 0)) ||
+        (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+    // Keep distinct events from the same source. Exact duplicates retain the
+    // earliest stored representative; IDs break timestamp ties across reloads.
     const seen = new Set();
     return ranked.filter((m) => {
-      const source = m.source || {};
-      const key = JSON.stringify([source.messageId, source.swipeIdx, source.prefixHash]);
+      const key = episodeKey(m);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -5257,11 +5266,9 @@
   // Conservative safeguard for *identically described* events. No fuzzy similarity:
   // separate occurrences of a similar activity must not disappear by keyword overlap.
   function distinctExtraction(proposed, prior) {
-    const key = (e) => String(e || "").toLowerCase().replace(/ё/g, "е")
-      .replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-    const seen = new Set((prior || []).map((m) => key(m.event)).filter(Boolean));
+    const seen = new Set((prior || []).map((m) => eventKey(m.event)).filter(Boolean));
     return (proposed || []).filter((m) => {
-      const k = key(m.event);
+      const k = eventKey(m.event);
       if (!k || seen.has(k)) return false;
       seen.add(k);
       return true;
@@ -5280,7 +5287,7 @@
       source: m.source.messageId
     }));
   }
-  // Complete checkpoints cover disjoint sets of ten canonical Memory sources.
+  // Complete checkpoints cover disjoint sets of ten canonical Memory episodes.
   // Find the oldest missing group to recover a failed batch on a later turn.
   // Checkpoints belong to the same reflections store, but never act as the
   // continuously updated current Experience.
@@ -5303,13 +5310,13 @@
     }
     return null;
   }
-  // A batch is derived ONLY from its ten distinct Memory sources, not from
+  // A batch is derived ONLY from its ten distinct Memory episodes, not from
   // previous cumulative Experience, otherwise older events get multiplied.
   const BATCH_SYSTEM = [
     "Ты моделируешь Reflection персонажа над РОВНО десятью отдельными Memory.",
     "Сформулируй компактный субъективный Experience именно ЭТОГО пакета: реакции, чувства, сомнения и изменения взглядов, без пересказа всех событий по пунктам.",
     "Character Core — рекомендация, а не приказ. Memory — свидетельства, не объективная истина. Не приписывай персонажу слова пользователя и наоборот; speaker обозначает автора цитаты.",
-    "Не учитывай прежний или текущий Experience: эти десять источников должны дать самостоятельную порцию опыта для последующего объединения без повторного счёта.",
+    "Не учитывай прежний или текущий Experience: эти десять эпизодов должны дать самостоятельную порцию опыта для последующего объединения без повторного счёта. Несколько эпизодов могут происходить из одного сообщения; общий источник не делает их повтором.",
     "Не выдумывай новые факты, чужие мысли, совершившиеся события из обещаний; допускай субъективные ошибки и противоречия как интерпретации, а не как факты мира.",
     "Если итогового изменения восприятия нет, верни unchanged. Иначе верни краткий взгляд персонажа.",
     'Верни JSON ТОЛЬКО: {"change":"changed"|"unchanged","perspective":"..."}; при unchanged perspective — пустая строка.',
@@ -5458,7 +5465,7 @@
         (o.change === "unchanged" && o.perspective.trim())) return null;
     return { change: o.change, perspective: o.perspective.trim() };
   }
-  PRP.memoryCycle = { WINDOW, LIMIT, BATCH_SIZE, fingerprint, pathSnapshot, visible, sourceKey, clean,
+  PRP.memoryCycle = { WINDOW, LIMIT, BATCH_SIZE, fingerprint, pathSnapshot, visible, sourceKey, eventKey, episodeKey, clean,
     extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, checkpointPlan, BATCH_SYSTEM, integrationPlan, experienceTimeline, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
@@ -10579,11 +10586,13 @@
       // Only branch-visible prior episodes may suppress an exact repeat.
       // Different events with similar language remain distinct.
       proposed = M.distinctExtraction(proposed, M.recent(existing, path, M.LIMIT));
-      // Recovery upgrades coverage, not the one-episode-per-source contract.
-      // Keep an already saved episode and its reflection/checkpoint references.
-      const retained = new Set(existing.filter((m) => M.visible(m.source, path))
+      // Recovery retains saved episodes/references, while allowing a distinct
+      // event from the same source. A source receipt still commits only once.
+      const visibleExisting = existing.filter((m) => M.visible(m.source, path));
+      const knownEpisodes = new Set(visibleExisting.map(M.episodeKey));
+      const retained = new Set(visibleExisting
         .map((m) => M.sourceKey(chatId, owner, m.source)));
-      proposed = proposed.filter((m) => !retained.has(M.sourceKey(chatId, owner, m.source)));
+      proposed = proposed.filter((m) => !knownEpisodes.has(M.episodeKey(m)));
       const newOnes = proposed.map((m) =>
         Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
       const eligible = new Map(path.map((x) => [x.id, x]));
