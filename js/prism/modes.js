@@ -139,7 +139,6 @@
           w.visualWearPartial.filter(x => x && x.item && x.placement)
             .map(x => q(x.item) + ": " + q(x.placement)).join("; ")
         : "",
-      w.visualPose ? "- установленная поза: " + q(w.visualPose) : "",
       w.visualHair ? "- установленная причёска: " + q(w.visualHair) : "",
     ].filter(Boolean).join("\n");
     const plans = (mc && mc.plans) || [];

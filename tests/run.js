@@ -213,7 +213,7 @@ t("DRAW-SOURCE-BIND-4: removal/adjustment opens narrow inquiry without whole-out
     const original = JSON.stringify({ world, known });
     const projected = SR.world(world, { character: known });
     assert.deepStrictEqual(projected.visualWear, ["футболка", "шорты"]);
-    assert.strictEqual(projected.visualPose, "сидит", "unknown tracked pose must not override legacy");
+    assert.strictEqual(projected.visualPose, undefined, "removed pose must not return from legacy state");
     assert.strictEqual(projected.location, "Город", "legacy location survives");
     assert.deepStrictEqual(projected.ongoing, ["план"]);
     assert.deepStrictEqual(projected.visualWearRemoved.map(x => x.item), ["кардиган"]);
@@ -221,7 +221,8 @@ t("DRAW-SOURCE-BIND-4: removal/adjustment opens narrow inquiry without whole-out
     projected.visualWear[0] = "платье";
     projected.visualWearRemoved[0].item = "чужой";
     assert.strictEqual(JSON.stringify({ world, known }), original, "resolver never mutates sources");
-    assert.deepStrictEqual(SR.world(world, null), world, "no tracker means unchanged legacy view");
+    const { visualPose, ...supported } = world;
+    assert.deepStrictEqual(SR.world(world, null), supported, "legacy pose is no longer projected");
   });
 
   t("SR-3: removed garments remain explicit per-actor read-only facts, no invented wear", () => {
@@ -671,14 +672,14 @@ const imgCard = { name: "Химэ", image: { trigger: "orihime inoue, long orang
 const st0 = fixtureState([{"actor": "environment", "field": "present", "action": "set", "value": ["Химэ"], "certainty": "established", "evidence": ""}, {"actor": "char", "field": "wear", "action": "set", "value": ["худи", "джинсы"], "certainty": "established", "evidence": ""}, {"actor": "char", "field": "pose", "action": "set", "value": "сидит у окна", "certainty": "established", "evidence": ""}],{"char": "Химэ", "user": "Лёня"});
 t("compose: гардероб из сцены уходит в неизменяемые теги", () => {
   const c = IC.compose({ draw: "1girl, sitting, cafe", card: imgCard, scene: st0, persona: { name: "Кира" } });
-  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pose: сидит у окна");
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans");
   assert.ok(c.keep.includes("brown eyes"), "stable card appearance stays outside the rewritable shot");
   assert.ok(!c.scene.includes("brown eyes"), "compiler sees the shot without immutable look");
   assert.ok(c.ownerPresent);
 });
 t("compose: сцена одевает иначе → устаревший гардероб не добавляется", () => {
   const c = IC.compose({ draw: "1girl, red dress, standing", card: imgCard, scene: st0, persona: {} });
-  assert.strictEqual(c.keep, "brown eyes, pose: сидит у окна");
+  assert.strictEqual(c.keep, "brown eyes");
   assert.ok(c.stale);
 });
 t("compose: NSFW-теги только по сцене, а не по одежде", () => {
@@ -688,7 +689,7 @@ t("compose: NSFW-теги только по сцене, а не по одежд�
 t("VIS-MODE-CAMERA: legacy persona POV fields cannot inject camera or negatives", () => {
   const persona={name:"Лёня",image:{view:"first",povTags:"pov hands",appearance:"base: 1boy, black hair"}};
   const c = IC.compose({ draw: "1girl, looking at viewer", card: imgCard, scene: st0, persona });
-  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans, pose: сидит у окна");
+  assert.strictEqual(c.keep, "brown eyes, grey hoodie, jeans");
   assert.ok(!c.keep.includes("black hair"));
   assert.ok(!c.keep.includes("pov"));
   const fin=IC.finalise({composed:c,card:imgCard,persona,settings:{promptMode:"off"},backend:"a1111"});
@@ -948,7 +949,7 @@ t("VIS-PROVENANCE-1: diagnostic image layers preserve source ownership", () => {
   const c = IC.compose({ draw: "1girl, looking at viewer, on sofa", card, scene: state, persona: {} });
   const layers = c.provenance.imageLayers;
   assert.equal(layers.identity, "burgundy hair");
-  assert.equal(layers.established, "pose: сидит");
+  assert.equal(layers.established, "");
   assert.equal(layers.wardrobePreset, "grey sweater");
   assert.equal(layers.shot, "1girl, looking at viewer, on sofa");
   assert.equal(layers.outfitKnown, true);
@@ -1021,7 +1022,7 @@ t("VC-3: при двух участниках внешность пользов�
   const c = IC.compose({ draw: "1girl, 1boy, Орихимэ and Лёня, at home", card, persona, scene: st });
   const f = IC.finalise({ composed: c, card, persona, backend: "a1111", settings: {} });
   assert.ok(c.ownerPresent && c.userPresent);
-  assert.ok(c.scene.includes("user clothing: черная куртка") && c.scene.includes("user pose: стоит у двери"));
+  assert.ok(c.scene.includes("user clothing: черная куртка") && !c.scene.includes("user pose:"));
   assert.ok(f.prompt.includes("orihime_inoue") && f.prompt.includes("short black hair"));
 });
 t("VC-4: имя персонажа не дублируется между [draw:] и триггером", () => {
@@ -2612,7 +2613,7 @@ async function foundationC() {
     assert.deepStrictEqual(W([], PD1).world, ENV.emptyWorld());
     const r = W([onC({ patch: { location: "Кафе", activity: "пьёт чай", nearby: ["Тацуки"], availability: "busy" }, createdAt: 1 }),
       onC({ patch: { activity: null, nearby: [] }, createdAt: 2 })], PD1);
-    assert.deepStrictEqual(r.world, { location: "Кафе", activity: null, nearby: [], ongoing: [], availability: "busy", visualWear: [], visualPose: null, visualHair: null });
+    assert.deepStrictEqual(r.world, { location: "Кафе", activity: null, nearby: [], ongoing: [], availability: "busy", visualWear: [], visualHair: null });
     const r2 = W([onC({ patch: { location: "Кафе", availability: "busy" }, createdAt: 1 }), onC({ patch: { location: "", availability: null }, createdAt: 2 })], PD1);
     assert.deepStrictEqual([r2.world.location, r2.world.availability], [null, "unknown"]);
     assert.ok(ENV.hasErrors(ENV.validateEvent(onC({ patch: {} }))), "событие без изменений не принимается");
@@ -5660,14 +5661,14 @@ async function foundationH() {
     const ev = (scope, patch, anchor = null, effectiveAt = null) => E.makeEvent({ scope, patch, anchor: anchor ? B.anchorOf(anchor) : null, effectiveAt });
     const base = ev("chat", { visualWear: ["белая блузка"], visualHair: "косы" });
     const branch = ev("branch", { visualWear: ["пижама"] }, one);
-    const future = ev("chat", { visualPose: "сидит" }, null, "2026-10-20T15:00:00.000Z");
+    const future = ev("chat", { visualHair: "коса" }, null, "2026-10-20T15:00:00.000Z");
     const record = E.blank("test", { timeZone: "UTC", timeMode: "live" });
     const at = (events, p, now) => E.resolveWorld(Object.assign({}, record, { events }), { path: p, now });
     assert.deepStrictEqual(at([base, branch], one).world.visualWear, ["пижама"]);
     assert.deepStrictEqual(at([base, branch], other).world.visualWear, ["белая блузка"]);
     assert.deepStrictEqual(at([base, branch], changed).world.visualWear, ["белая блузка"]);
-    assert.strictEqual(at([future], one, M.toMs("2026-10-20T12:00:00.000Z")).world.visualPose, null);
-    assert.strictEqual(at([future], one, M.toMs("2026-10-20T16:00:00.000Z")).world.visualPose, "сидит");
+    assert.strictEqual(at([future], one, M.toMs("2026-10-20T12:00:00.000Z")).world.visualHair, null);
+    assert.strictEqual(at([future], one, M.toMs("2026-10-20T16:00:00.000Z")).world.visualHair, "коса");
   });
 
 
@@ -7653,19 +7654,19 @@ async function unifiedTracker() {
     assert.strictEqual(INTR.grounded("Я дома, но пирог не получился", opts)[0].value, "дома");
   });
   // UT-1.3: naturally expressed state, drawing policy and deterministic safety.
-  await ta("UT13-1: Лилит — эллиптическая поза, одежда и деятельность в одном предложении", async () => {
+  await ta("UT13-1: Лилит — одежда и деятельность извлекаются без сохранения позы", async () => {
     const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)", otherName: "Лёня" };
     const txt = "Лилит (Лили): А вообще — лежу в своём любимом огромном свитере и воюю с конфигами. А ты что делаешь?";
     const ev = INTR.grounded(txt, o);
-    assert.deepStrictEqual(ev.map((x) => x.field).sort(), ["activity", "pose", "wear"]);
-    assert.strictEqual(ev.find((x) => x.field === "pose").value, "лежу");
+    assert.deepStrictEqual(ev.map((x) => x.field).sort(), ["activity", "wear"]);
+    assert.ok(!ev.some((x) => x.field === "pose"));
     assert.deepStrictEqual(ev.find((x) => x.field === "wear").value, ["своём любимом огромном свитере"]);
     assert.strictEqual(ev.find((x) => x.field === "activity").value, "воюю с конфигами");
     for (const e of ev) { assert.strictEqual(e.certainty, "reported"); assert.ok(txt.includes(e.evidence)); }
     const m = make("assistant", txt, ev, "l1");
     const state = STATE.fold({ mode: "messenger", path: [m], charName: "Лилит (Лили)" });
     const visual = STATE.forCharacter(state);
-    assert.strictEqual(visual.visualPose, "лежу");
+    assert.strictEqual(visual.visualPose, undefined);
     assert.deepStrictEqual(visual.visualWear, ["своём любимом огромном свитере"]);
     assert.strictEqual(visual.activity, "воюю с конфигами");
     assert.strictEqual(visual.location, null);
@@ -7677,7 +7678,7 @@ async function unifiedTracker() {
       "Лилит (Лили): А вообще — лежу в своём любимом огромном свитере и воюю с конфигами. А ты что делаешь?";
     const events = INTR.grounded(txt, o);
     assert.strictEqual(events.find((x) => x.field === "activity").value, "воюю с конфигами");
-    assert.strictEqual(events.find((x) => x.field === "pose").value, "лежу");
+    assert.ok(!events.some((x) => x.field === "pose"));
     assert.deepStrictEqual(INTR.grounded("Лёня: Лежу в свитере", o), []);
     assert.deepStrictEqual(INTR.grounded("Лёня сказал: Я лежу в свитере", o), []);
   });
@@ -7688,7 +7689,7 @@ async function unifiedTracker() {
       "Я лежу в свитере, если бы был дома", "Лилит (Лили): А вообще — буду лежать в свитере"])
       assert.deepStrictEqual(INTR.grounded(msg, o), [], msg);
     assert.strictEqual(INTR.grounded("Я дома, но пирог не получился", o)[0].value, "дома");
-    assert.strictEqual(INTR.grounded("А вообще — лежу в свитере, но потом переоденусь", o)[0].field, "pose");
+    assert.strictEqual(INTR.grounded("А вообще — лежу в свитере, но потом переоденусь", o)[0].field, "wear");
   });
   await ta("UT13-4: персонифицированное сообщение не меняет состояния пользователя и не создаёт место из воздуха", async () => {
     const txt = "Лилит (Лили): А вообще — лежу в огромном свитере и воюю с конфигами.";
@@ -8001,19 +8002,19 @@ async function unifiedTracker() {
       const status = await h.ctx.svc.state.observeMessage(h.chat.path()[0], { kind: "perchance" });
       assert.strictEqual(status.status, "partial");
       const state = h.ctx.svc.messenger.view().world;
-      assert.strictEqual(state.visualPose, "лежу");
+      assert.strictEqual(state.visualPose, undefined);
       assert.deepStrictEqual(state.visualWear, ["своём любимом огромном свитере"]);
       assert.strictEqual(state.activity, "воюю с конфигами");
       assert.strictEqual(state.location, null);
       const saved = h.store.messages.get(m.id).swipes[0];
-      assert.strictEqual(saved.stateEvents.length, 3);
-      assert.strictEqual(saved.stateStatus.eventCount, 3);
+      assert.strictEqual(saved.stateEvents.length, 2);
+      assert.strictEqual(saved.stateStatus.eventCount, 2);
     } finally { globalThis.PRP.llm = old; }
   });
   await ta("UT13-10: установленное сейчас сохраняется, будущее намерение не меняет его", async () => {
     const o = { mode: "messenger", role: "assistant", speakerName: "Лилит (Лили)" };
     const ev = INTR.grounded("Лежу в огромном свитере и хочу переодеться в пижаму", o);
-    assert.ok(ev.some((x) => x.field === "pose" && x.value === "лежу"));
+    assert.ok(!ev.some((x) => x.field === "pose"));
     assert.ok(ev.some((x) => x.field === "wear" && x.value.some((v) => v.includes("свитере"))));
     assert.ok(!ev.some((x) => x.field === "wear" && x.value.some((v) => v.includes("пижаму"))));
     const s = globalThis.PRP.settings;

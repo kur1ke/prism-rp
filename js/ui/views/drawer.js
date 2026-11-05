@@ -34,7 +34,7 @@
       ${field("Присутствуют", st.present.length ? st.present.join(", ") : st.presentKnown ? "никого" : "неизвестно")}</div>
       ${Object.entries(st.chars).map(([name, ch]) => `<div class="panel"><div class="who"><b>${esc(name)}</b></div>
         ${field("Место", ch.location)}${field("Занятие", ch.activity)}${field("Одежда", ch.wearKnown ? ch.wear.join(", ") || (ch.wearComplete ? "ничего не надето" : "неизвестно") : "неизвестно")}
-        ${field("Поза", ch.pose)}${field("Волосы", ch.visualHair)}${field("Настроение (оценка)", ch.mood)}</div>`).join("")}
+        ${field("Волосы", ch.visualHair)}${field("Настроение (оценка)", ch.mood)}</div>`).join("")}
       <p class="hint">Текущее состояние выбранной ветки. Неустановленные сведения остаются неизвестными.</p>`;
   }
 
@@ -433,7 +433,7 @@
     else if (!v) content = '<p class="empty-note">Диагностика состояния доступна в переписке.</p>';
     else if (section === "tracker") {
       const w = v.world || {};
-      const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Поза", w.visualPose], ["Причёска", w.visualHair]];
+      const pairs = [["Местоположение", w.location], ["Занятие", w.activity], ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")], ["Доступность", w.availability], ["Причёска", w.visualHair]];
       content = '<div class="block"><div class="block-title">Текущее состояние (кроме одежды)</div><dl class="kv">' +
         pairs.map(([k,val]) => '<dt>' + esc(k) + '</dt><dd>' + esc(val || "неизвестно") + '</dd>').join("") + '</dl></div>';
     } else if (section === "events") {

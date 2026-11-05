@@ -48,6 +48,9 @@ try:
    assert data['view']['loc']=='парке' and data['view']['weather']=='дождь' and data['view']['time']=='18:00',data
    assert all(x in data['prompt'] and x in data['imageContext'] for x in ['парке','дождь','18:00']),data
    assert data['calls']==1
+   assert 'pose' not in data['view']['chars']['Аля']
+   assert 'pose.set' not in data['prompt']
+   assert 'Поза' not in page.inner_text('#drawer-body')
    assert all(x in page.inner_text('#drawer-body') for x in ['парке','дождь','18:00'])
    assert page.locator('#drawer-body input,#drawer-body textarea').count()==0
    page.screenshot(path=str(out/f'scene-{width}.png'))

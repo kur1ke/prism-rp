@@ -608,7 +608,7 @@
       const c = ctx.chat();
       const path = chat().path(), m = path[path.length - 1];
       if (!c || !m) return { error: "Для исправления в ветке необходимо хотя бы одно сообщение." };
-      const choices = { location: "location", activity: "activity", visualWear: "wear", visualPose: "pose", visualHair: "hair", nearby: "nearby", ongoing: "ongoing", availability: "availability" };
+      const choices = { location: "location", activity: "activity", visualWear: "wear", visualHair: "hair", nearby: "nearby", ongoing: "ongoing", availability: "availability" };
       const changes = [], issues = [];
       for (const [key, val] of Object.entries(patch || {})) {
         const field = choices[key];

@@ -6,7 +6,7 @@
 
 `state/tracker.js` — единственный fold физических фактов активной ветки/свайпа. Входы: `stateEvents`, затем `stateCorrections` каждого сообщения; при наличии — типизированная ручная исходная база `chat.initialState` и отдельный начальный наряд Messenger `chat.initialWear`. Эти входы проходят один нормализатор. Отдельного состояния одежды/Scene в базе нет.
 
-- `actors.char` и `actors.user`: location, activity, wear, pose, hair, nearby, ongoing, availability, mood. Для одежды отдельно учитываются worn/removed/partiallyWorn, known/complete и provenance.
+- `actors.char` и `actors.user`: location, activity, wear, hair, nearby, ongoing, availability, mood. Для одежды отдельно учитываются worn/removed/partiallyWorn, known/complete и provenance.
 - `environment.fields`: явно установленные time, weather, present. Это общая обстановка RP; в Messenger такие события отвергаются. Время — явно установленное значение из текста, без старого календарного парсера и скрытого продвижения часов. Другие имена могут присутствовать в списке present; отдельный физический реестр NPC не добавляется.
 - Настроение отображается как интерпретация, не инструкция к поведению. Оно не извлекается из догадок о другом участнике.
 - Имена и значения в Prism остаются данными. Имена однострочные, значения — JSON-литералы. События другой ветки/свайпа не входят в текущий fold.
@@ -78,3 +78,5 @@ preflight/записи не затираются.
 16 сочетаний RP/Messenger, user/assistant, OpenAI/Perchance, 1440/390: хвост T170,
 родной IndexedDB rollback/retry, overflow, ownership, бэкап, reload и изоляция свайпа.
 Внешняя модель в этих проверках подменена; live Perchance/LLM — NOT RUN.
+
+Поза не является полем состояния: Observer и State Tool её не записывают, проекции и панели её не показывают, а изображение не наследует её из старого состояния. Сохранённые ранее pose/visualPose не применяются; формат бэкапа и схема базы не меняются. Положение тела и движение остаются обычными деталями текста и конкретного DRAW/visual plan, без обязанности отчитываться о них.

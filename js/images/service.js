@@ -198,11 +198,11 @@
       const wearFacts = !drawAuthored && snap ? PRP.stateTracker.wearFacts(snap.state) : [];
       const st = drawAuthored ? { chars: {}, present: [] } : PRP.stateTracker.view(snap ? snap.state : PRP.stateTracker.empty({}));
       const visual = !drawAuthored && ms
-        ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualPose: null, visualHair: null }))
+        ? (snap ? snap.character : (stamped || { location: null, visualWear: [], visualHair: null }))
         : null;
       if (!snap && !drawAuthored && ms && visual) {
         st.chars = st.chars || {};
-        st.chars[cd.name] = { wear: visual.visualWear || [], pose: visual.visualPose || "", visualHair: visual.visualHair || "", mood: "" };
+        st.chars[cd.name] = { wear: visual.visualWear || [], visualHair: visual.visualHair || "", mood: "" };
       }
       const operationId = U.uid("draw");
       const pendingEntry = Object.assign({}, entry, { operationId, status: "pending", stage: "Готовлю промпт…" });

@@ -16,6 +16,23 @@ const fold=(p,extra={})=>T.fold({mode:"rp",charName:"Аля",userName:"Кира"
 const current=[msg("a","Сейчас 18:00. Идёт дождь. Я в парке.",[
  evt("environment","time","18:00","Сейчас 18:00."),evt("environment","weather","дождь","Идёт дождь."),
  evt("char","location","парке","Я в парке.")])];
+test("Unified state: pose is not tracked, prompted or inherited by images",()=>{
+ assert.ok(!T.FIELDS.includes("pose"));
+ for(const mode of ["rp","messenger"]){
+  const state=fold([msg("old","Я сижу.",[evt("char","pose","СИДИТ_СТАРАЯ_ПОЗА","Я сижу.")])],{mode,legacyWorld:{visualPose:"СИДИТ_СТАРАЯ_ПОЗА"}});
+  assert.equal(T.fieldOf(state,"char","pose"),null);
+  assert.equal(T.forCharacter(state).visualPose,undefined);
+  assert.equal(T.view(state).chars.Аля.pose,undefined);
+  assert.ok(!T.describe(state).includes("СИДИТ_СТАРАЯ_ПОЗА"));
+  assert.ok(!I.instruction({mode}).includes("wear|pose"));
+ }
+ assert.deepEqual(I.grounded("Я сижу.",{mode:"messenger",role:"assistant"}),[]);
+ const parsed=P.imgCompose.parseStateCalls('[state: pose.set("сидит")]');
+ assert.deepEqual(parsed.calls,[]);assert.equal(parsed.text,"");
+ const image=P.imgCompose.compose({card:{name:"Аля",image:{}},persona:{name:"Кира"},scene:{chars:{Аля:{pose:"OLD_POSE"},Кира:{pose:"OLD_USER_POSE"}}},draw:"Аля, standing, hand on table"});
+ assert.ok(!JSON.stringify(image).includes("OLD_POSE") && !JSON.stringify(image).includes("OLD_USER_POSE"));
+ assert.ok(image.scene.includes("standing") && image.scene.includes("hand on table"));
+});
 test("Unified state: remove the old engine, command API and parallel projection",()=>{
  assert.equal(fs.existsSync(path.join(root,"js/prism/scene.js")),false);
  assert.equal(P.scene,undefined);

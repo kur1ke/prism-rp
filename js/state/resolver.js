@@ -12,12 +12,13 @@
   const REPORT_STALE_MS = 2 * 60 * 60 * 1000;
 
   const WORLD_FIELDS = Object.freeze([
-    "location", "activity", "visualWear", "visualPose", "visualHair",
+    "location", "activity", "visualWear", "visualHair",
     "nearby", "ongoing", "availability",
   ]);
   function world(base, tracked) {
     if (!base) return base;
     const out = clone(base);
+    delete out.visualPose;
     if (!tracked || !tracked.character) return out;
     const known = tracked.character;
     for (const field of WORLD_FIELDS) {

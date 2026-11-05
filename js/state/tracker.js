@@ -11,7 +11,7 @@
   const TR = PRP.tree || (typeof require !== "undefined" ? require("../chat/tree.js") : null);
   const WO = PRP.wearObservation || (typeof require !== "undefined" ? require("./wear-observation.js") : null);
   const ES = PRP.evidenceSpans || (typeof require !== "undefined" ? require("./evidence-spans.js") : null);
-  const FIELDS = Object.freeze(["location", "activity", "wear", "pose", "hair", "nearby", "ongoing", "availability", "mood", "time", "weather", "present"]);
+  const FIELDS = Object.freeze(["location", "activity", "wear", "hair", "nearby", "ongoing", "availability", "mood", "time", "weather", "present"]);
   const LIST = new Set(["wear", "nearby", "ongoing", "present"]);
   const CERTAINTY = new Set(["established", "reported", "intent"]);
   const ALLOWED_ACTORS = new Set(["char", "user", "environment"]);
@@ -493,7 +493,7 @@
     }
     const legacy = opts.legacyWorld || null;
     if (legacy) {
-      const compat = { location: legacy.location, activity: legacy.activity, wear: legacy.visualWear, pose: legacy.visualPose,
+      const compat = { location: legacy.location, activity: legacy.activity, wear: legacy.visualWear,
         hair: legacy.visualHair, nearby: legacy.nearby, ongoing: legacy.ongoing, availability: legacy.availability };
       for (const [field, v] of Object.entries(compat)) {
         if (v == null || (Array.isArray(v) && !v.length) || (field === "availability" && v === "unknown")) continue;
@@ -662,8 +662,8 @@
   }
   function forCharacter(snapshot) {
     const a = snapshot && snapshot.actors && snapshot.actors.char;
-    const result = { location: null, activity: null, visualWear: [], visualWearRemoved: a ? clone(a.wearState.removed) : [], visualWearPartial: a ? clone(a.wearState.partiallyWorn || []) : [], visualPose: null, visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
-    const mapping = { location: "location", activity: "activity", wear: "visualWear", pose: "visualPose", hair: "visualHair", nearby: "nearby", ongoing: "ongoing", availability: "availability" };
+    const result = { location: null, activity: null, visualWear: [], visualWearRemoved: a ? clone(a.wearState.removed) : [], visualWearPartial: a ? clone(a.wearState.partiallyWorn || []) : [], visualHair: null, nearby: [], ongoing: [], availability: "unknown", fieldStatus: {}, intentions: a ? a.intentions.slice() : [] };
+    const mapping = { location: "location", activity: "activity", wear: "visualWear", hair: "visualHair", nearby: "nearby", ongoing: "ongoing", availability: "availability" };
     for (const [field, key] of Object.entries(mapping)) {
       const datum = fieldOf(snapshot, "char", field);
       if (datum) { result[key] = clone(datum.value); result.fieldStatus[key] = { certainty: datum.certainty, source: datum.source }; }
@@ -740,7 +740,7 @@
       if (!a.name) continue;
       const wear = wearDatum(a);
       chars[a.name] = { wear: wear ? wear.value : [], wearKnown: !!wear,
-        wearComplete: !!a.wearState.complete, pose: value(a, "pose", ""), mood: value(a, "mood", ""),
+        wearComplete: !!a.wearState.complete, mood: value(a, "mood", ""),
         location: value(a, "location", ""), activity: value(a, "activity", ""), visualHair: value(a, "hair", "") };
     }
     return { time: env.time && env.time.value || "", weather: env.weather && env.weather.value || "",
@@ -750,7 +750,7 @@
   function describe(state) {
     const D = PRP.prismData || (typeof require !== "undefined" ? require("../prism/data.js") : null);
     const st = state || empty({}), lines = [];
-    const labels = { time:"время", weather:"погода", present:"присутствуют", location:"место", activity:"занятие", wear:"одежда", pose:"поза", hair:"волосы", mood:"настроение", nearby:"рядом", ongoing:"происходит", availability:"доступность" };
+    const labels = { time:"время", weather:"погода", present:"присутствуют", location:"место", activity:"занятие", wear:"одежда", hair:"волосы", mood:"настроение", nearby:"рядом", ongoing:"происходит", availability:"доступность" };
     for (const [id, a] of [["environment", st.environment], ["char", st.actors.char], ["user", st.actors.user]]) {
       const fields = Object.assign({}, a.fields);
       if (id !== "environment") { const wear = wearDatum(a); if (wear) fields.wear = wear; }

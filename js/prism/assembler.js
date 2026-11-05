@@ -120,7 +120,7 @@
     const msW = o.mode === "messenger" && o.messenger ? o.messenger.world || {} : null;
     const sc = o.stateSnapshot ? TRACK.view(o.stateSnapshot) : null;
     const modeText = msW ? [msW.location, msW.activity].concat(msW.nearby || [], msW.ongoing || []).filter(Boolean).join("\n")
-      : sc ? [sc.loc, sc.weather].concat(sc.present || [], ...Object.keys(sc.chars || {}).map((n) => [sc.chars[n].pose].concat(sc.chars[n].wear || []))).filter(Boolean).join("\n") : "";
+      : sc ? [sc.loc, sc.weather].concat(sc.present || [], ...Object.keys(sc.chars || {}).map((n) => (sc.chars[n].wear || []))).filter(Boolean).join("\n") : "";
     const scenarioText = o.includeScenario ? m(card.scenario || "").trim() : "";
     const sel = CC.select(CC.chunks(card, core, m), {
       text: recentText, context: [modeText, scenarioText].filter(Boolean).join("\n"),

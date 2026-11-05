@@ -72,12 +72,13 @@ assert.deepEqual(accidental.calls,[],"ordinary conversations must not rewrite ca
 
 
 const generic=IC.parseStateCalls('Перешла в спальню. [state: location.set("спальня")] [state: pose.set("лежу")]');
-assert.deepEqual(generic.calls.map(c=>c.field),["location","pose"]);
+assert.deepEqual(generic.calls.map(c=>c.field),["location"]);
 const genericEvents=TR.eventsFromStateCalls(generic.calls,"messenger");
-assert.deepEqual(genericEvents.map(e=>e.action),["set","set"]);
+assert.deepEqual(genericEvents.map(e=>e.action),["set"]);
 const genericState=folding([mk("generic",generic.calls,genericEvents)]);
 assert.equal(genericState.actors.char.fields.location.value,"спальня");
-assert.equal(genericState.actors.char.fields.pose.value,"лежу");
+assert.equal(genericState.actors.char.fields.pose,undefined);
+assert.ok(!IC.stateToolInstruction().includes("pose.set"));
 assert.equal(IC.parseStateCalls('[state: location.add("фальшивое место")]').calls.length,0);
 const clearing=IC.parseStateCalls('[state: location.clear()]');
 assert.equal(TR.eventsFromStateCalls(clearing.calls,"messenger")[0].value,null);

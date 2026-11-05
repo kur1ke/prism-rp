@@ -39,9 +39,9 @@
           <button class="btn btn-primary" data-act="ms-create">${icon("bubble")}Начать переписку</button></div></div></div></div>`;
   }
 
-  const OPS_LINE = (p) => Object.keys(p || {}).map((k) => {
+  const OPS_LINE = (p) => Object.keys(p || {}).filter(k => k !== "visualPose").map((k) => {
     const v = p[k];
-    const name = { location: "где", activity: "чем занят(а)", nearby: "рядом", ongoing: "происходит", availability: "доступность", visualWear: "одежда", visualPose: "поза", visualHair: "причёска" }[k] || k;
+    const name = { location: "где", activity: "чем занят(а)", nearby: "рядом", ongoing: "происходит", availability: "доступность", visualWear: "одежда", visualHair: "причёска" }[k] || k;
     if (v == null || (Array.isArray(v) && !v.length)) return name + ": очищено";
     return name + ": " + (k === "availability" ? availWord(v) : Array.isArray(v) ? v.join(", ") : v);
   }).join(" · ");
@@ -62,7 +62,7 @@
         ${fld("nearby", "Рядом (через запятую)", "", (w.nearby || []).join(", "))}${fld("ongoing", "Происходит (через запятую)", "", (w.ongoing || []).join(", "))}
         <div class="block-title" style="margin-top:16px">Внешний вид для изображений</div>
         <p class="hint">Только исправление неверно определённого факта. Повседневное состояние отслеживается автоматически; изображения его не переписывают.</p>
-        ${fld("visualWear", "Одежда (через запятую)", "", (w.visualWear || []).join(", "))}${fld("visualPose", "Поза", "", w.visualPose || "")}${fld("visualHair", "Причёска", "", w.visualHair || "")}
+        ${fld("visualWear", "Одежда (через запятую)", "", (w.visualWear || []).join(", "))}${fld("visualHair", "Причёска", "", w.visualHair || "")}
         <div class="field"><label>Доступность</label><select id="env-availability"><option value="">не менять</option>${AVAIL.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
         <div class="field"><label>Где действует</label>${scopeRadios("env-scope", d.scope)}</div>
         <div class="row"><button class="btn btn-primary btn-sm" data-act="env-save">Сохранить</button><button class="btn btn-sm btn-ghost" data-act="env-cancel">Отмена</button></div></div>` : "";
@@ -78,7 +78,7 @@
       ["Последнее сообщение о занятии", last.activity ? last.activity.value + " (" + MT.format(MT.toMs(last.activity.at), tz) + ")" : null],
       ["Рядом", (w.nearby || []).join(", ")], ["Происходит", (w.ongoing || []).join(", ")],
       ["Доступность", w.availability && w.availability !== "unknown" ? availWord(w.availability) : ""]]);
-    const appearance = rows([["Одежда", (w.visualWear || []).join(", ")], ["Поза", w.visualPose], ["Причёска", w.visualHair]]);
+    const appearance = rows([["Одежда", (w.visualWear || []).join(", ")], ["Причёска", w.visualHair]]);
     return `<div class="block"><div class="block-title">Положение ${esc(m.card.name)}</div>
         ${position ? `<dl class="kv env-world">${position}</dl>` : '<p class="empty-note">Пока нет сведений о положении.</p>'}
         ${appearance ? `<div class="block-title" style="margin-top:20px">Внешний вид</div><dl class="kv env-world">${appearance}</dl>` : ""}
