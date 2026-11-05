@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "8cece2fd7b9f1dcca129b6d619079114cf93d601";
+  window.PRISM_RP_BUILD_SHA = "4341587136617fe95cacfbfe17a4c2501db1bab5";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -10399,16 +10399,21 @@
     /* Листать варианты ответа. → "regen", если надо сгенерировать новый вариант
        (листание вправо за последний вариант последнего ответа); true — переключено; false — ничего. */
     async function swipe(msgId, dir) {
+      const c = ctx.chat();
+      if (!c || S.gen || S.turn) return false;
       const m = S.messages.find((x) => x.id === msgId);
-      if (!m) return false;
+      if (!m || m.chatId !== c.id) return false;
       const next = (m.swipeIdx || 0) + dir;
-      if (next < 0) return false;
+      if (!Number.isInteger(next) || next < 0) return false;
       const isLast = path().slice(-1)[0] === m;
       if (next >= m.swipes.length) return m.role === "assistant" && isLast ? "regen" : false;
-      m.swipeIdx = next;
-      await putMsg(m);
-      await touch();
-      return true;
+      const lock = S.turn = { chatId: c.id, kind: "branch", phase: "branch" };
+      try {
+        // Preserve the current leaf and service-level ancestor swipe semantics.
+        // Publish the selection only after message + preview commit together.
+        await commitMessage(Object.assign({}, m, { swipeIdx: next }));
+        return true;
+      } finally { if (S.turn === lock) S.turn = null; }
     }
     /* Добавить пользовательский ответ в ветку: становится новым концом.
        swipeExtra — неизменяемые сведения варианта, например метка времени переписки { messengerAt } (её даёт messenger/service). */

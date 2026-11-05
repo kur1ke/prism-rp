@@ -11227,16 +11227,21 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     /* Листать варианты ответа. → "regen", если надо сгенерировать новый вариант
        (листание вправо за последний вариант последнего ответа); true — переключено; false — ничего. */
     async function swipe(msgId, dir) {
+      const c = ctx.chat();
+      if (!c || S.gen || S.turn) return false;
       const m = S.messages.find((x) => x.id === msgId);
-      if (!m) return false;
+      if (!m || m.chatId !== c.id) return false;
       const next = (m.swipeIdx || 0) + dir;
-      if (next < 0) return false;
+      if (!Number.isInteger(next) || next < 0) return false;
       const isLast = path().slice(-1)[0] === m;
       if (next >= m.swipes.length) return m.role === "assistant" && isLast ? "regen" : false;
-      m.swipeIdx = next;
-      await putMsg(m);
-      await touch();
-      return true;
+      const lock = S.turn = { chatId: c.id, kind: "branch", phase: "branch" };
+      try {
+        // Preserve the current leaf and service-level ancestor swipe semantics.
+        // Publish the selection only after message + preview commit together.
+        await commitMessage(Object.assign({}, m, { swipeIdx: next }));
+        return true;
+      } finally { if (S.turn === lock) S.turn = null; }
     }
     /* Добавить пользовательский ответ в ветку: становится новым концом.
        swipeExtra — неизменяемые сведения варианта, например метка времени переписки { messengerAt } (её даёт messenger/service). */
