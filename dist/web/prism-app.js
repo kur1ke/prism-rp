@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "eb5b9f78eae7a374ef3d865476f1d7187c5e5c67";
+  window.PRISM_RP_BUILD_SHA = "8cece2fd7b9f1dcca129b6d619079114cf93d601";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -13607,15 +13607,19 @@
           title: !a.messages.length && text !== undefined ? AST.title(text) : a.title,
           messages: proposed.concat(target),
         });
-        await DB.put("assist", next);
-        Object.assign(a, next);
+        // A replacement is transient until its final commit. Keep the saved
+        // answer authoritative and use its DOM slot for streaming only.
+        if (regenId == null) {
+          await DB.put("assist", next);
+          Object.assign(a, next);
+        }
         accepted = true;
         if (!S.assistList.includes(a)) S.assistList.push(a);
         if (text !== undefined && typeof ui.acceptAssistInput === "function") ui.acceptAssistInput(text);
-        lock.msgId = target.id;
+        lock.msgId = regenId == null ? target.id : regenId;
         ui.rememberUi(); ui.renderStage(); ui.scrollBottom();
         const onDelta = (d) => {
-          if (S.gen !== lock) return;
+          if (S.gen !== lock || ctrl.signal.aborted) return;
           lock.raw += d.text || ""; lock.reasoning += d.reasoning || ""; ui.paintAssist();
         };
         let raw = "", reasoning = "", error = null;
@@ -13632,6 +13636,29 @@
           text: th.text.trim(), reasoning: [reasoning, th.reasoning].filter(Boolean).join("\n").trim(),
           ...(error ? { error } : {}),
         });
+        if (regenId != null) {
+          if (ctrl.signal.aborted) return { outcome: "aborted", report: built.report };
+          if (error || !response.text) {
+            ui.toast(error ? "Не удалось получить другой ответ: " + error + ". Прежний ответ сохранён."
+              : "Модель вернула пустой ответ. Прежний ответ сохранён.", true);
+            return { outcome: error ? "error" : "empty", report: built.report };
+          }
+          let replacement;
+          const committed = await DB.readModifyWrite(["assist"], [["assist", a.id]], ([current]) => {
+            if (!current || S.assist !== a || S.gen !== lock || ctrl.signal.aborted ||
+                sourceKey !== JSON.stringify([a.ctx, a.messages]) ||
+                sourceKey !== JSON.stringify([current.ctx, current.messages])) return null;
+            replacement = Object.assign({}, current, { messages: proposed.concat(response) });
+            return [["assist", replacement]];
+          });
+          if (!committed) {
+            ui.toast("Разговор изменился. Новый ответ не сохранён.", true);
+            return { outcome: "stale", report: built.report };
+          }
+          Object.assign(a, replacement);
+          ui.rememberUi();
+          return { outcome: "sent", report: built.report };
+        }
         const completed = Object.assign({}, a, {
           messages: a.messages.filter((m) => m.id !== target.id).concat(response.text || error ? [response] : []),
         });
