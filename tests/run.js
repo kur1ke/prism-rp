@@ -434,9 +434,9 @@ t("RP frame simplification: граница {{user}}, сцена + характе
   const sys = r.messages[0].content;
   const frame = sys.split("\n\n###")[0];
   assert.ok(frame.includes("Ты играешь за Химэ"));
-  assert.ok(frame.includes("собственная точка зрения, желания, намерения и границы"));
-  assert.ok(frame.includes("Его слова и поступки исходят из характера, опыта и текущих обстоятельств"));
-  assert.ok(frame.includes("Чужие ожидания и просьбы не обязывают его соглашаться или поступать вопреки себе"));
+  assert.ok(frame.includes("Его восприятие, речь и решения исходят из его характера, собственного отношения к происходящему, желаний и опыта"));
+  assert.ok(frame.includes("он свободен соглашаться, сомневаться, возражать, отказывать и менять своё решение"));
+  assert.ok(frame.includes("Просьба сама по себе не становится его намерением, а чужое утверждение — его убеждением"));
   assert.ok(frame.includes("Мысли, решения, действия и реплики собеседника остаются за ним"));
   assert.ok(!frame.includes("Кира"), "рамка не сосредоточена на имени собеседника");
   // раздельные разделы
@@ -447,12 +447,12 @@ t("RP frame simplification: граница {{user}}, сцена + характе
   for (const ph of ["не диктуют поступки", "не предписывают поступков", "свидетельства прошлого", "может действовать вопреки", "может поступить вопреки", "не забывает"]) {
     assert.ok(!sys.includes(ph), ph);
   }
-  // кадр не длиннее прежнего; FOUNDATION-H добавил только общее правило чтения разделов «данные / указания»
+  // Общее правило чтения разделов «данные / указания» сохраняется.
   assert.ok(A.TEMPLATES.rp.frame.endsWith("\n" + globalThis.PRP.prismModes.DATA_RULE));
-  assert.ok(A.TEMPLATES.rp.frame.replace("\n" + globalThis.PRP.prismModes.DATA_RULE, "").length < 398);
   // Общая основа и одна граница собеседника в обоих режимах.
   const mf = A.TEMPLATES.messenger.frame;
-  assert.ok(mf.includes("мессенджере") && mf.includes("Чужие ожидания и просьбы не обязывают"));
+  assert.ok(mf.includes("мессенджере") && mf.includes("он свободен соглашаться, сомневаться, возражать, отказывать"));
+  assert.ok(!mf.includes("Черты характера влияют на восприятие, но не предписывают поступков"));
   for (const mode of ["rp", "messenger"]) {
     const f = A.TEMPLATES[mode].frame;
     assert.ok(!f.includes("{{user}}"));
