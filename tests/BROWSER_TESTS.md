@@ -68,3 +68,5 @@ world-chat forms/provenance, storage upgrade/error UI and Perchance image/initia
 checks and remove the obsolete monolith after that migration. F29 remains partial.
 
 Observer/image concurrency is covered by `e2e-observer-image-race.py`: both commit orders, fresh unrelated fields, deleted/edited sources, no resurrection, and reload in RP/Messenger at 1440/390. The regression fails on the pre-A01 bundle.
+
+Assistant replacement durability is covered by `e2e-assist-regen.py`: streaming is transient; errors, cancellation (including a late result), empty output and failed final writes retain the saved answer. Successful replacements use a conditional native transaction, preserve independent metadata and cannot resurrect a deleted or overwrite an edited conversation. Reload is checked for both provider profiles at desktop/mobile widths. External model calls are fixtures.

@@ -12,6 +12,11 @@ function harness(kind="openai",context=4096,card){
  const ctx={S,DB:{put:async(_st,row)=>{writes++;rows.set(row.id,clone(row));},byIndex:async()=>[]},
   provider:()=>provider,contextTokens:p=>{assert.equal(p,provider);return context;},persona:()=>({name:"Кира"}),
   ui:{toast:t=>notices.push(t),openSettings(){},rememberUi(){},renderStage(){},scrollBottom(){},paintAssist(){},acceptAssistInput(){clears++;}}};
+ ctx.DB.readModifyWrite=async(_stores,reads,prepare)=>{
+  const puts=prepare(reads.map(([,id])=>rows.has(id)?clone(rows.get(id)):undefined));
+  if(!puts)return false;
+  for(const [store,row] of puts)await ctx.DB.put(store,row);return puts.length>0;
+ };
  OA.chat=async(_p,messages,sampler)=>{
   calls.push({used:count(messages),reserve:sampler.max_tokens,messages});
   assert.ok(count(messages)+sampler.max_tokens<=context);
