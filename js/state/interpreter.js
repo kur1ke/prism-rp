@@ -505,14 +505,15 @@
   function initialOutfitInstruction(card, setup) {
     const cd = card || {};
     const selection = PRP.cardModel ? PRP.cardModel.normalizeContextFields(cd.contextFields) : { description: true, personality: true, appearance: true };
-    const explicit = selection.prismCore && PRP.cardContext ? PRP.cardContext.normCore(cd.prismCore) : null;
+    const canonical = PRP.cardContext ? PRP.cardContext.core(cd) : null;
+    const explicit = canonical && canonical.source === "explicit" ? canonical : null;
     const trim = (v, n) => String(v || "").slice(0, n);
     const input = {
       name: trim(cd.name, 160),
       description: selection.description ? String(cd.description || "") : "",
       personality: selection.personality ? String(cd.personality || "") : "",
       appearance: selection.appearance ? String(cd.appearance || "") : "",
-      ...(explicit && explicit.reviewed ? { prismCore: { identity: explicit.identity, traits: explicit.traits,
+      ...(explicit ? { prismCore: { identity: explicit.identity, traits: explicit.traits,
         voice: explicit.voice, durableContext: explicit.durableContext } } : {}),
       scenario: trim(cd.scenario, 1100),
       firstMessage: trim(cd.firstMes, 550),

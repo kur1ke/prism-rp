@@ -363,7 +363,7 @@
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },
+          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), duplicates: core.duplicates, truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
           selected: keptChunkIds,

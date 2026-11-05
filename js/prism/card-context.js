@@ -45,13 +45,23 @@
     };
     const ex = fields.prismCore ? normCore(cd.prismCore) : null;
     const explicit = ex && ex.reviewed;
+    // Compare complete values/paragraphs only, after the same macro expansion.
+    // Disabled fields cannot cover Core. Never edit the stored card or infer similarity.
+    const covered = new Set(Object.values(primary).flatMap((value) => [value, ...paragraphs(value)]).filter(Boolean));
+    const duplicates = [];
+    const unique = (value, field) => {
+      const text = mm(value).trim();
+      if (text && covered.has(text)) { duplicates.push(field); return ""; }
+      return text;
+    };
+    const list = (values, field) => values.map((value, i) => unique(value, field + "#" + (i + 1))).filter(Boolean);
     return { source: explicit ? "explicit" : "fallback",
       reason: ex && !ex.reviewed ? "ядро из файла не проверено; выбранные основные поля передаются целиком" : "выбранные основные поля передаются целиком",
-      identity: explicit ? mm(ex.identity) : primary.description,
+      identity: explicit ? unique(ex.identity, "identity") : primary.description,
       personality: explicit ? "" : primary.personality,
-      traits: explicit ? ex.traits.map(mm) : [], voice: explicit ? ex.voice.map(mm) : [],
-      durableContext: explicit ? ex.durableContext.map(mm) : [],
-      primary, fields, truncated: [], rest: { description: "", personality: "" } };
+      traits: explicit ? list(ex.traits, "traits") : [], voice: explicit ? list(ex.voice, "voice") : [],
+      durableContext: explicit ? list(ex.durableContext, "durableContext") : [],
+      primary, fields, duplicates, truncated: [], rest: { description: "", personality: "" } };
   }
 
   // Optional manual Core starts from complete text, never from a character cap.
@@ -64,9 +74,9 @@
   // Text-only estimate for the permanent selection, not the complete request.
   // Colours use 20% / 40% of the configured input window (after output reserve).
   function tokenUsage(card, budget) {
-    const k = core(card), estimate = PRP.util.estimateTokens, ex = normCore((card || {}).prismCore);
+    const k = core(card), estimate = PRP.util.estimateTokens;
     const fields = { description: estimate(str((card || {}).description)), personality: estimate(str((card || {}).personality)),
-      appearance: estimate(str((card || {}).appearance)), prismCore: estimate(ex ? [ex.identity, ...ex.traits, ...ex.voice, ...ex.durableContext].join("\n") : "") };
+      appearance: estimate(str((card || {}).appearance)), prismCore: estimate(k.source === "explicit" ? [k.identity, ...k.traits, ...k.voice, ...k.durableContext].filter(Boolean).join("\n") : "") };
     const total = Object.keys(fields).reduce((n, key) => n + (k.fields[key] && (key !== "prismCore" || k.source === "explicit") ? fields[key] : 0), 0);
     const level = total === 0 || budget > 0 && total <= budget * .2 ? "normal" : budget > 0 && total <= budget * .4 ? "warn" : "danger";
     return { fields, total, budget, level };

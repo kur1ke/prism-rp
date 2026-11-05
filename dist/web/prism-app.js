@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "a16a8fd4cebedbbe87261d709f49efa756d280da";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -3078,13 +3078,23 @@
     };
     const ex = fields.prismCore ? normCore(cd.prismCore) : null;
     const explicit = ex && ex.reviewed;
+    // Compare complete values/paragraphs only, after the same macro expansion.
+    // Disabled fields cannot cover Core. Never edit the stored card or infer similarity.
+    const covered = new Set(Object.values(primary).flatMap((value) => [value, ...paragraphs(value)]).filter(Boolean));
+    const duplicates = [];
+    const unique = (value, field) => {
+      const text = mm(value).trim();
+      if (text && covered.has(text)) { duplicates.push(field); return ""; }
+      return text;
+    };
+    const list = (values, field) => values.map((value, i) => unique(value, field + "#" + (i + 1))).filter(Boolean);
     return { source: explicit ? "explicit" : "fallback",
       reason: ex && !ex.reviewed ? "ядро из файла не проверено; выбранные основные поля передаются целиком" : "выбранные основные поля передаются целиком",
-      identity: explicit ? mm(ex.identity) : primary.description,
+      identity: explicit ? unique(ex.identity, "identity") : primary.description,
       personality: explicit ? "" : primary.personality,
-      traits: explicit ? ex.traits.map(mm) : [], voice: explicit ? ex.voice.map(mm) : [],
-      durableContext: explicit ? ex.durableContext.map(mm) : [],
-      primary, fields, truncated: [], rest: { description: "", personality: "" } };
+      traits: explicit ? list(ex.traits, "traits") : [], voice: explicit ? list(ex.voice, "voice") : [],
+      durableContext: explicit ? list(ex.durableContext, "durableContext") : [],
+      primary, fields, duplicates, truncated: [], rest: { description: "", personality: "" } };
   }
 
   // Optional manual Core starts from complete text, never from a character cap.
@@ -3097,9 +3107,9 @@
   // Text-only estimate for the permanent selection, not the complete request.
   // Colours use 20% / 40% of the configured input window (after output reserve).
   function tokenUsage(card, budget) {
-    const k = core(card), estimate = PRP.util.estimateTokens, ex = normCore((card || {}).prismCore);
+    const k = core(card), estimate = PRP.util.estimateTokens;
     const fields = { description: estimate(str((card || {}).description)), personality: estimate(str((card || {}).personality)),
-      appearance: estimate(str((card || {}).appearance)), prismCore: estimate(ex ? [ex.identity, ...ex.traits, ...ex.voice, ...ex.durableContext].join("\n") : "") };
+      appearance: estimate(str((card || {}).appearance)), prismCore: estimate(k.source === "explicit" ? [k.identity, ...k.traits, ...k.voice, ...k.durableContext].filter(Boolean).join("\n") : "") };
     const total = Object.keys(fields).reduce((n, key) => n + (k.fields[key] && (key !== "prismCore" || k.source === "explicit") ? fields[key] : 0), 0);
     const level = total === 0 || budget > 0 && total <= budget * .2 ? "normal" : budget > 0 && total <= budget * .4 ? "warn" : "danger";
     return { fields, total, budget, level };
@@ -4938,7 +4948,7 @@
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), truncated: core.truncated },
+          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), duplicates: core.duplicates, truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
           selected: keptChunkIds,
@@ -6042,14 +6052,15 @@
   function initialOutfitInstruction(card, setup) {
     const cd = card || {};
     const selection = PRP.cardModel ? PRP.cardModel.normalizeContextFields(cd.contextFields) : { description: true, personality: true, appearance: true };
-    const explicit = selection.prismCore && PRP.cardContext ? PRP.cardContext.normCore(cd.prismCore) : null;
+    const canonical = PRP.cardContext ? PRP.cardContext.core(cd) : null;
+    const explicit = canonical && canonical.source === "explicit" ? canonical : null;
     const trim = (v, n) => String(v || "").slice(0, n);
     const input = {
       name: trim(cd.name, 160),
       description: selection.description ? String(cd.description || "") : "",
       personality: selection.personality ? String(cd.personality || "") : "",
       appearance: selection.appearance ? String(cd.appearance || "") : "",
-      ...(explicit && explicit.reviewed ? { prismCore: { identity: explicit.identity, traits: explicit.traits,
+      ...(explicit ? { prismCore: { identity: explicit.identity, traits: explicit.traits,
         voice: explicit.voice, durableContext: explicit.durableContext } } : {}),
       scenario: trim(cd.scenario, 1100),
       firstMessage: trim(cd.firstMes, 550),
@@ -9685,7 +9696,7 @@
     const lines = (a) => esc((a || []).join("\n"));
     const ta = (id, label, val, rows, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="${rows}" data-core="${id}" placeholder="${esc(ph)}">${val}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
     return `<div class="block core-block" id="prism-core"><div class="block-title" style="margin-top:22px">Ядро для Prism <span class="tag" id="core-state">${esc(state)}</span></div>
-      <p class="hint">Необязательные дополнительные сведения. Заполнять ядро не требуется: выбранные описание, личность и внешность передаются целиком. Ядро отправляется только при включённой галочке; текст не обрезается. Совпадающие сведения пока могут повторяться.</p>
+      <p class="hint">Необязательные дополнительные сведения. Заполнять ядро не требуется: выбранные описание, личность и внешность передаются целиком. Ядро отправляется только при включённой галочке. Полные точные совпадения с выбранными основными полями или их абзацами повторно не отправляются; исходный текст ядра сохраняется.</p>
       ${ta("core-identity", "Кто это", esc(ex ? ex.identity : ""), 3, "Студентка второго курса, живёт одна в Каракуре…")}
       ${ta("core-traits", "Черты", ex ? lines(ex.traits) : "", 3, "по одной на строку", "По одной на строку.")}
       ${ta("core-voice", "Манера речи", ex ? lines(ex.voice) : "", 2, "по одной на строку")}

@@ -153,7 +153,7 @@
     const lines = (a) => esc((a || []).join("\n"));
     const ta = (id, label, val, rows, ph, help) => `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" rows="${rows}" data-core="${id}" placeholder="${esc(ph)}">${val}</textarea>${help ? `<span class="help">${help}</span>` : ""}</div>`;
     return `<div class="block core-block" id="prism-core"><div class="block-title" style="margin-top:22px">Ядро для Prism <span class="tag" id="core-state">${esc(state)}</span></div>
-      <p class="hint">Необязательные дополнительные сведения. Заполнять ядро не требуется: выбранные описание, личность и внешность передаются целиком. Ядро отправляется только при включённой галочке; текст не обрезается. Совпадающие сведения пока могут повторяться.</p>
+      <p class="hint">Необязательные дополнительные сведения. Заполнять ядро не требуется: выбранные описание, личность и внешность передаются целиком. Ядро отправляется только при включённой галочке. Полные точные совпадения с выбранными основными полями или их абзацами повторно не отправляются; исходный текст ядра сохраняется.</p>
       ${ta("core-identity", "Кто это", esc(ex ? ex.identity : ""), 3, "Студентка второго курса, живёт одна в Каракуре…")}
       ${ta("core-traits", "Черты", ex ? lines(ex.traits) : "", 3, "по одной на строку", "По одной на строку.")}
       ${ta("core-voice", "Манера речи", ex ? lines(ex.voice) : "", 2, "по одной на строку")}
