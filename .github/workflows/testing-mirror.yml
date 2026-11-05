@@ -30,6 +30,8 @@ jobs:
         run: node tests/card-fields.js
       - name: Check complete permanent custom fields and overflow
         run: node tests/always-custom-fields.js
+      - name: Check lorebook labels, activation, ordering and budget
+        run: node tests/lorebook-contract.js
       - name: Check exact Core duplicates without rewriting stored text
         run: node tests/core-duplicates.js
       - name: Check removed background field and lore preservation
