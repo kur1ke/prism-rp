@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "4e9e672c1ee669dcc7577e15e2e0e33b93df198f";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5161,7 +5161,7 @@
   function extractionInput(path) {
     return (path || []).slice(-WINDOW).map((m) => ({
       messageId: m.id, role: m.role === "user" ? "user" : "character",
-      text: clean(m.text).slice(0, 900)
+      text: clean(m.text)
     })).filter((x) => x.text.length >= 4);
   }
   const EXTRACT_SYSTEM = [
@@ -10511,10 +10511,11 @@
       if (!relevant()) return finish("stale");
 
       // Journal every successfully examined selected-path source, including
-      // [] results. Old v7 Memory also counts as processed on its own branch.
+      // [] results. Legacy records cover only texts within the former 900-char
+      // input limit; longer sources need one full examination, not a guessed tail.
       // Read persisted receipts rather than trusting only UI state: reopening
       // the chat must not resubmit earlier sources to the model.
-      let existing, sources;
+      let existing, sources, priorReceipts;
       try {
         const [journal, stored] = await Promise.all([
           DB.byIndex("memorySources", "chatId", chatId),
@@ -10522,13 +10523,19 @@
         ]);
         if (!relevant()) return finish("stale");
         existing = stored.filter((x) => x.owner === owner);
-        const processed = new Set(journal.filter((x) => x.owner === owner &&
-          M.visible(x.source, path)).map((x) => x.sourceKey));
+        const eligible = new Map(path.map((x) => [x.id, x]));
+        priorReceipts = new Map(journal.filter((x) => x.owner === owner &&
+          M.visible(x.source, path)).map((x) => [x.sourceKey, x]));
+        const legacyComplete = (source) => {
+          const src = eligible.get(source && source.messageId);
+          return src && M.clean(src.text).length <= 900;
+        };
+        const processed = new Set([...priorReceipts.values()]
+          .filter((x) => x.coverage === "full" || legacyComplete(x.source)).map((x) => x.sourceKey));
         for (const item of existing) {
-          if (M.visible(item.source, path))
+          if (M.visible(item.source, path) && legacyComplete(item.source))
             processed.add(M.sourceKey(chatId, owner, item.source));
         }
-        const eligible = new Map(path.map((x) => [x.id, x]));
         sources = M.extractionInput(path.slice(0, path.indexOf(anchor) + 1))
           .filter((row) => {
             const src = eligible.get(row.messageId);
@@ -10572,6 +10579,11 @@
       // Only branch-visible prior episodes may suppress an exact repeat.
       // Different events with similar language remain distinct.
       proposed = M.distinctExtraction(proposed, M.recent(existing, path, M.LIMIT));
+      // Recovery upgrades coverage, not the one-episode-per-source contract.
+      // Keep an already saved episode and its reflection/checkpoint references.
+      const retained = new Set(existing.filter((m) => M.visible(m.source, path))
+        .map((m) => M.sourceKey(chatId, owner, m.source)));
+      proposed = proposed.filter((m) => !retained.has(M.sourceKey(chatId, owner, m.source)));
       const newOnes = proposed.map((m) =>
         Object.assign({ id: U.uid("mem"), schema: 1, chatId, owner, createdAt: Date.now() }, m));
       const eligible = new Map(path.map((x) => [x.id, x]));
@@ -10579,9 +10591,12 @@
         const src = eligible.get(row.messageId);
         const source = { messageId: src.id, swipeIdx: src.swipeIdx,
           textHash: src.textHash, prefixHash: src.prefixHash };
-        return { id: U.uid("msrc"), schema: 1, chatId, owner, source,
-          sourceKey: M.sourceKey(chatId, owner, source), processedAt: Date.now(),
-          result: proposed.some((m) => m.source.messageId === src.id) ? "memory" : "empty" };
+        const key = M.sourceKey(chatId, owner, source);
+        // Upgrade the old receipt in place: the unique sourceKey must not
+        // reject recovery of a source that was previously truncated.
+        return { id: priorReceipts.has(key) ? priorReceipts.get(key).id : U.uid("msrc"), schema: 1, chatId, owner, source,
+          sourceKey: key, coverage: "full", processedAt: Date.now(),
+          result: retained.has(key) || proposed.some((m) => m.source.messageId === src.id) ? "memory" : "empty" };
       });
       // One atomic commit across memories and source receipts. Once a source
       // was successfully examined, even an empty answer permanently excludes
@@ -10589,8 +10604,19 @@
       // The unique sourceKey index also blocks competing tab transactions.
       if (!relevant()) return finish("stale");
       try {
-        await DB.putAll(newOnes.map((m) => ["memories", m])
-          .concat(receipts.map((m) => ["memorySources", m])));
+        const writes = newOnes.map((m) => ["memories", m])
+          .concat(receipts.map((m) => ["memorySources", m]));
+        const upgrades = receipts.filter((m) => priorReceipts.has(m.sourceKey));
+        if (upgrades.length) {
+          // Competing tabs may both see the legacy receipt. Only the first
+          // transaction can upgrade it and commit its associated memories.
+          const committed = await DB.readModifyWrite(["memories", "memorySources"],
+            upgrades.map((m) => ["memorySources", m.id]), (rows) => {
+              if (rows.some((row) => !row || row.coverage === "full")) return null;
+              return writes;
+            });
+          if (!committed) return finish("source-commit-error");
+        } else await DB.putAll(writes);
       } catch (_) { return finish("source-commit-error"); }
       if (obsolete(chatId, revision)) {
         await Promise.all([

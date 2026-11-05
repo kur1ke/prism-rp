@@ -43,7 +43,7 @@
   function extractionInput(path) {
     return (path || []).slice(-WINDOW).map((m) => ({
       messageId: m.id, role: m.role === "user" ? "user" : "character",
-      text: clean(m.text).slice(0, 900)
+      text: clean(m.text)
     })).filter((x) => x.text.length >= 4);
   }
   const EXTRACT_SYSTEM = [

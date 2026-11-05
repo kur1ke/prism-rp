@@ -44,6 +44,11 @@ function harness() {
   const DB = {
     byIndex: async (type, index, id) => [...storage[type].values()].filter((r) => r.chatId === id),
     putAll: async (records) => records.forEach(([type, row]) => storage[type].set(row.id, row)),
+    readModifyWrite: async (_stores, reads, prepare) => {
+      const writes=prepare(reads.map(([type,id])=>storage[type].get(id)));
+      if(!writes)return false;
+      writes.forEach(([type,row])=>storage[type].set(row.id,row));return writes.length>0;
+    },
     put: async (type, row) => { storage[type].set(row.id, row); return row; },
     del: async (type, id) => { storage[type].delete(id); },
     delMany: async (type, ids) => ids.forEach((id) => storage[type].delete(id))
@@ -832,7 +837,65 @@ function backupJournalValidation() {
   assert.equal(B.check({ ...data, memorySources: [row, repeated] }, { replace: true }).data.memorySources.length, 0);
   console.log("PASS: backup refuses forged, cross-owner and repeated source receipts");
 }
+async function fullSourceCoverage() {
+  for (const mode of ["rp", "messenger"]) {
+    const h=harness(), tail="В конце встречи я подарила тебе серебряный компас.", a=message("long", "Вступление. ".repeat(160)+tail);
+    h.path.push(a);h.ctx.chat().mode=mode;
+    let calls=0;
+    modelReply=async(_,messages)=>{const data=JSON.parse(messages[1].content);
+      if(!data.sources)return {text:unchanged};calls++;
+      assert.equal(data.sources[0].text,PRP.memoryCycle.clean(a.swipes[0].text));
+      return {text:extraction(a.id,tail)};
+    };
+    assert.equal((await h.memory.observe(a,h.model)).status,"remembered-unchanged");
+    assert.equal([...h.storage.memories.values()][0].quote,tail);
+    assert.equal([...h.storage.memorySources.values()][0].coverage,"full");
+    await h.memory.load("ch");assert.equal((await h.memory.observe(a,h.model)).status,"no-unprocessed-source");assert.equal(calls,1);
+  }
+  console.log("PASS: full long source including tail, RP/Messenger, persisted full coverage and reload");
+}
+async function longSourceRetryAndLegacyCoverage() {
+  const M=PRP.memoryCycle,tail="В конце мы договорились встретиться у старого маяка.";
+  function setup(){const h=harness(),a=message("long", "Вступление. ".repeat(160)+tail);h.path.push(a);return {h,a};}
+  function receipt(h,a){const src=M.pathSnapshot(h.path)[0],source={messageId:src.id,swipeIdx:src.swipeIdx,textHash:src.textHash,prefixHash:src.prefixHash};return {id:"old-receipt",chatId:"ch",owner:"owner",source,sourceKey:M.sourceKey("ch","owner",source),result:"empty"};}
+  {
+    const {h,a}=setup();let calls=0;
+    modelReply=async()=>{calls++;return {text:JSON.stringify({memories:[]})};};h.ctx.contextTokens=()=>1200;
+    assert.equal((await h.memory.observe(a,h.model)).status,"overflow-extract");assert.equal(calls,0);assert.equal(h.storage.memorySources.size,0);
+    h.ctx.contextTokens=()=>12000;
+    modelReply=async()=>{calls++;return {text:JSON.stringify({memories:[{messageId:a.id,quote:"Несуществующая цитата",event:"Событие без источника",kind:"observed"}]})};};
+    assert.equal((await h.memory.observe(a,h.model)).status,"invalid-extract");assert.equal(h.storage.memorySources.size,0);
+    modelReply=async()=>{calls++;return {text:JSON.stringify({memories:[]})};};
+    assert.equal((await h.memory.observe(a,h.model)).status,"no-new-memory");assert.equal([...h.storage.memorySources.values()][0].coverage,"full");
+    assert.equal((await h.memory.observe(a,h.model)).status,"no-unprocessed-source");assert.equal(calls,2);
+  }
+  for(const withMemory of [false,true]){
+    const {h,a}=setup(),old=receipt(h,a);h.storage.memorySources.set(old.id,old);
+    if(withMemory)h.storage.memories.set("saved",{id:"saved",chatId:"ch",owner:"owner",source:old.source,event:"Ранее сохранённый эпизод встречи",quote:"Вступление.",kind:"observed"});
+    modelReply=async(_,messages)=>{assert.ok(JSON.parse(messages[1].content).sources[0].text.endsWith(tail));return {text:extraction(a.id,tail)};};
+    // Reflection is only needed when a genuinely new episode is stored.
+    const reply=modelReply;modelReply=async(p,m)=>JSON.parse(m[1].content).sources?reply(p,m):{text:unchanged};
+    assert.equal((await h.memory.observe(a,h.model)).status,withMemory?"no-new-memory":"remembered-unchanged");
+    assert.equal(h.storage.memorySources.size,1);assert.equal(h.storage.memorySources.get(old.id).coverage,"full");
+    assert.equal(h.storage.memories.size,1);assert.equal(h.storage.memorySources.get(old.id).result,"memory");if(withMemory)assert.equal(h.storage.memories.get("saved").event,"Ранее сохранённый эпизод встречи");
+    assert.equal((await h.memory.observe(a,h.model)).status,"no-unprocessed-source");
+  }
+  {
+    const {h,a}=setup(),old=receipt(h,a);h.storage.memorySources.set(old.id,old);
+    modelReply=async()=>{h.storage.memorySources.set(old.id,{...old,coverage:"full"});return {text:extraction(a.id,tail)};};
+    assert.equal((await h.memory.observe(a,h.model)).status,"source-commit-error");assert.equal(h.storage.memories.size,0);
+  }
+  for(const length of [899,900,901]){
+    const h=harness(),a=message("boundary","x".repeat(length));h.path.push(a);const old=receipt(h,a);h.storage.memorySources.set(old.id,old);
+    let calls=0;modelReply=async()=>{calls++;return {text:JSON.stringify({memories:[]})};};
+    assert.equal((await h.memory.observe(a,h.model)).status,length<=900?"no-unprocessed-source":"no-new-memory");
+    assert.equal(calls,length<=900?0:1);
+  }
+  console.log("PASS: long-source overflow/invalid retry, full empty receipt, legacy recovery retains one episode, competing upgrade guarded");
+}
 async function run() {
+  await fullSourceCoverage();
+  await longSourceRetryAndLegacyCoverage();
   await fifo();
   await deletionDuringMemoryWrite();
   await deletionDuringReflectionWrite();
