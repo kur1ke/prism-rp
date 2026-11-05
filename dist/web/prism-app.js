@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "49ac75fe8ad442c24321a1c54aa2d7263bc43e68";
+  window.PRISM_RP_BUILD_SHA = "eb5b9f78eae7a374ef3d865476f1d7187c5e5c67";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -11167,17 +11167,32 @@
       const pendingEntry = Object.assign({}, entry, { operationId, status: "pending", stage: "Готовлю промпт…" });
       delete pendingEntry.error;
       delete pendingEntry.translationFailure;
-      const pendingMessage = JSON.parse(JSON.stringify(msg));
-      const pendingSwipe = pendingMessage.swipes[origin.swipeIdx];
-      if (reuse) pendingSwipe.images[pendingSwipe.images.findIndex(im => im.id === entry.id)] = pendingEntry;
-      else (pendingSwipe.images = pendingSwipe.images || []).push(pendingEntry);
+      const reusedVersion = reuse ? JSON.stringify(reuse) : null;
+      let pendingImages;
       S.drawing.add(entry.id);
       const repaint = () => { if (ctx.chat() && ctx.chat().id === origin.chatId) ui.renderFeed(); };
       // Persist only the image entry; never repopulate the active chat's message list.
       try {
         // Publish pending only after persistence; the adapter's updatedAt
         // stamp and a failed write must not change the live message either.
-        await DB.put("messages", pendingMessage);
+        const committed = await DB.readModifyWrite(["messages"], [["messages", origin.messageId]], ([latest]) => {
+          if (!latest || latest.chatId !== origin.chatId ||
+              stateVersion(latest, origin.swipeIdx, drawAuthored) !==
+                (drawAuthored ? origin.sourceDrawVersion : origin.sourceStateVersion)) return null;
+          const selected = latest.swipes[origin.swipeIdx];
+          const images = Array.isArray(selected.images) ? selected.images : [];
+          const at = images.findIndex(im => im.id === entry.id);
+          if (reuse) {
+            if (at < 0 || JSON.stringify(images[at]) !== reusedVersion) return null;
+            images[at] = pendingEntry;
+          } else {
+            if (at >= 0) return null;
+            images.push(pendingEntry);
+          }
+          selected.images = pendingImages = images;
+          return [["messages", latest]];
+        });
+        if (!committed) throw new Error("Исходное сообщение, состояние или изображение изменилось.");
       } catch (e) {
         // No image work or live mutation has started. Release the reservation
         // so the existing controls can retry without reloading the page.
@@ -11191,7 +11206,7 @@
       Object.assign(entry, pendingEntry);
       delete entry.error;
       delete entry.translationFailure;
-      if (!reuse) (sw.images = sw.images || []).push(entry);
+      sw.images = pendingImages.map(im => im.id === entry.id ? entry : im);
       repaint();
       let finalPatch, imageData, translationFailure;
       let preparationRecorded = false;
@@ -11621,7 +11636,7 @@
       // Including text and state events protects a contextual interpretation
       // against a changed ancestor swipe, edited text, or corrected garment.
       return JSON.stringify((path || []).map((m) => [
-        m.id, m.swipeIdx || 0, TR.activeSwipe(m).text,
+        m.id, m.parentId || null, m.parentSwipeIdx, m.swipeIdx || 0, TR.activeSwipe(m).text,
         TR.activeSwipe(m).stateEvents, TR.activeSwipe(m).stateCorrections,
         TR.activeSwipe(m).draws,
       ]));
@@ -11998,11 +12013,22 @@
         wearInquiry: wearInquiryStatus,
         // Shot-local provenance, not wardrobe state. Same-swipe image use only.
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
-      const next = JSON.parse(JSON.stringify(msg));
-      next.swipes[swipeIdx].stateEvents = events;
-      next.swipes[swipeIdx].wearInquiries = wearInquiries;
-      next.swipes[swipeIdx].stateStatus = stateStatus;
-      await ctx.DB.put("messages", next);
+      // Other writers may attach an image while Observer is awaiting a model
+      // or storage. Validate the source and merge only Observer-owned fields
+      // into the current row, never publish an old copy of the whole message.
+      const committed = await ctx.DB.readModifyWrite(["messages"],
+        initialPath.map(m => ["messages", m.id]), rows => {
+          if (!ctx.chat() || ctx.chat().id !== chatId ||
+              pathFingerprint(chat().path()) !== originalKey ||
+              rows.some(row => !row || row.chatId !== chatId) ||
+              pathFingerprint(rows) !== originalKey) return null;
+          const next = rows[index], selected = next.swipes[swipeIdx];
+          selected.stateEvents = events;
+          selected.wearInquiries = wearInquiries;
+          selected.stateStatus = stateStatus;
+          return [["messages", next]];
+        });
+      if (!committed) return { skipped: "stale-branch" };
       sw.stateEvents = events;
       sw.wearInquiries = wearInquiries;
       sw.stateStatus = stateStatus;
