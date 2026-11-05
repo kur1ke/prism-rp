@@ -72,3 +72,5 @@ Observer/image concurrency is covered by `e2e-observer-image-race.py`: both comm
 Assistant replacement durability is covered by `e2e-assist-regen.py`: streaming is transient; errors, cancellation (including a late result), empty output and failed final writes retain the saved answer. Successful replacements use a conditional native transaction, preserve independent metadata and cannot resurrect a deleted or overwrite an edited conversation. Reload is checked for both provider profiles at desktop/mobile widths. External model calls are fixtures.
 
 A03: `e2e-swipe-commit.py` проверяет атомарность выбора свайпа и превью при отказе native IndexedDB, задержанной записи и повторном вызове, сохранение продолжения и reload (RP/Messenger, desktop/mobile). Живая модель не вызывается.
+
+`e2e-reflection-coverage.py`: разделение новых и ранее осмысленных свидетельств, unchanged/reload, native abort финальной записи, повтор неосмысленных событий в следующем цикле, изоляция якоря ветки и сохранение бэкапа. RP/Messenger × 1440/390, LLM подменена.

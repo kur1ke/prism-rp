@@ -156,18 +156,30 @@
       return true;
     });
   }
-  function weighted(memories, path) {
+  function weighted(memories, path, recencyOrder) {
     // Speaker comes from the currently visible canonical message path, not from
     // LLM-provided text or an untrusted field in a persisted/imported Memory.
     // This also repairs the Reflection input for memories saved before this change.
     const roles = new Map((path || []).map((m) => [m.id,
       m.role === "user" ? "user" : m.role === "assistant" ? "character" : "unknown"]));
+    const ranks = recencyOrder && new Map(recencyOrder.map((m, i) => [m.id, i]));
     return (memories || []).slice(0, LIMIT).map((m, i) => ({
       // Recency, not emotional force. No stored memory importance reduction.
-      recency: Number((1 - i / LIMIT).toFixed(2)), event: m.event, quote: m.quote,
+      recency: Number((1 - (ranks && ranks.has(m.id) ? ranks.get(m.id) : i) / LIMIT).toFixed(2)), event: m.event, quote: m.quote,
       kind: m.kind, speaker: roles.get(m.source && m.source.messageId) || "unknown",
       source: m.source.messageId
     }));
+  }
+  // Coverage is branch-bound, including successful "unchanged" assessments.
+  // Old evidence remains available as context, never as another new episode.
+  function reflectionEvidence(memories, reflections, path, chatId, owner) {
+    const covered = new Set((reflections || []).filter((r) =>
+      r.chatId === chatId && r.owner === owner && visible(r.anchor, path) &&
+      (!r.kind || r.kind === "current" || r.kind === "assessment"))
+      .flatMap((r) => Array.isArray(r.memoryIds) ? r.memoryIds : []));
+    const ordered = recent((memories || []).filter((m) => m.chatId === chatId && m.owner === owner), path, Infinity);
+    const fresh = ordered.filter((m) => !covered.has(m.id)).slice(0, LIMIT);
+    return { fresh, context: ordered.filter((m) => covered.has(m.id)).slice(0, LIMIT - fresh.length) };
   }
   // Complete checkpoints cover disjoint sets of ten canonical Memory episodes.
   // Find the oldest missing group to recover a failed batch on a later turn.
@@ -348,7 +360,7 @@
     return { change: o.change, perspective: o.perspective.trim() };
   }
   PRP.memoryCycle = { WINDOW, LIMIT, BATCH_SIZE, fingerprint, pathSnapshot, visible, sourceKey, eventKey, episodeKey, clean,
-    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, checkpointPlan, BATCH_SYSTEM, integrationPlan, experienceTimeline, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
+    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, reflectionEvidence, checkpointPlan, BATCH_SYSTEM, integrationPlan, experienceTimeline, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
 })(typeof window !== "undefined" ? window : globalThis);

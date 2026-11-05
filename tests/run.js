@@ -9088,7 +9088,9 @@ async function autoMemoryTests() {
     let n=0;fbLLM=async(_,msgs)=>({text:++n===1?extract(msg.id,baseText,"В переписке дано обещание"):JSON.stringify({change:"unchanged",perspective:""})});
     assert.strictEqual((await h.ctx.svc.memory.observe(h.chat.path()[0],{kind:"mock"})).status,"remembered-unchanged");
     assert.strictEqual((h.store.memories||new Map()).size,1);
-    assert.strictEqual((h.store.reflections||new Map()).size,0);
+    assert.strictEqual((h.store.reflections||new Map()).size,1);
+    assert.strictEqual(h.ctx.svc.memory.experience(),null,"coverage is not Experience");
+    assert.strictEqual([...h.store.reflections.values()][0].kind,"assessment");
   });
   await ta("AUTO-M4: invalid reflection preserves verified Memory; fabricated Memory and overflow fail closed",async()=>{
     const h=fbHarness(card,{autoMemory:true});await h.chat.createChat("rp","c1");
@@ -9150,7 +9152,8 @@ async function autoMemoryTests() {
     assert.ok(secondPrompt.includes("coreGuide"),"Core given independently");
     assert.ok(secondPrompt.includes("memories"),"Memories given independently");
     assert.strictEqual(h.ctx.svc.memory.visibleMemories().length,2);
-    assert.strictEqual((h.store.reflections||new Map()).size,1,"unchanged does not create spurious state");
+    assert.strictEqual((h.store.reflections||new Map()).size,2,"unchanged stores coverage only");
+    assert.strictEqual(h.ctx.svc.memory.experience().perspective,"Аля надеется на тёплую встречу, хотя волнуется.");
   });
   await ta("AUTO-M8: separate chats and Messenger report cannot become physical observations", async()=>{
     const h=fbHarness(card,{autoMemory:true});

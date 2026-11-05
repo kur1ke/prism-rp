@@ -423,8 +423,8 @@ async function tenMemoriesMakeIndependentBatch() {
   }
   assert.equal(calls.current, 11, "Reflection remains continuous after every accepted Memory");
   assert.equal(calls.batch, 1, "checkpoint Reflection fires at exactly one full Memory group");
-  assert.deepEqual(speeches, [1,2,3,4,5,6,7,8,9,10,10],
-    "current Reflection still uses only last ten accessible Memory");
+  assert.deepEqual(speeches, Array(11).fill(1),
+    "current Reflection gets only previously unassessed evidence as new memories");
   const batch = [...h.storage.reflections.values()].find((r) => r.kind === "batch");
   assert.equal(batch.memoryIds.length, 10);
   assert.deepEqual(batch.memoryIds, [...h.storage.memories.values()].slice(0,10).map((m) => m.id));

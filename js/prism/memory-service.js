@@ -218,7 +218,9 @@
         S.memories = (S.memories || []).concat(newOnes);
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
       }
-      const candidates = M.recent(existing.concat(newOnes), path, M.LIMIT);
+      const evidence = M.reflectionEvidence(existing.concat(newOnes), S.reflections || [], path, chatId, owner);
+      const candidates = evidence.fresh;
+      const recencyOrder = M.recent(candidates.concat(evidence.context), path, M.LIMIT);
       const prior = experience(ctx.svc.chat.path());
       const cd = ctx.card() || {};
       // Exactly the same Core interpretation as normal Prism assembly. Do not
@@ -232,7 +234,8 @@
         traits: canonical.traits, voice: canonical.voice, durableContext: canonical.durableContext };
       const payload = { mode: initialChat.mode, coreGuide: core,
         previousExperience: prior ? prior.perspective : null,
-        memories: M.weighted(candidates, path) };
+        memories: M.weighted(candidates, path, recencyOrder),
+        previouslyReflectedMemories: M.weighted(evidence.context, path, recencyOrder) };
       const lateIntegrated = M.unappliedIntegration(S.reflections || [], path, prior);
       if (lateIntegrated) payload.recentIntegrated = lateIntegrated.perspective;
       let reflectionUser = JSON.stringify(payload);
@@ -240,6 +243,10 @@
       // giving up current Reflection to the strict token budget.
       while (!fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT) && payload.recentIntegrated) {
         delete payload.recentIntegrated;
+        reflectionUser = JSON.stringify(payload);
+      }
+      while (payload.previouslyReflectedMemories.length && !fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)) {
+        payload.previouslyReflectedMemories.pop();
         reflectionUser = JSON.stringify(payload);
       }
       while (payload.memories.length && !fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)) {
@@ -253,23 +260,23 @@
       catch (e) { return finish(e && e.code === "MEMORY_TIMEOUT" ? "reflect-timeout" : "reflect-error"); }
       if (!relevant()) return finish("stale");
       if (!result) return finish("invalid-reflection");
-      const record = result.change === "changed" && (!prior || result.perspective !== prior.perspective) ? {
+      const changed = result.change === "changed" && (!prior || result.perspective !== prior.perspective);
+      const record = {
         id: U.uid("ref"), schema: 1, chatId, owner,
         anchor: { messageId: anchor.id, swipeIdx: anchor.swipeIdx, textHash: anchor.textHash, prefixHash: anchor.prefixHash },
-        perspective: result.perspective, memoryIds: includedMemoryIds,
+        ...(changed ? { perspective: result.perspective } : { kind: "assessment", change: "unchanged" }),
+        memoryIds: includedMemoryIds,
         createdAt: Date.now()
-      } : null;
-      // A new Experience version commits only after validated reflection;
-      // Memory is already safely stored as a separate class of evidence.
-      if (record) {
-        await DB.put("reflections", record);
-        if (obsolete(chatId, revision)) {
-          await DB.del("reflections", record.id);
-          return finish("stale");
-        }
+      };
+      // A successful unchanged assessment records coverage, not a new Experience.
+      // Commit coverage and any changed perspective in the same record.
+      await DB.put("reflections", record);
+      if (obsolete(chatId, revision)) {
+        await DB.del("reflections", record.id);
+        return finish("stale");
       }
       if (S.chatId === chatId) {
-        if (record) S.reflections = (S.reflections || []).concat([record]);
+        S.reflections = (S.reflections || []).concat([record]);
         if (ctx.svc.prism) ctx.svc.prism.refresh();
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
       }
@@ -360,7 +367,7 @@
           }
         }
       }
-      return finish(record ? "reflected" : "remembered-unchanged");
+      return finish(changed ? "reflected" : "remembered-unchanged");
     }
     // Preserve every committed reply: same-chat cycles run in FIFO order,
     // while different chats remain independent. No continuous/background loop.
