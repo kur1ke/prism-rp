@@ -17,7 +17,7 @@
       <div class="assist-mark">${icon("assist")}</div>
       <div class="head-who"><div class="head-name">Ассистент</div><span class="head-scene">${esc(a.messages.length ? a.title : "Разговор с моделью вне игры")}</span></div>
       <div class="head-tools">
-        <button class="pill" data-act="assist-ctx" title="Что ассистент видит: карточку персонажа и выдержку из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
+        <button class="pill" data-act="assist-ctx" title="Карточка для консультации, настройки передачи и выдержка из чата">${cd ? R.avatar(cd, 18) : icon("card")}<span>${ctxLabel}</span></button>
         <button class="pill" data-act="vision-test" title="Проверить распознавание изображений через Perchance">Тест Vision</button>
         <button class="icon-btn" data-act="assist-list" title="Все разговоры">${icon("clock")}</button>
         <button class="icon-btn" data-act="assist-new" title="Новый разговор">${icon("plus")}</button>
@@ -26,7 +26,7 @@
     const empty = !a.messages.length ? `<div class="assist-empty">
         <div class="assist-hero">${icon("assist")}</div>
         <h2>О чём поговорим?</h2>
-        <p>Здесь модель — ваш помощник, а не персонаж. Спросите совета по карточке, сцене или настройкам. ${cd ? `Ассистент видит карточку ${esc(cd.name)}${ch ? " и выдержку из выбранного чата" : ""}.` : "Подключите персонажа кнопкой вверху — тогда ассистент увидит его карточку и, по желанию, чат."}</p>
+        <p>Здесь модель — ваш помощник, а не персонаж. Спросите совета по карточке, сцене или настройкам. ${cd ? `Ассистент видит сохранённые поля карточки ${esc(cd.name)}, включая выключенные в отыгрыше. Также доступны настройки передачи${ch ? " и выдержка из выбранного чата" : ""}. Копия отправленного RP-запроса не приложена.` : "Подключите персонажа кнопкой вверху — тогда ассистент увидит его карточку и, по желанию, чат."}</p>
         <div class="starters">${AS.starters(!!cd, !!ch).map((x) => `<button class="starter" data-act="assist-starter" data-q="${esc(x.q)}">${esc(x.t)}</button>`).join("")}</div>
       </div>` : "";
     const feed = a.messages.map((msg, i) => {

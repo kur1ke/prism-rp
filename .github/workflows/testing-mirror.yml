@@ -42,6 +42,8 @@ jobs:
         run: node tests/observer-full-source.js
       - name: Check assistant budget and mutation-free preflight
         run: node tests/assist-budget.js
+      - name: Check assistant card fields and RP selection scope
+        run: node tests/assist-card-context.js
       - name: Check imported values at HTML boundaries
         run: node tests/render-import-safety.js
       - name: Check StateTracker photographed outfit continuity
