@@ -4,7 +4,7 @@
 
 ## Design principles
 
-1. Canonical, typed, stable fields mean the same thing independent of origin: `description` (who/what), `appearance` (physical look), `personality` (traits), `background` (history), `scenario` (starting circumstances), `firstMes`, `mesExample`, `lore`, `directives`, `image`, `customFields`.
+1. Canonical, typed, stable fields mean the same thing independent of origin: `description` (who/what), `appearance` (physical look), `personality` (traits), `scenario` (starting circumstances), `firstMes`, `mesExample`, `lore`, `directives`, `image`, `customFields`.
 2. Never silently promote an imported source/extension, author note or custom field into instructions. Imported custom fields are disabled, including always-on entries. Unknown source fields are retained as evidence, not executed.
 3. Default exported field shape is stable and includes blank declared Prism slots (`extensions.prism_rp.fields`, `image`, `customFields`). Keep standard spec field names, types and optional semantics. Avoid app-specific keys at the Character Card `data` root.
 4. Preserve original source, origin, unknown entries and exact values where possible. When a target format lacks a field, use a namespaced extension AND a backwards-compatible text representation when safe. A third party may ignore extensions: guarantee Prism round-tripping, not universal interpretation.
@@ -18,7 +18,7 @@
 | Description | `description` | `description` / `char_persona` | `data.description` | `data.description` (+ age/sex facts) |
 | Appearance | `appearance` | embedded in description (not separately standardized) | `data.description` labeled paragraph + `data.extensions.prism_rp.fields.appearance` | `data.profile.appearance` |
 | Personality | `personality` | `personality` (where available) | `data.personality` | `data.profile.personality` |
-| Background | `background` | typically within description | `data.description` labeled paragraph + `data.extensions.prism_rp.fields.background` | `data.profile.background` |
+| Biography / past | ordinary `lore` entry, no `background` slot | existing prose remains description; no inferred split | ordinary lore entries; no dedicated Prism background extension | `data.profile.background` becomes a disabled lore entry |
 | Scenario | `scenario` | `scenario` / `world_scenario` | `data.scenario` | `data.profile.scenario` |
 | Greeting | `firstMes` + `altGreetings` | `first_mes` / `char_greeting` | `data.first_mes` + `alternate_greetings` | `data.firstMessage` |
 | Example dialogue | `mesExample` | `mes_example` / `example_dialogue` | `data.mes_example` | `data.exampleDialogue` |
@@ -27,20 +27,31 @@
 | Images / LoRA | `image` | not standardized | `data.extensions.prism_rp.image` | `imageTrigger`, `imageLoras`, `outfitTags`, `imageStyleTrigger`, `nsfwTags` |
 | Custom data | `customFields` | not standardized | `data.extensions.prism_rp.customFields` | preserve unknown fields, unless a deliberate adapter is added |
 
-**Important:** Character Card V3 does *not* have a standard `appearance` or `background` field. A Prism conversion preserves their semantics via `extensions.prism_rp.fields`; the portable `data.description` necessarily combines them for clients unaware of Prism's extension.
+**Important:** Character Card V3 does not standardize a separate `appearance` field. Prism exports description + a labeled appearance paragraph in portable `data.description`, and stores the separate originals in `extensions.prism_rp.fields.{description,appearance}`. There is no new canonical/exported background field. Legacy canonical background and URV biography are preserved as disabled ordinary lore entries, not a special runtime layer.
+
+## Core and RP selection
+
+`extensions.prism_rp.contextFields` preserves selection of description, personality,
+appearance and prismCore. Defaults are full first three fields on, explicit Core off.
+Core data lives in `extensions.prism_rp.prismCore`; imports require review and explicit
+selection. Selected primary fields and reviewed selected Core are protected from
+arbitrary truncation; exact Core copies already present in selected primary text are
+omitted from the outbound projection, never erased from the card. These settings do
+not constitute a historical RP payload. Consultation assistant F27 separates saved
+fields from settings and explicitly marks the actual request as not attached.
 
 ## Compatible text fallback
 
-For cards exported by Prism, paragraph separators exactly mark `Внешность:\n...` and `Прошлое:\n...`. If the extension is missing or became stale after an external edit, the importer may restore the fields from these **explicit** paragraphs. It must not infer a field boundary from prose or unfamiliar headings.
+For cards exported by Prism, paragraph separators exactly mark `Внешность:\n...`. If the extension is missing or became stale after an external edit, the importer may restore appearance from this **explicit** paragraph. An old `Прошлое` paragraph remains prose; its label does not restore a removed background slot. It must not infer a field boundary from prose or unfamiliar headings.
 
 If parsing cannot determine ownership unambiguously, keep the original description, warn in import review, and preserve original source. Prefer a transparent ambiguity to silent relabeling.
 
 ## Custom fields authority
 
-- `customFields: [{id,label,text,mode,enabled}]` is typed, with modes `relevant` (default) and `always` (budget permitting).
+- `customFields: [{id,label,text,mode,enabled}]` is typed, with modes `relevant` (default) and `always` (complete protected field in an accepted request).
 - Fields are untrusted **card facts**, never author/system instructions; they enter the existing `prism/data` escaped data layer.
 - Defaults are disabled on import, and blank/inactive fields never enter the runtime context.
-- Selected fields compete with other optional details under the same budget and removal policy.
+- Enabled `relevant` fields compete with optional details: at most four related fragments per turn, then budget reduction. Enabled `always` fields are transmitted whole; if protected data cannot fit after optional reductions, preflight rejects the request rather than silently dropping them.
 - Explicit user activation is needed; a visible checkbox reflects real runtime behavior.
 - Unknown third-party scalar text/number or simple list fields are proposed as *disabled* custom character facts, with `origin.format` and `origin.path`. Instructions, configuration, keys, binary/structured values and unsupported types stay only in the original imported source and are not forwarded to the RP model. This distinction is conservative and is not a semantic guarantee about arbitrary external schemas.
 - Technical provenance and custom-field delivery rules appear in the editor only when that field's **«Подробнее»** checkbox is selected. This controls visibility only, never model delivery.
