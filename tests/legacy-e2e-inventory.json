@@ -1,0 +1,1389 @@
+{
+  "sourceRef": "b1b52f01a27e8eba5c92f7fae8a940108b08a735",
+  "sourceFile": "tests/e2e.py",
+  "note": "203 named call sites, not a count of executed cases. Ported rows reference current semantic coverage, not identical retired UI. Pending requires individual disposition before monolith removal.",
+  "checks": [
+    {
+      "historicalLine": 100,
+      "name": "'главный экран: приветствие с шагами'",
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-catalog.py: current welcome and separate catalog"
+      ]
+    },
+    {
+      "historicalLine": 107,
+      "name": "'импорт PNG: экран проверки до сохранения'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-catalog.py"
+      ]
+    },
+    {
+      "historicalLine": 110,
+      "name": "'импорт PNG: плитка персонажа после подтверждения'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-catalog.py"
+      ]
+    },
+    {
+      "historicalLine": 122,
+      "name": "'редактор: подписи полей по CCv2'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 138,
+      "name": "'редактор: поля сохраняются при смене раздела'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-catalog.py"
+      ]
+    },
+    {
+      "historicalLine": 141,
+      "name": "'создание персонажа'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-catalog.py"
+      ]
+    },
+    {
+      "historicalLine": 144,
+      "name": "'кнопка «Изменить» на плитке открывает карточку'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-catalog.py"
+      ]
+    },
+    {
+      "historicalLine": 146,
+      "name": "'альтернативное приветствие сохранено'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-catalog.py"
+      ]
+    },
+    {
+      "historicalLine": 148,
+      "name": "'лорбук: доп. ключи и название сохранены'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 150,
+      "name": "'создатель и версия сохранены'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 161,
+      "name": "'загрузка списка моделей'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-settings.py"
+      ]
+    },
+    {
+      "historicalLine": 162,
+      "name": "'первая модель выбрана автоматически'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-settings.py"
+      ]
+    },
+    {
+      "historicalLine": 166,
+      "name": "'настройка «не передавать инструкции после истории» выключена по умолчанию'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-settings.py"
+      ]
+    },
+    {
+      "historicalLine": 170,
+      "name": "'пресет «Живой» применён'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-settings.py"
+      ]
+    },
+    {
+      "historicalLine": 172,
+      "name": "'пресет «Живой» применён'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-settings.py"
+      ]
+    },
+    {
+      "historicalLine": 178,
+      "name": "'приветствие с подстановкой {{user}}'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 179,
+      "name": "'строка сцены в шапке'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 180,
+      "name": "'счётчик контекста в композере'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 188,
+      "name": "'ответ получен, директива вырезана'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 189,
+      "name": "'плашки изменений сцены'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 192,
+      "name": "'Prism: склонности, сцена, лорбук'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 193,
+      "name": "'пресет «Живой» ушёл в запрос'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 194,
+      "name": "'D: в сцене (RP) нет кнопки инициативы'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 195,
+      "name": "'строка сцены обновилась'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 202,
+      "name": "'продолжение: инструкция и дописанный текст'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 207,
+      "name": "'сцена: время из дельт'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 209,
+      "name": "'сцена: +1 час'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 212,
+      "name": "'сцена: погода из формы'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 215,
+      "name": "'гардероб: надеть'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 217,
+      "name": "'гардероб: снять'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 219,
+      "name": "'H: в сцене нет управления отношением'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 220,
+      "name": "'H: устаревшая отметка отношения из ответа видна как недействующая'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 222,
+      "name": "'H: в Prism нет отношения и его причины'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 230,
+      "name": "'новый вариант 2/2'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 232,
+      "name": "'назад к 1/2'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 237,
+      "name": "'автоматическая память: нет ручного редактора'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 238,
+      "name": "'автоматическая память: панель Experience'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 249,
+      "name": "'изображения: списки с сервера'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 252,
+      "name": "'изображения: модель выбрана из списка'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 255,
+      "name": "'изображения: общих LoRA в настройках нет'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 260,
+      "name": "'имя в шапке чата открывает карточку'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 274,
+      "name": "'авто-рисование по [draw:]'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 276,
+      "name": "'авто-рисование по [draw:]'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 277,
+      "name": "'директива [draw:] скрыта'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 280,
+      "name": "'промпт: LoRA персонажа'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 282,
+      "name": "'промпт: триггер и гардероб из сцены'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 284,
+      "name": "'промпт: блок качества один раз'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 285,
+      "name": "'размер 2:3 → 832×1216'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 286,
+      "name": "'негатив персонажа'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 287,
+      "name": "'модель передана серверу'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 290,
+      "name": "'сведения о картинке'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 293,
+      "name": "'закрепление seed'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 295,
+      "name": "'просмотр картинки'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 303,
+      "name": "'«заново» — новый seed'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 308,
+      "name": "'перевод сцены текстовой моделью'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 310,
+      "name": "'переведённая сцена в промпте'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 311,
+      "name": "'закреплённый seed применён'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 317,
+      "name": "'поиск: совпадения подсвечены'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 324,
+      "name": "'FC: новая переписка — окно настройки времени, пояс по умолчанию'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 327,
+      "name": "'FC: режим показан и не переключается'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 332,
+      "name": "'переписка: пузыри'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 334,
+      "name": "'FC: статус не берётся из [scene:] ответа'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 337,
+      "name": "'переписка: рамка'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 338,
+      "name": "'FC: переписке — разделы среды вместо сцены и без протокола [scene:]'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 344,
+      "name": "'H: переписка — [scene:] из ответа хранится только неактивным и сцену не создаёт; в следующий Prism не попадает'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 347,
+      "name": "'FC: у отправленного и полученного сообщения — метка времени переписки'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 348,
+      "name": "'PRISM1-1: опыт другого чата не попадает в модель'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 351,
+      "name": "'PRISM1-1: вкладка опыта другого чата пуста'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 352,
+      "name": "'FC: у переписки вкладка «Среда» вместо «Сцена»'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 360,
+      "name": "'FC: явная правка положения — в шапке и во вкладке'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 365,
+      "name": "'поповер моделей'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 367,
+      "name": "'быстрая смена модели'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 372,
+      "name": "'после перезагрузки открыт тот же чат'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 378,
+      "name": "'тема «Бумага»'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-settings.py"
+      ]
+    },
+    {
+      "historicalLine": 384,
+      "name": "'PRISM1-1: в своём чате опыт на месте'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 393,
+      "name": "'бэкап со всеми коллекциями'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 400,
+      "name": "'ассистент: открыт с карточкой и чатом'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 407,
+      "name": "'ассистент: ответ с разметкой'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 409,
+      "name": "'ассистент: модель видит карточку и чат'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 411,
+      "name": "'ассистент: списки и блок кода'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 417,
+      "name": "'ассистент: можно отключить персонажа'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 422,
+      "name": "'ассистент: без персонажа карточка не уходит'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 424,
+      "name": "'ассистент: без персонажа карточка не уходит'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 426,
+      "name": "'ассистент: список разговоров'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 430,
+      "name": "'ассистент: «Другой ответ» заменяет ответ'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 433,
+      "name": "'ассистент: после перезагрузки открыт тот же разговор'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 444,
+      "name": "'экспорт PNG'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 445,
+      "name": "'экспорт: LoRA едут внутри карточки'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-workflows.py"
+      ]
+    },
+    {
+      "historicalLine": 462,
+      "name": "'архив не показывается как автоматическая память'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 464,
+      "name": "'старый Experience сохранён без миграции'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 465,
+      "name": "'старый Experience не входит в Prism'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 499,
+      "name": "f'OVERFLOW {mode}: дерево не изменилось, отчёт Prism показывает переполнение'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-budget-window.py"
+      ]
+    },
+    {
+      "historicalLine": 500,
+      "name": "'OVERFLOW: модель не вызывалась'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-budget-window.py"
+      ]
+    },
+    {
+      "historicalLine": 501,
+      "name": "'OVERFLOW: ошибка показана вне истории'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-budget-window.py"
+      ]
+    },
+    {
+      "historicalLine": 502,
+      "name": "'OVERFLOW: открыта вкладка Prism с переполнением'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-budget-window.py"
+      ]
+    },
+    {
+      "historicalLine": 520,
+      "name": "'H: «### Указания автора» в описании карточки не создаёт раздел указаний, текст цел как литерал'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 531,
+      "name": "'мобильная ширина без горизонтальной прокрутки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 560,
+      "name": "'FA: неизвестный и битый файл — ошибки на проверке'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 561,
+      "name": "'FA: импортировать нечего — кнопка выключена'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 566,
+      "name": "'FA: после ошибок карточка не создана (и после перезагрузки)'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 571,
+      "name": "'FA: URV — формат, поля, собранный промпт не включается'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 572,
+      "name": "'FA: URV — указания выключены по умолчанию'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 575,
+      "name": "'FA: отмена — ничего не сохранено'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 580,
+      "name": "'FA: URV импортирован'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 583,
+      "name": "'FA: редактор — внешность и прошлое отдельными полями'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 585,
+      "name": "'FA: редактор — импортированное указание с пометкой и выключено'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 587,
+      "name": "'FA: редактор — сведения об исходнике'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 593,
+      "name": "'FA: сохранение в редакторе не включает импортированное'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 610,
+      "name": "'FA: выключенное указание не уходит в модель'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 628,
+      "name": "'FA: включённое указание уходит в модель, выключенное — нет'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 642,
+      "name": "'B-25: карточка со сценарием без первого сообщения'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 648,
+      "name": "'B-26/B-31: пустая сцена — кнопка начала, без пустых сообщений'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 649,
+      "name": "'B-27: модель сама не вызывается'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 655,
+      "name": "'B-28/B-29: пользователь пишет первым — ответ получает сценарий'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 661,
+      "name": "'B-30: следующий ответ — без сценария'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 670,
+      "name": "'B-36: ошибка начала — чат пуст, можно повторить'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 679,
+      "name": "'B-32/B-33: начало сцены — один вызов, сценарий и указание начать, без реплик пользователя'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 681,
+      "name": "'B-34: начало записано, сцена из [scene:]'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 684,
+      "name": "'B-35: после перезагрузки начало на месте'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 694,
+      "name": "'FB single-system: начало отклонено до вызова, чат пуст, причина показана'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 701,
+      "name": "'FB single-system: можно написать первым — настоящая реплика, без «[Начало]»'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 712,
+      "name": "'W1-26: библиотека миров открывается'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py"
+      ]
+    },
+    {
+      "historicalLine": 724,
+      "name": "'W1-27/W1-28: мир создан, два факта с метками'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py"
+      ]
+    },
+    {
+      "historicalLine": 732,
+      "name": "'W1-29: персонаж привязан к миру'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py"
+      ]
+    },
+    {
+      "historicalLine": 742,
+      "name": "'W1-30/W1-31/W1-32/W1-33: превью — замена, свой факт, выключенный факт'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py"
+      ]
+    },
+    {
+      "historicalLine": 753,
+      "name": "'W1-34: у второго персонажа пак без изменений первого'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py"
+      ]
+    },
+    {
+      "historicalLine": 757,
+      "name": "'W1-34: сам пак не изменился'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py"
+      ]
+    },
+    {
+      "historicalLine": 767,
+      "name": "'W1-35: после перезагрузки мир и линза на месте'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py"
+      ]
+    },
+    {
+      "historicalLine": 774,
+      "name": "'W1-18: мир со ссылками не удаляется, причина с именами'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 787,
+      "name": "'W1-36/W2: без выбранного таймлайна и без связи с ходом мир в модель не подаётся'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 796,
+      "name": "'W2-UI: вкладка «Мир чата» — действующие факты с пометкой отбора'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 802,
+      "name": "'W2-UI: по умолчанию — текущая ветка'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 808,
+      "name": "'W2-UI: явный факт ветки сохранён с привязкой к ветке'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 824,
+      "name": "'W2-30: в модель — факт ветки и замена линзы (таймлайн canon), без выключенного и без постороннего'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 828,
+      "name": "'W2: ответ модели не пополнил мир чата'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 830,
+      "name": "'W2: отчёт Prism показывает мир'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 836,
+      "name": "'W2-25: до места привязки факт ветки не действует, на ветке — действует'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 840,
+      "name": "'W2: после перезагрузки мир чата на месте'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 855,
+      "name": "'FC: ручное время и пояс сохранены при создании'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 866,
+      "name": "'FC: в модель — время переписки в поясе чата'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 868,
+      "name": "'FC: время сообщений — метки переписки (09:00 по Токио)'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 873,
+      "name": "'FC: сдвиг ручного времени — явный; метки отправленных не меняются'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 879,
+      "name": "'FC: договорённость отмечена вручную и видна в «Среде»'",
+      "status": "retired-contract",
+      "evidence": [
+        "Scene/manual state/background contracts removed; see docs/TESTING_STABILITY_WORKPLAN.md"
+      ]
+    },
+    {
+      "historicalLine": 896,
+      "name": "'D: кнопка «Проверить инициативу» в переписке, отдельно от отправки'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 901,
+      "name": "'D: отказ [no-message] — «Персонаж решил пока не писать», ничего не сохранено'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 906,
+      "name": "'D: ошибка провайдера — своё сообщение об ошибке, ничего не сохранено'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 912,
+      "name": "'D: строгий шаблон (одно системное сообщение) — отказ до вызова модели'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 922,
+      "name": "'D: запись сообщения успешна, запись чата — отказ (настоящий IndexedDB): откат всего, в памяти и в базе прежнее, замок снят'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 934,
+      "name": "'D: успешная инициатива — одно сообщение персонажа с меткой ручного «сейчас» (09:15) и происхождением «по проверке»'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 937,
+      "name": "'D: в модель — поводы как данные и указание проверки; реплики пользователя не подделано'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 940,
+      "name": "'D: среда, договорённости и время не изменились'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 944,
+      "name": "'D: вторая инициатива подряд не создаётся — «дождитесь вашего ответа»'",
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py"
+      ]
+    },
+    {
+      "historicalLine": 962,
+      "name": "'D: смена чата во время проверки — ответ не сохранён ни в одном чате'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 975,
+      "name": "'W2-UI узкий экран: «Мир чата» открывается без горизонтальной прокрутки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 980,
+      "name": "'FC узкий экран: «Среда» и форма положения без горизонтальной прокрутки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 987,
+      "name": "'D 390 px: кнопка инициативы видна целиком, без горизонтальной прокрутки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 991,
+      "name": "'FC узкий экран: «Среда» и форма положения без горизонтальной прокрутки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1011,
+      "name": "'узкий экран: все 7 разделов редактора нажимаются, активный раздел виден'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1012,
+      "name": "'узкий экран: лента разделов прокручивается, страница без горизонтальной прокрутки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1013,
+      "name": "'узкий экран: раздел «Мир» — выбор пака, линза и превью'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1021,
+      "name": "'узкий экран: сохранение из дальнего раздела работает'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1026,
+      "name": "'H-UI: ядро — запасное, показано, что использует Prism'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1035,
+      "name": "'H-UI: явное ядро сохранено и используется Prism'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1037,
+      "name": "'H-UI 390 px: редактор с ядром без горизонтальной прокрутки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1045,
+      "name": "'H-UI: сброс — снова запасное ядро; модель не вызывалась'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1053,
+      "name": "'нет ошибок JS (standalone)'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1083,
+      "name": "'W1-13: база v3 → v6 без потерь, новые коллекции на месте'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1088,
+      "name": "'W1: одна линза на персонажа — вторую отклоняет сама база (уникальный индекс)'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1101,
+      "name": "'W1-19: бэкап включает мир, восстановление его возвращает'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1102,
+      "name": "'W2-33: бэкап включает мир чата, восстановление его возвращает'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1108,
+      "name": "'W2-33: удаление чата удаляет его мир, пак остаётся'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1130,
+      "name": "'FC: восстановление (замена) — среда только для переписки из бэкапа; для сцены и сироты отброшена до записи'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1132,
+      "name": "'W2 fix: восстановление (замена) — запись мира без своего чата не записана, остальные восстановлены'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1148,
+      "name": "'W2 fix: восстановление (добавление) — запись для существующего чата принята, сирота — нет'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1164,
+      "name": "'FC fix: добавление — конфликт режима: местная сцена не стала перепиской, чужие сообщения и среда не записаны'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1186,
+      "name": "'H: замена бэкапом — коллекции, которых нет в бэкапе, пусты; сирота бэкапа не записана; данные бэкапа на месте'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1189,
+      "name": "'H: замена бэкапом без настроек — настройки по умолчанию после перезагрузки'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1191,
+      "name": "'H: после замены приложение открывается с данными бэкапа'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1225,
+      "name": "'H-FIX: отказ запроса посреди замены — отказ промиса, все старые данные целы, ни одной новой записи'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1227,
+      "name": "'H-FIX: синхронная ошибка постановки в очередь — откат, старые данные целы'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1229,
+      "name": "'H-FIX: успешная замена на настоящем IndexedDB — данные бэкапа на месте, старых нет, отсутствующие коллекции пусты'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1242,
+      "name": "'H-FIX UI: ошибка записи — «Бэкап не загружен», без сообщения об успехе, данные не изменены'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1254,
+      "name": "'H-FIX UI: повтор тем же файлом после ошибки проходит'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1285,
+      "name": "'IndexedDB: открытое соединение уступает обновлению (versionchange) — без зависания и «занято»'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1287,
+      "name": "'IndexedDB: вкладка, уступившая базу, предупреждает обновить страницу'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1297,
+      "name": "'IndexedDB: занятая база — видимое сообщение (DB_BLOCKED), не пустой экран'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1303,
+      "name": "'IndexedDB: после закрытия другой вкладки — обычный запуск, данные на месте, база v6'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1317,
+      "name": "'IndexedDB: зависшее открытие — DB_OPEN_TIMEOUT и сообщение, база не изменена'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1340,
+      "name": "'v4→v6: старая вкладка v4 держит базу — видимое DB_BLOCKED'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1347,
+      "name": "'v4→v6: обновление только добавляет worldOverlays и messengerEnvironments; карточки, пак и линза целы'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1377,
+      "name": "'FC v5→v6: вкладка v5 уступила, обновление без DB_BLOCKED'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1378,
+      "name": "'FC v5→v6: только добавлена messengerEnvironments; все прежние коллекции целы'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1380,
+      "name": "'FC: старая переписка без среды открывается — пустая среда в памяти, ничего не придумано, в базу не записано'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1399,
+      "name": "'Perchance: выбран по умолчанию'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1405,
+      "name": "'Perchance: стриминг ответа'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1407,
+      "name": "'Perchance: инструкция содержит Prism и историю'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1412,
+      "name": "'Perchance: продолжение через startWith'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1416,
+      "name": "'Perchance: рисование через image()'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1418,
+      "name": "'Perchance: рисование через image()'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1420,
+      "name": "'Perchance: разрешение и без LoRA'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1422,
+      "name": "'Perchance: контекст из плагина'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1432,
+      "name": "'D Perchance: инициатива — решение последней строкой инструкции, без строк пользователя; ответ сохранён как сообщение-инициатива'",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "historicalLine": 1436,
+      "name": "'нет ошибок JS (perchance)'",
+      "status": "pending",
+      "evidence": []
+    }
+  ]
+}
