@@ -16,7 +16,10 @@ uploads these artifacts even on failure and publishes bundles only on success.
 Use `--jobs 1` for serial diagnosis or `--timeout` to change the watchdog locally.
 
 `PRISM_CHROMIUM` may select an executable; otherwise the helper uses system
-Chromium when installed, falling back to Playwright's managed browser. All
+Chromium when installed, falling back to Playwright's managed browser. CI uses
+the preinstalled Google Chrome on the pinned Ubuntu 24.04 runner and logs its
+version. It does not download extra system fonts or reinstall browser libraries;
+the initial attempt with `--with-deps` stalled on the Ubuntu package mirror. All
 contexts select the isolated testing database. Google Fonts requests receive
 empty CSS to remove an unrelated external dependency. Model and image responses
 use fixtures; these tests do not establish live provider or hosted Perchance
