@@ -70,3 +70,5 @@ checks and remove the obsolete monolith after that migration. F29 remains partia
 Observer/image concurrency is covered by `e2e-observer-image-race.py`: both commit orders, fresh unrelated fields, deleted/edited sources, no resurrection, and reload in RP/Messenger at 1440/390. The regression fails on the pre-A01 bundle.
 
 Assistant replacement durability is covered by `e2e-assist-regen.py`: streaming is transient; errors, cancellation (including a late result), empty output and failed final writes retain the saved answer. Successful replacements use a conditional native transaction, preserve independent metadata and cannot resurrect a deleted or overwrite an edited conversation. Reload is checked for both provider profiles at desktop/mobile widths. External model calls are fixtures.
+
+A03: `e2e-swipe-commit.py` проверяет атомарность выбора свайпа и превью при отказе native IndexedDB, задержанной записи и повторном вызове, сохранение продолжения и reload (RP/Messenger, desktop/mobile). Живая модель не вызывается.
