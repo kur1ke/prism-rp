@@ -1,4 +1,5 @@
 """F09: actual bundle, stored card unchanged and editor still exposes original Core."""
+from browser_support import launch_chromium, browser_context
 import json, pathlib, shutil, socket, subprocess, sys
 from playwright.sync_api import sync_playwright
 root=pathlib.Path(__file__).resolve().parents[1]
@@ -9,14 +10,14 @@ server=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.
 results=[]
 try:
  with sync_playwright() as p:
-  browser=p.chromium.launch(headless=True,executable_path=shutil.which('chromium'))
+  browser=launch_chromium(p)
   for width in [1440,390]:
-   context=browser.new_context(viewport={'width':width,'height':900});context.add_init_script('window.__PRP_TEST_MIRROR=true')
+   context=browser_context(browser, viewport={'width':width,'height':900});context.add_init_script('window.__PRP_TEST_MIRROR=true')
    page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    page.goto(f'http://127.0.0.1:{port}/dist/standalone/index.html');page.wait_for_function('window.PRP && PRP.app && document.querySelector("#stage").innerText.length>0')
    result=page.evaluate('''async()=>{
     const P=PRP,{ctx}=P.app,c=Object.assign(P.cardModel.blank(),{id:'dedup',name:'N',description:'DESC_MARKER',personality:'TRAIT_ONE\\n\\nTRAIT_TWO',appearance:'LOOK_MARKER',contextFields:{description:true,personality:true,appearance:true,prismCore:true}});
-    c.prismCore=P.cardContext.deriveCore(c);const original=JSON.stringify(c);await P.store.put('cards',c);await ctx.nav.loadAll();
+    c.prismCore=P.cardContext.deriveCore(c);await P.store.put('cards',c);const original=JSON.stringify(await P.store.get('cards',c.id));await ctx.nav.loadAll();
     for(const mode of ['rp','messenger'])for(const pc of [false,true]){
       const b=P.assembler.build({card:c,mode,contextTokens:32000,inputCost:pc?m=>P.perchance.inputCost({char:'N',user:'U'},m):undefined});
       const text=b.messages.map(m=>m.content).join('\\n');

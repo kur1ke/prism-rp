@@ -2,6 +2,7 @@
 Uses temporary Chromium contexts, real IndexedDB and mocked model output.
 Run: python3 tests/e2e-unified-state.py [artifact-directory]
 """
+from browser_support import launch_chromium, browser_context
 import json,os,pathlib,shutil,socket,subprocess,sys,tempfile
 from playwright.sync_api import sync_playwright
 root=pathlib.Path(__file__).resolve().parents[1]
@@ -13,9 +14,9 @@ server=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.
 results=[]
 try:
  with sync_playwright() as pw:
-  browser=pw.chromium.launch(headless=True,executable_path=os.environ.get('PRISM_CHROMIUM') or shutil.which('chromium'))
+  browser=launch_chromium(pw)
   for width in [1440,390]:
-   context=browser.new_context(viewport={'width':width,'height':900})
+   context=browser_context(browser, viewport={'width':width,'height':900})
    context.add_init_script('window.__PRP_TEST_MIRROR=true')
    page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    page.goto(f'http://127.0.0.1:{port}/dist/standalone/index.html',wait_until='domcontentloaded')

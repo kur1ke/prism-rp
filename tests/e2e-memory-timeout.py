@@ -1,4 +1,5 @@
 """F13 real adapters/native IDB: bounded all phases, abort ignored by remote, safe late reply."""
+from browser_support import launch_chromium, browser_context
 import json,pathlib,shutil,socket,subprocess,sys
 from playwright.sync_api import sync_playwright
 root=pathlib.Path(__file__).resolve().parents[1];out=pathlib.Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
@@ -7,12 +8,12 @@ server=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.
 results=[]
 try:
  with sync_playwright() as p:
-  browser=p.chromium.launch(headless=True,executable_path=shutil.which('chromium'))
+  browser=launch_chromium(p)
   for mode in ['rp','messenger']:
    for provider in ['openai','perchance']:
     for stage in ['extract','reflect','batch','integrate']:
      for width in [1440,390]:
-      context=browser.new_context(viewport={'width':width,'height':900});context.add_init_script('window.__PRP_TEST_MIRROR=true');page=context.new_page();errors=[];page.on('pageerror',lambda e,bag=errors:bag.append(str(e)))
+      context=browser_context(browser, viewport={'width':width,'height':900});context.add_init_script('window.__PRP_TEST_MIRROR=true');page=context.new_page();errors=[];page.on('pageerror',lambda e,bag=errors:bag.append(str(e)))
       page.goto(f'http://127.0.0.1:{port}/dist/standalone/index.html');page.wait_for_function('window.PRP && PRP.app && document.querySelector("#stage").innerText.length>0')
       result=page.evaluate('''async({mode,provider,stage})=>{
        const P=PRP,M=P.memoryCycle,DB=P.store,card=Object.assign(P.cardModel.blank(),{id:'owner',name:'Аля'}),chat={id:'timeout',cardId:'owner',mode},path=[];

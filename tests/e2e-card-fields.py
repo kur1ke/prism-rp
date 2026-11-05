@@ -1,4 +1,5 @@
 """F07: editor selection/token UI, actual transports, overflow, export and reload."""
+from browser_support import launch_chromium, browser_context
 import json, os, pathlib, shutil, socket, subprocess, sys, tempfile
 from playwright.sync_api import sync_playwright
 
@@ -11,11 +12,11 @@ server=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.
 results=[]
 try:
     with sync_playwright() as p:
-        browser=p.chromium.launch(headless=True,executable_path=os.environ.get('PRISM_CHROMIUM') or shutil.which('chromium'))
+        browser=launch_chromium(p)
         for mode in ['rp','messenger']:
             for kind in ['openai','perchance']:
                 for width in [1440,390]:
-                    context=browser.new_context(viewport={'width':width,'height':900},accept_downloads=True)
+                    context=browser_context(browser, viewport={'width':width,'height':900},accept_downloads=True)
                     context.add_init_script('window.__PRP_TEST_MIRROR=true')
                     page=context.new_page();errors=[]
                     page.on('pageerror',lambda e:errors.append(str(e)))

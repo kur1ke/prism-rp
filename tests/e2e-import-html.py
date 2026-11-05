@@ -1,4 +1,5 @@
 """F23: import an adversarial backup through the real UI; no network or live model."""
+from browser_support import launch_chromium, browser_context
 import json,os,pathlib,shutil,socket,subprocess,sys,tempfile
 from playwright.sync_api import sync_playwright
 root=pathlib.Path(__file__).resolve().parents[1]
@@ -12,9 +13,9 @@ server=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.
 results=[]
 try:
  with sync_playwright() as pw:
-  browser=pw.chromium.launch(headless=True,executable_path=os.environ.get('PRISM_CHROMIUM') or shutil.which('chromium'))
+  browser=launch_chromium(pw)
   for case in ['assist-id','assist-role','rp-id','messenger-live-id','image-ratio','image-size','image-seed','sampler','context','world-limit','prose-size']:
-   context=browser.new_context(viewport={'width':1100,'height':800})
+   context=browser_context(browser, viewport={'width':1100,'height':800})
    context.add_init_script('window.__PRP_TEST_MIRROR=true')
    page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    page.on('dialog',lambda d:d.accept())

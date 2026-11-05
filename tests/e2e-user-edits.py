@@ -2,6 +2,7 @@
 Run after node build.js: python3 tests/e2e-user-edits.py [artifact-directory].
 All providers are mocked; uses a temporary browser context and local HTTP server.
 """
+from browser_support import launch_chromium, browser_context
 import json, pathlib, subprocess, os, shutil, socket, sys, tempfile
 from playwright.sync_api import sync_playwright
 
@@ -14,9 +15,9 @@ server=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.
 results=[]
 try:
  with sync_playwright() as p:
-  browser=p.chromium.launch(headless=True,**({'executable_path':os.environ.get('PRISM_CHROMIUM') or shutil.which('chromium')} if os.environ.get('PRISM_CHROMIUM') or shutil.which('chromium') else {}))
+  browser=launch_chromium(p)
   for mode,width in [('rp',1440),('messenger',1440),('rp',390),('messenger',390)]:
-   context=browser.new_context(viewport={'width':width,'height':900 if width>500 else 844})
+   context=browser_context(browser, viewport={'width':width,'height':900 if width>500 else 844})
    context.add_init_script('window.__PRP_TEST_MIRROR=true')
    page=context.new_page();errors=[]
    page.on('pageerror',lambda e:errors.append(str(e)))

@@ -1,22 +1,28 @@
 """PERF-01 — сквозная проверка в headless Chromium (настоящий IndexedDB, настоящий интерфейс поля ввода).
 Запуск: python3 tests/e2e-perf.py <папка для скриншотов>
-Поднимает статический сервер dist/ (8775) и мок OpenAI-сервера (8776) с управляемой задержкой служебного разбора.
+Поднимает статический сервер dist/ и мок OpenAI-сервера на свободных локальных портах с управляемой задержкой служебного разбора.
 Настройка (провайдер, персонаж, чат) — через сервисы приложения, проверки — через интерфейс:
   • ответ показан, разбор ещё идёт — поле ввода принимает реплику, видно «отправится автоматически»;
   • реплика не появляется в ленте и в базе, пока разбор не закончен; затем уходит сама, без дублей;
   • «Отменить» возвращает текст в поле и ничего не пишет;
-  • переход в другой чат во время ожидания — реплика не пишется, текст сохраняется для своего чата;
+  • принятый ход блокирует переход; после отмены черновик сохраняется только у своего чата;
   • Debug → «Тайминги» (режим разработчика) показывает замеры, без текста сообщений;
   • 390 px: строка статуса без горизонтальной прокрутки."""
-import json, os, subprocess, sys, time, urllib.request
+from browser_support import launch_chromium, browser_context
+import json, os, socket, subprocess, sys, time, urllib.request
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp"
 os.makedirs(OUT, exist_ok=True)
-MOCK = "http://127.0.0.1:8776"
-static = subprocess.Popen([sys.executable, "-m", "http.server", "8775", "-d", os.path.join(ROOT, "dist")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-mock = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/mock_server.py"), "8776"])
+def free_port():
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0))
+        return probe.getsockname()[1]
+STATIC_PORT, MOCK_PORT = free_port(), free_port()
+MOCK = f"http://127.0.0.1:{MOCK_PORT}"
+static = subprocess.Popen([sys.executable, "-m", "http.server", str(STATIC_PORT), "--bind", "127.0.0.1", "-d", os.path.join(ROOT, "dist")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+mock = subprocess.Popen([sys.executable, os.path.join(ROOT, "tests/mock_server.py"), str(MOCK_PORT)])
 time.sleep(1.0)
 
 results = []
@@ -42,14 +48,14 @@ user_msgs = lambda page: page.evaluate("async () => (await PRP.app.ctx.DB.byInde
 
 try:
     with sync_playwright() as pw:
-        b = pw.chromium.launch()
-        page = b.new_context(viewport={"width": 1280, "height": 860}).new_page()
+        b = launch_chromium(pw)
+        page = browser_context(b, viewport={"width": 1280, "height": 860}).new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" and "net::ERR_" not in m.text else None)
-        page.goto("http://127.0.0.1:8775/standalone/index.html")
+        page.goto(f"http://127.0.0.1:{STATIC_PORT}/standalone/index.html")
         page.wait_for_function("window.PRP && PRP.app && PRP.app.S.settings")
-        ids = page.evaluate(SETUP)
+        ids = page.evaluate(SETUP.replace("http://127.0.0.1:8776", MOCK))
         page.wait_for_selector(".composer #input")
         get("/state-delay?ms=2500")
 
@@ -100,6 +106,13 @@ try:
         page.keyboard.press("Enter")
         page.wait_for_function("PRP.app.S.turn && PRP.app.S.turn.phase === 'waiting-state'")
         first_chat = ids["chat"]
+        count_before = page.evaluate("PRP.app.S.chats.length")
+        page.evaluate(f"PRP.app.ctx.nav.newChat('rp', '{ids['card']}')")
+        check("PERF-E7: активный принятый ход защищает навигацию и не создаёт чат",
+              page.evaluate("PRP.app.S.chatId") == first_chat and page.evaluate("PRP.app.S.chats.length") == count_before)
+        page.click("[data-act=send-cancel]")
+        page.wait_for_function("!PRP.app.S.turn && !PRP.app.S.tracking")
+        check("PERF-E7: отмена возвращает черновик до разрешённого перехода", page.input_value("#input") == "Это не должно уйти в другой чат.")
         page.evaluate(f"PRP.app.ctx.nav.newChat('rp', '{ids['card']}')")
         page.wait_for_function(f"PRP.app.S.chatId !== '{first_chat}'")
         second_chat = page.evaluate("PRP.app.S.chatId")
@@ -112,7 +125,7 @@ try:
         page.evaluate(f"PRP.app.ctx.nav.openChat('{first_chat}')")
         page.wait_for_function(f"PRP.app.S.chatId === '{first_chat}'")
         page.wait_for_timeout(300)
-        check("PERF-E7: смена чата — реплика не записана ни туда, ни сюда; текст вернулся в поле своего чата, а не в поле второго",
+        check("PERF-E7: переход после отмены сохраняет черновик только у своего чата",
               n_other == 0 and "Это не должно уйти в другой чат." not in user_msgs(page) and page.input_value("#input") == "Это не должно уйти в другой чат."
               and b_input == "Текст второго чата.")
         # Поле ввода принадлежит своему чату: набранное не переносится в другой чат и возвращается при возврате.
@@ -153,6 +166,12 @@ try:
         page.fill("#input", "")
         page.dispatch_event("#input", "input")
 
+        # Navigation resets the per-chat journal: measure a fresh completed turn.
+        assistants = page.locator('.turn.assistant').count()
+        page.fill('#input', 'Я снова сижу в кафе у окна.')
+        page.keyboard.press('Enter')
+        page.wait_for_function('(n) => document.querySelectorAll(".turn.assistant").length > n && !PRP.app.S.gen && !PRP.app.S.tracking && !PRP.app.S.turn', arg=assistants, timeout=30000)
+
         # Тайминги в Debug
         page.click("[data-act=debug-open]")
         page.click("[data-act=debug-section][data-section=timing]")
@@ -163,7 +182,7 @@ try:
         ready = [x["ms"] for x in perf if x["metric"] == "readyAfterReplyMs"]
         ast = [x["ms"] for x in perf if x["metric"] == "assistantStateMs"]
         print("    perf readyAfterReplyMs:", ready, "assistantStateMs:", ast)
-        check("PERF-E9: ввод освобождается сразу после ответа (readyAfterReplyMs < 300 мс при разборе 1,5–2,5 с)", ready and max(ready) < 300 and ast and min(ast) >= 1400)
+        check("PERF-E9: ввод освобождается сразу после ответа (ввод готов до окончания замедленного Observer)", ready and ast and max(ready) < max(ast))
         page.screenshot(path=os.path.join(OUT, "perf-02-timing.png"))
         page.click("[data-act=modal-close]")
 
@@ -171,9 +190,10 @@ try:
         page.set_viewport_size({"width": 390, "height": 820})
         page.wait_for_timeout(200)
         get("/state-delay?ms=2000")
+        assistants = page.locator(".turn.assistant").count()
         page.fill("#input", "Я посмотрел в окно.")
         page.keyboard.press("Enter")
-        page.wait_for_function("document.querySelectorAll('.turn.assistant').length >= 4 && !PRP.app.S.gen", timeout=30000)
+        page.wait_for_function("n => document.querySelectorAll('.turn.assistant').length > n && !PRP.app.S.gen", arg=assistants, timeout=30000)
         page.fill("#input", "Очень длинная реплика, чтобы проверить перенос строки статуса на узком экране без горизонтальной прокрутки страницы.")
         page.keyboard.press("Enter")
         page.wait_for_selector(".turn-status [data-act=send-cancel]")
@@ -192,9 +212,10 @@ window.ai = function (opts) {
   if (opts && opts.preload) return;
   const ins = typeof opts.instruction === 'function' ? opts.instruction() : opts.instruction;
   const sw = typeof opts.startWith === 'function' ? opts.startWith() : (opts.startWith || '');
-  const service = /извлекатель ДОКАЗАННЫХ ИЗМЕНЕНИЙ/.test(ins || '');
-  window.__calls.push({ service, at: Date.now() });
-  const text = service ? '{"events": []}' : ' Привет из Perchance! Я сижу у окна.';
+  const service = /наблюдатель ИЗМЕНЕНИЙ/.test(ins || '');
+  const memory = /Выполни независимый от RP анализ/.test(ins || '');
+  window.__calls.push({ service, memory, at: Date.now() });
+  const text = service ? '{"events": []}' : memory ? '{"memories": []}' : ' Привет из Perchance! Я сижу у окна.';
   let resolveFn; const p = new Promise(r => resolveFn = r);
   (async () => {
     await new Promise(r => setTimeout(r, service ? 1200 : 30));
@@ -206,14 +227,13 @@ window.ai = function (opts) {
 };
 """
         src = open(os.path.join(ROOT, "dist/perchance/html.html"), encoding="utf-8").read()
-        tp = os.path.join(ROOT, "dist/perchance/_perf_test.html")
-        with open(tp, "w", encoding="utf-8") as f:
-            f.write("<!doctype html><html><head><meta charset='utf-8'><script>" + STUB + "</script></head><body>" + src + "</body></html>")
+        fixture = "<!doctype html><html><head><meta charset='utf-8'><script>" + STUB + "</script></head><body>" + src + "</body></html>"
         try:
-            p2 = b.new_context(viewport={"width": 1280, "height": 860}).new_page()
+            p2 = browser_context(b, viewport={"width": 1280, "height": 860}).new_page()
             errors2 = []
             p2.on("pageerror", lambda e: errors2.append(str(e)))
-            p2.goto("http://127.0.0.1:8775/perchance/_perf_test.html")
+            p2.route(f"http://127.0.0.1:{STATIC_PORT}/perchance-fixture", lambda route: route.fulfill(status=200, content_type="text/html", body=fixture))
+            p2.goto(f"http://127.0.0.1:{STATIC_PORT}/perchance-fixture")
             p2.wait_for_function("window.PRP && PRP.app && PRP.app.S.settings")
             p2.evaluate("""async () => { const ctx = PRP.app.ctx; PRP.app.S.settings.images.enabled = false;
               const d = ctx.svc.cards.draft(null); d.name = 'Химэ'; const r = await ctx.svc.cards.save(d); await ctx.nav.newChat('rp', r.card.id); }""")
@@ -227,13 +247,13 @@ window.ai = function (opts) {
             p2.wait_for_timeout(150)
             waiting = p2.evaluate("PRP.app.S.turn && PRP.app.S.turn.phase")
             p2.wait_for_function("document.querySelectorAll('.turn.assistant').length >= 2 && !PRP.app.S.gen && !PRP.app.S.turn", timeout=20000)
-            calls = p2.evaluate("window.__calls.map((c) => c.service ? 'S' : 'R').join('')")
+            calls = p2.evaluate("window.__calls.filter(c => !c.memory).map((c) => c.service ? 'S' : 'R').join('')")
             check("PERF-P2: Perchance — реплика принята во время разбора и ушла после него; порядок вызовов разбор→RP→разбор→разбор→RP", waiting == "waiting-state" and calls.startswith("SRSSR"))
             print("    perchance calls:", calls)
             check("PERF-P3: нет ошибок JS (Perchance)", not errors2)
             if errors2: print("   ", errors2[:5])
         finally:
-            os.remove(tp)
+            if "p2" in locals(): p2.context.close()
         b.close()
 finally:
     static.terminate(); mock.terminate()

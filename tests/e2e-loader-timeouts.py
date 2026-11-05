@@ -1,6 +1,7 @@
 """F24: real browser fetch/inline execution with mocked HTTPS routes and virtual time.
 No external network or live Perchance API. Run after node build.js.
 """
+from browser_support import launch_chromium, browser_context
 import hashlib,json,os,pathlib,shutil,sys,tempfile
 from playwright.sync_api import sync_playwright
 root=pathlib.Path(__file__).resolve().parents[1]
@@ -18,9 +19,9 @@ if fallback_bundle:
 good='window.__boots=(window.__boots||0)+1;window.PRP={};window.PRISM_RP_VERSION="test";'
 results=[]
 with sync_playwright() as pw:
- browser=pw.chromium.launch(headless=True,executable_path=os.environ.get('PRISM_CHROMIUM') or shutil.which('chromium'))
+ browser=launch_chromium(pw)
  for scenario in ['normal-app','late-cdn','late-api','all-stalled','http-fallback','runtime-error','syntax-error']+(['fallback-app'] if fallback_bundle else []):
-  context=browser.new_context(viewport={'width':1100,'height':800})
+  context=browser_context(browser, viewport={'width':1100,'height':800})
   if scenario in ['late-cdn','late-api']:
    # Cancellation is intentionally ignored; late successful responses must still be harmless.
    context.add_init_script('''const fetchOriginal=window.fetch;window.fetch=(url,options)=>{const {signal,...rest}=options||{};return fetchOriginal(url,rest);};''')

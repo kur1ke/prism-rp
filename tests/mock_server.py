@@ -75,7 +75,7 @@ class H(BaseHTTPRequestHandler):
             return self.json({"images": [PNG_B64], "info": json.dumps(info)})
         LOG.append(req)
         user_last = next((m["content"] for m in reversed(req.get("messages", [])) if m["role"] == "user"), "")
-        if "извлекатель ДОКАЗАННЫХ ИЗМЕНЕНИЙ" in user_last:
+        if "наблюдатель ИЗМЕНЕНИЙ" in user_last:
             STATE["calls"] += 1
             time.sleep(STATE["delay"] / 1000.0)
             body = json.dumps({"events": []})
@@ -97,18 +97,18 @@ class H(BaseHTTPRequestHandler):
             text = "[no-message]" if mode == "decline" else "INI-OK: привет! давно не писал(а)\n\nскучаю немного"
             reasoning = ""
         elif "ассистент внутри Prism RP" in system:
-            card = "карточка: да" if "### Карточка персонажа" in system else "карточка: нет"
+            card = "карточка: да" if "### Карточка для консультации" in system else "карточка: нет"
             chat = "чат: да" if "### Выдержка из ролевого чата" in system else "чат: нет"
             text = "## Совет\n\n**Коротко:** " + card + ", " + chat + ".\n\n- первый пункт\n- второй пункт\n\n```\nописание: тихая\n```"
             reasoning = ""
         elif "мессенджере" in system:
-            text = "привет!) только с пар вышла\n\nты как?\n\n[scene: Химэ.pose=идёт к метро]"
+            text = "привет!) только с пар вышла\n\nты как?"
             reasoning = ""
         else:
-            text = "*Химэ улыбается и отодвигает стул.* «Привет! Садись.»\n\n[scene: time=+10m; loc=Кафе, терраса; Химэ.wear=худи, джинсы; Химэ.rel=+1 рада встрече]"
+            text = "*Химэ улыбается и отодвигает стул.* «Привет! Садись. Я в кафе, на мне худи и джинсы.»"
             reasoning = "Она помнит прошлую встречу."
             if "нарисуй" in user_last.lower():
-                text = "*Химэ позирует.* «Ну как?»\n\n[draw: 1girl, orihime_inoue, smiling, posing, cafe terrace, 2:3]\n[scene: Химэ.pose=позирует]"
+                text = "*Химэ позирует.* «Ну как?»\n\n[draw: 1girl, orihime_inoue, smiling, posing, cafe terrace, 2:3]"
         self.send_response(200); self.cors()
         self.send_header("Content-Type", "text/event-stream"); self.end_headers()
         def send(obj):

@@ -1,4 +1,5 @@
 """F10 native IndexedDB coverage receipt, competing upgrade, backup and reload."""
+from browser_support import launch_chromium, browser_context
 import json,pathlib,shutil,socket,subprocess,sys
 from playwright.sync_api import sync_playwright
 root=pathlib.Path(__file__).resolve().parents[1];out=pathlib.Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)
@@ -6,7 +7,7 @@ with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
 server=subprocess.Popen(['python3','-m','http.server',str(port),'--bind','127.0.0.1','--directory',str(root)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 try:
  with sync_playwright() as p:
-  browser=p.chromium.launch(headless=True,executable_path=shutil.which('chromium'));context=browser.new_context();context.add_init_script('window.__PRP_TEST_MIRROR=true');page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+  browser=launch_chromium(p);context=browser_context(browser, );context.add_init_script('window.__PRP_TEST_MIRROR=true');page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   page.goto(f'http://127.0.0.1:{port}/dist/standalone/index.html');page.wait_for_function('window.PRP && PRP.app && document.querySelector("#stage").innerText.length>0')
   result=page.evaluate('''async()=>{
    const P=PRP,DB=P.store,card=Object.assign(P.cardModel.blank(),{id:'owner',name:'N'}),chat={id:'coverage',cardId:'owner',mode:'rp'},tail='В конце она подарила серебряный компас.';
