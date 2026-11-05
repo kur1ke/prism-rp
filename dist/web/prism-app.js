@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "4faf703201109757811bd107cb536c7589c7f26f";
+  window.PRISM_RP_BUILD_SHA = "39b3178c7e0eb57be8def81fbe898c190adb2d66";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -5291,18 +5291,30 @@
       return true;
     });
   }
-  function weighted(memories, path) {
+  function weighted(memories, path, recencyOrder) {
     // Speaker comes from the currently visible canonical message path, not from
     // LLM-provided text or an untrusted field in a persisted/imported Memory.
     // This also repairs the Reflection input for memories saved before this change.
     const roles = new Map((path || []).map((m) => [m.id,
       m.role === "user" ? "user" : m.role === "assistant" ? "character" : "unknown"]));
+    const ranks = recencyOrder && new Map(recencyOrder.map((m, i) => [m.id, i]));
     return (memories || []).slice(0, LIMIT).map((m, i) => ({
       // Recency, not emotional force. No stored memory importance reduction.
-      recency: Number((1 - i / LIMIT).toFixed(2)), event: m.event, quote: m.quote,
+      recency: Number((1 - (ranks && ranks.has(m.id) ? ranks.get(m.id) : i) / LIMIT).toFixed(2)), event: m.event, quote: m.quote,
       kind: m.kind, speaker: roles.get(m.source && m.source.messageId) || "unknown",
       source: m.source.messageId
     }));
+  }
+  // Coverage is branch-bound, including successful "unchanged" assessments.
+  // Old evidence remains available as context, never as another new episode.
+  function reflectionEvidence(memories, reflections, path, chatId, owner) {
+    const covered = new Set((reflections || []).filter((r) =>
+      r.chatId === chatId && r.owner === owner && visible(r.anchor, path) &&
+      (!r.kind || r.kind === "current" || r.kind === "assessment"))
+      .flatMap((r) => Array.isArray(r.memoryIds) ? r.memoryIds : []));
+    const ordered = recent((memories || []).filter((m) => m.chatId === chatId && m.owner === owner), path, Infinity);
+    const fresh = ordered.filter((m) => !covered.has(m.id)).slice(0, LIMIT);
+    return { fresh, context: ordered.filter((m) => covered.has(m.id)).slice(0, LIMIT - fresh.length) };
   }
   // Complete checkpoints cover disjoint sets of ten canonical Memory episodes.
   // Find the oldest missing group to recover a failed batch on a later turn.
@@ -5483,7 +5495,7 @@
     return { change: o.change, perspective: o.perspective.trim() };
   }
   PRP.memoryCycle = { WINDOW, LIMIT, BATCH_SIZE, fingerprint, pathSnapshot, visible, sourceKey, eventKey, episodeKey, clean,
-    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, checkpointPlan, BATCH_SYSTEM, integrationPlan, experienceTimeline, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
+    extractionInput, parseExtraction, recent, extractionContext, distinctExtraction, weighted, reflectionEvidence, checkpointPlan, BATCH_SYSTEM, integrationPlan, experienceTimeline, INTEGRATE_SYSTEM, currentReflection, unappliedIntegration,
     parseReflection, EXTRACT_SYSTEM, REFLECT_SYSTEM };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.memoryCycle;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -10678,7 +10690,9 @@
         S.memories = (S.memories || []).concat(newOnes);
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
       }
-      const candidates = M.recent(existing.concat(newOnes), path, M.LIMIT);
+      const evidence = M.reflectionEvidence(existing.concat(newOnes), S.reflections || [], path, chatId, owner);
+      const candidates = evidence.fresh;
+      const recencyOrder = M.recent(candidates.concat(evidence.context), path, M.LIMIT);
       const prior = experience(ctx.svc.chat.path());
       const cd = ctx.card() || {};
       // Exactly the same Core interpretation as normal Prism assembly. Do not
@@ -10692,7 +10706,8 @@
         traits: canonical.traits, voice: canonical.voice, durableContext: canonical.durableContext };
       const payload = { mode: initialChat.mode, coreGuide: core,
         previousExperience: prior ? prior.perspective : null,
-        memories: M.weighted(candidates, path) };
+        memories: M.weighted(candidates, path, recencyOrder),
+        previouslyReflectedMemories: M.weighted(evidence.context, path, recencyOrder) };
       const lateIntegrated = M.unappliedIntegration(S.reflections || [], path, prior);
       if (lateIntegrated) payload.recentIntegrated = lateIntegrated.perspective;
       let reflectionUser = JSON.stringify(payload);
@@ -10700,6 +10715,10 @@
       // giving up current Reflection to the strict token budget.
       while (!fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT) && payload.recentIntegrated) {
         delete payload.recentIntegrated;
+        reflectionUser = JSON.stringify(payload);
+      }
+      while (payload.previouslyReflectedMemories.length && !fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)) {
+        payload.previouslyReflectedMemories.pop();
         reflectionUser = JSON.stringify(payload);
       }
       while (payload.memories.length && !fits(M.REFLECT_SYSTEM, reflectionUser, MAX_REFLECT_OUT)) {
@@ -10713,23 +10732,23 @@
       catch (e) { return finish(e && e.code === "MEMORY_TIMEOUT" ? "reflect-timeout" : "reflect-error"); }
       if (!relevant()) return finish("stale");
       if (!result) return finish("invalid-reflection");
-      const record = result.change === "changed" && (!prior || result.perspective !== prior.perspective) ? {
+      const changed = result.change === "changed" && (!prior || result.perspective !== prior.perspective);
+      const record = {
         id: U.uid("ref"), schema: 1, chatId, owner,
         anchor: { messageId: anchor.id, swipeIdx: anchor.swipeIdx, textHash: anchor.textHash, prefixHash: anchor.prefixHash },
-        perspective: result.perspective, memoryIds: includedMemoryIds,
+        ...(changed ? { perspective: result.perspective } : { kind: "assessment", change: "unchanged" }),
+        memoryIds: includedMemoryIds,
         createdAt: Date.now()
-      } : null;
-      // A new Experience version commits only after validated reflection;
-      // Memory is already safely stored as a separate class of evidence.
-      if (record) {
-        await DB.put("reflections", record);
-        if (obsolete(chatId, revision)) {
-          await DB.del("reflections", record.id);
-          return finish("stale");
-        }
+      };
+      // A successful unchanged assessment records coverage, not a new Experience.
+      // Commit coverage and any changed perspective in the same record.
+      await DB.put("reflections", record);
+      if (obsolete(chatId, revision)) {
+        await DB.del("reflections", record.id);
+        return finish("stale");
       }
       if (S.chatId === chatId) {
-        if (record) S.reflections = (S.reflections || []).concat([record]);
+        S.reflections = (S.reflections || []).concat([record]);
         if (ctx.svc.prism) ctx.svc.prism.refresh();
         if (S.drawerOpen && S.tab === "memory") ctx.ui.renderDrawer();
       }
@@ -10820,7 +10839,7 @@
           }
         }
       }
-      return finish(record ? "reflected" : "remembered-unchanged");
+      return finish(changed ? "reflected" : "remembered-unchanged");
     }
     // Preserve every committed reply: same-chat cycles run in FIFO order,
     // while different chats remain independent. No continuous/background loop.
