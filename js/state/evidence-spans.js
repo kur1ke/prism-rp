@@ -13,8 +13,8 @@
     function add(a,b){
       while(a<b&&/\s/u.test(text[a]))a++;
       while(b>a&&/\s/u.test(text[b-1]))b--;
-      if(a>=b||out.length>=MAX)return;
-      const idx=out.filter(x=>x.kind===kind).length;
+      if(a>=b||(kind==="draw"&&out.length>=MAX))return;
+      const idx=out.length;
       out.push({id:(kind==="draw"?"D":"T")+idx,kind,start:a,end:b,text:text.slice(a,b)});
     }
     // Clause-independent sentences keep the actual predicate, its garment and
@@ -40,11 +40,11 @@
   function catalog(opts){
     const o=opts||{};
     // These are the exact input slices Observer sees, not historical text.
-    return chunks(String(o.text||"").slice(0,4500),"text")
+    return chunks(String(o.text||""),"text")
       .concat(chunks(String(o.draw||"").slice(0,1600),"draw"));
   }
   function resolve(sourceId,options){
-    if(typeof sourceId!=="string"||!new RegExp("^[TD][0-9]{1,2}$").test(sourceId))
+    if(typeof sourceId!=="string"||!new RegExp("^[TD][0-9]+$").test(sourceId))
       return {error:"invalid-source-id"};
     const row=catalog(options).find(x=>x.id===sourceId);
     return row?{span:{kind:row.kind,start:row.start,end:row.end},

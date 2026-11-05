@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "31b31fc24f0eb03123d73824a7b6cc9018fb06f7";
+  window.PRISM_RP_BUILD_SHA = "";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -3547,8 +3547,8 @@
     function add(a,b){
       while(a<b&&/\s/u.test(text[a]))a++;
       while(b>a&&/\s/u.test(text[b-1]))b--;
-      if(a>=b||out.length>=MAX)return;
-      const idx=out.filter(x=>x.kind===kind).length;
+      if(a>=b||(kind==="draw"&&out.length>=MAX))return;
+      const idx=out.length;
       out.push({id:(kind==="draw"?"D":"T")+idx,kind,start:a,end:b,text:text.slice(a,b)});
     }
     // Clause-independent sentences keep the actual predicate, its garment and
@@ -3574,11 +3574,11 @@
   function catalog(opts){
     const o=opts||{};
     // These are the exact input slices Observer sees, not historical text.
-    return chunks(String(o.text||"").slice(0,4500),"text")
+    return chunks(String(o.text||""),"text")
       .concat(chunks(String(o.draw||"").slice(0,1600),"draw"));
   }
   function resolve(sourceId,options){
-    if(typeof sourceId!=="string"||!new RegExp("^[TD][0-9]{1,2}$").test(sourceId))
+    if(typeof sourceId!=="string"||!new RegExp("^[TD][0-9]+$").test(sourceId))
       return {error:"invalid-source-id"};
     const row=catalog(options).find(x=>x.id===sourceId);
     return row?{span:{kind:row.kind,start:row.start,end:row.end},
@@ -11432,7 +11432,9 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const TR = PRP.tree, TRACK = PRP.stateTracker, INT = PRP.stateInterpreter, WI = PRP.wearInquiry;
-  const MAX_TEXT = 4500;
+  const LEGACY_TEXT_LIMIT = 4500; // Old receipts do not prove coverage beyond this prefix.
+  const LEGACY_TEXT_FRAGMENTS = 48;
+  const ES = PRP.evidenceSpans || (typeof require !== "undefined" ? require("./evidence-spans.js") : null);
   const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("../providers/simple-request.js") : null);
   function create(ctx) {
     const { S } = ctx;
@@ -11685,7 +11687,7 @@
     function prepareUser(text, provider) {
       const c = ctx.chat(), source = String(text || "");
       if (!c || !source.trim() || !INT.mayChangeState(source)) return null;
-      const options = { mode: c.mode, role: "user", text: source.slice(0, MAX_TEXT),
+      const options = { mode: c.mode, role: "user", text: source,
         speakerName: (ctx.persona() || {}).name, ...observationContext(chat().path(), "user") };
       // A cancelled or stale turn simply discards this promise; it never commits.
       return { chatId: c.id, providerId: provider && provider.id, options, promise: analyse(options, provider) };
@@ -11707,6 +11709,9 @@
       if (!sourceDraw && !INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
       if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) &&
           sw.stateStatus.sourceText === sourceText && (sw.stateStatus.sourceDraw || "") === sourceDraw &&
+          (sw.stateStatus.analysedTextChars === sourceText.length ||
+            sw.stateStatus.analysedTextChars === undefined && sourceText.length <= LEGACY_TEXT_LIMIT &&
+              ES.catalog({ text: sourceText }).length <= LEGACY_TEXT_FRAGMENTS) &&
           !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       const index = initialPath.indexOf(msg);
@@ -11784,7 +11789,7 @@
         priorDrawState = localState;
         contextual.references = TRACK.references(localState, "char", ["remove", "adjust", "add"]);
       }
-      const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
+      const options = { mode: c.mode, role: msg.role, text: sourceText,
         ...(sourceDraw ? { draw: sourceDraw.slice(0, 1600), draws: [{ prompt: sourceDraw }],
           drawMoment: draws[latestIndex] && draws[latestIndex].moment || null } : {}),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name,
@@ -11817,7 +11822,7 @@
       }
       // Fallback never invents frame objects; semantic photo references
       // are determined only by the validated main Observer result.
-      const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
+      const fallback = INT.grounded(sourceText, options);
       // Grounded fallback intentionally reads only text. Image descriptions
       // are interpreted by the SAME Observer and independently verified
       // against their exact draw evidence on every StateTracker fold.
@@ -11935,6 +11940,9 @@
         issues.push("Лимит архивных draw-событий: предыдущие факты требуют ручной проверки");
       const status = !result.valid ? events.length ? "partial" : "error" : issues.length ? "partial" : events.length ? "ok" : "no-changes";
       const stateStatus = { status, sourceText, sourceDraw, sourceDrawIndex: latestIndex,
+        // null means the model did not return a valid analysis, not a full
+        // successful receipt. The next request may retry this exact source.
+        analysedTextChars: result.valid ? sourceText.length : null,
         issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
         // Current-swipe, bounded diagnostics only; failed model guesses never

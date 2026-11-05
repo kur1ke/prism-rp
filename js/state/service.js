@@ -6,7 +6,9 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const TR = PRP.tree, TRACK = PRP.stateTracker, INT = PRP.stateInterpreter, WI = PRP.wearInquiry;
-  const MAX_TEXT = 4500;
+  const LEGACY_TEXT_LIMIT = 4500; // Old receipts do not prove coverage beyond this prefix.
+  const LEGACY_TEXT_FRAGMENTS = 48;
+  const ES = PRP.evidenceSpans || (typeof require !== "undefined" ? require("./evidence-spans.js") : null);
   const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("../providers/simple-request.js") : null);
   function create(ctx) {
     const { S } = ctx;
@@ -259,7 +261,7 @@
     function prepareUser(text, provider) {
       const c = ctx.chat(), source = String(text || "");
       if (!c || !source.trim() || !INT.mayChangeState(source)) return null;
-      const options = { mode: c.mode, role: "user", text: source.slice(0, MAX_TEXT),
+      const options = { mode: c.mode, role: "user", text: source,
         speakerName: (ctx.persona() || {}).name, ...observationContext(chat().path(), "user") };
       // A cancelled or stale turn simply discards this promise; it never commits.
       return { chatId: c.id, providerId: provider && provider.id, options, promise: analyse(options, provider) };
@@ -281,6 +283,9 @@
       if (!sourceDraw && !INT.mayChangeState(sourceText)) return { skipped: "non-event-greeting" };
       if (sw.stateStatus && ["ok", "partial", "no-changes"].includes(sw.stateStatus.status) &&
           sw.stateStatus.sourceText === sourceText && (sw.stateStatus.sourceDraw || "") === sourceDraw &&
+          (sw.stateStatus.analysedTextChars === sourceText.length ||
+            sw.stateStatus.analysedTextChars === undefined && sourceText.length <= LEGACY_TEXT_LIMIT &&
+              ES.catalog({ text: sourceText }).length <= LEGACY_TEXT_FRAGMENTS) &&
           !(opts && opts.force)) return { skipped: "already-processed" };
       const initialPath = chat().path();
       const index = initialPath.indexOf(msg);
@@ -358,7 +363,7 @@
         priorDrawState = localState;
         contextual.references = TRACK.references(localState, "char", ["remove", "adjust", "add"]);
       }
-      const options = { mode: c.mode, role: msg.role, text: sourceText.slice(0, MAX_TEXT),
+      const options = { mode: c.mode, role: msg.role, text: sourceText,
         ...(sourceDraw ? { draw: sourceDraw.slice(0, 1600), draws: [{ prompt: sourceDraw }],
           drawMoment: draws[latestIndex] && draws[latestIndex].moment || null } : {}),
         speakerName: msg.role === "assistant" ? (ctx.card() || {}).name : (ctx.persona() || {}).name,
@@ -391,7 +396,7 @@
       }
       // Fallback never invents frame objects; semantic photo references
       // are determined only by the validated main Observer result.
-      const fallback = INT.grounded(sourceText.slice(0, MAX_TEXT), options);
+      const fallback = INT.grounded(sourceText, options);
       // Grounded fallback intentionally reads only text. Image descriptions
       // are interpreted by the SAME Observer and independently verified
       // against their exact draw evidence on every StateTracker fold.
@@ -509,6 +514,9 @@
         issues.push("Лимит архивных draw-событий: предыдущие факты требуют ручной проверки");
       const status = !result.valid ? events.length ? "partial" : "error" : issues.length ? "partial" : events.length ? "ok" : "no-changes";
       const stateStatus = { status, sourceText, sourceDraw, sourceDrawIndex: latestIndex,
+        // null means the model did not return a valid analysis, not a full
+        // successful receipt. The next request may retry this exact source.
+        analysedTextChars: result.valid ? sourceText.length : null,
         issues, at: Date.now(),
         method: fallback.length ? "model+grounded" : "model", eventCount: events.length,
         // Current-swipe, bounded diagnostics only; failed model guesses never
