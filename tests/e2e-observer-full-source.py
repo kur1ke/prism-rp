@@ -38,8 +38,8 @@ try:
        const before=JSON.stringify(await DB.get('messages',a.id));
        if((await svc.track(a,model)).status!=='overflow'||calls!==0||JSON.stringify(await DB.get('messages',a.id))!==before)throw Error('overflow mutated source');
        windowTokens=32000;
-       const put=DB.put,putAll=DB.putAll;DB.put=async(store,row)=>putAll([[store,row],['messages',{}]]);
-       const rejected=await svc.track(a,model);DB.put=put;
+       const rmw=DB.readModifyWrite;DB.readModifyWrite=(stores,reads,prepare)=>rmw(stores,reads,rows=>{const writes=prepare(rows);return writes?writes.concat([['messages',{}]]):null;});
+       const rejected=await svc.track(a,model);DB.readModifyWrite=rmw;
        if(!rejected.error||JSON.stringify(await DB.get('messages',a.id))!==before||a.swipes[0].stateStatus)throw Error('partial failed commit');
        const result=await svc.track(a,model);if(result.status!=='ok'||result.events[0].sourceSpan.start<=4500||calls!==2)throw Error('tail not committed');
        const saved=await DB.get('messages',a.id);if(saved.swipes[0].stateStatus.analysedTextChars!==text.length)throw Error('false coverage');

@@ -42,6 +42,7 @@ try:
                     DB.get=(...args)=>{if(backendDone)independentReads++;return originalGet(...args);};
                     PRP.imgBackends.generate=async()=>{backendDone=true;return {dataUrl:png,seed:42,info:{width:512,height:512}};};
                     DB.readModifyWrite=async(...args)=>{
+                      if(!args[0].includes("images"))return originalRmw(...args);
                       txCalls++;
                       const latest=await originalGet('messages',msg.id),im=latest.swipes[0].images[0];
                       if(change==='delete-message'){await DB.mutateBatch({deletes:[['messages',msg.id],['images',im.id]]});deleted.push(msg.id);}

@@ -66,3 +66,5 @@ but is not a claim that all 203 checks have been ported. Inventory and migrate
 the remaining active workflows (including remaining import/author-directive controls, empty-scene startup,
 world-chat forms/provenance, storage upgrade/error UI and Perchance image/initiative paths); document retired
 checks and remove the obsolete monolith after that migration. F29 remains partial.
+
+Observer/image concurrency is covered by `e2e-observer-image-race.py`: both commit orders, fresh unrelated fields, deleted/edited sources, no resurrection, and reload in RP/Messenger at 1440/390. The regression fails on the pre-A01 bundle.

@@ -32,7 +32,7 @@ module.exports = async function ({ make, test }) {
       // Same causal point on the old implementation and on the fixed service:
       // another writer completes immediately before the final transaction starts.
       DB.putAll = async entries => { if (entries.some(([s]) => s === "images")) await changeSource(); return putAll(entries); };
-      DB.readModifyWrite = async (...args) => { await changeSource(); return rmw(...args); };
+      DB.readModifyWrite = async (...args) => { if (args[0].includes("images")) await changeSource(); return rmw(...args); };
       P.imgBackends.generate = async () => ({ dataUrl: "data:image/png;base64,AA==", seed: 42 });
       try {
         await svc.draw(msg, sw, sw.draws[0]);
@@ -59,8 +59,8 @@ module.exports = async function ({ make, test }) {
     const msg = await h.chat.commitMessage(draft, draft.id);
     Object.assign(h.S.settings.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false });
     h.S.drawing = new Set(); h.S.imgUrls = {};
-    const backend = P.imgBackends.generate;
-    h.ctx.DB.readModifyWrite = async () => { throw Error("final transaction abort"); };
+    const backend = P.imgBackends.generate, rmw = h.ctx.DB.readModifyWrite;
+    h.ctx.DB.readModifyWrite = async (...args) => { if (args[0].includes("images")) throw Error("final transaction abort"); return rmw(...args); };
     P.imgBackends.generate = async () => ({ dataUrl: "data:image/png;base64,AA==", seed: 42 });
     try {
       await assert.rejects(P.imageService.create(h.ctx).draw(msg, msg.swipes[0], msg.swipes[0].draws[0]), /final transaction abort/);

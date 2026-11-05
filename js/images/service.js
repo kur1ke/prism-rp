@@ -208,17 +208,32 @@
       const pendingEntry = Object.assign({}, entry, { operationId, status: "pending", stage: "Готовлю промпт…" });
       delete pendingEntry.error;
       delete pendingEntry.translationFailure;
-      const pendingMessage = JSON.parse(JSON.stringify(msg));
-      const pendingSwipe = pendingMessage.swipes[origin.swipeIdx];
-      if (reuse) pendingSwipe.images[pendingSwipe.images.findIndex(im => im.id === entry.id)] = pendingEntry;
-      else (pendingSwipe.images = pendingSwipe.images || []).push(pendingEntry);
+      const reusedVersion = reuse ? JSON.stringify(reuse) : null;
+      let pendingImages;
       S.drawing.add(entry.id);
       const repaint = () => { if (ctx.chat() && ctx.chat().id === origin.chatId) ui.renderFeed(); };
       // Persist only the image entry; never repopulate the active chat's message list.
       try {
         // Publish pending only after persistence; the adapter's updatedAt
         // stamp and a failed write must not change the live message either.
-        await DB.put("messages", pendingMessage);
+        const committed = await DB.readModifyWrite(["messages"], [["messages", origin.messageId]], ([latest]) => {
+          if (!latest || latest.chatId !== origin.chatId ||
+              stateVersion(latest, origin.swipeIdx, drawAuthored) !==
+                (drawAuthored ? origin.sourceDrawVersion : origin.sourceStateVersion)) return null;
+          const selected = latest.swipes[origin.swipeIdx];
+          const images = Array.isArray(selected.images) ? selected.images : [];
+          const at = images.findIndex(im => im.id === entry.id);
+          if (reuse) {
+            if (at < 0 || JSON.stringify(images[at]) !== reusedVersion) return null;
+            images[at] = pendingEntry;
+          } else {
+            if (at >= 0) return null;
+            images.push(pendingEntry);
+          }
+          selected.images = pendingImages = images;
+          return [["messages", latest]];
+        });
+        if (!committed) throw new Error("Исходное сообщение, состояние или изображение изменилось.");
       } catch (e) {
         // No image work or live mutation has started. Release the reservation
         // so the existing controls can retry without reloading the page.
@@ -232,7 +247,7 @@
       Object.assign(entry, pendingEntry);
       delete entry.error;
       delete entry.translationFailure;
-      if (!reuse) (sw.images = sw.images || []).push(entry);
+      sw.images = pendingImages.map(im => im.id === entry.id ? entry : im);
       repaint();
       let finalPatch, imageData, translationFailure;
       let preparationRecorded = false;

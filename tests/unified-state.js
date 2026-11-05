@@ -119,6 +119,7 @@ async function lifecycle(){
  const m=msg("a","Идёт дождь.",[]);m.chatId="c";
  const c={id:"c",cardId:"card",mode:"rp"};let calls=0,writes=0;
  const ctx={S:{chatId:"c",messages:[m],settings:{}},chat:()=>c,card:()=>({id:"card",name:"Аля"}),persona:()=>({name:"Кира"}),svc:{chat:{path:()=>[m]}},DB:{put:async()=>{writes++;}},ui:{}};
+ ctx.DB.readModifyWrite=async(_stores,reads,prepare)=>{const puts=prepare(reads.map(()=>JSON.parse(JSON.stringify(m))));if(!puts)return false;for(const [store,row] of puts)await ctx.DB.put(store,row);return true;};
  P.llm={simple:async()=>{calls++;return JSON.stringify({events:[{actor:"environment",field:"weather",action:"set",value:"дождь",certainty:"established",sourceId:"T0"}]});}};
  const service=P.stateService.create(ctx);ctx.svc.state=service;
  const result=await service.track(m,{id:"mock"});assert.equal(result.status,"ok",JSON.stringify(result));assert.equal(T.view(service.snapshot()).weather,"дождь");assert.equal(writes,1);

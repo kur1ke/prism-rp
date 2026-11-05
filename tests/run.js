@@ -6794,6 +6794,7 @@ async function unifiedTracker() {
         ["красное платье","белое бельё"].sort());
       sw.text+=" Потом ещё один снимок.";
       sw.draws.push({prompt:"Орихимэ, красное платье, чёрная куртка"});
+      await h.chat.putMsg(h.chat.path().at(-1)); // continuation is committed before Observer
       assert.equal((await h.ctx.svc.state.observeMessage(h.chat.path().at(-1),{id:"mock"})).status,"ok");
       assert.equal(observed,2);assert.equal(inquired,2);
       assert.equal(sw.wearInquiries.length,2);

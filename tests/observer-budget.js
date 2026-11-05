@@ -15,6 +15,11 @@ function harness(limit=1024,kind="openai",role="assistant",mode="rp"){
   svc:{chat:{path:()=>S.messages}},ui:{toast:(...x)=>notices.push(x)}};
  P.llm={simple:async(p,instruction,options)=>{calls.push({p,instruction,options});return JSON.stringify({events:[{
   actor:"environment",field:"weather",action:"set",value:"дождь",certainty:"established",sourceId:"T0"}]});}};
+ ctx.DB.readModifyWrite=async(_stores,reads,prepare)=>{
+  const rows=reads.map(([,id])=>JSON.parse(JSON.stringify(S.messages.find(m=>m.id===id)||null)));
+  const puts=prepare(rows);if(!puts)return false;
+  for(const [store,row] of puts)await ctx.DB.put(store,row);return puts.length>0;
+ };
  const service=P.stateService.create(ctx);ctx.svc.state=service;
  return {S,msg,chat,ctx,service,provider,rp,writes,calls,windows,notices,setLimit:v=>{limit=v;}};
 }

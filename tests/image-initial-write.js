@@ -17,10 +17,10 @@ module.exports = async function ({ make, test }) {
       h.S.settings.images = Object.assign({}, h.S.settings.images, { enabled: true, backend: "a1111", url: "http://unused", translate: false, drawPromptMode: "tags" });
       const svc = P.imageService.create(h.ctx);
       const before = JSON.stringify(msg), dbBefore = await h.ctx.DB.get("messages", msg.id), urlsBefore = JSON.stringify(h.S.imgUrls);
-      const put = h.ctx.DB.put, originalBackend = backend.generate;
+      const rmw = h.ctx.DB.readModifyWrite, originalBackend = backend.generate;
       let calls = 0, release, repaints = 0;
       h.ctx.ui.renderFeed = () => { repaints++; };
-      h.ctx.DB.put = async () => { await new Promise(r => { release = r; }); throw Error("F20 initial put abort"); };
+      h.ctx.DB.readModifyWrite = async () => { await new Promise(r => { release = r; }); throw Error("F20 initial put abort"); };
       backend.generate = async () => { calls++; return { dataUrl: "data:image/png;base64,AA==", seed: 42, info: { width: 512, height: 512 } }; };
       try {
         const pending = svc.draw(msg, sw, sw.draws[0], reuse || undefined);
@@ -38,13 +38,13 @@ module.exports = async function ({ make, test }) {
         assert.equal(JSON.stringify(h.S.imgUrls), urlsBefore);
         assert.equal(calls, 0); assert.ok(repaints > 0);
         assert.ok(h.toasts.some(x => /F20 initial put abort/.test(x.t)));
-        h.ctx.DB.put = put;
+        h.ctx.DB.readModifyWrite = rmw;
         await svc.draw(msg, sw, sw.draws[0], reuse || undefined);
         assert.equal(calls, 1); assert.equal(h.S.drawing.size, 0);
         assert.equal(sw.images.length, 1); assert.equal(sw.images[0].status, "done");
         assert.equal(h.S.imgUrls[sw.images[0].id], "data:image/png;base64,AA==");
         assert.equal((await h.ctx.DB.get("messages", msg.id)).swipes[0].images[0].status, "done");
-      } finally { backend.generate = originalBackend; h.ctx.DB.put = put; }
+      } finally { backend.generate = originalBackend; h.ctx.DB.readModifyWrite = rmw; }
     });
   }
 };

@@ -149,7 +149,7 @@
       // Including text and state events protects a contextual interpretation
       // against a changed ancestor swipe, edited text, or corrected garment.
       return JSON.stringify((path || []).map((m) => [
-        m.id, m.swipeIdx || 0, TR.activeSwipe(m).text,
+        m.id, m.parentId || null, m.parentSwipeIdx, m.swipeIdx || 0, TR.activeSwipe(m).text,
         TR.activeSwipe(m).stateEvents, TR.activeSwipe(m).stateCorrections,
         TR.activeSwipe(m).draws,
       ]));
@@ -526,11 +526,22 @@
         wearInquiry: wearInquiryStatus,
         // Shot-local provenance, not wardrobe state. Same-swipe image use only.
         frameObjects: Array.isArray(result.frameObjects) ? result.frameObjects.slice(0, INT.MAX) : [] };
-      const next = JSON.parse(JSON.stringify(msg));
-      next.swipes[swipeIdx].stateEvents = events;
-      next.swipes[swipeIdx].wearInquiries = wearInquiries;
-      next.swipes[swipeIdx].stateStatus = stateStatus;
-      await ctx.DB.put("messages", next);
+      // Other writers may attach an image while Observer is awaiting a model
+      // or storage. Validate the source and merge only Observer-owned fields
+      // into the current row, never publish an old copy of the whole message.
+      const committed = await ctx.DB.readModifyWrite(["messages"],
+        initialPath.map(m => ["messages", m.id]), rows => {
+          if (!ctx.chat() || ctx.chat().id !== chatId ||
+              pathFingerprint(chat().path()) !== originalKey ||
+              rows.some(row => !row || row.chatId !== chatId) ||
+              pathFingerprint(rows) !== originalKey) return null;
+          const next = rows[index], selected = next.swipes[swipeIdx];
+          selected.stateEvents = events;
+          selected.wearInquiries = wearInquiries;
+          selected.stateStatus = stateStatus;
+          return [["messages", next]];
+        });
+      if (!committed) return { skipped: "stale-branch" };
       sw.stateEvents = events;
       sw.wearInquiries = wearInquiries;
       sw.stateStatus = stateStatus;
