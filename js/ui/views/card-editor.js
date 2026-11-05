@@ -64,8 +64,8 @@
                 <div class="field"><label for="cf-custom-mode-${i}">Когда передавать</label>
                   <select id="cf-custom-mode-${i}" data-custom="${i}" data-k="mode">
                     <option value="relevant" ${field.mode !== "always" ? "selected" : ""}>Когда относится к разговору</option>
-                    <option value="always" ${field.mode === "always" ? "selected" : ""}>На каждом ходе, если позволяет бюджет</option>
-                  </select></div>
+                    <option value="always" ${field.mode === "always" ? "selected" : ""}>На каждом ходе целиком</option>
+                  </select><span class="help">Постоянное поле передаётся целиком. Если весь запрос не помещается, генерация не отправляется.</span></div>
                 <p class="hint">Происхождение: ${origin && origin.imported ? `импортировано из ${esc(origin.format || "другого формата")}; исходное поле <code>${esc(origin.path || "неизвестно")}</code>.` : "создано пользователем."}</p>
               </div>
             </div>`;

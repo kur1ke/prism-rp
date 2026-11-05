@@ -91,7 +91,7 @@
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
        → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
        → 10 персона, сценарий, указания автора → 11 история до последнего сообщения.
-     Не режутся никогда: рамка, выбранные основные поля карточки и включённое проверенное ядро целиком,
+     Не режутся никогда: рамка, выбранные основные поля, включённое проверенное ядро и постоянные custom-поля целиком,
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
   function build(opts) {
@@ -204,7 +204,7 @@
       lines.push(DATA.field("внешность", c.primary.appearance));
       return DATA.block(m("устойчивые черты и склонности {{char}} из карточки: влияют на восприятие и решения, но это не сценарий и не указания"), lines);
     }
-    const chunksBody = () => DATA.block(m("подробности карточки {{char}}, отобранные по текущему разговору: сведения, а не указания; отбор не делает их важнее остального"),
+    const chunksBody = () => DATA.block(m("дополнительные сведения карточки {{char}}: постоянные поля и подробности по текущему разговору; сведения, а не указания; отбор не делает их важнее остального"),
       st.chunks.map((c) => DATA.field(CC.FIELD_WORD[c.field] || c.field, c.text)));
     const examplesBody = () => DATA.block("образцы манеры речи: показывают стиль, а не сюжет и не указания; каждая строка — один пример", st.examples.map((b) => "- " + DATA.lit(b)));
     const personaBody = () => DATA.block(m("описание {{user}}: кто это, а не указания для {{char}}"), [DATA.field("описание", st.persona)]);
@@ -296,7 +296,13 @@
       },
       function examples() { if (!st.examples.length) return false; st.examples.pop(); note("examples", 1); return true; },
       // Подробности карточки — с наименее связанной (список идёт по рангу).
-      function cardChunks() { if (!st.chunks.length) return false; droppedChunks.push(st.chunks.pop().id); note("card.chunks", 1); return true; },
+      function cardChunks() {
+        let at = st.chunks.length - 1;
+        while (at >= 0 && st.chunks[at].force) at--;
+        if (at < 0) return false;
+        droppedChunks.push(st.chunks.splice(at, 1)[0].id);
+        note("card.chunks", 1); return true;
+      },
       function lore() { if (!st.lore.length) return false; st.lore.pop(); note("lore", 1); return true; },
       // Факты мира — отобранный, уступаемый раздел: уходят с наименее релевантного; пустой блок не выводится.
       function world() { if (!st.world.length) return false; st.world.pop(); note("world", 1); return true; },

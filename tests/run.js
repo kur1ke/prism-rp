@@ -5785,8 +5785,8 @@ async function foundationH() {
     const s = A.build({ card: CARD, history: turns(4) }).messages[0].content;
     assert.ok(s.includes('- "Химэ: Ну и ладно!"') && !s.includes("Ой."));
   });
-  await ta("H-H1: бюджет — подробности уступают раньше ядра, строгий предел точен; переполнение — 0 вызовов модели", async () => {
-    const fat = Object.assign({}, CARD, { customFields: Array.from({length:4},(_,i)=>({label:"Справка"+i,text:`Сора ${i}. `+big(600,"Каракура "),enabled:true,mode:"always"})) });
+  await ta("H-H1: relevant details yield before protected card; overflow makes no model call", async () => {
+    const fat = Object.assign({}, CARD, { customFields: Array.from({length:4},(_,i)=>({label:"Справка"+i,text:`Сора ${i}. `+big(600,"Каракура "),enabled:true,mode:"relevant"})) });
     const r = A.build(Object.assign({ card: fat, stateSnapshot: baseScene, history: hist(3, 20).concat([{ role: "user", text: "Сора и Каракура" }]) }, BUD));
     strict(r);
     assert.ok(r.report.card.dropped.length > 0 && r.report.card.selected.length >= 0);
@@ -9279,7 +9279,7 @@ const TR_ = globalThis.PRP.tree;
 // Do not let an unresolved async fixture finish Node with exit code 0.
 // The suite normally completes in seconds; a pending test must fail CI.
 setTimeout(() => { console.error("Test runner timeout: an async test never finished"); process.exit(1); }, 60000);
-foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./perchance-budget.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./no-background.js")({ make: fbHarness, test: ta })).then(() => require("./card-fields.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./image-result-commit.js")({ make: fbHarness, test: ta })).then(() => require("./image-initial-write.js")({ make: fbHarness, test: ta })).then(() => require("./generation-commit.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
+foundationB().then(autoMemoryTests).then(w2Services).then(w2BackupIntegrity).then(foundationC).then(foundationH).then(foundationHFix).then(foundationD).then(unifiedTracker).then(perfTurn).then(() => require("./budget-window.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./perchance-budget.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./always-custom-fields.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./no-background.js")({ make: fbHarness, test: ta })).then(() => require("./card-fields.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./image-result-commit.js")({ make: fbHarness, test: ta })).then(() => require("./image-initial-write.js")({ make: fbHarness, test: ta })).then(() => require("./generation-commit.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => require("./user-edits.js")({ make: fbHarness, setModel: (fn) => { fbLLM = fn; }, test: ta })).then(() => {
   console.log(`\n${passed} пройдено, ${failed} с ошибками`);
   process.exit(failed ? 1 : 0);
 });

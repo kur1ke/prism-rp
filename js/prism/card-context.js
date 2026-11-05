@@ -9,7 +9,7 @@
   const CM = PRP.cardModel || (typeof require !== "undefined" ? require("../cards/model.js") : null);
   const CORE_SCHEMA = 1;
   const CHUNK_MAX = 500;      // символов в куске подробностей
-  const CHUNK_LIMIT = 4;      // кусков подробностей за ход
+  const CHUNK_LIMIT = 4;      // только выборочных фрагментов за ход; постоянные поля не ограничены
   const EXAMPLES = { fullUntil: 2, oneUntil: 5 };
   const FIELD_WORD = { description: "описание", personality: "личность", appearance: "внешность", custom: "дополнительные сведения" };
   // Признаки разговора о внешности (по основам слов; рус. и англ.).
@@ -94,7 +94,8 @@
     // Custom fields are opt-in card facts. Never interpret their labels as prompt roles.
     (Array.isArray(cd.customFields) ? cd.customFields : []).forEach((f, i) => {
       if (!f || f.enabled !== true || !str(f.label).trim() || !str(f.text).trim()) return;
-      splitChunks(mm(str(f.text))).forEach((part, j) => out.push({
+      const parts = f.mode === "always" ? [mm(str(f.text)).trim()] : splitChunks(mm(str(f.text)));
+      parts.forEach((part, j) => out.push({
         id: `custom#${i + 1}#${j + 1}`, field: "custom",
         text: str(f.label).trim() + ": " + part, order: out.length,
         force: f.mode === "always",
@@ -157,7 +158,11 @@
     });
     const pool = rows.filter((r) => r.eligible).sort((a, b) => (Number(b.force) - Number(a.force)) || (b.terms - a.terms) || (b.overlap - a.overlap) || (b.visual - a.visual) || (a.order - b.order));
     const limit = x.limit != null ? x.limit : CHUNK_LIMIT;
-    pool.forEach((r, i) => { if (i < limit) { r.selected = true; r.rank = i + 1; } else r.omitted = "limit"; });
+    let optional = 0;
+    pool.forEach((r, i) => {
+      if (r.force || optional++ < limit) { r.selected = true; r.rank = i + 1; }
+      else r.omitted = "limit";
+    });
     return { rows, selected: pool.filter((r) => r.selected) };
   }
 
