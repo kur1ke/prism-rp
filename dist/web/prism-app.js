@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "0081701e9679efee1139f5b2c101099fc6f28635";
+  window.PRISM_RP_BUILD_SHA = "5b912738cef0bfb24437310818f8983a8486fa93";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -2785,7 +2785,7 @@
       for (const k of LIST_KEYS) if (k in p) world[k] = Array.isArray(p[k]) ? p[k].slice() : [];
       if ("availability" in p) world.availability = p.availability || "unknown";
     }
-    return { world, activeEvents: o.rows.filter((r) => r.active), inactiveEvents: o.rows.filter((r) => !r.active), events: o.rows, warnings: o.warnings };
+    return { world, manualEvents: o.active.map(({ e }) => clone(e)), activeEvents: o.rows.filter((r) => r.active), inactiveEvents: o.rows.filter((r) => !r.active), events: o.rows, warnings: o.warnings };
   }
 
   PRP.messengerEnv = { SCHEMA, AVAIL, KEYS, emptyWorld, blank, normalize, makePatch, makeEvent, validateEvent, validateRecord, checkScope, order, resolveWorld, hasErrors };
@@ -3832,7 +3832,7 @@
    Чистый, детерминированный. Истина хранится не в UI, а в событиях на swipes сообщений;
    raw/compiled изображение не является событием; подтверждённое описание текущего
    авторского [draw:] может стать источником wear-события. Перспектива задаёт видимость, не физическое существование.
-   Поля legacy Messenger Environment — совместимый начальный слой/ручные исправления.
+   Ручные события Messenger Environment сворачиваются вместе с событиями сообщений.
    Не определяет, что произошло из свободного текста (это работа state/interpreter).
 */
 (function (root) {
@@ -4305,8 +4305,8 @@
 
   /* Свёртка активной ветки: события StateTracker и ручные коррекции.
      Путь передаётся ровно до нужного сообщения (особенно для старых картинок).
-     Legacy Messenger events передаются через legacyWorld как начальный слой —
-     применяются до событий из истории, чтобы явная хронология имела приоритет. */
+     manualEvents — проверенные видимые события среды; legacyWorld — только
+     снимок старого изображения без событий. */
   function fold(o) {
     const opts = o || {};
     let st = empty({ char: opts.charName, user: opts.userName });
@@ -4332,7 +4332,38 @@
         else st.actors.char.fields[field] = { value: clone(v), certainty: "established", source: { kind: "legacy-manual" } };
       }
     }
-    for (const m of opts.path || []) {
+    // Manual Environment events retain their own time and scope (visibility is
+    // checked by messenger/environment). Replay them, not a flattened baseline.
+    const path = opts.path || [], pending = new Map();
+    const time = (v) => { const n = typeof v === "number" ? v : Date.parse(v); return Number.isFinite(n) ? n : -Infinity; };
+    const stamp = (m) => { const sw = TR.activeSwipe(m); return [time(sw.messengerAt && sw.messengerAt.at), time(sw.createdAt || m.createdAt)]; };
+    const compare = (a, b) => (a[0] === b[0] ? 0 : a[0] < b[0] ? -1 : 1) || (a[1] === b[1] ? 0 : a[1] < b[1] ? -1 : 1);
+    const enqueue = (at, task) => { if (!pending.has(at)) pending.set(at, []); pending.get(at).push(task); };
+    for (const e of opts.manualEvents || []) {
+      const at = [time(e.effectiveAt), time(e.createdAt)];
+      let slot = -1;
+      for (let i = 0; i < path.length; i++) if (compare(stamp(path[i]), at) <= 0) slot = i;
+      if (e.scope === "branch" && e.provenance) slot = Math.max(slot, path.findIndex((m) => m.id === e.provenance.anchorId));
+      enqueue(slot, { at, manual: e });
+    }
+    const replay = (slot) => {
+      for (const task of (pending.get(slot) || []).sort((a, b) => compare(a.at, b.at))) {
+        if (task.correction) { st = apply(st, task.correction, task.source); continue; }
+        const event = task.manual, source = { role: "manual", mode: opts.mode, kind: "manual-environment", eventId: event.id };
+        const fields = { location:"location", activity:"activity", visualWear:"wear", visualHair:"hair", nearby:"nearby", ongoing:"ongoing", availability:"availability" };
+        for (const [key, value] of Object.entries(event.patch || {})) {
+          const field = fields[key];
+          if (!field) continue;
+          if (field === "wear") transitionWear(st.actors.char, {
+            action: Array.isArray(value) && value.length ? "set" : "invalidate", value: value || [], certainty: "established",
+          }, source);
+          else st.actors.char.fields[field] = { value: value == null ? (LIST.has(field) ? [] : field === "availability" ? "unknown" : "") : clone(value), certainty: "established", source };
+        }
+      }
+    };
+    replay(-1);
+    for (let i = 0; i < path.length; i++) {
+      const m = path[i];
       const sw = TR.activeSwipe(m);
       // References are anchored to the BEGINNING of each observation unit.
       // A single DRAW can adjust one garment then remove another; their
@@ -4357,8 +4388,10 @@
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.
       for (const e of Array.isArray(sw.stateCorrections) ? sw.stateCorrections : []) {
-        st = apply(st, e, { role: "manual", mode: opts.mode, messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+        enqueue(i, { at: e.correctedCreatedAt ? [time(e.correctedAt), time(e.correctedCreatedAt)] : stamp(m),
+          correction: e, source: { role: "manual", mode: opts.mode, messageId: m.id, swipeIdx: m.swipeIdx || 0 } });
       }
+      replay(i);
     }
     return st;
   }
@@ -11279,7 +11312,8 @@
       const ms = currentChat.mode === "messenger" && ctx.svc.messenger;
       const stamped = !drawAuthored && sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
       const snap = !drawAuthored && ctx.svc.state
-        ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
+        ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined,
+          manualEvents: ms && sourceSwipe.messengerAt ? sourceSwipe.messengerAt.manualEvents : undefined }) : null;
       const wearFacts = !drawAuthored && snap ? PRP.stateTracker.wearFacts(snap.state) : [];
       const st = drawAuthored ? { chars: {}, present: [] } : PRP.stateTracker.view(snap ? snap.state : PRP.stateTracker.empty({}));
       const visual = !drawAuthored && ms
@@ -11637,12 +11671,14 @@
       if (!c || !cd) return TRACK.empty({});
       const p = path || chat().path(), extra = opts || {};
       let legacy = extra.legacyWorld;
+      let manualEvents = extra.manualEvents;
       if (legacy === undefined && c.mode === "messenger" && ctx.svc.messenger) {
         const world = ctx.svc.messenger.worldAt(p, extra.now);
-        legacy = world && world.world;
+        manualEvents = world && world.manualEvents;
       }
+      if (Array.isArray(manualEvents)) legacy = null;
       return TRACK.fold({ mode: c.mode, initialState:c.initialState, path: p,
-        charName: cd.name, userName: ctx.persona().name, legacyWorld: legacy, initialWear: c.initialWear });
+        charName: cd.name, userName: ctx.persona().name, legacyWorld: legacy, manualEvents, initialWear: c.initialWear });
     }
 
     function context(path, opts) {
@@ -12229,7 +12265,10 @@
         const empty = val == null || (Array.isArray(val) && !val.length) || val === "";
         const e = { actor: "char", field, action: empty ? "clear" : "set", value: val, certainty: "established", evidence: "" };
         const r = TRACK.normalize(e, { role: "manual", mode: c.mode });
-        if (r.error) issues.push(r.error); else changes.push(r.event);
+        if (r.error) issues.push(r.error); else changes.push(Object.assign(r.event, {
+          correctedAt: c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.now() : null,
+          correctedCreatedAt: Date.now(),
+        }));
       }
       if (!changes.length || issues.length) return { error: issues.join("; ") || "Нет изменений." };
       const swIdx = m.swipeIdx || 0, sw = TR.activeSwipe(m);
@@ -13472,10 +13511,10 @@
       const path = p || chat().path();
       const at = t !== undefined ? t : now(env);
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: at });
-      // Один трекер для обоих режимов. Старая среда является только
-      // совместимым базовым слоем; сообщения дополняют/изменяют его автоматически.
+      // Tracker сворачивает ручные события среды и события сообщений
+      // в одной хронологии, не накладывая всю историю на позднюю правку.
       if (ctx.svc.state) {
-        const tracked = ctx.svc.state.context(path, { now: at, legacyWorld: w.world });
+        const tracked = ctx.svc.state.context(path, { now: at });
         w.world = SR.world(w.world, tracked);
         w.world = SR.messengerFreshness(w.world, path, at);
       }
@@ -13494,7 +13533,8 @@
       if (!env) return null;
       const at = t !== undefined ? t : now(env);
       if (at == null) return null;
-      return { at: MT.toIso(at), timeZone: env.timeZone, world: ENV.resolveWorld(env, { path: pathCtx(p), now: at }).world };
+      const resolved = ENV.resolveWorld(env, { path: pathCtx(p), now: at });
+      return { at: MT.toIso(at), timeZone: env.timeZone, world: resolved.world, manualEvents: resolved.manualEvents };
     }
     function stampForNew() { return snapshot(chat().path()); }
 
@@ -13621,7 +13661,7 @@
       const t = now(env);
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: t });
       if (ctx.svc.state) {
-        const tracked = ctx.svc.state.context(path, { now: t, legacyWorld: w.world });
+        const tracked = ctx.svc.state.context(path, { now: t });
         w.world = SR.world(w.world, tracked);
         w.world = SR.messengerFreshness(w.world, path, t);
       }
