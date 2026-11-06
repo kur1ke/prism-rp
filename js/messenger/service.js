@@ -57,10 +57,10 @@
       const path = p || chat().path();
       const at = t !== undefined ? t : now(env);
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: at });
-      // Один трекер для обоих режимов. Старая среда является только
-      // совместимым базовым слоем; сообщения дополняют/изменяют его автоматически.
+      // Tracker сворачивает ручные события среды и события сообщений
+      // в одной хронологии, не накладывая всю историю на позднюю правку.
       if (ctx.svc.state) {
-        const tracked = ctx.svc.state.context(path, { now: at, legacyWorld: w.world });
+        const tracked = ctx.svc.state.context(path, { now: at });
         w.world = SR.world(w.world, tracked);
         w.world = SR.messengerFreshness(w.world, path, at);
       }
@@ -79,7 +79,8 @@
       if (!env) return null;
       const at = t !== undefined ? t : now(env);
       if (at == null) return null;
-      return { at: MT.toIso(at), timeZone: env.timeZone, world: ENV.resolveWorld(env, { path: pathCtx(p), now: at }).world };
+      const resolved = ENV.resolveWorld(env, { path: pathCtx(p), now: at });
+      return { at: MT.toIso(at), timeZone: env.timeZone, world: resolved.world, manualEvents: resolved.manualEvents };
     }
     function stampForNew() { return snapshot(chat().path()); }
 
@@ -206,7 +207,7 @@
       const t = now(env);
       const w = ENV.resolveWorld(env, { path: pathCtx(path), now: t });
       if (ctx.svc.state) {
-        const tracked = ctx.svc.state.context(path, { now: t, legacyWorld: w.world });
+        const tracked = ctx.svc.state.context(path, { now: t });
         w.world = SR.world(w.world, tracked);
         w.world = SR.messengerFreshness(w.world, path, t);
       }

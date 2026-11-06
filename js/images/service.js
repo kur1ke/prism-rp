@@ -223,7 +223,8 @@
       const ms = currentChat.mode === "messenger" && ctx.svc.messenger;
       const stamped = !drawAuthored && sourceSwipe.messengerAt && sourceSwipe.messengerAt.world;
       const snap = !drawAuthored && ctx.svc.state
-        ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined }) : null;
+        ? ctx.svc.state.context(upto, { legacyWorld: ms ? (stamped || null) : undefined,
+          manualEvents: ms && sourceSwipe.messengerAt ? sourceSwipe.messengerAt.manualEvents : undefined }) : null;
       const wearFacts = !drawAuthored && snap ? PRP.stateTracker.wearFacts(snap.state) : [];
       const st = drawAuthored ? { chars: {}, present: [] } : PRP.stateTracker.view(snap ? snap.state : PRP.stateTracker.empty({}));
       const visual = !drawAuthored && ms

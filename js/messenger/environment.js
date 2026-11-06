@@ -162,7 +162,7 @@
       for (const k of LIST_KEYS) if (k in p) world[k] = Array.isArray(p[k]) ? p[k].slice() : [];
       if ("availability" in p) world.availability = p.availability || "unknown";
     }
-    return { world, activeEvents: o.rows.filter((r) => r.active), inactiveEvents: o.rows.filter((r) => !r.active), events: o.rows, warnings: o.warnings };
+    return { world, manualEvents: o.active.map(({ e }) => clone(e)), activeEvents: o.rows.filter((r) => r.active), inactiveEvents: o.rows.filter((r) => !r.active), events: o.rows, warnings: o.warnings };
   }
 
   PRP.messengerEnv = { SCHEMA, AVAIL, KEYS, emptyWorld, blank, normalize, makePatch, makeEvent, validateEvent, validateRecord, checkScope, order, resolveWorld, hasErrors };

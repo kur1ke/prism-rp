@@ -2,7 +2,7 @@
    Чистый, детерминированный. Истина хранится не в UI, а в событиях на swipes сообщений;
    raw/compiled изображение не является событием; подтверждённое описание текущего
    авторского [draw:] может стать источником wear-события. Перспектива задаёт видимость, не физическое существование.
-   Поля legacy Messenger Environment — совместимый начальный слой/ручные исправления.
+   Ручные события Messenger Environment сворачиваются вместе с событиями сообщений.
    Не определяет, что произошло из свободного текста (это работа state/interpreter).
 */
 (function (root) {
@@ -475,8 +475,8 @@
 
   /* Свёртка активной ветки: события StateTracker и ручные коррекции.
      Путь передаётся ровно до нужного сообщения (особенно для старых картинок).
-     Legacy Messenger events передаются через legacyWorld как начальный слой —
-     применяются до событий из истории, чтобы явная хронология имела приоритет. */
+     manualEvents — проверенные видимые события среды; legacyWorld — только
+     снимок старого изображения без событий. */
   function fold(o) {
     const opts = o || {};
     let st = empty({ char: opts.charName, user: opts.userName });
@@ -502,7 +502,38 @@
         else st.actors.char.fields[field] = { value: clone(v), certainty: "established", source: { kind: "legacy-manual" } };
       }
     }
-    for (const m of opts.path || []) {
+    // Manual Environment events retain their own time and scope (visibility is
+    // checked by messenger/environment). Replay them, not a flattened baseline.
+    const path = opts.path || [], pending = new Map();
+    const time = (v) => { const n = typeof v === "number" ? v : Date.parse(v); return Number.isFinite(n) ? n : -Infinity; };
+    const stamp = (m) => { const sw = TR.activeSwipe(m); return [time(sw.messengerAt && sw.messengerAt.at), time(sw.createdAt || m.createdAt)]; };
+    const compare = (a, b) => (a[0] === b[0] ? 0 : a[0] < b[0] ? -1 : 1) || (a[1] === b[1] ? 0 : a[1] < b[1] ? -1 : 1);
+    const enqueue = (at, task) => { if (!pending.has(at)) pending.set(at, []); pending.get(at).push(task); };
+    for (const e of opts.manualEvents || []) {
+      const at = [time(e.effectiveAt), time(e.createdAt)];
+      let slot = -1;
+      for (let i = 0; i < path.length; i++) if (compare(stamp(path[i]), at) <= 0) slot = i;
+      if (e.scope === "branch" && e.provenance) slot = Math.max(slot, path.findIndex((m) => m.id === e.provenance.anchorId));
+      enqueue(slot, { at, manual: e });
+    }
+    const replay = (slot) => {
+      for (const task of (pending.get(slot) || []).sort((a, b) => compare(a.at, b.at))) {
+        if (task.correction) { st = apply(st, task.correction, task.source); continue; }
+        const event = task.manual, source = { role: "manual", mode: opts.mode, kind: "manual-environment", eventId: event.id };
+        const fields = { location:"location", activity:"activity", visualWear:"wear", visualHair:"hair", nearby:"nearby", ongoing:"ongoing", availability:"availability" };
+        for (const [key, value] of Object.entries(event.patch || {})) {
+          const field = fields[key];
+          if (!field) continue;
+          if (field === "wear") transitionWear(st.actors.char, {
+            action: Array.isArray(value) && value.length ? "set" : "invalidate", value: value || [], certainty: "established",
+          }, source);
+          else st.actors.char.fields[field] = { value: value == null ? (LIST.has(field) ? [] : field === "availability" ? "unknown" : "") : clone(value), certainty: "established", source };
+        }
+      }
+    };
+    replay(-1);
+    for (let i = 0; i < path.length; i++) {
+      const m = path[i];
       const sw = TR.activeSwipe(m);
       // References are anchored to the BEGINNING of each observation unit.
       // A single DRAW can adjust one garment then remove another; their
@@ -527,8 +558,10 @@
       // Пользовательская коррекция всегда после извлечённых событий ЭТОГО сообщения,
       // но следующее реальное изменение может её обновить.
       for (const e of Array.isArray(sw.stateCorrections) ? sw.stateCorrections : []) {
-        st = apply(st, e, { role: "manual", mode: opts.mode, messageId: m.id, swipeIdx: m.swipeIdx || 0 });
+        enqueue(i, { at: e.correctedCreatedAt ? [time(e.correctedAt), time(e.correctedCreatedAt)] : stamp(m),
+          correction: e, source: { role: "manual", mode: opts.mode, messageId: m.id, swipeIdx: m.swipeIdx || 0 } });
       }
+      replay(i);
     }
     return st;
   }

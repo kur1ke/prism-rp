@@ -24,12 +24,14 @@
       if (!c || !cd) return TRACK.empty({});
       const p = path || chat().path(), extra = opts || {};
       let legacy = extra.legacyWorld;
+      let manualEvents = extra.manualEvents;
       if (legacy === undefined && c.mode === "messenger" && ctx.svc.messenger) {
         const world = ctx.svc.messenger.worldAt(p, extra.now);
-        legacy = world && world.world;
+        manualEvents = world && world.manualEvents;
       }
+      if (Array.isArray(manualEvents)) legacy = null;
       return TRACK.fold({ mode: c.mode, initialState:c.initialState, path: p,
-        charName: cd.name, userName: ctx.persona().name, legacyWorld: legacy, initialWear: c.initialWear });
+        charName: cd.name, userName: ctx.persona().name, legacyWorld: legacy, manualEvents, initialWear: c.initialWear });
     }
 
     function context(path, opts) {
@@ -616,7 +618,10 @@
         const empty = val == null || (Array.isArray(val) && !val.length) || val === "";
         const e = { actor: "char", field, action: empty ? "clear" : "set", value: val, certainty: "established", evidence: "" };
         const r = TRACK.normalize(e, { role: "manual", mode: c.mode });
-        if (r.error) issues.push(r.error); else changes.push(r.event);
+        if (r.error) issues.push(r.error); else changes.push(Object.assign(r.event, {
+          correctedAt: c.mode === "messenger" && ctx.svc.messenger ? ctx.svc.messenger.now() : null,
+          correctedCreatedAt: Date.now(),
+        }));
       }
       if (!changes.length || issues.length) return { error: issues.join("; ") || "Нет изменений." };
       const swIdx = m.swipeIdx || 0, sw = TR.activeSwipe(m);
