@@ -1306,6 +1306,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     scenarioReplies: 5, // 0 = never cut off by reply count
     autoContext: true,
     singleSystem: false,
+    wholeCardSystemPrompt: false, // opt-in experiment: selected character text as one system prompt
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,
@@ -5493,6 +5494,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        stateToolEnabled, extraPost, noPostHistory,
+       wholeCardSystemPrompt — явный opt-in: основные поля/Core и действующий сценарий одним разделом указаний;
+         текст не JSON-кодируется, raw/source не читается; весь блок защищён от бюджетного сокращения,
        inputCost — необязательная чистая функция messages → стоимость конечной транспортной формы,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
        messenger — для режима messenger: { world, conversation, temporal, plans } (готовые данные среды переписки;
@@ -5518,6 +5521,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
        → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
        → 10 персона, сценарий, указания автора → 11 история до последнего сообщения.
+     При wholeCardSystemPrompt действующий сценарий также защищён как часть цельного блока.
      Не режутся никогда: рамка, выбранные основные поля, включённое проверенное ядро и постоянные custom-поля целиком,
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -5526,6 +5530,9 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const AD = MODES.adapter(o.mode);
     const card = o.card || {};
+    // Explicit user-selected experiment. Only the canonical, selected fields
+    // below gain instruction semantics; never read preserved/raw import text.
+    const wholeCard = o.wholeCardSystemPrompt === true;
     // Имена идут в заголовки разделов — только однострочные (перевод строки в имени не начнёт раздел).
     const vars = { char: DATA.oneLine(card.name) || "Персонаж", user: DATA.oneLine(o.userName) || "Пользователь" };
     const m = (x) => U.macros(x, vars);
@@ -5638,6 +5645,24 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
     const loreBody = () => (st.lore.length ? LORE_NOTE + "\n" + st.lore.map((e) => "- " + DATA.lit(m(e.content))).join("\n") : "");
     const scenarioBody = () => DATA.block("Описанные обстоятельства задают начало взаимодействия. Установленные здесь факты сохраняют силу, пока дальнейшие события их не изменят. Они не предписывают персонажу реакции, решения или исход взаимодействия.", [DATA.field("начало", st.scenario)]);
 
+    function wholeCardBody() {
+      const c = st.core;
+      return [
+        ["Имя", vars.char],
+        ["Описание", c.primary.description],
+        ["Характер и манера речи", c.primary.personality],
+        ["Внешность", c.primary.appearance],
+        ["Кто это", core.source === "explicit" ? c.identity : ""],
+        ["Черты", c.traits.join("\n")],
+        ["Манера речи", c.voice.join("\n")],
+        ["Устойчивые сведения", c.durable.join("\n")],
+        ["Исходная ситуация", st.scenario],
+      ].filter(([, text]) => text).map(([label, text]) => label + ":\n" + text).join("\n\n");
+    }
+    const characterSection = () => wholeCard
+      ? section("Указания автора карточки (цельный промпт персонажа — эксперимент)", wholeCardBody())
+      : section(m(T.card), coreBody());
+
     function parts() {
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
@@ -5646,7 +5671,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         head: [
           frame,
           section(T.author, st.authorSys),
-          section(m(T.card), coreBody()),
+          characterSection(),
           section(m(T.reflection),
             st.reflection ? DATA.block("Приобретённый опыт может содержать сомнения и ошибочные интерпретации; модель свободна переосмысливать его, Core неизменен", [DATA.field("восприятие", st.reflection)]) : ""),
           section(m(T.cardContext), chunksBody()),
@@ -5654,7 +5679,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
           section(m(T.persona), personaBody()),
           section(m(T.lore), loreBody()),
           section(m(T.world), worldBody(st.world, m)),
-          section(m(T.origin), scenarioBody()),
+          wholeCard ? "" : section(m(T.origin), scenarioBody()),
           scene,
           wearStateSection,
         ].concat(messengerParts()).filter(Boolean),
@@ -5743,7 +5768,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
       function reflection() { if (!st.reflection) return false; st.reflection = ""; note("reflection", "субъективный опыт не поместился"); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
-      function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
+      function scenario() { if (wholeCard || !st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
@@ -5790,7 +5815,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), duplicates: core.duplicates, truncated: core.truncated },
+          promptFormat: wholeCard ? "whole-system" : "data",
+          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(characterSection()), duplicates: core.duplicates, truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
           selected: keptChunkIds,
@@ -5810,7 +5836,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
-          card: tokLayer(section(m(T.card), coreBody())) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + tokLayer(section(m(T.origin), scenarioBody())),
+          card: tokLayer(characterSection()) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + (wholeCard ? 0 : tokLayer(section(m(T.origin), scenarioBody()))),
           reflection: tokLayer(st.reflection ? DATA.block("Experience, субъективный", [DATA.field("восприятие", st.reflection)]) : ""),
           scene: tok(scene),
           messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),
@@ -10003,7 +10029,8 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   function cardDebug(c) {
     if (!c) return "";
     return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
-      <dl class="kv"><dt>Основные поля</dt><dd>${esc(c.core.reason)}${c.core.source === "explicit" ? "; дополнительное ядро включено" : ""}; ≈ ${c.core.tokens} ток.</dd>
+      <dl class="kv"><dt>Подача</dt><dd>${c.promptFormat === "whole-system" ? "Цельный системный промпт (эксперимент)" : "Разделы данных"}</dd>
+        <dt>Основные поля</dt><dd>${esc(c.core.reason)}${c.core.source === "explicit" ? "; дополнительное ядро включено" : ""}; ≈ ${c.core.tokens} ток.</dd>
         <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>
         <dt>Подробности</dt><dd>${c.selected.length ? esc(c.selected.join(", ")) : "нет"}${c.dropped.length ? `; не поместилось: ${esc(c.dropped.join(", "))}` : ""}</dd></dl>
       ${c.candidates.length ? `<table><thead><tr><th>Кусок</th><th>почему</th><th>итог</th></tr></thead><tbody>
@@ -10399,6 +10426,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         <div class="field"><label for="scenario-replies">Убирать сценарий после</label><select id="scenario-replies" data-set-num="scenarioReplies">${PRP.scenario.LIMITS.map(n => `<option value="${n}" ${PRP.scenario.replyLimit(s.scenarioReplies) === n ? "selected" : ""}>${n === 0 ? "Никогда" : n + " ответов персонажа"}</option>`).join("")}</select><span class="help">Для RP и переписки. Считаются ответы в выбранной ветке; приветствие из карточки, повторная генерация и дописывание не добавляют шаг. При выборе «Никогда» общий бюджет контекста всё равно действует.</span></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
+        <label class="check"><input type="checkbox" data-set="wholeCardSystemPrompt" ${s.wholeCardSystemPrompt === true ? "checked" : ""}><span>Карточка цельным системным промптом (эксперимент)<small>Описание, характер и манера речи, внешность и действующий сценарий подаются вместе, без JSON-кавычек, как указания персонажа. Используются выбранные поля карточки; её текст не меняется. Срок передачи сценария сохраняется. При нехватке контекста цельный блок не обрезается. Выключите для возврата к обычной подаче данных.</small></span></label>
         <label class="check"><input type="checkbox" data-set="noPostHistory" ${s.noPostHistory ? "checked" : ""}><span>Не передавать инструкции после истории<small>Касается только указаний автора карточки (post_history_instructions), не самого характера. По умолчанию выключено — для совместимости с карточками.</small></span></label>
         <label class="check"><input type="checkbox" data-set="stateToolEnabled" ${s.stateToolEnabled ? "checked" : ""}><span>State Tool (эксперимент)<small>RP-модель сообщает изменения состояния сама. Observer не разбирает такие ответы, но продолжает разбирать ваши сообщения. Тестируйте только в TEST.</small></span></label>
         <div class="block-title" style="margin-top:20px">Ассистент</div>
@@ -11884,6 +11912,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
         worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
+        wholeCardSystemPrompt: s.wholeCardSystemPrompt === true,
         includeScenario: scenarioDecision.included,
         inputCost: perchanceInput ? (messages) => PRP.perchance.inputCost(transport.names, messages, transport) : undefined,
       }, extra));
