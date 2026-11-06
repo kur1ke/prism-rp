@@ -7,6 +7,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, VP = PRP.visualPlan;
+  const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("../providers/simple-request.js") : null);
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -89,7 +90,35 @@
         { chatId: origin.chatId, msgId: origin.messageId, outcome });
     };
 
-    function textGen(instruction) { return LLM.simple(ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), instruction); }
+    async function textGen(instruction, provider) {
+      const model = arguments.length > 1 ? provider : ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
+      if (!model) throw new Error("нет текстовой модели");
+      const options = { maxTokens: 400 };
+      const windowTokens = typeof ctx.contextTokens === "function" ? ctx.contextTokens(model) : S.settings.contextTokens;
+      const budget = SIMPLE.budget(model, instruction, options, windowTokens);
+      if (budget.overflow) {
+        const error = new Error(budget.invalidContext
+          ? "Некорректный размер окна модели обработки: " + budget.contextTokens
+          : "Перевод изображения не помещается в окно модели обработки: " +
+            budget.inputTokens + " + " + budget.reserveTokens + " > " + budget.contextTokens);
+        error.code = "CONTEXT_OVERFLOW"; error.budget = budget;
+        throw error;
+      }
+      const configured = Number(ctx.imageTranslateTimeoutMs);
+      const timeoutMs = Number.isFinite(configured) && configured > 0 ? configured : 40000;
+      const controller = new AbortController();
+      let timer;
+      try {
+        return await Promise.race([
+          LLM.simple(model, instruction, { ...options, signal: controller.signal }),
+          new Promise((_, reject) => { timer = setTimeout(() => {
+            const error = new Error("Превышено время ожидания перевода изображения: " + timeoutMs + " мс");
+            error.code = "IMAGE_TRANSLATION_TIMEOUT";
+            reject(error); controller.abort();
+          }, timeoutMs); })
+        ]);
+      } finally { clearTimeout(timer); }
+    }
 
     // Подсказка переводчику: кто это и какие теги уже добавятся сами.
     function identityFor(cd) {
@@ -128,7 +157,7 @@
       const generateText = async (instruction) => {
         const started = clock();
         let outcome = "ok";
-        try { return await LLM.simple(provider, instruction); }
+        try { return await textGen(instruction, provider); }
         catch (e) { outcome = "error"; throw e; }
         finally { perf("imageTranslateMs", started, origin, outcome); }
       };

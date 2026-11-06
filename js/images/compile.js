@@ -3,7 +3,8 @@
    теряются. Поэтому сцена на другом языке переписывается текстовой моделью
    в англоязычные теги (или описание), сохраняя все детали и градус сцены.
    Английский текст проходит без изменений. Результат кэшируется: одна и та же
-   сцена переводится один раз. При любой ошибке используется исходный текст. */
+   сцена переводится один раз. При обычной ошибке используется исходный текст;
+   переполнение контекста, тайм-аут запроса и отмена прерывают операцию. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -301,6 +302,9 @@
       remember(key, result);
       return result;
     } catch (e) {
+      // A request rejected before generation or canceled by its caller must
+      // not fall back to sending uncompiled source to the image backend.
+      if (e && (e.code === "CONTEXT_OVERFLOW" || e.code === "IMAGE_TRANSLATION_TIMEOUT" || e.name === "AbortError")) throw e;
       return failure((o.shotOnly ? "Ошибка Visual Frame: " : "Ошибка компиляции канонической одежды: ") + String(e && e.message || e).slice(0, 120));
     }
   }

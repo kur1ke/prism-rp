@@ -63,6 +63,8 @@ jobs:
         run: node tests/state-temporal-freshness.js
       - name: Check Messenger return gap chronology
         run: node tests/messenger-return-gap.js
+      - name: Check image translation preflight and timeout
+        run: node tests/image-translation-budget.js
       - name: Check OpenAI SSE completion
         run: node tests/openai-sse-done.js
       - name: Check Perchance cancellation lifecycle

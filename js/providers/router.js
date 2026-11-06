@@ -24,8 +24,9 @@
   async function simple(prov, instruction, options) {
     if (!prov) throw new Error("нет текстовой модели");
     const request = SIMPLE.prepare(prov, instruction, options);
-    if (prov.kind === "perchance") return PC.simple(request.instruction);
-    const r = await OA.chat(prov, request.messages, request.sampler, {});
+    const signal = options && options.signal;
+    if (prov.kind === "perchance") return PC.simple(request.instruction, { signal });
+    const r = await OA.chat(prov, request.messages, request.sampler, { signal });
     return OA.splitThink(r.text).text;
   }
 

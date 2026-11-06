@@ -100,8 +100,16 @@
     const bodyOnly = o.outputFormat === "message-body";
     const unprefixed = bodyOnly || o.outputFormat === "json";
     const p = prepareChat(names, messages, o);
+    return generate(ai, p, o, names, unprefixed, false);
+  }
+
+  // Shared cancellation lifecycle; simple requests keep their raw instruction
+  // and result format, without dialogue wrappers or a response seed.
+  function generate(ai, p, o, names, unprefixed, simple) {
     let started = false, text = "";
     function outputText(res) {
+      if (simple) return res && res.generatedText != null ? String(res.generatedText)
+        : res == null ? text : String(res || "");
       // In unprefixed modes, streaming already excludes the transport seed
       // (isFromStartWith). Prefer that exact body over generatedText, whose
       // inclusion of startWith varies across plugin versions.
@@ -141,9 +149,7 @@
         if (finished) return;
         handle = ai({
           instruction: () => blob ? [p.instruction, blob] : p.instruction,
-          startWith: () => p.startWith,
-          stopSequences: () => p.stop,
-          hideStartWith: true,
+          ...(simple ? {} : { startWith: () => p.startWith, stopSequences: () => p.stop, hideStartWith: true }),
           onChunk: (data) => {
             if (finished || (o.signal && o.signal.aborted)) return;
             if (data.isFromStartWith) return;
@@ -158,7 +164,7 @@
         if (finished) stopHandle();
         return Promise.resolve(handle).then((res) => {
           if (finished) return;
-          return { text: outputText(res).trim(), reasoning: "", finish: "stop" };
+          return { text: simple ? outputText(res) : outputText(res).trim(), reasoning: "", finish: "stop" };
         });
       }).then((result) => finish(resolve, result), (error) => finish(reject, error));
     });
@@ -179,11 +185,13 @@
   function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
   // Простой вызов без стриминга: служебные задачи (перевод промпта картинки).
-  async function simple(instruction) {
+  async function simple(instruction, options) {
+    const o = options || {};
+    if (o.signal && o.signal.aborted) throw abortError("");
     const ai = plugin();
     if (!ai) throw new Error("ai-text-plugin недоступен");
-    const res = await ai({ instruction: () => instruction });
-    return res && res.generatedText != null ? String(res.generatedText) : String(res || "");
+    const res = await generate(ai, { instruction }, o, {}, true, true);
+    return res.text;
   }
 
   PRP.perchance = { available, meta, chat, toPrompt, prepareChat, inputCost, simple };
