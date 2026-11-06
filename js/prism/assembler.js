@@ -66,6 +66,8 @@
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        stateToolEnabled, extraPost, noPostHistory,
+       wholeCardSystemPrompt — явный opt-in: основные поля/Core и действующий сценарий одним разделом указаний;
+         текст не JSON-кодируется, raw/source не читается; весь блок защищён от бюджетного сокращения,
        inputCost — необязательная чистая функция messages → стоимость конечной транспортной формы,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
        messenger — для режима messenger: { world, conversation, temporal, plans } (готовые данные среды переписки;
@@ -91,6 +93,7 @@
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
        → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
        → 10 персона, сценарий, указания автора → 11 история до последнего сообщения.
+     При wholeCardSystemPrompt действующий сценарий также защищён как часть цельного блока.
      Не режутся никогда: рамка, выбранные основные поля, включённое проверенное ядро и постоянные custom-поля целиком,
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -99,6 +102,9 @@
     const T = TEMPLATES[o.mode] || TEMPLATES.rp;
     const AD = MODES.adapter(o.mode);
     const card = o.card || {};
+    // Explicit user-selected experiment. Only the canonical, selected fields
+    // below gain instruction semantics; never read preserved/raw import text.
+    const wholeCard = o.wholeCardSystemPrompt === true;
     // Имена идут в заголовки разделов — только однострочные (перевод строки в имени не начнёт раздел).
     const vars = { char: DATA.oneLine(card.name) || "Персонаж", user: DATA.oneLine(o.userName) || "Пользователь" };
     const m = (x) => U.macros(x, vars);
@@ -211,6 +217,24 @@
     const loreBody = () => (st.lore.length ? LORE_NOTE + "\n" + st.lore.map((e) => "- " + DATA.lit(m(e.content))).join("\n") : "");
     const scenarioBody = () => DATA.block("Описанные обстоятельства задают начало взаимодействия. Установленные здесь факты сохраняют силу, пока дальнейшие события их не изменят. Они не предписывают персонажу реакции, решения или исход взаимодействия.", [DATA.field("начало", st.scenario)]);
 
+    function wholeCardBody() {
+      const c = st.core;
+      return [
+        ["Имя", vars.char],
+        ["Описание", c.primary.description],
+        ["Характер и манера речи", c.primary.personality],
+        ["Внешность", c.primary.appearance],
+        ["Кто это", core.source === "explicit" ? c.identity : ""],
+        ["Черты", c.traits.join("\n")],
+        ["Манера речи", c.voice.join("\n")],
+        ["Устойчивые сведения", c.durable.join("\n")],
+        ["Исходная ситуация", st.scenario],
+      ].filter(([, text]) => text).map(([label, text]) => label + ":\n" + text).join("\n\n");
+    }
+    const characterSection = () => wholeCard
+      ? section("Указания автора карточки (цельный промпт персонажа — эксперимент)", wholeCardBody())
+      : section(m(T.card), coreBody());
+
     function parts() {
       const older = history.slice(0, history.length - st.minH);
       const keptOlder = st.keepOld == null ? older : older.slice(older.length - st.keepOld);
@@ -219,7 +243,7 @@
         head: [
           frame,
           section(T.author, st.authorSys),
-          section(m(T.card), coreBody()),
+          characterSection(),
           section(m(T.reflection),
             st.reflection ? DATA.block("Приобретённый опыт может содержать сомнения и ошибочные интерпретации; модель свободна переосмысливать его, Core неизменен", [DATA.field("восприятие", st.reflection)]) : ""),
           section(m(T.cardContext), chunksBody()),
@@ -227,7 +251,7 @@
           section(m(T.persona), personaBody()),
           section(m(T.lore), loreBody()),
           section(m(T.world), worldBody(st.world, m)),
-          section(m(T.origin), scenarioBody()),
+          wholeCard ? "" : section(m(T.origin), scenarioBody()),
           scene,
           wearStateSection,
         ].concat(messengerParts()).filter(Boolean),
@@ -316,7 +340,7 @@
       function reflection() { if (!st.reflection) return false; st.reflection = ""; note("reflection", "субъективный опыт не поместился"); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
-      function scenario() { if (!st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
+      function scenario() { if (wholeCard || !st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
@@ -363,7 +387,8 @@
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(section(m(T.card), coreBody())), duplicates: core.duplicates, truncated: core.truncated },
+          promptFormat: wholeCard ? "whole-system" : "data",
+          core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(characterSection()), duplicates: core.duplicates, truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
           selected: keptChunkIds,
@@ -383,7 +408,7 @@
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
-          card: tokLayer(section(m(T.card), coreBody())) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + tokLayer(section(m(T.origin), scenarioBody())),
+          card: tokLayer(characterSection()) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + (wholeCard ? 0 : tokLayer(section(m(T.origin), scenarioBody()))),
           reflection: tokLayer(st.reflection ? DATA.block("Experience, субъективный", [DATA.field("восприятие", st.reflection)]) : ""),
           scene: tok(scene),
           messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),
