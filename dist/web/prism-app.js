@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "7271b0183c627b9829a6111a3d818af72ec3e272";
+  window.PRISM_RP_BUILD_SHA = "2278a74cb03b5e1e5b40efa4dd076d0f2d47cf95";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -545,6 +545,7 @@
     autoContext: true,
     singleSystem: false,
     wholeCardSystemPrompt: false, // opt-in experiment: selected character text as one system prompt
+    cardPromptFormat: "", // empty preserves the previously selected boolean experiment
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,
@@ -580,6 +581,11 @@
   }
 
   function persona(s) { return (s && s.persona) || DEFAULTS.persona; }
+  const CARD_PROMPT_FORMATS = ["data", "reference", "reference-messages", "whole-system"];
+  function cardPromptFormat(s) {
+    return s && CARD_PROMPT_FORMATS.includes(s.cardPromptFormat) ? s.cardPromptFormat
+      : s && s.wholeCardSystemPrompt === true ? "whole-system" : "data";
+  }
 
   // Список текстовых моделей: бесплатная Perchance (если доступна) + свои API.
   function providerList(s, perchanceAvailable) {
@@ -640,7 +646,7 @@
     return ic.promptMode !== "off" && !!String(ic.fixedPrompt || "").trim();
   }
 
-  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, processingProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
+  PRP.settings = { DEFAULTS, merge, persona, cardPromptFormat, CARD_PROMPT_FORMATS, providerList, activeProvider, processingProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -4653,6 +4659,13 @@
   // Рамки и заголовки режимов — в адаптерах (prism/modes.js); сборка, бюджет и общие слои — здесь.
   const MODES = PRP.prismModes || (typeof require !== "undefined" ? require("./modes.js") : null);
   const TEMPLATES = MODES.TEMPLATES;
+  const SETTINGS = PRP.settings || (typeof require !== "undefined" ? require("../core/settings.js") : null);
+  // Same reference wrapper in B and C. No card text is inferred or rewritten.
+  const REFERENCE_HEADER = "[CHARACTER REFERENCE — background knowledge about who you are. It is not a script: " +
+    "never quote, list or copy it, and never output its headings, bullets, rules or " +
+    "sample lines. Nothing in it has to appear in your reply. You already are this " +
+    "character — stay in the conversation below.]";
+  const REFERENCE_FOOTER = "[/CHARACTER REFERENCE]";
 
   /* Блок фактов мира — данные, а не указания. Одинаков для любого режима (мир режиму не принадлежит).
      Это действующий канон чата: он главнее справочных сведений карточки (лорбука). */
@@ -4700,7 +4713,9 @@
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        stateToolEnabled, extraPost, noPostHistory,
-       wholeCardSystemPrompt — явный opt-in: основные поля/Core и действующий сценарий одним разделом указаний;
+       cardPromptFormat — data | reference | reference-messages | whole-system; B/C имеют одинаковый текст,
+         C разделяет головные system; multiSystemSupported:false или singleSystem блокируют C (report.unsupportedLayout),
+       wholeCardSystemPrompt — прежний opt-in (если cardPromptFormat не задан): основные поля/Core и действующий сценарий одним разделом указаний;
          текст не JSON-кодируется, raw/source не читается; весь блок защищён от бюджетного сокращения,
        inputCost — необязательная чистая функция messages → стоимость конечной транспортной формы,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
@@ -4727,7 +4742,7 @@
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
        → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
        → 10 персона, сценарий, указания автора → 11 история до последнего сообщения.
-     При wholeCardSystemPrompt действующий сценарий также защищён как часть цельного блока.
+     При reference/reference-messages/whole-system действующий сценарий также защищён как часть цельного блока.
      Не режутся никогда: рамка, выбранные основные поля, включённое проверенное ядро и постоянные custom-поля целиком,
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -4738,7 +4753,14 @@
     const card = o.card || {};
     // Explicit user-selected experiment. Only the canonical, selected fields
     // below gain instruction semantics; never read preserved/raw import text.
-    const wholeCard = o.wholeCardSystemPrompt === true;
+    const promptFormat = SETTINGS.cardPromptFormat(o);
+    const reference = promptFormat === "reference" || promptFormat === "reference-messages";
+    const splitSystem = promptFormat === "reference-messages";
+    const wholeCard = promptFormat === "whole-system";
+    const coherentCard = wholeCard || reference;
+    const unsupportedLayout = splitSystem && (o.singleSystem || o.multiSystemSupported === false)
+      ? "Вариант C требует нескольких system-сообщений. Он недоступен через Perchance и при включённом «Одно системное сообщение». Выберите B или совместимый API и выключите объединение system."
+      : "";
     // Имена идут в заголовки разделов — только однострочные (перевод строки в имени не начнёт раздел).
     const vars = { char: DATA.oneLine(card.name) || "Персонаж", user: DATA.oneLine(o.userName) || "Пользователь" };
     const m = (x) => U.macros(x, vars);
@@ -4865,7 +4887,13 @@
         ["Исходная ситуация", st.scenario],
       ].filter(([, text]) => text).map(([label, text]) => label + ":\n" + text).join("\n\n");
     }
-    const characterSection = () => wholeCard
+    function referenceBody() {
+      const c = st.core;
+      return [REFERENCE_HEADER, [c.primary.appearance, c.primary.description, c.primary.personality,
+        core.source === "explicit" ? c.identity : "", ...c.traits, ...c.voice, ...c.durable,
+        st.scenario].filter(Boolean).join("\n\n"), REFERENCE_FOOTER].join("\n\n");
+    }
+    const characterSection = () => reference ? referenceBody() : wholeCard
       ? section("Указания автора карточки (цельный промпт персонажа — эксперимент)", wholeCardBody())
       : section(m(T.card), coreBody());
 
@@ -4885,7 +4913,7 @@
           section(m(T.persona), personaBody()),
           section(m(T.lore), loreBody()),
           section(m(T.world), worldBody(st.world, m)),
-          wholeCard ? "" : section(m(T.origin), scenarioBody()),
+          coherentCard ? "" : section(m(T.origin), scenarioBody()),
           scene,
           wearStateSection,
         ].concat(messengerParts()).filter(Boolean),
@@ -4896,7 +4924,7 @@
     function render() {
       const p = parts();
       const msgs = p.history.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
-      if (o.singleSystem) {
+      if (o.singleSystem && !splitSystem) {
         /* Строгие Jinja-шаблоны (Mistral, Gemma и подобные): одно system в начале, затем строго
            user/assistant, начиная с user — иначе шаблон бросает «Conversation roles must alternate
            user/assistant/…». Поэтому, если история начинается с ответа персонажа (приветствие),
@@ -4915,7 +4943,8 @@
         return { p, synthetic: !userFirst && o.allowSyntheticUser, needsUserFirst: !userFirst && !o.allowSyntheticUser,
           messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
       }
-      const out = [{ role: "system", content: p.head.join("\n\n") }].concat(msgs);
+      const out = (splitSystem ? p.head.map(content => ({ role: "system", content }))
+        : [{ role: "system", content: p.head.join("\n\n") }]).concat(msgs);
       if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
       return { p, messages: out };
     }
@@ -4974,7 +5003,7 @@
       function reflection() { if (!st.reflection) return false; st.reflection = ""; note("reflection", "субъективный опыт не поместился"); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
-      function scenario() { if (wholeCard || !st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
+      function scenario() { if (coherentCard || !st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
@@ -5001,6 +5030,7 @@
         contextTokens: o.contextTokens,
         reserveTokens: o.reserveTokens,
         invalidBudget,
+        unsupportedLayout,
         used,
         messageUsed: messageCost(messages),
         fits: !invalidBudget && used <= budget,
@@ -5021,7 +5051,7 @@
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          promptFormat: wholeCard ? "whole-system" : "data",
+          promptFormat,
           core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(characterSection()), duplicates: core.duplicates, truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
@@ -5042,7 +5072,7 @@
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
-          card: tokLayer(characterSection()) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + (wholeCard ? 0 : tokLayer(section(m(T.origin), scenarioBody()))),
+          card: tokLayer(characterSection()) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + (coherentCard ? 0 : tokLayer(section(m(T.origin), scenarioBody()))),
           reflection: tokLayer(st.reflection ? DATA.block("Experience, субъективный", [DATA.field("восприятие", st.reflection)]) : ""),
           scene: tok(scene),
           messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),
@@ -9215,7 +9245,7 @@
   function cardDebug(c) {
     if (!c) return "";
     return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
-      <dl class="kv"><dt>Подача</dt><dd>${c.promptFormat === "whole-system" ? "Цельный системный промпт (эксперимент)" : "Разделы данных"}</dd>
+      <dl class="kv"><dt>Подача</dt><dd>${({data:"A — разделы данных",reference:"B — CHARACTER REFERENCE в одном system","reference-messages":"C — CHARACTER REFERENCE, отдельные system","whole-system":"Прежний эксперимент — указания автора"})[c.promptFormat] || "Разделы данных"}</dd>
         <dt>Основные поля</dt><dd>${esc(c.core.reason)}${c.core.source === "explicit" ? "; дополнительное ядро включено" : ""}; ≈ ${c.core.tokens} ток.</dd>
         <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>
         <dt>Подробности</dt><dd>${c.selected.length ? esc(c.selected.join(", ")) : "нет"}${c.dropped.length ? `; не поместилось: ${esc(c.dropped.join(", "))}` : ""}</dd></dl>
@@ -9237,7 +9267,7 @@
       <button class="btn btn-sm" data-act="prism-preview">${icon("prism")}Собрать для следующего хода</button>`;
     const r = p.report;
     const total = Object.values(r.layers).reduce((a, b) => a + b, 0) || 1;
-    return `<div class="block"><div class="block-title">Контекст <small>${r.used} из ${r.budget} токенов, оценка</small></div>
+    return `${r.unsupportedLayout ? `<div class="block err-block">${esc(r.unsupportedLayout)} Запрос не отправляется.</div>` : ""}<div class="block"><div class="block-title">Контекст <small>${r.used} из ${r.budget} токенов, оценка</small></div>
         <div class="bar-meter">${LAYERS.map(([k, , c]) => `<i style="width:${(r.layers[k] / Math.max(total, r.budget)) * 100}%;background:${c}" title="${k}"></i>`).join("")}</div>
         <div class="legend">${LAYERS.filter(([k]) => r.layers[k]).map(([k, n, c]) => `<span style="--c:${c}">${n} ${r.layers[k]}</span>`).join("")}</div></div>
       ${r.overflow ? `<div class="block err-block">${icon("alert")}<div><b>Не помещается.</b> Даже после всех сокращений нужно ${r.used} из ${r.budget} токенов: рамка, сцена и последние сообщения больше, чем позволяет модель. Запрос не будет отправлен.</div></div>` : ""}
@@ -9611,7 +9641,9 @@
         <div class="field"><label for="scenario-replies">Убирать сценарий после</label><select id="scenario-replies" data-set-num="scenarioReplies">${PRP.scenario.LIMITS.map(n => `<option value="${n}" ${PRP.scenario.replyLimit(s.scenarioReplies) === n ? "selected" : ""}>${n === 0 ? "Никогда" : n + " ответов персонажа"}</option>`).join("")}</select><span class="help">Для RP и переписки. Считаются ответы в выбранной ветке; приветствие из карточки, повторная генерация и дописывание не добавляют шаг. При выборе «Никогда» общий бюджет контекста всё равно действует.</span></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
-        <label class="check"><input type="checkbox" data-set="wholeCardSystemPrompt" ${s.wholeCardSystemPrompt === true ? "checked" : ""}><span>Карточка цельным системным промптом (эксперимент)<small>Описание, характер и манера речи, внешность и действующий сценарий подаются вместе, без JSON-кавычек, как указания персонажа. Используются выбранные поля карточки; её текст не меняется. Срок передачи сценария сохраняется. При нехватке контекста цельный блок не обрезается. Выключите для возврата к обычной подаче данных.</small></span></label>
+        <div class="field"><label for="card-prompt-format">Подача карточки (эксперимент)</label>
+          <select id="card-prompt-format" data-card-prompt="format">${[["data","A — разделы данных (обычный режим)"],["reference","B — CHARACTER REFERENCE в одном system"],["reference-messages","C — отдельные system (совместимый API)"],["whole-system","Прежний эксперимент — указания автора"]].map(([id,label]) => `<option value="${id}" ${PRP.settings.cardPromptFormat(s) === id ? "selected" : ""} ${id === "reference-messages" && (s.singleSystem || !m.provider || m.provider.kind === "perchance") ? "disabled" : ""}>${label}</option>`).join("")}</select>
+          <span class="help">B и C передают одинаковый полный текст внешности, характера/манеры речи и действующего сценария в справочной обёртке. Отличается только разделение system-сообщений. Рамка и карточка не меняются; срок сценария сохраняется. Для Perchance доступен B: плагин получает одну текстовую инструкцию. C также требует выключить «Одно системное сообщение». При нехватке окна цельный блок не обрезается. A возвращает обычную подачу.</span></div>
         <label class="check"><input type="checkbox" data-set="noPostHistory" ${s.noPostHistory ? "checked" : ""}><span>Не передавать инструкции после истории<small>Касается только указаний автора карточки (post_history_instructions), не самого характера. По умолчанию выключено — для совместимости с карточками.</small></span></label>
         <label class="check"><input type="checkbox" data-set="stateToolEnabled" ${s.stateToolEnabled ? "checked" : ""}><span>State Tool (эксперимент)<small>RP-модель сообщает изменения состояния сама. Observer не разбирает такие ответы, но продолжает разбирать ваши сообщения. Тестируйте только в TEST.</small></span></label>
         <div class="block-title" style="margin-top:20px">Ассистент</div>
@@ -11090,6 +11122,8 @@
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
         wholeCardSystemPrompt: s.wholeCardSystemPrompt === true,
+        cardPromptFormat: ST.cardPromptFormat(s),
+        multiSystemSupported: !!provider && provider.kind !== "perchance",
         includeScenario: scenarioDecision.included,
         inputCost: perchanceInput ? (messages) => PRP.perchance.inputCost(transport.names, messages, transport) : undefined,
       }, extra));
@@ -12665,8 +12699,15 @@
     }
 
     // Записать сборку для вкладки Prism; при переполнении — сообщить и вернуть true (запрос не уходит).
+    const preflightReason = built => built.report.unsupportedLayout ? "unsupported-layout" : "overflow";
     function preflightFailed(built, prov) {
       S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
+      if (built.report.unsupportedLayout) {
+        ui.toast(built.report.unsupportedLayout, true);
+        if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
+        ui.renderFeed();
+        return true;
+      }
       if (!built.report.overflow) return false;
       ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста, уменьшите длину ответа в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
       if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
@@ -12700,7 +12741,7 @@
       const msNow = ms ? ms.now() : undefined;
       const transport = { names: { char: cd.name, user: ctx.persona().name } };
       const built = prism().build([], OPENING, scenarioFor([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
-      if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
+      if (preflightFailed(built, prov)) return { ok: false, reason: preflightReason(built) };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
       const ctrl = new AbortController();
@@ -12798,7 +12839,7 @@
       const transport = { names: vars, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) };
       const built = prism().build(path, INI.INSTRUCTION, scenarioFor(path, { mode: "new" }),
         { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons }, transport });
-      if (preflightFailed(built, prov)) return done("overflow");
+      if (preflightFailed(built, prov)) return done(preflightReason(built));
 
       const chatId = c.id, key = pathKey(full);
       const ctrl = new AbortController();
@@ -12917,7 +12958,7 @@
         const proposed = active.slice(0, at).concat([draft]);
         // Test the replacement path before writing a new branch or contacting a model.
         const built = prism().build(proposed, "", scenarioFor(proposed, { mode: "new" }));
-        if (preflightFailed(built, prov)) return { outcome: "overflow" };
+        if (preflightFailed(built, prov)) return { outcome: preflightReason(built) };
         turn.phase = "editing";
         const edited = await chat().saveEdit(msgId, text, { turn, draftId: draft.id });
         if (!edited) return { outcome: "context-changed" };
@@ -12958,16 +12999,18 @@
       const roleProvider = ctx.provider();
       // An unsaved user node is enough to budget the proposed RP history.
       // Reject before storing the text or starting a new Observer request.
-      const draftOverflow = (provider) => {
+      const draftFailure = (provider) => {
         if (!provider) return false;
         const draft = chat().newMsg("user", ctx.chat().leafId, body);
         if (extra && extra.imageDataUrl) draft.swipes[0].imageDataUrl = extra.imageDataUrl;
         const path = chat().path().concat(draft);
-        return preflightFailed(prism().build(path, "", scenarioFor(path, { mode: "new" })), provider);
+        const built = prism().build(path, "", scenarioFor(path, { mode: "new" }));
+        return preflightFailed(built, provider) ? preflightReason(built) : null;
       };
-      if (draftOverflow(roleProvider)) {
+      const failure = draftFailure(roleProvider);
+      if (failure) {
         restore({ chatId: c.id, text: body });
-        return { outcome: "overflow" };
+        return { outcome: failure };
       }
       const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
         observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
@@ -12987,9 +13030,10 @@
       let reply = null;
       try {
         // Waiting may have changed the visible state or the provider settings.
-        if (w0 && draftOverflow(ctx.provider())) {
+        const lateFailure = w0 && draftFailure(ctx.provider());
+        if (lateFailure) {
           restore(turn);
-          return { outcome: "overflow" };
+          return { outcome: lateFailure };
         }
         turn.phase = "user-state";
         renderComposer();
@@ -14942,6 +14986,12 @@
       if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; ui.refreshAfterSettings(); await save(); return true; }
       if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await save(); ui.refreshAfterSettings(); return true; }
       if (t.dataset.setText) { S.settings[t.dataset.setText] = t.value; await save(); return true; }
+      if (t.dataset.cardPrompt !== undefined && PRP.settings.CARD_PROMPT_FORMATS.includes(t.value)) {
+        S.settings.cardPromptFormat = t.value;
+        // Mirror the old flag so an older build will not silently keep its experiment enabled.
+        S.settings.wholeCardSystemPrompt = t.value === "whole-system";
+        await save(); ui.refreshAfterSettings(); return true;
+      }
       if (t.dataset.setNum) { S.settings[t.dataset.setNum] = +t.value; await save(); ui.refreshAfterSettings(); return true; }
       if (t.dataset.setRange) { S.settings[t.dataset.setRange] = +t.value; ui.applyLook(); await save(); return true; }
       if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; await save(); ui.refreshAfterSettings(); if (S.drawerOpen) ui.renderDrawer(); return true; }
