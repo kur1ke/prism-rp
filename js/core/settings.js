@@ -15,6 +15,7 @@
     scenarioReplies: 5, // 0 = never cut off by reply count
     autoContext: true,
     singleSystem: false,
+    wholeCardSystemPrompt: false, // opt-in experiment: selected character text as one system prompt
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,

@@ -143,7 +143,8 @@
   function cardDebug(c) {
     if (!c) return "";
     return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
-      <dl class="kv"><dt>Основные поля</dt><dd>${esc(c.core.reason)}${c.core.source === "explicit" ? "; дополнительное ядро включено" : ""}; ≈ ${c.core.tokens} ток.</dd>
+      <dl class="kv"><dt>Подача</dt><dd>${c.promptFormat === "whole-system" ? "Цельный системный промпт (эксперимент)" : "Разделы данных"}</dd>
+        <dt>Основные поля</dt><dd>${esc(c.core.reason)}${c.core.source === "explicit" ? "; дополнительное ядро включено" : ""}; ≈ ${c.core.tokens} ток.</dd>
         <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>
         <dt>Подробности</dt><dd>${c.selected.length ? esc(c.selected.join(", ")) : "нет"}${c.dropped.length ? `; не поместилось: ${esc(c.dropped.join(", "))}` : ""}</dd></dl>
       ${c.candidates.length ? `<table><thead><tr><th>Кусок</th><th>почему</th><th>итог</th></tr></thead><tbody>
