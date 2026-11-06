@@ -31,9 +31,12 @@
   function descendants(list, id) {
     const out = [];
     const stack = [id];
+    const seen = new Set([id]);
     while (stack.length) {
       const cur = stack.pop();
-      for (const m of list) if (m.parentId === cur) { out.push(m.id); stack.push(m.id); }
+      for (const m of list) if (m.parentId === cur && !seen.has(m.id)) {
+        seen.add(m.id); out.push(m.id); stack.push(m.id);
+      }
     }
     return out;
   }
@@ -41,7 +44,10 @@
   // Самый свежий лист под узлом — куда переходить после переключения ветки.
   function latestLeaf(list, id) {
     let cur = id;
+    const seen = new Set();
     for (;;) {
+      if (seen.has(cur)) return null; // A corrupt cycle has no leaf.
+      seen.add(cur);
       const kids = children(list, cur);
       if (!kids.length) return cur;
       cur = kids[kids.length - 1].id;

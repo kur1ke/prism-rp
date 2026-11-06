@@ -124,7 +124,13 @@
         const chkChats = svc.chat.checkBackupChats(data, { replace, existingChats });
         // Ссылочная целостность: чат → персонаж, сообщения и картинки → чат, опыт → персонаж и чат, линза → персонаж и пак, повторы id.
         const existing = replace ? {} : { cards: (await DB.all("cards")).map((c) => c.id), chats: local.map((c) => c.id), packs: (await DB.all("worldPacks")).map((p) => p.id), lenses: (await DB.all("worldLenses")).map((l) => ({ id: l.id, cardId: l.cardId })) };
+        if (!replace) existing.messages = await DB.all("messages");
         const chkRefs = PRP.backup.check(chkChats.data, { replace, existing });
+        if (chkRefs.fatal) {
+          t.value = "";
+          ui.toast("Бэкап не загружен: в связях сообщений обнаружен цикл. Данные не изменены.", true);
+          return true;
+        }
         const chk = svc.worldChat.checkBackup(chkRefs.data, { replace, existingChatIds: local.map((c) => c.id) });
         // Среда переписки — то же: только к переписке из бэкапа (замена) или из бэкапа и уже существующих (добавление).
         const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats });

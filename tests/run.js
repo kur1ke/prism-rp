@@ -13,6 +13,7 @@ require(J("world/overlay.js"));
 require(J("world/canon.js"));
 require(J("world/retrieve.js"));
 require(J("core/backup.js"));
+require("./backup-tree.js");
 require(J("prism/data.js"));
 require(J("prism/scenario.js"));
 require(J("messenger/time.js"));

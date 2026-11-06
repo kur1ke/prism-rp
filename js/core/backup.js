@@ -13,8 +13,9 @@
    (world/overlay-service.checkBackup, messenger/service.checkBackup); режимы чатов — chat/service.checkBackupChats.
    Без DOM, хранилища, сети и S.
 
-   data — объект бэкапа; opts: { replace, existing: { cards: [id], chats: [id], packs: [id], lenses: [{ id, cardId }] } }
-   → { data (отфильтрованная копия), rejected: { store: число }, issues: [{ level, code, message, store, id }] } */
+   Цикл сообщений отменяет всё восстановление (fatal), а не удаляет часть истории.
+   data — объект бэкапа; opts: { replace, existing: { cards: [id], chats: [id], packs: [id], lenses: [{ id, cardId }], messages: [record] } }
+   → { data (отфильтрованная копия), rejected: { store: число }, issues: [{ level, code, message, store, id }], fatal } */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -117,7 +118,28 @@
       if (r.chatId != null && r.chatId !== "" && !chats.has(sid(r.chatId))) { reject("experience", r.id, "experience-orphan-chat", "Запись опыта относится к чату, которого нет."); return false; }
       return true;
     });
-    return { data: out, rejected, issues };
+    // Validate the resulting graph, including unchanged local edges during an
+    // additive restore. Do not guess a root or partially restore a cyclic chat.
+    const nodes = new Map((replace ? [] : (ex.messages || [])).map((m) => [sid(m.id), m]));
+    for (const m of Array.isArray(out.messages) ? out.messages : []) nodes.set(sid(m.id), m);
+    const done = new Set();
+    let fatal = false;
+    for (const start of nodes.keys()) {
+      const route = new Set();
+      let id = start;
+      while (nodes.has(id) && !done.has(id)) {
+        if (route.has(id)) {
+          fatal = true;
+          issues.push({ level: "error", code: "message-cycle", store: "messages", id,
+            message: "В связях сообщений обнаружен цикл. Восстановление отменено; данные не изменены." });
+          break;
+        }
+        route.add(id);
+        id = sid(nodes.get(id).parentId);
+      }
+      for (const visited of route) done.add(visited);
+    }
+    return { data: out, rejected, issues, fatal };
   }
 
   const total = (rejected) => Object.values(rejected || {}).reduce((a, b) => a + b, 0);

@@ -97,9 +97,27 @@ try:
             with page.expect_download() as info:page.click('[data-act=backup]')
             path=out/f'backup-{width}.json';info.value.save_as(path)
             data=json.loads(path.read_text());assert data['app']=='prism-rp' and data['version']==8 and len(data['messages'])==3
+            # A07: real file-input restore must reject cycles before any writes.
+            dialog_mode={'replace':True}
+            page.on('dialog',lambda dialog:dialog.accept() if dialog_mode['replace'] else dialog.dismiss())
+            before=page.evaluate('PRP.store.exportAll()')
+            before.pop('exportedAt')
+            for kind in ['self','pair','additive']:
+                bad=json.loads(json.dumps(data))
+                user=next(m for m in bad['messages'] if m['id']=='old-user')
+                user['parentId']='old-user' if kind=='self' else 'old-reply'
+                if kind=='additive':bad['messages']=[user]
+                dialog_mode['replace']=kind!='additive'
+                badpath=out/f'cycle-{kind}-{width}.json'
+                badpath.write_text(json.dumps(bad))
+                page.locator('#file-backup').set_input_files(str(badpath))
+                page.wait_for_function('document.body.innerText.includes("в связях сообщений обнаружен цикл")')
+                after=page.evaluate('PRP.store.exportAll()');after.pop('exportedAt')
+                assert after==before,(kind,'failed restore changed data')
+                assert page.evaluate('!!PRP.app.S.modal && document.querySelector("#file-backup").value===""')
+            dialog_mode['replace']=True
             # Restore the downloaded file using the application's normal file input.
             page.evaluate('PRP.store.importAll({app:"prism-rp",version:8},true)')
-            page.on('dialog',lambda dialog:dialog.accept())
             page.locator('#file-backup').set_input_files(str(path))
             page.wait_for_function('!PRP.app.S.modal && PRP.app.S.cards.some(c=>c.id==="old-card")')
             restored=page.evaluate('''async()=>{
@@ -114,7 +132,7 @@ try:
             page.reload();page.wait_for_selector('.chat-head')
             assert page.evaluate('PRP.tree.activeSwipe(PRP.app.ctx.svc.chat.path().at(-1)).text')=='ALT'
             assert errors==[],errors
-            checks+=['UI failure/no download: PASS','UI download/restore: PASS','branches/swipes/reload: PASS']
+            checks+=['UI failure/no download: PASS','cyclic replace/additive refused without writes: PASS','UI download/restore: PASS','branches/swipes/reload: PASS']
             results.append({'width':width,'checks':checks,'runtimeErrors':errors})
             context.close()
         browser.close()
