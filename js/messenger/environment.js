@@ -120,8 +120,8 @@
     return out;
   }
 
-  /* Видимость и порядок событий с привязкой. Порядок: «на весь чат» (effectiveAt → createdAt → id) — базовый слой;
-     затем события видимой ветки в порядке повествования (глубина привязки → effectiveAt → createdAt → id).
+  /* Видимость и порядок событий с привязкой. Порядок: «на весь чат» (effectiveAt → createdAt → индекс записи) — базовый слой;
+     затем события видимой ветки в порядке повествования (глубина привязки → effectiveAt → createdAt → индекс записи).
      → { active: [{ e, row }], rows, warnings } */
   function order(list, path, nowMs, validate) {
     const rows = [], warnings = [], chat = [], branch = [];
@@ -143,7 +143,9 @@
       row.active = true; row.depth = BR.depthOf(e.provenance, path);
       branch.push({ e, row, at });
     });
-    const byTime = (a, b) => ((a.at == null ? -Infinity : a.at) - (b.at == null ? -Infinity : b.at)) || ((a.e.createdAt || 0) - (b.e.createdAt || 0)) || String(a.e.id).localeCompare(String(b.e.id));
+    // events is append-only. Two edits in one millisecond must retain their
+    // saved creation order; random IDs cannot decide which edit wins.
+    const byTime = (a, b) => ((a.at == null ? -Infinity : a.at) - (b.at == null ? -Infinity : b.at)) || ((a.e.createdAt || 0) - (b.e.createdAt || 0)) || (a.row.index - b.row.index);
     chat.sort(byTime);
     branch.sort((a, b) => (a.row.depth - b.row.depth) || byTime(a, b));
     return { active: chat.concat(branch), rows, warnings };

@@ -48,8 +48,21 @@ try:
    assert page.evaluate('PRP.app.ctx.svc.messenger.context().world.location')=='парке'
    page.reload();page.wait_for_selector('.chat-head')
    assert page.evaluate('PRP.app.ctx.svc.messenger.context().world.location')=='парке'
+   page.evaluate('''async()=>{
+    const ctx=PRP.app.ctx,t=Date.parse('2026-11-06T10:00:03Z');
+    await ctx.svc.messenger.setTime({timeMode:'manual',manualNow:new Date(t).toISOString()});
+    await ctx.svc.messenger.commitEvent({id:'z-first-set',scope:'chat',createdAt:t,patch:{visualWear:['пальто']}});
+    window.__beforeClear=ctx.svc.messenger.snapshot(ctx.svc.chat.path());
+    await ctx.svc.messenger.commitEvent({id:'a-later-clear',scope:'chat',createdAt:t,patch:{visualWear:null}});
+   }''')
+   assert page.evaluate('PRP.app.ctx.svc.messenger.context().world.visualWear')==[]
+   assert page.evaluate('''()=>{const ctx=PRP.app.ctx;
+    return ctx.svc.state.context(ctx.svc.chat.path(),{legacyWorld:__beforeClear.world,manualEvents:__beforeClear.manualEvents}).character.visualWear;}''')==['пальто']
+   assert page.evaluate('async()=>(await PRP.store.get("messengerEnvironments","chat")).events.slice(-2).map(e=>e.id)')==['z-first-set','a-later-clear']
+   page.reload();page.wait_for_selector('.chat-head')
+   assert page.evaluate('PRP.app.ctx.svc.messenger.context().world.visualWear')==[]
    assert errors==[],errors
-   results.append({'width':width,'manualUI':'PASS','prompt':'PASS','laterReport':'PASS','reload':'PASS','runtimeErrors':errors})
+   results.append({'width':width,'manualUI':'PASS','prompt':'PASS','laterReport':'PASS','reload':'PASS','equalTimestamps':'PASS','historicalSnapshot':'PASS','runtimeErrors':errors})
    context.close()
   browser.close()
  (out/'results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2));print(json.dumps(results,ensure_ascii=False))

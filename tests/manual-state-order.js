@@ -8,6 +8,47 @@ module.exports=async({make,test})=>{
    swipes:[{text:'Я в '+value+'.',createdAt:at,messengerAt:{at:new Date(at).toISOString()},stateEvents:[report(value)]}]};
   await h.chat.commitMessage(m,id);return m;
  };
+ await test('A08 ties: saved creation order wins over random ids in chat and branch events',async()=>{
+  const E=P.messengerEnv,path=[{id:'root',swipeIdx:0},{id:'left',swipeIdx:0}],anchor=P.branch.anchorOf(path);
+  for(const scope of ['chat','branch'])for(const ids of [['z-first','a-second'],['a-first','z-second']]){
+   const events=[
+    E.makeEvent({id:ids[0],scope,anchor,patch:{visualWear:['пальто'],location:'дом'},effectiveAt:new Date(t0).toISOString(),createdAt:t0+1}),
+    E.makeEvent({id:ids[1],scope,anchor,patch:{visualWear:null,location:null},effectiveAt:new Date(t0).toISOString(),createdAt:t0+1})
+   ];
+   const record={events},before=JSON.stringify(record);
+   for(const source of [record,E.normalize(record,'c1'),JSON.parse(JSON.stringify(record))]){
+    const resolved=E.resolveWorld(source,{path,now:t0});
+    assert.deepEqual(resolved.manualEvents.map(e=>e.id),ids);
+    assert.deepEqual(resolved.world.visualWear,[]);assert.equal(resolved.world.location,null);
+    const state=P.stateTracker.fold({mode:'messenger',charName:'Аля',path:[],manualEvents:resolved.manualEvents});
+    assert.deepEqual(state.actors.char.wearState.worn,[]);assert.equal(state.actors.char.wearState.known,false);
+   }
+   assert.equal(JSON.stringify(record),before);
+  }
+ });
+ await test('A08 ties: effective time, creation time and branch visibility still take priority',async()=>{
+  const E=P.messengerEnv,path=[{id:'root',swipeIdx:0},{id:'left',swipeIdx:0}],anchor=P.branch.anchorOf(path);
+  const event=(id,value,at,createdAt,scope='chat')=>E.makeEvent({id,scope,anchor,patch:{location:value},effectiveAt:new Date(at).toISOString(),createdAt});
+  const events=[event('earlier-array','LATER_TIME',t0+2,t0),event('later-array','EARLIER_TIME',t0,t0+9)];
+  assert.equal(E.resolveWorld({events},{path,now:t0+10}).world.location,'LATER_TIME');
+  assert.equal(E.resolveWorld({events},{path,now:t0}).world.location,'EARLIER_TIME');
+  assert.equal(E.resolveWorld({events:[event('x','NEWER_CREATION',t0,t0+2),event('y','OLDER_CREATION',t0,t0+1)]},{path,now:t0}).world.location,'NEWER_CREATION');
+  const branch=[event('z','FIRST_BRANCH',t0,t0,'branch'),event('a','LAST_BRANCH',t0,t0,'branch')];
+  assert.equal(E.resolveWorld({events:branch},{path,now:t0}).world.location,'LAST_BRANCH');
+  assert.equal(E.resolveWorld({events:branch},{path:[path[0],{id:'right',swipeIdx:0}],now:t0}).world.location,null);
+ });
+ await test('A08 ties: service clear survives reload when both timestamps coincide',async()=>{
+  const h=make({name:'Аля'});await h.chat.createChat('messenger','c1');h.ctx.svc.state=P.stateService.create(h.ctx);
+  await h.ctx.svc.messenger.setTime({timeMode:'manual',manualNow:new Date(t0).toISOString()});
+  for(const draft of [{id:'z-set',patch:{visualWear:['пальто']}},{id:'a-clear',patch:{visualWear:null}}]){
+   const r=await h.ctx.svc.messenger.commitEvent({...draft,scope:'chat',createdAt:t0+1});assert.ok(r.event);
+  }
+  assert.deepEqual(h.ctx.svc.messenger.context().world.visualWear,[]);
+  const stored=JSON.stringify(h.store.messengerEnvironments.get(h.S.chatId));
+  await h.ctx.svc.messenger.load(h.S.chatId);
+  assert.deepEqual(h.ctx.svc.messenger.context().world.visualWear,[]);
+  assert.equal(JSON.stringify(h.store.messengerEnvironments.get(h.S.chatId)),stored);
+ });
  await test('A08: global manual correction supersedes old report, later report supersedes correction',async()=>{
   const h=make({name:'Аля'});await h.chat.createChat('messenger','c1');h.ctx.svc.state=P.stateService.create(h.ctx);
   await h.ctx.svc.messenger.setTime({timeMode:'manual',manualNow:new Date(t0+1000).toISOString()});
