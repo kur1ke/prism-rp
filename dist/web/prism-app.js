@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "d8117934555d2f624f0d3c3b70f35cf6d1a7ccf5";
+  window.PRISM_RP_BUILD_SHA = "6d5f0b18d979dd4a37f1e54a343ab9e02f0c480e";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -7845,9 +7845,10 @@
 
   /* ── SSE ────────────────────────────────────────────────────────────── */
   function createSSEParser(onData) {
-    let buf = "";
+    let buf = "", ended = false;
     return {
       push(chunk) {
+        if (ended) return;
         buf += chunk;
         let nl;
         while ((nl = buf.search(/\r?\n/)) >= 0) {
@@ -7856,7 +7857,7 @@
           if (!line.startsWith("data:")) continue;
           const payload = line.slice(5).trim();
           if (!payload) continue;
-          if (payload === "[DONE]") { onData(null, true); continue; }
+          if (payload === "[DONE]") { ended = true; buf = ""; onData(null, true); return; }
           try { onData(JSON.parse(payload), false); } catch (e) { /* неполная строка или мусор — пропускаем */ }
         }
       },
@@ -7976,8 +7977,10 @@
       }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
+      let completed = false;
       const parser = createSSEParser((json, done) => {
-        if (done || !json) return;
+        if (done) { completed = true; return; }
+        if (!json) return;
         const d = deltaOf(json);
         if (d.text || d.reasoning) {
           received = true;
@@ -7986,13 +7989,24 @@
         }
         if (d.finish) out.finish = d.finish;
       });
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        parser.push(dec.decode(value, { stream: true }));
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          parser.push(dec.decode(value, { stream: true }));
+          if (completed) break;
+        }
+        parser.flush();
+        if (signal && signal.aborted) throw new DOMException("Aborted", "AbortError");
+        return out;
+      } finally {
+        if (completed) {
+          // DONE is final even if the server keeps the connection open.
+          // Cleanup must not delay or reject an already completed response.
+          try { reader.cancel().catch(() => {}); } catch (_) {}
+        }
+        reader.releaseLock();
       }
-      parser.flush();
-      return out;
     }
   }
 
