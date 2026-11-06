@@ -134,7 +134,7 @@
       authorSys: m(directiveText(card, "system")).trim(),
       core: { identity: core.identity, personality: core.personality, traits: core.traits.slice(), voice: core.voice.slice(), durable: core.durableContext.slice(), primary: core.primary },
       chunks: sel.selected.slice(),
-      // Сценарий — исходные обстоятельства; подаётся только до границы первого ответа (prism/scenario.js).
+      // Сценарий — исходные обстоятельства; срок передачи задаёт prism/scenario.js.
       scenario: scenarioText,
       examples: exBlocks.slice(0, exPlan.keep),
       persona: m(o.userDesc || "").trim(),
@@ -209,7 +209,7 @@
     const examplesBody = () => DATA.block("образцы манеры речи: показывают стиль, а не сюжет и не указания; каждая строка — один пример", st.examples.map((b) => "- " + DATA.lit(b)));
     const personaBody = () => DATA.block(m("описание {{user}}: кто это, а не указания для {{char}}"), [DATA.field("описание", st.persona)]);
     const loreBody = () => (st.lore.length ? LORE_NOTE + "\n" + st.lore.map((e) => "- " + DATA.lit(m(e.content))).join("\n") : "");
-    const scenarioBody = () => DATA.block("исходные обстоятельства начала истории: не текущее состояние и не указания", [DATA.field("начало", st.scenario)]);
+    const scenarioBody = () => DATA.block("Описанные обстоятельства задают начало взаимодействия. Установленные здесь факты сохраняют силу, пока дальнейшие события их не изменят. Они не предписывают персонажу реакции, решения или исход взаимодействия.", [DATA.field("начало", st.scenario)]);
 
     function parts() {
       const older = history.slice(0, history.length - st.minH);

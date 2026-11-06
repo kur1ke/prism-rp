@@ -1501,7 +1501,7 @@ t("FB: сценарий — отдельный раздел «начало ис�
   const head = on.messages[0].content;
   const cardSec = head.slice(head.indexOf("### Характер")).split("\n### ")[0];
   assert.ok(!cardSec.includes("SCEN-LIB"), "не внутри склонностей");
-  assert.ok(head.includes("### С чего начинается история") && head.includes("SCEN-LIB"));
+  assert.ok(head.includes("### Исходная ситуация") && head.includes("SCEN-LIB"));
   assert.ok(head.indexOf("SCEN-LIB") < head.indexOf("### Сейчас"), "перед сценой");
   assert.strictEqual(on.report.scenarioIncluded, true); assert.strictEqual(on.report.scenarioState, "included");
   const off = A.build({ card: cd, history: [{ role: "user", text: "hi" }], includeScenario: false });
