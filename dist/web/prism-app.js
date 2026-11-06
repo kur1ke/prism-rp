@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "6d5f0b18d979dd4a37f1e54a343ab9e02f0c480e";
+  window.PRISM_RP_BUILD_SHA = "c96c3568a4c913716618535f81d1ddeda3bd8425";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -7470,7 +7470,8 @@
    теряются. Поэтому сцена на другом языке переписывается текстовой моделью
    в англоязычные теги (или описание), сохраняя все детали и градус сцены.
    Английский текст проходит без изменений. Результат кэшируется: одна и та же
-   сцена переводится один раз. При любой ошибке используется исходный текст. */
+   сцена переводится один раз. При обычной ошибке используется исходный текст;
+   переполнение контекста, тайм-аут запроса и отмена прерывают операцию. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -7768,6 +7769,9 @@
       remember(key, result);
       return result;
     } catch (e) {
+      // A request rejected before generation or canceled by its caller must
+      // not fall back to sending uncompiled source to the image backend.
+      if (e && (e.code === "CONTEXT_OVERFLOW" || e.code === "IMAGE_TRANSLATION_TIMEOUT" || e.name === "AbortError")) throw e;
       return failure((o.shotOnly ? "Ошибка Visual Frame: " : "Ошибка компиляции канонической одежды: ") + String(e && e.message || e).slice(0, 120));
     }
   }
@@ -8125,8 +8129,16 @@
     const bodyOnly = o.outputFormat === "message-body";
     const unprefixed = bodyOnly || o.outputFormat === "json";
     const p = prepareChat(names, messages, o);
+    return generate(ai, p, o, names, unprefixed, false);
+  }
+
+  // Shared cancellation lifecycle; simple requests keep their raw instruction
+  // and result format, without dialogue wrappers or a response seed.
+  function generate(ai, p, o, names, unprefixed, simple) {
     let started = false, text = "";
     function outputText(res) {
+      if (simple) return res && res.generatedText != null ? String(res.generatedText)
+        : res == null ? text : String(res || "");
       // In unprefixed modes, streaming already excludes the transport seed
       // (isFromStartWith). Prefer that exact body over generatedText, whose
       // inclusion of startWith varies across plugin versions.
@@ -8166,9 +8178,7 @@
         if (finished) return;
         handle = ai({
           instruction: () => blob ? [p.instruction, blob] : p.instruction,
-          startWith: () => p.startWith,
-          stopSequences: () => p.stop,
-          hideStartWith: true,
+          ...(simple ? {} : { startWith: () => p.startWith, stopSequences: () => p.stop, hideStartWith: true }),
           onChunk: (data) => {
             if (finished || (o.signal && o.signal.aborted)) return;
             if (data.isFromStartWith) return;
@@ -8183,7 +8193,7 @@
         if (finished) stopHandle();
         return Promise.resolve(handle).then((res) => {
           if (finished) return;
-          return { text: outputText(res).trim(), reasoning: "", finish: "stop" };
+          return { text: simple ? outputText(res) : outputText(res).trim(), reasoning: "", finish: "stop" };
         });
       }).then((result) => finish(resolve, result), (error) => finish(reject, error));
     });
@@ -8204,11 +8214,13 @@
   function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
   // Простой вызов без стриминга: служебные задачи (перевод промпта картинки).
-  async function simple(instruction) {
+  async function simple(instruction, options) {
+    const o = options || {};
+    if (o.signal && o.signal.aborted) throw abortError("");
     const ai = plugin();
     if (!ai) throw new Error("ai-text-plugin недоступен");
-    const res = await ai({ instruction: () => instruction });
-    return res && res.generatedText != null ? String(res.generatedText) : String(res || "");
+    const res = await generate(ai, { instruction }, o, {}, true, true);
+    return res.text;
   }
 
   PRP.perchance = { available, meta, chat, toPrompt, prepareChat, inputCost, simple };
@@ -8242,8 +8254,9 @@
   async function simple(prov, instruction, options) {
     if (!prov) throw new Error("нет текстовой модели");
     const request = SIMPLE.prepare(prov, instruction, options);
-    if (prov.kind === "perchance") return PC.simple(request.instruction);
-    const r = await OA.chat(prov, request.messages, request.sampler, {});
+    const signal = options && options.signal;
+    if (prov.kind === "perchance") return PC.simple(request.instruction, { signal });
+    const r = await OA.chat(prov, request.messages, request.sampler, { signal });
     return OA.splitThink(r.text).text;
   }
 
@@ -11016,6 +11029,7 @@
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
   const U = PRP.util, TR = PRP.tree, IC = PRP.imgCompose, ICP = PRP.imgCompile, IB = PRP.imgBackends, ST = PRP.settings, LLM = PRP.llm, VP = PRP.visualPlan;
+  const SIMPLE = PRP.simpleRequest || (typeof require !== "undefined" ? require("../providers/simple-request.js") : null);
 
     // В мессенджере цель отправленного изображения определяется не только последним
     // ответом персонажа: он может отвечать на вопрос несколькими репликами.
@@ -11098,7 +11112,35 @@
         { chatId: origin.chatId, msgId: origin.messageId, outcome });
     };
 
-    function textGen(instruction) { return LLM.simple(ctx.processingProvider ? ctx.processingProvider() : ctx.provider(), instruction); }
+    async function textGen(instruction, provider) {
+      const model = arguments.length > 1 ? provider : ctx.processingProvider ? ctx.processingProvider() : ctx.provider();
+      if (!model) throw new Error("нет текстовой модели");
+      const options = { maxTokens: 400 };
+      const windowTokens = typeof ctx.contextTokens === "function" ? ctx.contextTokens(model) : S.settings.contextTokens;
+      const budget = SIMPLE.budget(model, instruction, options, windowTokens);
+      if (budget.overflow) {
+        const error = new Error(budget.invalidContext
+          ? "Некорректный размер окна модели обработки: " + budget.contextTokens
+          : "Перевод изображения не помещается в окно модели обработки: " +
+            budget.inputTokens + " + " + budget.reserveTokens + " > " + budget.contextTokens);
+        error.code = "CONTEXT_OVERFLOW"; error.budget = budget;
+        throw error;
+      }
+      const configured = Number(ctx.imageTranslateTimeoutMs);
+      const timeoutMs = Number.isFinite(configured) && configured > 0 ? configured : 40000;
+      const controller = new AbortController();
+      let timer;
+      try {
+        return await Promise.race([
+          LLM.simple(model, instruction, { ...options, signal: controller.signal }),
+          new Promise((_, reject) => { timer = setTimeout(() => {
+            const error = new Error("Превышено время ожидания перевода изображения: " + timeoutMs + " мс");
+            error.code = "IMAGE_TRANSLATION_TIMEOUT";
+            reject(error); controller.abort();
+          }, timeoutMs); })
+        ]);
+      } finally { clearTimeout(timer); }
+    }
 
     // Подсказка переводчику: кто это и какие теги уже добавятся сами.
     function identityFor(cd) {
@@ -11137,7 +11179,7 @@
       const generateText = async (instruction) => {
         const started = clock();
         let outcome = "ok";
-        try { return await LLM.simple(provider, instruction); }
+        try { return await textGen(instruction, provider); }
         catch (e) { outcome = "error"; throw e; }
         finally { perf("imageTranslateMs", started, origin, outcome); }
       };
