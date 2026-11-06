@@ -429,7 +429,7 @@ t("порядок слоёв в итоговом контексте", () => {
   assert.strictEqual(r.messages[1].content, "hi");
 });
 
-t("RP frame simplification: граница {{user}}, сцена + характер + опыт, разделы раздельно, без повторов философии", () => {
+t("RP frame: общая рамка характера и речи, граница собеседника, раздельные данные", () => {
   const st = fixtureState([{"actor": "char", "field": "location", "action": "set", "value": "Кафе", "certainty": "established", "evidence": ""}],{"char": "Химэ", "user": "Лёня"});
   const r = A.build({ card: { name: "Химэ", description: "DESC" }, userName: "Кира", stateSnapshot: st, reflection: { perspective: "EVT" }, history: [{ role: "user", text: "hi" }] });
   const sys = r.messages[0].content;
@@ -451,6 +451,8 @@ t("RP frame simplification: граница {{user}}, сцена + характе
   // Общее правило чтения разделов «данные / указания» сохраняется.
   assert.ok(A.TEMPLATES.rp.frame.endsWith("\n" + globalThis.PRP.prismModes.DATA_RULE));
   // Общая основа и одна граница собеседника в обоих режимах.
+  const commonFrame = A.TEMPLATES.rp.frame.slice(0, -("\n" + globalThis.PRP.prismModes.DATA_RULE).length);
+  assert.strictEqual(commonFrame.split("\n\n").length, 3);
   const mf = A.TEMPLATES.messenger.frame;
   assert.ok(mf.includes("мессенджере") && mf.includes("он свободен соглашаться, сомневаться, возражать, отказывать"));
   assert.ok(!mf.includes("Черты характера влияют на восприятие, но не предписывают поступков"));
@@ -458,7 +460,7 @@ t("RP frame simplification: граница {{user}}, сцена + характе
     const f = A.TEMPLATES[mode].frame;
     assert.ok(!f.includes("{{user}}"));
     assert.strictEqual(f.split("собеседника остаются за ним").length - 1, 1);
-    assert.ok(f.startsWith(A.TEMPLATES.rp.frame.split("\n")[0]));
+    assert.ok(f.startsWith(commonFrame), "вся общая рамка присутствует в обоих режимах");
   }
   const ms = A.build({ mode: "messenger", card: { name: "Химэ", description: "D" }, reflection: { perspective: "EVT" }, history: [{ role: "user", text: "hi" }] }).messages[0].content;
   assert.strictEqual(ms.split("свидетельства прошлого").length - 1, 1, "в переписке — один раз, в рамке");
@@ -2112,7 +2114,7 @@ async function foundationB() {
     assert.strictEqual(h.S.lastPrism.report.scenarioState, "included");
   });
   await ta("FB-16: указание начала учитывается в строгом бюджете", async () => {
-    const h = fbHarness(CARD_NOFIRST, { contextTokens: 1200 });
+    const h = fbHarness(CARD_NOFIRST, { contextTokens: 2048 });
     await h.chat.createChat("rp");
     let seen = null, r = null; fbLLM = async (p, msgs) => { seen = msgs; r = h.S.lastPrism.report; return { text: "Привет." }; };
     await h.gen.generate(null, "opening");
