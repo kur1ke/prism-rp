@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "2278a74cb03b5e1e5b40efa4dd076d0f2d47cf95";
+  window.PRISM_RP_BUILD_SHA = "a5665a3e1d4a9bdd47a12b6a939a187957a28ef2";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -2750,8 +2750,8 @@
     return out;
   }
 
-  /* Видимость и порядок событий с привязкой. Порядок: «на весь чат» (effectiveAt → createdAt → id) — базовый слой;
-     затем события видимой ветки в порядке повествования (глубина привязки → effectiveAt → createdAt → id).
+  /* Видимость и порядок событий с привязкой. Порядок: «на весь чат» (effectiveAt → createdAt → индекс записи) — базовый слой;
+     затем события видимой ветки в порядке повествования (глубина привязки → effectiveAt → createdAt → индекс записи).
      → { active: [{ e, row }], rows, warnings } */
   function order(list, path, nowMs, validate) {
     const rows = [], warnings = [], chat = [], branch = [];
@@ -2773,7 +2773,9 @@
       row.active = true; row.depth = BR.depthOf(e.provenance, path);
       branch.push({ e, row, at });
     });
-    const byTime = (a, b) => ((a.at == null ? -Infinity : a.at) - (b.at == null ? -Infinity : b.at)) || ((a.e.createdAt || 0) - (b.e.createdAt || 0)) || String(a.e.id).localeCompare(String(b.e.id));
+    // events is append-only. Two edits in one millisecond must retain their
+    // saved creation order; random IDs cannot decide which edit wins.
+    const byTime = (a, b) => ((a.at == null ? -Infinity : a.at) - (b.at == null ? -Infinity : b.at)) || ((a.e.createdAt || 0) - (b.e.createdAt || 0)) || (a.row.index - b.row.index);
     chat.sort(byTime);
     branch.sort((a, b) => (a.row.depth - b.row.depth) || byTime(a, b));
     return { active: chat.concat(branch), rows, warnings };
