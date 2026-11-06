@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "39b3178c7e0eb57be8def81fbe898c190adb2d66";
+  window.PRISM_RP_BUILD_SHA = "051f15f53dd9dba95e1695c15b12581f1c3098da";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -519,6 +519,7 @@
     samplerPreset: "balanced",
     sampler: { temperature: 0.9, top_p: 0.95, min_p: 0.05, top_k: 0, repetition_penalty: 1.05, max_tokens: 700 },
     contextTokens: 8192,
+    scenarioReplies: 5, // 0 = never cut off by reply count
     autoContext: true,
     singleSystem: false,
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
@@ -2480,30 +2481,15 @@
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* js/prism/scenario.js */
-/* Prism RP — жизненный цикл сценария карточки (чистый модуль).
-
-   Сценарий (card.scenario) — исходные обстоятельства мира: где и с чего начинается история.
-   Это не постоянная часть карточки и не сцена: в сцену он не переносится и не разбирается.
-
-   Правило — граница первого ответа на реплику пользователя:
-     сценарий подаётся в генерацию, пока она отвечает не дальше первой реплики пользователя
-     в своей ветке. Формально: берётся ветка ДО генерируемого ответа («предшествующий путь»);
-     если она кончается репликой пользователя, эта реплика — та, на которую отвечают, и она
-     не считается; сценарий подаётся, если в остальной части нет ни одной реплики пользователя.
-
-   Предшествующий путь по режимам генерации:
-     opening  (модель начинает сцену)     → []
-     new      (новый ответ; и предпросмотр) → вся активная ветка
-     regen    (другой вариант ответа)      → ветка до перегенерируемого сообщения (без него)
-     continue (дописать ответ)             → ветка до дописываемого сообщения (без него)
-
-   Всё выводится из ветки при каждом вызове: никакого флага «сценарий израсходован» нет,
-   поэтому переключение веток и вариантов само восстанавливает или убирает сценарий. */
+/* Prism RP — срок передачи сценария карточки, без изменения истории и состояния.
+   Считаются ответы персонажа на выбранном пути; авторское приветствие не считается.
+   Regen/continue используют путь ДО целевого ответа, поэтому не расходуют новый шаг.
+   0 означает «Никогда»: сценарий не отключается по числу ответов, но общий бюджет действует. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-
-  // Ветка до генерируемого ответа. path — [{id, role, …}] от корня; targetId — для regen/continue.
+  const LIMITS = Object.freeze([5, 10, 15, 20, 25, 30, 0]);
+  function replyLimit(value) { return LIMITS.includes(value) ? value : 5; }
   function precedingPath(path, mode, targetId) {
     const p = path || [];
     if (mode === "opening") return [];
@@ -2511,26 +2497,22 @@
       const i = p.findIndex((m) => m.id === targetId);
       return i >= 0 ? p.slice(0, i) : p.slice();
     }
-    return p.slice(); // new и предпросмотр следующего хода
+    return p.slice();
   }
-
-  // Отвечает ли генерация после этой ветки не дальше первой реплики пользователя.
-  function includedAfter(preceding) {
-    const p = preceding || [];
-    const answered = p.length && p[p.length - 1].role === "user" ? p.slice(0, -1) : p;
-    return !answered.some((m) => m.role === "user");
+  function completedReplies(path) {
+    return (path || []).filter((m) => m.role === "assistant" && m.opening !== "authored").length;
   }
-
-  /* Решение для одной генерации. → { included, preceding, reason }
-     reason: "origin" — ещё до первой реплики пользователя или ответ на неё; "past-first-turn" — позже. */
+  function includedAfter(preceding, limit) {
+    const cutoff = replyLimit(limit);
+    return cutoff === 0 || completedReplies(preceding) < cutoff;
+  }
   function forGeneration(path, opts) {
-    const o = opts || {};
-    const preceding = precedingPath(path, o.mode || "new", o.targetId);
-    const included = includedAfter(preceding);
-    return { included, preceding, reason: included ? "origin" : "past-first-turn" };
+    const o = opts || {}, preceding = precedingPath(path, o.mode || "new", o.targetId);
+    const limit = replyLimit(o.limit), completed = completedReplies(preceding);
+    const included = includedAfter(preceding, limit);
+    return { included, preceding, limit, completed, reason: included ? "within-limit" : "limit-reached" };
   }
-
-  PRP.scenario = { precedingPath, includedAfter, forGeneration };
+  PRP.scenario = { LIMITS, replyLimit, completedReplies, precedingPath, includedAfter, forGeneration };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.scenario;
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -4957,13 +4939,13 @@
         examples: st.examples.length > 0,
         postHistory: !!st.postHistory,
         postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
-        // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "past-first-turn"
-        // (граница первого ответа пройдена), "budget" (не поместился).
+        // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "limit-reached"
+        // (срок передачи пройден), "budget" (не поместился).
         scenarioIncluded: !!st.scenario,
         // singleSystem: подставлена служебная реплика «[Начало]» / её нельзя было подставить, а шаблону нужен ход пользователя.
         syntheticUser: !!synthetic,
         needsUserFirst: !!needsUserFirst,
-        scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
+        scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "limit-reached" : "budget",
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
@@ -9112,7 +9094,7 @@
         <dt>Лорбук</dt><dd>${r.loreKept} из ${r.loreMatched} сработавших${r.loreDropped ? `, не поместилось ${r.loreDropped}` : ""}</dd>
         ${r.world ? `<dt>Мир</dt><dd>${r.worldKept} ${R.plural(r.worldKept, "факт", "факта", "фактов")} из ${r.world.relevant} релевантных${r.worldDropped ? `, не поместилось ${r.worldDropped}` : ""}; действует ${r.world.effective}, проходит отбор по таймлайну ${r.world.eligible}</dd>` : ""}
         <dt>Примеры речи</dt><dd>${r.examples ? "вошли" : "не вошли"}</dd>
-        ${r.scenarioState && r.scenarioState !== "none" ? `<dt>Сценарий</dt><dd>${{ included: "в контексте — исходные обстоятельства, до первого ответа на вашу реплику", "past-first-turn": "больше не подаётся: первый ответ на вашу реплику уже прозвучал", budget: "не поместился" }[r.scenarioState]}</dd>` : ""}
+        ${r.scenarioState && r.scenarioState !== "none" ? `<dt>Сценарий</dt><dd>${{ included: "в контексте — " + (r.scenarioLimit === 0 ? "без отсечения по ответам" : "до " + (r.scenarioLimit || 5) + " ответов персонажа; завершено " + (r.scenarioRepliesCompleted || 0)), "limit-reached": "больше не подаётся: достигнут срок " + (r.scenarioLimit || 5) + " ответов персонажа", budget: "не поместился" }[r.scenarioState]}</dd>` : ""}
         ${r.postHistoryDisabled ? `<dt>После истории</dt><dd>указания автора выключены в настройках</dd>` : ""}
         ${(r.truncated || []).length ? `<dt>Сокращено</dt><dd>${r.truncated.map((t) => esc(TRUNC[t.layer] || t.layer) + (t.dropped ? ` −${t.dropped}` : "")).join(", ")}</dd>` : ""}
         </dl></div>
@@ -9472,6 +9454,7 @@
         <div class="row">${num("top_k", "Top K", "1", "0 — выключено")}${num("repetition_penalty", "Штраф за повторы", "0.01")}${num("max_tokens", "Длина ответа", "50", "в токенах")}</div>
         <div class="row"><div class="field"><label>Объём контекста</label><input type="number" step="512" data-set-num="contextTokens" value="${esc(s.contextTokens)}"><span class="help">в токенах; для Perchance берётся из плагина</span></div>
           <div class="field"><label>Фактов мира за ход</label><input type="number" min="0" max="30" data-set-num="worldLimit" value="${esc(s.worldLimit)}"></div></div>
+        <div class="field"><label for="scenario-replies">Убирать сценарий после</label><select id="scenario-replies" data-set-num="scenarioReplies">${PRP.scenario.LIMITS.map(n => `<option value="${n}" ${PRP.scenario.replyLimit(s.scenarioReplies) === n ? "selected" : ""}>${n === 0 ? "Никогда" : n + " ответов персонажа"}</option>`).join("")}</select><span class="help">Для RP и переписки. Считаются ответы в выбранной ветке; приветствие из карточки, повторная генерация и дописывание не добавляют шаг. При выборе «Никогда» общий бюджет контекста всё равно действует.</span></div>
         <label class="check"><input type="checkbox" data-set="autoContext" ${s.autoContext ? "checked" : ""}><span>Брать объём контекста из плагина Perchance</span></label>
         <label class="check"><input type="checkbox" data-set="singleSystem" ${s.singleSystem ? "checked" : ""}><span>Одно системное сообщение<small>Для локальных моделей со строгими шаблонами чата, которые ломаются от нескольких system.</small></span></label>
         <label class="check"><input type="checkbox" data-set="noPostHistory" ${s.noPostHistory ? "checked" : ""}><span>Не передавать инструкции после истории<small>Касается только указаний автора карточки (post_history_instructions), не самого характера. По умолчанию выключено — для совместимости с карточками.</small></span></label>
@@ -10916,6 +10899,7 @@
     function build(path, extraPost, scenario, extra) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
+      const scenarioDecision = scenario || SCN.forGeneration(path, { limit: s.scenarioReplies });
       // Модель получает инструкцию [draw:] только согласно явно выбранной
       // политике. В обычной переписке просьба о фото — не скрытый побочный эффект.
       const allowDraw = ST.imagesOn(s, ctx.env.perchanceImages()) &&
@@ -10950,9 +10934,11 @@
         worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
-        includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
+        includeScenario: scenarioDecision.included,
         inputCost: perchanceInput ? (messages) => PRP.perchance.inputCost(transport.names, messages, transport) : undefined,
       }, extra));
+      built.report.scenarioLimit = scenarioDecision.limit;
+      built.report.scenarioRepliesCompleted = scenarioDecision.completed;
       built.report.inputFormat = perchanceInput ? "perchance" : "messages";
       built.report.imageDirectiveAllowed = allowDraw;
       built.report.imageDirectivePolicy = ST.modelDrawPolicy(s);
@@ -12185,7 +12171,7 @@
    Режимы: "new" — новый ответ, "regen" — новый вариант, "continue" — дописать текущий вариант,
    "opening" — модель начинает сцену в пустом чате (см. opening ниже: дерево меняется только
    после успешного ответа).
-   Сценарий карточки подаётся по правилу prism/scenario.js (граница первого ответа).
+   Сценарий карточки подаётся по правилу prism/scenario.js (выбранный срок в ответах персонажа).
    Переписка: момент переписки выбирается при подготовке (живое время — часы, ручное — сохранённое) и вместе
    с положением персонажа записывается в вариант (messengerAt) ТОЛЬКО при успешном ответе. Ошибка, отмена,
    пустой ответ и переполнение время не записывают и не двигают. Legacy Environment генерация не меняет;
@@ -12232,6 +12218,7 @@
 
   function create(ctx) {
     const { S, ui } = ctx;
+    const scenarioFor = (path, options) => SCN.forGeneration(path, Object.assign({}, options, { limit: S.settings.scenarioReplies }));
     const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images, state = () => ctx.svc.state;
     const perf = (metric, ms, meta) => { if (typeof ctx.perf === "function") ctx.perf(metric, ms, meta); };
     const renderComposer = () => { if (typeof ui.renderComposer === "function") ui.renderComposer(); else ui.renderFeed(); };
@@ -12368,7 +12355,7 @@
         outputFormat: ms ? "message-body" : null,
         imageDataUrl: imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null,
       };
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign({ transport }, rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
+      const built = prism().build(path, extraPost, scenarioFor(full, { mode, targetId: msgId }), Object.assign({ transport }, rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
@@ -12521,7 +12508,7 @@
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined;
       const transport = { names: { char: cd.name, user: ctx.persona().name } };
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
+      const built = prism().build([], OPENING, scenarioFor([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
@@ -12618,7 +12605,7 @@
       const reasons = INI.reasons(conv, msNow);
       const vars = { char: cd.name, user: ctx.persona().name };
       const transport = { names: vars, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) };
-      const built = prism().build(path, INI.INSTRUCTION, SCN.forGeneration(path, { mode: "new" }),
+      const built = prism().build(path, INI.INSTRUCTION, scenarioFor(path, { mode: "new" }),
         { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons }, transport });
       if (preflightFailed(built, prov)) return done("overflow");
 
@@ -12738,7 +12725,7 @@
         const active = chat().path(), at = active.findIndex((m) => m.id === msgId);
         const proposed = active.slice(0, at).concat([draft]);
         // Test the replacement path before writing a new branch or contacting a model.
-        const built = prism().build(proposed, "", SCN.forGeneration(proposed, { mode: "new" }));
+        const built = prism().build(proposed, "", scenarioFor(proposed, { mode: "new" }));
         if (preflightFailed(built, prov)) return { outcome: "overflow" };
         turn.phase = "editing";
         const edited = await chat().saveEdit(msgId, text, { turn, draftId: draft.id });
@@ -12785,7 +12772,7 @@
         const draft = chat().newMsg("user", ctx.chat().leafId, body);
         if (extra && extra.imageDataUrl) draft.swipes[0].imageDataUrl = extra.imageDataUrl;
         const path = chat().path().concat(draft);
-        return preflightFailed(prism().build(path, "", SCN.forGeneration(path, { mode: "new" })), provider);
+        return preflightFailed(prism().build(path, "", scenarioFor(path, { mode: "new" })), provider);
       };
       if (draftOverflow(roleProvider)) {
         restore({ chatId: c.id, text: body });
