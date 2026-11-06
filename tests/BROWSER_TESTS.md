@@ -78,3 +78,5 @@ A03: `e2e-swipe-commit.py` проверяет атомарность выбор�
 `e2e-scenario-cutoff.py`: границы 5/10/15/20/25/30 и «Никогда», ветки, авторское приветствие, фактические regen/continue при выбранном сроке 10, reload. RP/Messenger × 1440/390; модель подменена. `e2e-settings.py` выбирает все значения через настоящий select и проверяет сохранение после reload.
 
 A04: `e2e-perchance-abort.py` использует настоящий адаптер и UI Stop с IndexedDB, подменяя только внешний плагин/fetch. Проверяет раннюю отмену и вложения, игнорирующий stop поток, поздние чанки/результат/ошибку, старый ответ ассистента, повтор и reload на 1440/390. Node-контракт: `perchance-abort.js`.
+
+A05: `e2e-openai-done.py` использует настоящий HTTP SSE-сервер без EOF после `[DONE]`, router/OpenAI adapter, RP/Messenger UI и IndexedDB. Проверяет завершение без Stop, отмену reader/закрытие соединения, текст/reasoning/preview, отсутствие повторного запроса и reload на 1440/390. Узкие границы парсера/cleanup/отмены: `openai-sse-done.js`. Живой провайдер не вызывается.

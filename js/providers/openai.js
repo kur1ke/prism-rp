@@ -36,9 +36,10 @@
 
   /* ── SSE ────────────────────────────────────────────────────────────── */
   function createSSEParser(onData) {
-    let buf = "";
+    let buf = "", ended = false;
     return {
       push(chunk) {
+        if (ended) return;
         buf += chunk;
         let nl;
         while ((nl = buf.search(/\r?\n/)) >= 0) {
@@ -47,7 +48,7 @@
           if (!line.startsWith("data:")) continue;
           const payload = line.slice(5).trim();
           if (!payload) continue;
-          if (payload === "[DONE]") { onData(null, true); continue; }
+          if (payload === "[DONE]") { ended = true; buf = ""; onData(null, true); return; }
           try { onData(JSON.parse(payload), false); } catch (e) { /* неполная строка или мусор — пропускаем */ }
         }
       },
@@ -167,8 +168,10 @@
       }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
+      let completed = false;
       const parser = createSSEParser((json, done) => {
-        if (done || !json) return;
+        if (done) { completed = true; return; }
+        if (!json) return;
         const d = deltaOf(json);
         if (d.text || d.reasoning) {
           received = true;
@@ -177,13 +180,24 @@
         }
         if (d.finish) out.finish = d.finish;
       });
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        parser.push(dec.decode(value, { stream: true }));
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          parser.push(dec.decode(value, { stream: true }));
+          if (completed) break;
+        }
+        parser.flush();
+        if (signal && signal.aborted) throw new DOMException("Aborted", "AbortError");
+        return out;
+      } finally {
+        if (completed) {
+          // DONE is final even if the server keeps the connection open.
+          // Cleanup must not delay or reject an already completed response.
+          try { reader.cancel().catch(() => {}); } catch (_) {}
+        }
+        reader.releaseLock();
       }
-      parser.flush();
-      return out;
     }
   }
 

@@ -63,6 +63,8 @@ jobs:
         run: node tests/state-temporal-freshness.js
       - name: Check Messenger return gap chronology
         run: node tests/messenger-return-gap.js
+      - name: Check OpenAI SSE completion
+        run: node tests/openai-sse-done.js
       - name: Check Perchance cancellation lifecycle
         run: node tests/perchance-abort.js
       - name: Check fresh and previously reflected evidence
