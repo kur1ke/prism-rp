@@ -308,8 +308,15 @@
     }
 
     // Записать сборку для вкладки Prism; при переполнении — сообщить и вернуть true (запрос не уходит).
+    const preflightReason = built => built.report.unsupportedLayout ? "unsupported-layout" : "overflow";
     function preflightFailed(built, prov) {
       S.lastPrism = Object.assign({ at: Date.now(), provider: prov.label }, built);
+      if (built.report.unsupportedLayout) {
+        ui.toast(built.report.unsupportedLayout, true);
+        if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
+        ui.renderFeed();
+        return true;
+      }
       if (!built.report.overflow) return false;
       ui.toast(`Контекст не помещается даже после всех сокращений (${built.report.used} из ${built.report.budget} токенов), запрос не отправлен. Увеличьте объём контекста, уменьшите длину ответа в «Настройки → Генерация» или сократите сцену и карточку. Подробности — во вкладке Prism.`, true);
       if (S.drawerOpen) { S.tab = "prism"; ui.renderDrawer(); }
@@ -343,7 +350,7 @@
       const msNow = ms ? ms.now() : undefined;
       const transport = { names: { char: cd.name, user: ctx.persona().name } };
       const built = prism().build([], OPENING, scenarioFor([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
-      if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
+      if (preflightFailed(built, prov)) return { ok: false, reason: preflightReason(built) };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
       const ctrl = new AbortController();
@@ -441,7 +448,7 @@
       const transport = { names: vars, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) };
       const built = prism().build(path, INI.INSTRUCTION, scenarioFor(path, { mode: "new" }),
         { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons }, transport });
-      if (preflightFailed(built, prov)) return done("overflow");
+      if (preflightFailed(built, prov)) return done(preflightReason(built));
 
       const chatId = c.id, key = pathKey(full);
       const ctrl = new AbortController();
@@ -560,7 +567,7 @@
         const proposed = active.slice(0, at).concat([draft]);
         // Test the replacement path before writing a new branch or contacting a model.
         const built = prism().build(proposed, "", scenarioFor(proposed, { mode: "new" }));
-        if (preflightFailed(built, prov)) return { outcome: "overflow" };
+        if (preflightFailed(built, prov)) return { outcome: preflightReason(built) };
         turn.phase = "editing";
         const edited = await chat().saveEdit(msgId, text, { turn, draftId: draft.id });
         if (!edited) return { outcome: "context-changed" };
@@ -601,16 +608,18 @@
       const roleProvider = ctx.provider();
       // An unsaved user node is enough to budget the proposed RP history.
       // Reject before storing the text or starting a new Observer request.
-      const draftOverflow = (provider) => {
+      const draftFailure = (provider) => {
         if (!provider) return false;
         const draft = chat().newMsg("user", ctx.chat().leafId, body);
         if (extra && extra.imageDataUrl) draft.swipes[0].imageDataUrl = extra.imageDataUrl;
         const path = chat().path().concat(draft);
-        return preflightFailed(prism().build(path, "", scenarioFor(path, { mode: "new" })), provider);
+        const built = prism().build(path, "", scenarioFor(path, { mode: "new" }));
+        return preflightFailed(built, provider) ? preflightReason(built) : null;
       };
-      if (draftOverflow(roleProvider)) {
+      const failure = draftFailure(roleProvider);
+      if (failure) {
         restore({ chatId: c.id, text: body });
-        return { outcome: "overflow" };
+        return { outcome: failure };
       }
       const prepared = w0 && st && st.prepareUser && observerProvider && roleProvider &&
         observerProvider.id !== roleProvider.id ? st.prepareUser(body, observerProvider) : null;
@@ -630,9 +639,10 @@
       let reply = null;
       try {
         // Waiting may have changed the visible state or the provider settings.
-        if (w0 && draftOverflow(ctx.provider())) {
+        const lateFailure = w0 && draftFailure(ctx.provider());
+        if (lateFailure) {
           restore(turn);
-          return { outcome: "overflow" };
+          return { outcome: lateFailure };
         }
         turn.phase = "user-state";
         renderComposer();

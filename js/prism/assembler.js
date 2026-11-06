@@ -19,6 +19,13 @@
   // Рамки и заголовки режимов — в адаптерах (prism/modes.js); сборка, бюджет и общие слои — здесь.
   const MODES = PRP.prismModes || (typeof require !== "undefined" ? require("./modes.js") : null);
   const TEMPLATES = MODES.TEMPLATES;
+  const SETTINGS = PRP.settings || (typeof require !== "undefined" ? require("../core/settings.js") : null);
+  // Same reference wrapper in B and C. No card text is inferred or rewritten.
+  const REFERENCE_HEADER = "[CHARACTER REFERENCE — background knowledge about who you are. It is not a script: " +
+    "never quote, list or copy it, and never output its headings, bullets, rules or " +
+    "sample lines. Nothing in it has to appear in your reply. You already are this " +
+    "character — stay in the conversation below.]";
+  const REFERENCE_FOOTER = "[/CHARACTER REFERENCE]";
 
   /* Блок фактов мира — данные, а не указания. Одинаков для любого режима (мир режиму не принадлежит).
      Это действующий канон чата: он главнее справочных сведений карточки (лорбука). */
@@ -66,7 +73,9 @@
        worldFacts: [] — факты мира, уже отобранные world/retrieve, В ПОРЯДКЕ РЕЛЕВАНТНОСТИ (первый — самый релевантный),
        history: [{role, text}], contextTokens, reserveTokens, singleSystem, minHistory,
        stateToolEnabled, extraPost, noPostHistory,
-       wholeCardSystemPrompt — явный opt-in: основные поля/Core и действующий сценарий одним разделом указаний;
+       cardPromptFormat — data | reference | reference-messages | whole-system; B/C имеют одинаковый текст,
+         C разделяет головные system; multiSystemSupported:false или singleSystem блокируют C (report.unsupportedLayout),
+       wholeCardSystemPrompt — прежний opt-in (если cardPromptFormat не задан): основные поля/Core и действующий сценарий одним разделом указаний;
          текст не JSON-кодируется, raw/source не читается; весь блок защищён от бюджетного сокращения,
        inputCost — необязательная чистая функция messages → стоимость конечной транспортной формы,
        includeScenario — подавать ли сценарий карточки (решение prism/scenario.js; по умолчанию да),
@@ -93,7 +102,7 @@
        → 4 лорбук → 5 факты мира (с наименее релевантного) → 6 договорённости переписки (со старых)
        → 7 списки «рядом» и «происходит» → 8 автоматический Experience → 9 указания после истории
        → 10 персона, сценарий, указания автора → 11 история до последнего сообщения.
-     При wholeCardSystemPrompt действующий сценарий также защищён как часть цельного блока.
+     При reference/reference-messages/whole-system действующий сценарий также защищён как часть цельного блока.
      Не режутся никогда: рамка, выбранные основные поля, включённое проверенное ядро и постоянные custom-поля целиком,
      сцена (или в переписке — где/чем занят/доступность, состояние переписки и время), служебные указания.
      Если и они не помещаются — report.overflow = true (без молчаливого превышения). */
@@ -104,7 +113,14 @@
     const card = o.card || {};
     // Explicit user-selected experiment. Only the canonical, selected fields
     // below gain instruction semantics; never read preserved/raw import text.
-    const wholeCard = o.wholeCardSystemPrompt === true;
+    const promptFormat = SETTINGS.cardPromptFormat(o);
+    const reference = promptFormat === "reference" || promptFormat === "reference-messages";
+    const splitSystem = promptFormat === "reference-messages";
+    const wholeCard = promptFormat === "whole-system";
+    const coherentCard = wholeCard || reference;
+    const unsupportedLayout = splitSystem && (o.singleSystem || o.multiSystemSupported === false)
+      ? "Вариант C требует нескольких system-сообщений. Он недоступен через Perchance и при включённом «Одно системное сообщение». Выберите B или совместимый API и выключите объединение system."
+      : "";
     // Имена идут в заголовки разделов — только однострочные (перевод строки в имени не начнёт раздел).
     const vars = { char: DATA.oneLine(card.name) || "Персонаж", user: DATA.oneLine(o.userName) || "Пользователь" };
     const m = (x) => U.macros(x, vars);
@@ -231,7 +247,13 @@
         ["Исходная ситуация", st.scenario],
       ].filter(([, text]) => text).map(([label, text]) => label + ":\n" + text).join("\n\n");
     }
-    const characterSection = () => wholeCard
+    function referenceBody() {
+      const c = st.core;
+      return [REFERENCE_HEADER, [c.primary.appearance, c.primary.description, c.primary.personality,
+        core.source === "explicit" ? c.identity : "", ...c.traits, ...c.voice, ...c.durable,
+        st.scenario].filter(Boolean).join("\n\n"), REFERENCE_FOOTER].join("\n\n");
+    }
+    const characterSection = () => reference ? referenceBody() : wholeCard
       ? section("Указания автора карточки (цельный промпт персонажа — эксперимент)", wholeCardBody())
       : section(m(T.card), coreBody());
 
@@ -251,7 +273,7 @@
           section(m(T.persona), personaBody()),
           section(m(T.lore), loreBody()),
           section(m(T.world), worldBody(st.world, m)),
-          wholeCard ? "" : section(m(T.origin), scenarioBody()),
+          coherentCard ? "" : section(m(T.origin), scenarioBody()),
           scene,
           wearStateSection,
         ].concat(messengerParts()).filter(Boolean),
@@ -262,7 +284,7 @@
     function render() {
       const p = parts();
       const msgs = p.history.map((h) => ({ role: h.role === "user" ? "user" : "assistant", content: h.text }));
-      if (o.singleSystem) {
+      if (o.singleSystem && !splitSystem) {
         /* Строгие Jinja-шаблоны (Mistral, Gemma и подобные): одно system в начале, затем строго
            user/assistant, начиная с user — иначе шаблон бросает «Conversation roles must alternate
            user/assistant/…». Поэтому, если история начинается с ответа персонажа (приветствие),
@@ -281,7 +303,8 @@
         return { p, synthetic: !userFirst && o.allowSyntheticUser, needsUserFirst: !userFirst && !o.allowSyntheticUser,
           messages: [{ role: "system", content: p.head.concat(p.post).join("\n\n") }].concat(merged) };
       }
-      const out = [{ role: "system", content: p.head.join("\n\n") }].concat(msgs);
+      const out = (splitSystem ? p.head.map(content => ({ role: "system", content }))
+        : [{ role: "system", content: p.head.join("\n\n") }]).concat(msgs);
       if (p.post.length) out.push({ role: "system", content: p.post.join("\n\n") });
       return { p, messages: out };
     }
@@ -340,7 +363,7 @@
       function reflection() { if (!st.reflection) return false; st.reflection = ""; note("reflection", "субъективный опыт не поместился"); return true; },
       function postHistory() { if (!st.postHistory) return false; st.postHistory = ""; note("postHistory", "указания после истории"); return true; },
       function persona() { if (!st.persona) return false; st.persona = ""; note("persona", "описание собеседника"); return true; },
-      function scenario() { if (wholeCard || !st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
+      function scenario() { if (coherentCard || !st.scenario) return false; st.scenario = ""; note("card.scenario", "сценарий"); return true; },
       function authorSys() { if (!st.authorSys) return false; st.authorSys = ""; note("authorSys", "указания автора"); return true; },
       function recentHistory() { if (st.minH <= 1) return false; st.minH--; st.keepOld = 0; note("history", 1); return true; },
     ];
@@ -367,6 +390,7 @@
         contextTokens: o.contextTokens,
         reserveTokens: o.reserveTokens,
         invalidBudget,
+        unsupportedLayout,
         used,
         messageUsed: messageCost(messages),
         fits: !invalidBudget && used <= budget,
@@ -387,7 +411,7 @@
         initiative: o.mode === "messenger" && o.initiative ? { reasonIds: (o.initiative.reasons || []).map((r) => r.id) } : null,
         // Карточка (FOUNDATION-H): ядро, кандидаты подробностей и их судьба, примеры.
         card: {
-          promptFormat: wholeCard ? "whole-system" : "data",
+          promptFormat,
           core: { source: core.source, reason: core.reason, fields: core.fields, tokens: tokLayer(characterSection()), duplicates: core.duplicates, truncated: core.truncated },
           candidates: sel.rows.map((r) => ({ id: r.id, field: r.field, chars: r.chars, overlap: r.overlap, terms: r.terms, visual: r.visual, reasons: r.reasons,
             state: keptChunkIds.includes(r.id) ? "selected" : droppedChunks.includes(r.id) ? "budget" : r.omitted === "limit" ? "limit" : "no-relation" })),
@@ -408,7 +432,7 @@
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),
-          card: tokLayer(characterSection()) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + (wholeCard ? 0 : tokLayer(section(m(T.origin), scenarioBody()))),
+          card: tokLayer(characterSection()) + tokLayer(section(m(T.cardContext), chunksBody())) + tokLayer(section(m(T.examples), examplesBody())) + tokLayer(section(m(T.persona), personaBody())) + (coherentCard ? 0 : tokLayer(section(m(T.origin), scenarioBody()))),
           reflection: tokLayer(st.reflection ? DATA.block("Experience, субъективный", [DATA.field("восприятие", st.reflection)]) : ""),
           scene: tok(scene),
           messenger: messengerParts().reduce((n, x) => n + tokLayer(x), 0),
