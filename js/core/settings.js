@@ -16,6 +16,7 @@
     autoContext: true,
     singleSystem: false,
     wholeCardSystemPrompt: false, // opt-in experiment: selected character text as one system prompt
+    cardPromptFormat: "", // empty preserves the previously selected boolean experiment
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer
     developerMode: false,
     noPostHistory: false,
@@ -51,6 +52,11 @@
   }
 
   function persona(s) { return (s && s.persona) || DEFAULTS.persona; }
+  const CARD_PROMPT_FORMATS = ["data", "reference", "reference-messages", "whole-system"];
+  function cardPromptFormat(s) {
+    return s && CARD_PROMPT_FORMATS.includes(s.cardPromptFormat) ? s.cardPromptFormat
+      : s && s.wholeCardSystemPrompt === true ? "whole-system" : "data";
+  }
 
   // Список текстовых моделей: бесплатная Perchance (если доступна) + свои API.
   function providerList(s, perchanceAvailable) {
@@ -111,6 +117,6 @@
     return ic.promptMode !== "off" && !!String(ic.fixedPrompt || "").trim();
   }
 
-  PRP.settings = { DEFAULTS, merge, persona, providerList, activeProvider, processingProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
+  PRP.settings = { DEFAULTS, merge, persona, cardPromptFormat, CARD_PROMPT_FORMATS, providerList, activeProvider, processingProvider, contextTokens, imagesOn, qualityPinned, modelDrawPolicy, modelDrawAllowed, pictureRequested };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.settings;
 })(typeof window !== "undefined" ? window : globalThis);

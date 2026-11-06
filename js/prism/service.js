@@ -88,6 +88,8 @@
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
         wholeCardSystemPrompt: s.wholeCardSystemPrompt === true,
+        cardPromptFormat: ST.cardPromptFormat(s),
+        multiSystemSupported: !!provider && provider.kind !== "perchance",
         includeScenario: scenarioDecision.included,
         inputCost: perchanceInput ? (messages) => PRP.perchance.inputCost(transport.names, messages, transport) : undefined,
       }, extra));

@@ -29,10 +29,10 @@ try:
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.goto(f'http://127.0.0.1:{port}/dist/standalone/index.html')
                     page.wait_for_selector('.home-welcome')
-                    # Use the settings controller's actual navigation action and actual checkbox.
+                    # Use the actual selection control; keep the previously published experiment testable.
                     page.evaluate('PRP.controllers.settings(PRP.app.ctx).actions.settings({dataset:{section:"gen"}})')
-                    assert not page.locator('[data-set=wholeCardSystemPrompt]').is_checked()
-                    page.check('[data-set=wholeCardSystemPrompt]')
+                    assert page.locator('#card-prompt-format').input_value() == 'data'
+                    page.select_option('#card-prompt-format', 'whole-system')
                     page.wait_for_function('async()=>(await PRP.store.getSetting("app",null)).wholeCardSystemPrompt===true')
                     page.reload()
                     page.wait_for_function('window.PRP && PRP.app && PRP.app.S.settings.wholeCardSystemPrompt===true')
@@ -75,7 +75,7 @@ try:
                     assert '### Характер Мира' not in request
                     page.evaluate('PRP.controllers.settings(PRP.app.ctx).actions.settings({dataset:{section:"gen"}})')
                     page.screenshot(path=str(out / f'whole-card-{mode}-{kind}-{width}.png'))
-                    page.uncheck('[data-set=wholeCardSystemPrompt]')
+                    page.select_option('#card-prompt-format', 'data')
                     page.wait_for_function('async()=>(await PRP.store.getSetting("app",null)).wholeCardSystemPrompt===false')
                     page.click('[data-act=modal-close]')
                     page.fill('#input', 'А теперь?')

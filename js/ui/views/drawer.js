@@ -143,7 +143,7 @@
   function cardDebug(c) {
     if (!c) return "";
     return `<details class="block exp-debug card-debug"><summary>Карточка: ядро и подробности</summary>
-      <dl class="kv"><dt>Подача</dt><dd>${c.promptFormat === "whole-system" ? "Цельный системный промпт (эксперимент)" : "Разделы данных"}</dd>
+      <dl class="kv"><dt>Подача</dt><dd>${({data:"A — разделы данных",reference:"B — CHARACTER REFERENCE в одном system","reference-messages":"C — CHARACTER REFERENCE, отдельные system","whole-system":"Прежний эксперимент — указания автора"})[c.promptFormat] || "Разделы данных"}</dd>
         <dt>Основные поля</dt><dd>${esc(c.core.reason)}${c.core.source === "explicit" ? "; дополнительное ядро включено" : ""}; ≈ ${c.core.tokens} ток.</dd>
         <dt>Примеры речи</dt><dd>${c.examples.kept} из ${c.examples.total}; ${esc(c.examples.rule)}</dd>
         <dt>Подробности</dt><dd>${c.selected.length ? esc(c.selected.join(", ")) : "нет"}${c.dropped.length ? `; не поместилось: ${esc(c.dropped.join(", "))}` : ""}</dd></dl>
@@ -165,7 +165,7 @@
       <button class="btn btn-sm" data-act="prism-preview">${icon("prism")}Собрать для следующего хода</button>`;
     const r = p.report;
     const total = Object.values(r.layers).reduce((a, b) => a + b, 0) || 1;
-    return `<div class="block"><div class="block-title">Контекст <small>${r.used} из ${r.budget} токенов, оценка</small></div>
+    return `${r.unsupportedLayout ? `<div class="block err-block">${esc(r.unsupportedLayout)} Запрос не отправляется.</div>` : ""}<div class="block"><div class="block-title">Контекст <small>${r.used} из ${r.budget} токенов, оценка</small></div>
         <div class="bar-meter">${LAYERS.map(([k, , c]) => `<i style="width:${(r.layers[k] / Math.max(total, r.budget)) * 100}%;background:${c}" title="${k}"></i>`).join("")}</div>
         <div class="legend">${LAYERS.filter(([k]) => r.layers[k]).map(([k, n, c]) => `<span style="--c:${c}">${n} ${r.layers[k]}</span>`).join("")}</div></div>
       ${r.overflow ? `<div class="block err-block">${icon("alert")}<div><b>Не помещается.</b> Даже после всех сокращений нужно ${r.used} из ${r.budget} токенов: рамка, сцена и последние сообщения больше, чем позволяет модель. Запрос не будет отправлен.</div></div>` : ""}

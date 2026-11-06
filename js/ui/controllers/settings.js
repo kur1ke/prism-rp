@@ -156,6 +156,12 @@
       if (t.dataset.imgSel) { collectImgForm(); S.settings.images[t.dataset.imgSel] = t.value; ui.refreshAfterSettings(); await save(); return true; }
       if (t.dataset.sampler) { S.settings.sampler[t.dataset.sampler] = t.value === "" ? null : +t.value; S.settings.samplerPreset = "custom"; await save(); ui.refreshAfterSettings(); return true; }
       if (t.dataset.setText) { S.settings[t.dataset.setText] = t.value; await save(); return true; }
+      if (t.dataset.cardPrompt !== undefined && PRP.settings.CARD_PROMPT_FORMATS.includes(t.value)) {
+        S.settings.cardPromptFormat = t.value;
+        // Mirror the old flag so an older build will not silently keep its experiment enabled.
+        S.settings.wholeCardSystemPrompt = t.value === "whole-system";
+        await save(); ui.refreshAfterSettings(); return true;
+      }
       if (t.dataset.setNum) { S.settings[t.dataset.setNum] = +t.value; await save(); ui.refreshAfterSettings(); return true; }
       if (t.dataset.setRange) { S.settings[t.dataset.setRange] = +t.value; ui.applyLook(); await save(); return true; }
       if (t.dataset.set) { S.settings[t.dataset.set] = t.checked; await save(); ui.refreshAfterSettings(); if (S.drawerOpen) ui.renderDrawer(); return true; }
