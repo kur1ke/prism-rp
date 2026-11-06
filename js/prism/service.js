@@ -52,6 +52,7 @@
     function build(path, extraPost, scenario, extra) {
       const c = ctx.chat(), cd = ctx.card();
       const s = S.settings;
+      const scenarioDecision = scenario || SCN.forGeneration(path, { limit: s.scenarioReplies });
       // Модель получает инструкцию [draw:] только согласно явно выбранной
       // политике. В обычной переписке просьба о фото — не скрытый побочный эффект.
       const allowDraw = ST.imagesOn(s, ctx.env.perchanceImages()) &&
@@ -86,9 +87,11 @@
         worldFacts: wctx.facts, history, extraPost,
         contextTokens: ctx.contextTokens(), reserveTokens: s.sampler.max_tokens || 700,
         singleSystem: s.singleSystem, stateToolEnabled: !!s.stateToolEnabled, noPostHistory: !!s.noPostHistory,
-        includeScenario: (scenario || SCN.forGeneration(path, { mode: "new" })).included,
+        includeScenario: scenarioDecision.included,
         inputCost: perchanceInput ? (messages) => PRP.perchance.inputCost(transport.names, messages, transport) : undefined,
       }, extra));
+      built.report.scenarioLimit = scenarioDecision.limit;
+      built.report.scenarioRepliesCompleted = scenarioDecision.completed;
       built.report.inputFormat = perchanceInput ? "perchance" : "messages";
       built.report.imageDirectiveAllowed = allowDraw;
       built.report.imageDirectivePolicy = ST.modelDrawPolicy(s);

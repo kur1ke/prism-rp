@@ -373,13 +373,13 @@
         examples: st.examples.length > 0,
         postHistory: !!st.postHistory,
         postHistoryDisabled: !!o.noPostHistory && !!directiveText(card, "postHistory").trim(),
-        // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "past-first-turn"
-        // (граница первого ответа пройдена), "budget" (не поместился).
+        // Сценарий: included — вошёл; иначе почему нет: "none" (в карточке пусто), "limit-reached"
+        // (срок передачи пройден), "budget" (не поместился).
         scenarioIncluded: !!st.scenario,
         // singleSystem: подставлена служебная реплика «[Начало]» / её нельзя было подставить, а шаблону нужен ход пользователя.
         syntheticUser: !!synthetic,
         needsUserFirst: !!needsUserFirst,
-        scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "past-first-turn" : "budget",
+        scenarioState: st.scenario ? "included" : !String(card.scenario || "").trim() ? "none" : !o.includeScenario ? "limit-reached" : "budget",
         layers: {
           frame: tok(frame),
           author: tokLayer(section(T.author, st.authorSys)) + tokLayer(section(T.authorPost, st.postHistory)),

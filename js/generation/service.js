@@ -5,7 +5,7 @@
    Режимы: "new" — новый ответ, "regen" — новый вариант, "continue" — дописать текущий вариант,
    "opening" — модель начинает сцену в пустом чате (см. opening ниже: дерево меняется только
    после успешного ответа).
-   Сценарий карточки подаётся по правилу prism/scenario.js (граница первого ответа).
+   Сценарий карточки подаётся по правилу prism/scenario.js (выбранный срок в ответах персонажа).
    Переписка: момент переписки выбирается при подготовке (живое время — часы, ручное — сохранённое) и вместе
    с положением персонажа записывается в вариант (messengerAt) ТОЛЬКО при успешном ответе. Ошибка, отмена,
    пустой ответ и переполнение время не записывают и не двигают. Legacy Environment генерация не меняет;
@@ -52,6 +52,7 @@
 
   function create(ctx) {
     const { S, ui } = ctx;
+    const scenarioFor = (path, options) => SCN.forGeneration(path, Object.assign({}, options, { limit: S.settings.scenarioReplies }));
     const chat = () => ctx.svc.chat, prism = () => ctx.svc.prism, images = () => ctx.svc.images, state = () => ctx.svc.state;
     const perf = (metric, ms, meta) => { if (typeof ctx.perf === "function") ctx.perf(metric, ms, meta); };
     const renderComposer = () => { if (typeof ui.renderComposer === "function") ui.renderComposer(); else ui.renderFeed(); };
@@ -188,7 +189,7 @@
         outputFormat: ms ? "message-body" : null,
         imageDataUrl: imageMessage && TR.activeSwipe(imageMessage).imageDataUrl || null,
       };
-      const built = prism().build(path, extraPost, SCN.forGeneration(full, { mode, targetId: msgId }), Object.assign({ transport }, rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
+      const built = prism().build(path, extraPost, scenarioFor(full, { mode, targetId: msgId }), Object.assign({ transport }, rootOpening ? { allowSyntheticUser: false, operation: "opening" } : {}, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return;
       if (rootOpening && openingBlocked(built, prov)) return;
 
@@ -341,7 +342,7 @@
       const ms = messenger();
       const msNow = ms ? ms.now() : undefined;
       const transport = { names: { char: cd.name, user: ctx.persona().name } };
-      const built = prism().build([], OPENING, SCN.forGeneration([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
+      const built = prism().build([], OPENING, scenarioFor([], { mode: "opening" }), Object.assign({ allowSyntheticUser: false, operation: "opening", transport }, ms ? { messengerNow: msNow } : {}));
       if (preflightFailed(built, prov)) return { ok: false, reason: "overflow" };
       if (openingBlocked(built, prov)) return { ok: false, reason: "needs-user-first" };
 
@@ -438,7 +439,7 @@
       const reasons = INI.reasons(conv, msNow);
       const vars = { char: cd.name, user: ctx.persona().name };
       const transport = { names: vars, outputFormat: "message-body", closing: U.macros(INI.CLOSING, vars) };
-      const built = prism().build(path, INI.INSTRUCTION, SCN.forGeneration(path, { mode: "new" }),
+      const built = prism().build(path, INI.INSTRUCTION, scenarioFor(path, { mode: "new" }),
         { allowSyntheticUser: false, messengerNow: msNow, initiative: { reasons }, transport });
       if (preflightFailed(built, prov)) return done("overflow");
 
@@ -558,7 +559,7 @@
         const active = chat().path(), at = active.findIndex((m) => m.id === msgId);
         const proposed = active.slice(0, at).concat([draft]);
         // Test the replacement path before writing a new branch or contacting a model.
-        const built = prism().build(proposed, "", SCN.forGeneration(proposed, { mode: "new" }));
+        const built = prism().build(proposed, "", scenarioFor(proposed, { mode: "new" }));
         if (preflightFailed(built, prov)) return { outcome: "overflow" };
         turn.phase = "editing";
         const edited = await chat().saveEdit(msgId, text, { turn, draftId: draft.id });
@@ -605,7 +606,7 @@
         const draft = chat().newMsg("user", ctx.chat().leafId, body);
         if (extra && extra.imageDataUrl) draft.swipes[0].imageDataUrl = extra.imageDataUrl;
         const path = chat().path().concat(draft);
-        return preflightFailed(prism().build(path, "", SCN.forGeneration(path, { mode: "new" })), provider);
+        return preflightFailed(prism().build(path, "", scenarioFor(path, { mode: "new" })), provider);
       };
       if (draftOverflow(roleProvider)) {
         restore({ chatId: c.id, text: body });

@@ -41,6 +41,13 @@ try:
             page.click('[data-act=prov-save]')
             page.click('[data-act=settings][data-section=gen]')
             assert not page.locator('[data-set=noPostHistory]').is_checked()
+            assert page.locator('#scenario-replies').input_value() == '5'
+            assert page.locator('#scenario-replies option').evaluate_all('(options)=>options.map(o=>o.value)') == ['5','10','15','20','25','30','0']
+            for cutoff in [5,10,15,20,25,30,0]:
+                page.select_option('#scenario-replies', str(cutoff))
+                page.wait_for_function('(n)=>PRP.app.S.settings.scenarioReplies===n', arg=cutoff)
+                page.wait_for_function('async(n)=>(await PRP.store.getSetting("app",null)).scenarioReplies===n', arg=cutoff)
+
             page.click('.preset[data-id=lively]')
             page.wait_for_function("document.querySelector('[data-sampler=temperature]').value === '1.1'")
             page.click('[data-act=settings][data-section=look]')
@@ -56,10 +63,11 @@ try:
             page.reload()
             page.wait_for_function('window.PRP && PRP.app && PRP.app.S.settings')
             saved = page.evaluate('''()=>{const s=PRP.app.S.settings;
-              return {theme:s.theme,temperature:s.sampler.temperature,noPostHistory:s.noPostHistory,
+              return {theme:s.theme,temperature:s.sampler.temperature,noPostHistory:s.noPostHistory,scenarioReplies:s.scenarioReplies,
                 provider:s.providers.find(p=>p.baseUrl==='https://fixture.invalid/v1')};}''')
             assert saved['theme'] == 'paper' and saved['temperature'] == 1.1
             assert saved['noPostHistory'] is False
+            assert saved['scenarioReplies'] == 0
             assert saved['provider']['model'] == 'mock-rp-7b'
             assert len(saved['provider']['models']) == 2
             assert not errors, errors

@@ -74,3 +74,5 @@ Assistant replacement durability is covered by `e2e-assist-regen.py`: streaming 
 A03: `e2e-swipe-commit.py` проверяет атомарность выбора свайпа и превью при отказе native IndexedDB, задержанной записи и повторном вызове, сохранение продолжения и reload (RP/Messenger, desktop/mobile). Живая модель не вызывается.
 
 `e2e-reflection-coverage.py`: разделение новых и ранее осмысленных свидетельств, unchanged/reload, native abort финальной записи, повтор неосмысленных событий в следующем цикле, изоляция якоря ветки и сохранение бэкапа. RP/Messenger × 1440/390, LLM подменена.
+
+`e2e-scenario-cutoff.py`: границы 5/10/15/20/25/30 и «Никогда», ветки, авторское приветствие, фактические regen/continue при выбранном сроке 10, reload. RP/Messenger × 1440/390; модель подменена. `e2e-settings.py` выбирает все значения через настоящий select и проверяет сохранение после reload.

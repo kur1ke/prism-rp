@@ -1456,30 +1456,34 @@ t("B-4: ответ на первую реплику пользователя п�
   assert.strictEqual(SCN.forGeneration([U_("u1")], { mode: "new" }).included, true);
   assert.strictEqual(SCN.forGeneration([A_("a0"), U_("u1")], { mode: "new" }).included, true);
 });
-t("B-5/B-6: после первого ответа и на поздних ходах — сценария нет", () => {
-  assert.strictEqual(SCN.forGeneration([A_("a0"), U_("u1"), A_("a1")], { mode: "new" }).included, false, "предпросмотр после первого обмена");
-  assert.strictEqual(SCN.forGeneration([U_("u1"), A_("a1")], { mode: "new" }).included, false);
-  assert.strictEqual(SCN.forGeneration([A_("a0"), U_("u1"), A_("a1"), U_("u2")], { mode: "new" }).included, false);
-  assert.strictEqual(SCN.forGeneration([U_("u1"), U_("u2")], { mode: "new" }).included, false, "вторая реплика подряд — уже не первая");
+const scenarioTurns = (n) => Array.from({length:n},(_,i)=>[U_("u"+i),A_("a"+i)]).flat();
+t("B-5/B-6: срок считается ответами, по умолчанию пять", () => {
+  assert.strictEqual(SCN.forGeneration(scenarioTurns(4)).included,true);
+  assert.strictEqual(SCN.forGeneration(scenarioTurns(5)).included,false);
+  assert.strictEqual(SCN.forGeneration(Array.from({length:20},(_,i)=>U_("u"+i))).included,true);
+  for(const limit of [5,10,15,20,25,30]){
+    assert.strictEqual(SCN.forGeneration(scenarioTurns(limit-1),{limit}).included,true);
+    assert.strictEqual(SCN.forGeneration(scenarioTurns(limit),{limit}).included,false);
+  }
+  assert.strictEqual(SCN.forGeneration(scenarioTurns(40),{limit:0}).included,true);
 });
-t("B-7/B-8: ветки — без реплик пользователя сценарий возвращается, соседняя ветка не влияет", () => {
-  // A ── B(user) ── C ; A' (другой корень/вариант без пользователя)
-  const withUser = [A_("A"), U_("B"), A_("C")], noUser = [A_("D")];
-  assert.strictEqual(SCN.forGeneration(withUser, { mode: "new" }).included, false);
-  assert.strictEqual(SCN.forGeneration(noUser, { mode: "new" }).included, true);
-  assert.strictEqual(SCN.forGeneration(withUser, { mode: "new" }).included, false, "вызовы не влияют друг на друга");
+t("B-7/B-8: ветки восстанавливают собственный срок сценария", () => {
+  const long=scenarioTurns(5),short=[Object.assign(A_("g"),{opening:"authored"})];
+  assert.strictEqual(SCN.forGeneration(long).included,false);
+  assert.strictEqual(SCN.forGeneration(short).included,true);
+  assert.strictEqual(SCN.forGeneration(long).included,false);
+  assert.strictEqual(SCN.completedReplies([{role:"assistant",opening:"generated"}]),1);
 });
-t("B-10/B-11: другой вариант первого ответа — со сценарием, позднего — без", () => {
-  const p = [A_("a0"), U_("u1"), A_("a1"), U_("u2"), A_("a2")];
-  assert.strictEqual(SCN.forGeneration(p, { mode: "regen", targetId: "a1" }).included, true);
-  assert.strictEqual(SCN.forGeneration(p, { mode: "regen", targetId: "a2" }).included, false);
-  assert.strictEqual(SCN.forGeneration(p, { mode: "regen", targetId: "a0" }).included, true, "другой вариант начала");
+t("B-10/B-11: regen сохраняет номер ответа на границе срока", () => {
+  const p=scenarioTurns(6);
+  assert.strictEqual(SCN.forGeneration(p,{mode:"regen",targetId:"a4"}).included,true);
+  assert.strictEqual(SCN.forGeneration(p,{mode:"regen",targetId:"a5"}).included,false);
+  assert.strictEqual(SCN.forGeneration(p,{mode:"regen",targetId:"a5",limit:0}).included,true);
 });
-t("B-12: «продолжить» — по той же границе", () => {
-  const p = [A_("a0"), U_("u1"), A_("a1"), U_("u2"), A_("a2")];
-  assert.strictEqual(SCN.forGeneration(p.slice(0, 1), { mode: "continue", targetId: "a0" }).included, true, "дописать начало");
-  assert.strictEqual(SCN.forGeneration(p.slice(0, 3), { mode: "continue", targetId: "a1" }).included, true, "дописать первый ответ");
-  assert.strictEqual(SCN.forGeneration(p, { mode: "continue", targetId: "a2" }).included, false, "дописать поздний ответ");
+t("B-12: дописывание не расходует новый шаг", () => {
+  const p=scenarioTurns(6);
+  assert.strictEqual(SCN.forGeneration(p,{mode:"continue",targetId:"a4"}).included,true);
+  assert.strictEqual(SCN.forGeneration(p,{mode:"continue",targetId:"a5"}).included,false);
 });
 t("B-13: детерминированно, без флага «израсходован»", () => {
   const p = [A_("a0"), U_("u1"), A_("a1")];
@@ -1499,7 +1503,7 @@ t("FB: сценарий — отдельный раздел «начало ис�
   assert.strictEqual(on.report.scenarioIncluded, true); assert.strictEqual(on.report.scenarioState, "included");
   const off = A.build({ card: cd, history: [{ role: "user", text: "hi" }], includeScenario: false });
   assert.ok(!off.messages.some((m) => m.content.includes("SCEN-LIB")));
-  assert.strictEqual(off.report.scenarioState, "past-first-turn");
+  assert.strictEqual(off.report.scenarioState, "limit-reached");
   assert.strictEqual(A.build({ card: Object.assign({}, cd, { scenario: "" }), history: [] }).report.scenarioState, "none");
 });
 
@@ -2117,35 +2121,22 @@ async function foundationB() {
     assert.strictEqual(est, r.used, "отчёт считает ровно то, что ушло, вместе с указанием");
     assert.ok(r.used <= r.budget && !r.overflow);
   });
-  await ta("B-4/B-5/B-30 (FB-4/FB-5): пользователь пишет первым — первый ответ со сценарием, следующий без", async () => {
-    const h = fbHarness(CARD_NOFIRST);
-    await h.chat.createChat("rp");
-    const sent = [];
-    fbLLM = async (p, msgs) => { sent.push(allText(msgs)); return { text: "Да, я здесь." }; };
-    await h.chat.addUserMessage("Ты ещё здесь?");
-    await h.gen.generate();
-    assert.ok(sent[0].includes("SCEN-LIB"), "первый ответ получает сценарий");
-    assert.strictEqual(h.chat.path()[0].role, "user", "реплика пользователя — корень");
-    h.prism.refresh();
-    assert.ok(!allText(h.S.lastPrism.messages).includes("SCEN-LIB"), "предпросмотр после первого ответа — без сценария");
-    assert.strictEqual(h.S.lastPrism.report.scenarioState, "past-first-turn");
-    await h.chat.addUserMessage("Что читаешь?");
-    await h.gen.generate();
-    assert.ok(!sent[1].includes("SCEN-LIB"), "второй ответ — без сценария");
-    // B-10: другой вариант ПЕРВОГО ответа — снова со сценарием; B-11: позднего — без
-    const p = h.chat.path();
-    await h.gen.generate(p[1].id, "regen");
-    assert.ok(sent[2].includes("SCEN-LIB"));
-    await h.gen.generate(p[3].id, "regen");
-    assert.ok(!sent[3].includes("SCEN-LIB"));
-    // B-12: продолжить первый ответ — со сценарием, поздний — без
-    await h.gen.generate(p[1].id, "continue");
-    assert.ok(sent[4].includes("SCEN-LIB"));
-    await h.gen.generate(p[3].id, "continue");
-    assert.ok(!sent[5].includes("SCEN-LIB"));
-    // B-7: вернуться на ветку без реплик пользователя невозможно в этом чате (корень — пользователь); см. авторский случай ниже
+  await ta("B-4/B-5/B-30: первые пять ответов со сценарием, шестой без; regen/continue сохраняют шаг", async () => {
+    const h=fbHarness(CARD_NOFIRST);await h.chat.createChat("rp");
+    const sent=[];fbLLM=async(_p,msgs)=>{sent.push(allText(msgs));return {text:"Да, я здесь."};};
+    for(let i=0;i<6;i++){
+      await h.chat.addUserMessage("Вопрос номер "+i);await h.gen.generate();
+      assert.strictEqual(sent[i].includes("SCEN-LIB"),i<5);
+    }
+    h.prism.refresh();assert.strictEqual(h.S.lastPrism.report.scenarioState,"limit-reached");
+    const p=h.chat.path();
+    await h.gen.generate(p[9].id,"regen");assert.ok(sent[6].includes("SCEN-LIB"));
+    await h.chat.selectBranch(p[11].id);
+    await h.gen.generate(p[11].id,"regen");assert.ok(!sent[7].includes("SCEN-LIB"));
+    await h.gen.generate(p[9].id,"continue");assert.ok(sent[8].includes("SCEN-LIB"));
+    await h.gen.generate(p[11].id,"continue");assert.ok(!sent[9].includes("SCEN-LIB"));
   });
-  await ta("FB авторское начало: предпросмотр со сценарием → ответ на первую реплику со сценарием → дальше без; ветка без реплик восстанавливает", async () => {
+  await ta("FB авторское приветствие не расходует срок; ветка восстанавливает сценарий", async () => {
     const h = fbHarness(CARD_FIRST);
     await h.chat.createChat("rp");
     const root = h.chat.path()[0];
@@ -2157,7 +2148,7 @@ async function foundationB() {
     await h.gen.generate();
     assert.ok(sent[0].includes("SCEN-FEST"));
     h.prism.refresh();
-    assert.ok(!allText(h.S.lastPrism.messages).includes("SCEN-FEST"));
+    assert.ok(allText(h.S.lastPrism.messages).includes("SCEN-FEST"));
     // B-7/B-8: другой вариант начала — новая ветка без реплик пользователя; модель зовётся с указанием начать
     await h.gen.generate(root.id, "regen");
     assert.ok(sent[1].includes("SCEN-FEST") && sent[1].includes("Начни сцену"), "другой вариант начала — со сценарием и указанием");
@@ -2167,7 +2158,7 @@ async function foundationB() {
     assert.ok(allText(h.S.lastPrism.messages).includes("SCEN-FEST"), "ветка без реплик пользователя");
     h.ctx.chat().leafId = T.latestLeaf(h.S.messages, root.id);
     h.prism.refresh();
-    assert.ok(!allText(h.S.lastPrism.messages).includes("SCEN-FEST"), "соседняя ветка с репликой — без");
+    assert.ok(allText(h.S.lastPrism.messages).includes("SCEN-FEST"), "соседняя ветка имеет свой срок");
   });
   await ta("FB-24: начало сцены — только включённые указания автора", async () => {
     const card = Object.assign({}, CARD_NOFIRST, { directives: { system: CM.importedDirective("IMPORTED-OFF"), postHistory: CM.directive("AUTHORED-ON", "authored") } });

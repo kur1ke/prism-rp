@@ -2,7 +2,7 @@
 // Imported fields remain literal data at HTML boundaries, including streaming paths.
 const assert=require("node:assert/strict");
 const path=require("node:path");
-for(const file of ["core/util","core/settings","chat/tree","providers/openai","images/compose",
+for(const file of ["core/util","core/settings","prism/scenario","chat/tree","providers/openai","images/compose",
   "assist/assist","ui/render","ui/views/kit","ui/views/chat","ui/views/assist","ui/views/settings"])
  require(path.join(__dirname,"../js",file+".js"));
 const P=globalThis.PRP, V=P.views, esc=P.render.esc;

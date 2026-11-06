@@ -12,6 +12,7 @@
     samplerPreset: "balanced",
     sampler: { temperature: 0.9, top_p: 0.95, min_p: 0.05, top_k: 0, repetition_penalty: 1.05, max_tokens: 700 },
     contextTokens: 8192,
+    scenarioReplies: 5, // 0 = never cut off by reply count
     autoContext: true,
     singleSystem: false,
     stateToolEnabled: false, // experimental: RP-authored state changes, no mandatory Observer

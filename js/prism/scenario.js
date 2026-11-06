@@ -1,27 +1,12 @@
-/* Prism RP — жизненный цикл сценария карточки (чистый модуль).
-
-   Сценарий (card.scenario) — исходные обстоятельства мира: где и с чего начинается история.
-   Это не постоянная часть карточки и не сцена: в сцену он не переносится и не разбирается.
-
-   Правило — граница первого ответа на реплику пользователя:
-     сценарий подаётся в генерацию, пока она отвечает не дальше первой реплики пользователя
-     в своей ветке. Формально: берётся ветка ДО генерируемого ответа («предшествующий путь»);
-     если она кончается репликой пользователя, эта реплика — та, на которую отвечают, и она
-     не считается; сценарий подаётся, если в остальной части нет ни одной реплики пользователя.
-
-   Предшествующий путь по режимам генерации:
-     opening  (модель начинает сцену)     → []
-     new      (новый ответ; и предпросмотр) → вся активная ветка
-     regen    (другой вариант ответа)      → ветка до перегенерируемого сообщения (без него)
-     continue (дописать ответ)             → ветка до дописываемого сообщения (без него)
-
-   Всё выводится из ветки при каждом вызове: никакого флага «сценарий израсходован» нет,
-   поэтому переключение веток и вариантов само восстанавливает или убирает сценарий. */
+/* Prism RP — срок передачи сценария карточки, без изменения истории и состояния.
+   Считаются ответы персонажа на выбранном пути; авторское приветствие не считается.
+   Regen/continue используют путь ДО целевого ответа, поэтому не расходуют новый шаг.
+   0 означает «Никогда»: сценарий не отключается по числу ответов, но общий бюджет действует. */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
-
-  // Ветка до генерируемого ответа. path — [{id, role, …}] от корня; targetId — для regen/continue.
+  const LIMITS = Object.freeze([5, 10, 15, 20, 25, 30, 0]);
+  function replyLimit(value) { return LIMITS.includes(value) ? value : 5; }
   function precedingPath(path, mode, targetId) {
     const p = path || [];
     if (mode === "opening") return [];
@@ -29,25 +14,21 @@
       const i = p.findIndex((m) => m.id === targetId);
       return i >= 0 ? p.slice(0, i) : p.slice();
     }
-    return p.slice(); // new и предпросмотр следующего хода
+    return p.slice();
   }
-
-  // Отвечает ли генерация после этой ветки не дальше первой реплики пользователя.
-  function includedAfter(preceding) {
-    const p = preceding || [];
-    const answered = p.length && p[p.length - 1].role === "user" ? p.slice(0, -1) : p;
-    return !answered.some((m) => m.role === "user");
+  function completedReplies(path) {
+    return (path || []).filter((m) => m.role === "assistant" && m.opening !== "authored").length;
   }
-
-  /* Решение для одной генерации. → { included, preceding, reason }
-     reason: "origin" — ещё до первой реплики пользователя или ответ на неё; "past-first-turn" — позже. */
+  function includedAfter(preceding, limit) {
+    const cutoff = replyLimit(limit);
+    return cutoff === 0 || completedReplies(preceding) < cutoff;
+  }
   function forGeneration(path, opts) {
-    const o = opts || {};
-    const preceding = precedingPath(path, o.mode || "new", o.targetId);
-    const included = includedAfter(preceding);
-    return { included, preceding, reason: included ? "origin" : "past-first-turn" };
+    const o = opts || {}, preceding = precedingPath(path, o.mode || "new", o.targetId);
+    const limit = replyLimit(o.limit), completed = completedReplies(preceding);
+    const included = includedAfter(preceding, limit);
+    return { included, preceding, limit, completed, reason: included ? "within-limit" : "limit-reached" };
   }
-
-  PRP.scenario = { precedingPath, includedAfter, forGeneration };
+  PRP.scenario = { LIMITS, replyLimit, completedReplies, precedingPath, includedAfter, forGeneration };
   if (typeof module !== "undefined" && module.exports) module.exports = PRP.scenario;
 })(typeof window !== "undefined" ? window : globalThis);
