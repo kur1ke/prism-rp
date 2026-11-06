@@ -94,30 +94,14 @@
   // opts.continueFrom — продолжить уже начатый ответ: он уходит в startWith.
   function chat(names, messages, opts) {
     const o = opts || {};
+    if (o.signal && o.signal.aborted) return Promise.reject(abortError(""));
     const ai = plugin();
     if (!ai) return Promise.reject(new Error("ai-text-plugin недоступен: приложение запущено не на Perchance."));
     const bodyOnly = o.outputFormat === "message-body";
     const unprefixed = bodyOnly || o.outputFormat === "json";
     const p = prepareChat(names, messages, o);
     let started = false, text = "";
-    const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl) : null;
-    return Promise.resolve(imageBlob).then((blob) => {
-    const handle = ai({
-      instruction: () => blob ? [p.instruction, blob] : p.instruction,
-      startWith: () => p.startWith,
-      stopSequences: () => p.stop,
-      hideStartWith: true,
-      onChunk: (data) => {
-        if (data.isFromStartWith) return;
-        let chunk = data.textChunk || "";
-        if (!started) { chunk = chunk.replace(/^\s+/, ""); if (chunk) started = true; }
-        if (!chunk) return;
-        text += chunk;
-        if (o.onDelta) o.onDelta({ text: chunk, reasoning: "" });
-      },
-    });
-    if (o.signal) o.signal.addEventListener("abort", () => { try { handle.stop(); } catch (e) {} }, { once: true });
-    return Promise.resolve(handle).then((res) => {
+    function outputText(res) {
       // In unprefixed modes, streaming already excludes the transport seed
       // (isFromStartWith). Prefer that exact body over generatedText, whose
       // inclusion of startWith varies across plugin versions.
@@ -129,16 +113,65 @@
       // Transcript continuation guard is RP-only. Messenger content (including
       // quoted names) and structured JSON are not cut by speaker-name regexes.
       if (!unprefixed) out = out.split(new RegExp(`\\n+${escapeRe(names.user || "Пользователь")}:`))[0];
-      if (o.signal && o.signal.aborted) {
-        const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = out; throw e;
+      return out;
+    }
+    return new Promise((resolve, reject) => {
+      let finished = false, handle, stopped = false;
+      const finish = (settle, value) => {
+        if (finished) return;
+        finished = true;
+        if (o.signal) o.signal.removeEventListener("abort", onAbort);
+        settle(value);
+      };
+      const stopHandle = () => {
+        if (!handle || stopped) return;
+        stopped = true;
+        try { if (typeof handle.stop === "function") handle.stop(); } catch (_) {}
+      };
+      const onAbort = () => {
+        finish(reject, abortError(outputText(null)));
+        stopHandle();
+      };
+      if (o.signal) {
+        o.signal.addEventListener("abort", onAbort, { once: true });
+        if (o.signal.aborted) { onAbort(); return; }
       }
-      return { text: out.trim(), reasoning: "", finish: "stop" };
-    });
+      const imageBlob = o.imageDataUrl ? awaitImageBlob(o.imageDataUrl, o.signal) : null;
+      Promise.resolve(imageBlob).then((blob) => {
+        if (finished) return;
+        handle = ai({
+          instruction: () => blob ? [p.instruction, blob] : p.instruction,
+          startWith: () => p.startWith,
+          stopSequences: () => p.stop,
+          hideStartWith: true,
+          onChunk: (data) => {
+            if (finished || (o.signal && o.signal.aborted)) return;
+            if (data.isFromStartWith) return;
+            let chunk = data.textChunk || "";
+            if (!started) { chunk = chunk.replace(/^\s+/, ""); if (chunk) started = true; }
+            if (!chunk) return;
+            text += chunk;
+            if (o.onDelta) o.onDelta({ text: chunk, reasoning: "" });
+          },
+        });
+        // Abort can happen synchronously inside ai(), before it returns its handle.
+        if (finished) stopHandle();
+        return Promise.resolve(handle).then((res) => {
+          if (finished) return;
+          return { text: outputText(res).trim(), reasoning: "", finish: "stop" };
+        });
+      }).then((result) => finish(resolve, result), (error) => finish(reject, error));
     });
   }
 
-  async function awaitImageBlob(url) {
-    const response = await fetch(url);
+  function abortError(partial) {
+    const e = new Error("Остановлено"); e.name = "AbortError"; e.partial = partial;
+    return e;
+  }
+
+  async function awaitImageBlob(url, signal) {
+    const response = await fetch(url, { signal });
+    if (signal && signal.aborted) throw abortError("");
     if (!response.ok) throw new Error("Не удалось прочитать вложение");
     return response.blob();
   }
