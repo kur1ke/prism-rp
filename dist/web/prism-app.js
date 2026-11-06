@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "291d40af10f712692565c868be47a08b90de71a5";
+  window.PRISM_RP_BUILD_SHA = "d09105938824029707e152d3b31dec82caaefbf8";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -391,8 +391,9 @@
    (world/overlay-service.checkBackup, messenger/service.checkBackup); режимы чатов — chat/service.checkBackupChats.
    Без DOM, хранилища, сети и S.
 
-   data — объект бэкапа; opts: { replace, existing: { cards: [id], chats: [id], packs: [id], lenses: [{ id, cardId }] } }
-   → { data (отфильтрованная копия), rejected: { store: число }, issues: [{ level, code, message, store, id }] } */
+   Цикл сообщений отменяет всё восстановление (fatal), а не удаляет часть истории.
+   data — объект бэкапа; opts: { replace, existing: { cards: [id], chats: [id], packs: [id], lenses: [{ id, cardId }], messages: [record] } }
+   → { data (отфильтрованная копия), rejected: { store: число }, issues: [{ level, code, message, store, id }], fatal } */
 (function (root) {
   "use strict";
   const PRP = (root.PRP = root.PRP || {});
@@ -495,7 +496,28 @@
       if (r.chatId != null && r.chatId !== "" && !chats.has(sid(r.chatId))) { reject("experience", r.id, "experience-orphan-chat", "Запись опыта относится к чату, которого нет."); return false; }
       return true;
     });
-    return { data: out, rejected, issues };
+    // Validate the resulting graph, including unchanged local edges during an
+    // additive restore. Do not guess a root or partially restore a cyclic chat.
+    const nodes = new Map((replace ? [] : (ex.messages || [])).map((m) => [sid(m.id), m]));
+    for (const m of Array.isArray(out.messages) ? out.messages : []) nodes.set(sid(m.id), m);
+    const done = new Set();
+    let fatal = false;
+    for (const start of nodes.keys()) {
+      const route = new Set();
+      let id = start;
+      while (nodes.has(id) && !done.has(id)) {
+        if (route.has(id)) {
+          fatal = true;
+          issues.push({ level: "error", code: "message-cycle", store: "messages", id,
+            message: "В связях сообщений обнаружен цикл. Восстановление отменено; данные не изменены." });
+          break;
+        }
+        route.add(id);
+        id = sid(nodes.get(id).parentId);
+      }
+      for (const visited of route) done.add(visited);
+    }
+    return { data: out, rejected, issues, fatal };
   }
 
   const total = (rejected) => Object.values(rejected || {}).reduce((a, b) => a + b, 0);
@@ -3428,9 +3450,12 @@
   function descendants(list, id) {
     const out = [];
     const stack = [id];
+    const seen = new Set([id]);
     while (stack.length) {
       const cur = stack.pop();
-      for (const m of list) if (m.parentId === cur) { out.push(m.id); stack.push(m.id); }
+      for (const m of list) if (m.parentId === cur && !seen.has(m.id)) {
+        seen.add(m.id); out.push(m.id); stack.push(m.id);
+      }
     }
     return out;
   }
@@ -3438,7 +3463,10 @@
   // Самый свежий лист под узлом — куда переходить после переключения ветки.
   function latestLeaf(list, id) {
     let cur = id;
+    const seen = new Set();
     for (;;) {
+      if (seen.has(cur)) return null; // A corrupt cycle has no leaf.
+      seen.add(cur);
       const kids = children(list, cur);
       if (!kids.length) return cur;
       cur = kids[kids.length - 1].id;
@@ -14813,7 +14841,13 @@
         const chkChats = svc.chat.checkBackupChats(data, { replace, existingChats });
         // Ссылочная целостность: чат → персонаж, сообщения и картинки → чат, опыт → персонаж и чат, линза → персонаж и пак, повторы id.
         const existing = replace ? {} : { cards: (await DB.all("cards")).map((c) => c.id), chats: local.map((c) => c.id), packs: (await DB.all("worldPacks")).map((p) => p.id), lenses: (await DB.all("worldLenses")).map((l) => ({ id: l.id, cardId: l.cardId })) };
+        if (!replace) existing.messages = await DB.all("messages");
         const chkRefs = PRP.backup.check(chkChats.data, { replace, existing });
+        if (chkRefs.fatal) {
+          t.value = "";
+          ui.toast("Бэкап не загружен: в связях сообщений обнаружен цикл. Данные не изменены.", true);
+          return true;
+        }
         const chk = svc.worldChat.checkBackup(chkRefs.data, { replace, existingChatIds: local.map((c) => c.id) });
         // Среда переписки — то же: только к переписке из бэкапа (замена) или из бэкапа и уже существующих (добавление).
         const chkEnv = svc.messenger.checkBackup(chk.data, { replace, existingChats });
