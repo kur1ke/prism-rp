@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Prism RP</title>
-<!-- Prism RP 0.5.0 · собрано 2026-11-06 · исходники: index.html, css/, js/ -->
+<!-- Prism RP 0.5.0 · собрано 2026-11-07 · исходники: index.html, css/, js/ -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=Onest:wght@400;500;600;700&display=swap">
@@ -15344,6 +15344,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
   PRP.controllers.drawer = function (ctx) {
     const { S, ui, svc } = ctx;
     const { $ } = ui;
+    const csv = (value) => String(value || "").split(",").map((part) => part.trim()).filter(Boolean);
 
     // Copy only the currently open Debug section, not other tabs or hidden
     // application state. A legacy fallback is needed in embedded Perchance frames.
