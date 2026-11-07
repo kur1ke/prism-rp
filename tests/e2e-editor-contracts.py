@@ -22,6 +22,7 @@ try:
     await PRP.app.ctx.nav.loadAll();window.__calls=0;PRP.llm.chat=async()=>{__calls++;throw Error('editor must not call model');};}''')
    page.click('.home-greeting-actions [data-act=characters]');page.click('.home [data-act=new-card]')
    page.wait_for_selector('#cf-name')
+   page.wait_for_function('document.activeElement && document.activeElement.id==="cf-name"')
    labels=page.inner_text('.modal-body')
    assert all(s in labels for s in ['description','personality','scenario'])
    page.fill('#cf-name','Мира');page.fill('#cf-desc',literal);page.fill('#cf-pers','Сдержанна.');page.fill('#cf-scen','SCEN_EMPTY_CARD')
