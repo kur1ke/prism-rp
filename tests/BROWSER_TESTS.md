@@ -44,7 +44,7 @@ initiative refusal/API error/strict-template rejection, transactional rollback,
 successful provenance and reload. Each runs at 1440 and 390 pixels.
 
 `legacy-e2e-inventory.json` records all 203 historical named check call sites,
-with their original lines, current evidence or pending disposition. These are
+with their original lines and current coverage or explicit retired/replaced disposition; none remain pending. These are
 call sites, not the number of executed scenarios. Ported entries describe current
 semantic coverage; obsolete labels and removed controls are not recreated.
 Mobile settings now enter directly from the welcome screen. The catalog suite
@@ -56,16 +56,18 @@ checks all three controls by viewport bounds and hit testing after actual image
 loading: four viewport sizes, three image shapes and two long captions (24 cases).
 The full caption remains intact; only its visible label is truncated.
 
-## Remaining F29 work
+## F29 migration complete
 
-The historical `tests/e2e.py` is **not the current gate**. Its 203 named checks
-mix active flows with retired Scene/manual Experience/editor expectations and
-old IndexedDB versions. It currently fails after import because it expects the
-catalog on the welcome screen. The new catalog suite covers the current route,
-but is not a claim that all 203 checks have been ported. Inventory and migrate
-the remaining active workflows (including remaining import/author-directive controls, empty-scene startup,
-world-chat forms/provenance, storage upgrade/error UI and Perchance image/initiative paths); document retired
-checks and remove the obsolete monolith after that migration. F29 remains partial.
+All 203 historical named call sites have been individually classified in
+`legacy-e2e-inventory.json`: current semantic coverage, explicitly replaced contract
+or retired contract. There are zero pending entries. The obsolete `tests/e2e.py`
+has been removed; its pinned `sourceRef` retains the historical source. The current
+gate discovers all 50 `e2e-*.py` suites, builds fresh sources, records evidence and
+fails CI/publication on any failure or watchdog timeout.
+
+This closes migration of the old browser flow. It does not certify a live model
+or installation of the HTML in a user's Perchance generator. Native IndexedDB and
+UI/adapters run for real; external AI/image providers are fixtures.
 
 Observer/image concurrency is covered by `e2e-observer-image-race.py`: both commit orders, fresh unrelated fields, deleted/edited sources, no resurrection, and reload in RP/Messenger at 1440/390. The regression fails on the pre-A01 bundle.
 
@@ -86,8 +88,8 @@ A06: `e2e-image-translation-budget.py` — ImageService/compiler/router + реа
 F29 import/opening migration: `e2e-import-directives.py` checks unknown/broken JSON,
 review cancellation, URV source preservation, default-disabled imported directives,
 editor save/reload and explicit system-directive consent at 1440/390 px. Prompt
-membership is checked with the real assembler using the persisted card; this test
-does not claim a provider call. The fixture is synthetic and has no dialogue examples.
+membership is checked with the real assembler using the persisted card and with
+actual OpenAI-adapter requests before/after explicit consent; external replies are fixtures. The fixture is synthetic and has no dialogue examples.
 `e2e-empty-opening.py` checks no automatic call or placeholder turn, user-first
 requests, failed opening/retry, assistant-only opening persistence, and single-system
 preflight plus user-first recovery, using the actual OpenAI adapter with a local
@@ -101,3 +103,28 @@ environment remains unpersisted. Every case runs at 1440/390 px in isolated TEST
 entities/topics/locations), branch ownership, timeline/lens relevance in an actual
 OpenAI-adapter request, no implicit model-to-world writes and reload at 1440/390 px.
 It reproduced the missing `csv` helper before the controller fix.
+
+F29 restore/Perchance/Memory migration adds three auto-discovered suites:
+- `e2e-backup-restore.py`: request/setup rollback in native IndexedDB, replacement
+  cleanup, real UI failure/same-file retry, owner filtering, additive mode conflicts,
+  world roundtrip and chat/world cleanup at 1440/390.
+- `e2e-perchance-workflows.py`: actual compiled Perchance HTML with fixture plugins;
+  default provider, live UI chunks, continuation seed, image resolution/seed/no LoRA,
+  metadata context and body-only initiative/reload at both widths. This is not a
+  live Perchance service or model check.
+- `e2e-memory-panel-isolation.py`: actual app panel, automatic Memory/Experience,
+  chat isolation/reopening/reload and unchanged inert legacy archive at both widths.
+
+The inventory has zero pending call sites; F29 migration is complete. Existing Core
+coverage is mapped to full-field/opt-in Core semantics. Retired scene-parser output
+is replaced by opening persistence plus canonical StateTracker/Observer checks.
+
+Final migration adds `e2e-editor-contracts.py` and `e2e-image-workflows.py` and expands
+Messenger/world suites. Editor tests cover all seven reachable sections, metadata,
+lore, literal data, optional Core clearing, empty opening and viewport bounds. Image
+tests check real RP/translation/A1111 requests and auto Draw, identity/LoRA, authored
+clothing, quality, size, negative/model/seed and UI sampler selection. Messenger tests
+cover timezone/frame/reasons, read-only generation context, mobile forms/control
+bounds and the current navigation guard plus abort. Its Stop click remains reachable
+under the visible warning toast; no force click bypasses hit testing. World tests
+exercise referenced-pack deletion refusal and the report's current Debug location.

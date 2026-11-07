@@ -1,7 +1,7 @@
 {
   "sourceRef": "b1b52f01a27e8eba5c92f7fae8a940108b08a735",
   "sourceFile": "tests/e2e.py",
-  "note": "203 named call sites, not a count of executed cases. Ported rows reference current semantic coverage, not identical retired UI. Pending requires individual disposition before monolith removal.",
+  "note": "203 historical named call sites, not a count of executed cases. Migration complete: every row has current semantic coverage or an explicit retired/replaced contract; zero pending. Historical source is retained at sourceRef; the obsolete monolith was removed after migration.",
   "checks": [
     {
       "historicalLine": 100,
@@ -30,8 +30,10 @@
     {
       "historicalLine": 122,
       "name": "'редактор: подписи полей по CCv2'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 138,
@@ -68,14 +70,18 @@
     {
       "historicalLine": 148,
       "name": "'лорбук: доп. ключи и название сохранены'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 150,
       "name": "'создатель и версия сохранены'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 161,
@@ -160,14 +166,19 @@
     {
       "historicalLine": 192,
       "name": "'Prism: склонности, сцена, лорбук'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-image-workflows.py: real request includes character frame/full card/lore",
+        "tests/e2e-unified-state.py: same canonical Tracker snapshot in Prism and image context replaces Scene projection"
+      ]
     },
     {
       "historicalLine": 193,
       "name": "'пресет «Живой» ушёл в запрос'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 194,
@@ -276,14 +287,18 @@
     {
       "historicalLine": 237,
       "name": "'автоматическая память: нет ручного редактора'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 238,
       "name": "'автоматическая память: панель Experience'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 249,
@@ -312,62 +327,83 @@
     {
       "historicalLine": 260,
       "name": "'имя в шапке чата открывает карточку'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 274,
       "name": "'авто-рисование по [draw:]'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 276,
       "name": "'авто-рисование по [draw:]'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 277,
       "name": "'директива [draw:] скрыта'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 280,
       "name": "'промпт: LoRA персонажа'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 282,
       "name": "'промпт: триггер и гардероб из сцены'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-image-workflows.py: identity trigger and authored Draw clothing preserved; removed legacy Scene wardrobe injection is not recreated",
+        "tests/e2e-unified-state.py: canonical StateTracker source for ordinary image preparation"
+      ]
     },
     {
       "historicalLine": 284,
       "name": "'промпт: блок качества один раз'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 285,
       "name": "'размер 2:3 → 832×1216'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 286,
       "name": "'негатив персонажа'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 287,
       "name": "'модель передана серверу'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 290,
@@ -404,20 +440,26 @@
     {
       "historicalLine": 308,
       "name": "'перевод сцены текстовой моделью'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 310,
       "name": "'переведённая сцена в промпте'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 311,
       "name": "'закреплённый seed применён'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-image-workflows.py: actual RP/translation/A1111 adapters with fixture replies; auto Draw, UI preset in request, identity/LoRA, quality, dimensions, negative/model/seed at 1440/390"
+      ]
     },
     {
       "historicalLine": 317,
@@ -430,14 +472,18 @@
     {
       "historicalLine": 324,
       "name": "'FC: новая переписка — окно настройки времени, пояс по умолчанию'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 327,
       "name": "'FC: режим показан и не переключается'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 332,
@@ -458,8 +504,10 @@
     {
       "historicalLine": 337,
       "name": "'переписка: рамка'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 338,
@@ -488,20 +536,26 @@
     {
       "historicalLine": 348,
       "name": "'PRISM1-1: опыт другого чата не попадает в модель'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 351,
       "name": "'PRISM1-1: вкладка опыта другого чата пуста'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 352,
       "name": "'FC: у переписки вкладка «Среда» вместо «Сцена»'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 360,
@@ -530,8 +584,10 @@
     {
       "historicalLine": 372,
       "name": "'после перезагрузки открыт тот же чат'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 378,
@@ -544,14 +600,19 @@
     {
       "historicalLine": 384,
       "name": "'PRISM1-1: в своём чате опыт на месте'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 393,
       "name": "'бэкап со всеми коллекциями'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 400,
@@ -652,20 +713,26 @@
     {
       "historicalLine": 462,
       "name": "'архив не показывается как автоматическая память'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 464,
       "name": "'старый Experience сохранён без миграции'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 465,
       "name": "'старый Experience не входит в Prism'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-memory-panel-isolation.py: real app read-only Memory/Experience panel, exact chat isolation, inert archive and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 499,
@@ -702,14 +769,18 @@
     {
       "historicalLine": 520,
       "name": "'H: «### Указания автора» в описании карточки не создаёт раздел указаний, текст цел как литерал'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 531,
       "name": "'мобильная ширина без горизонтальной прокрутки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 560,
@@ -802,20 +873,26 @@
     {
       "historicalLine": 610,
       "name": "'FA: выключенное указание не уходит в модель'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py: actual OpenAI adapter payload before/after explicit author-directive consent at 1440/390"
+      ]
     },
     {
       "historicalLine": 628,
       "name": "'FA: включённое указание уходит в модель, выключенное — нет'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py: actual OpenAI adapter payload before/after explicit author-directive consent at 1440/390"
+      ]
     },
     {
       "historicalLine": 642,
       "name": "'B-25: карточка со сценарием без первого сообщения'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 648,
@@ -868,8 +945,11 @@
     {
       "historicalLine": 681,
       "name": "'B-34: начало записано, сцена из [scene:]'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-empty-opening.py: opening response persisted and restored",
+        "tests/e2e-unified-state.py: canonical StateTracker/Observer replaces retired scene directive parser"
+      ]
     },
     {
       "historicalLine": 684,
@@ -954,8 +1034,10 @@
     {
       "historicalLine": 774,
       "name": "'W1-18: мир со ссылками не удаляется, причина с именами'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-worlds.py: real delete attempt is refused with both character names; pack persists at 1440/390"
+      ]
     },
     {
       "historicalLine": 787,
@@ -1008,8 +1090,10 @@
     {
       "historicalLine": 830,
       "name": "'W2: отчёт Prism показывает мир'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-world-chat.py: actual Debug modal shows world selection/relevance report; developer diagnostics moved out of drawer"
+      ]
     },
     {
       "historicalLine": 836,
@@ -1038,8 +1122,10 @@
     {
       "historicalLine": 866,
       "name": "'FC: в модель — время переписки в поясе чата'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 868,
@@ -1116,14 +1202,18 @@
     {
       "historicalLine": 937,
       "name": "'D: в модель — поводы как данные и указание проверки; реплики пользователя не подделано'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 940,
       "name": "'D: среда, договорённости и время не изменились'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 944,
@@ -1136,8 +1226,11 @@
     {
       "historicalLine": 962,
       "name": "'D: смена чата во время проверки — ответ не сохранён ни в одном чате'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-messenger.py: current navigation guard refuses switching during initiative; real Stop aborts; late result cannot write either chat",
+        "js/ui/app.js: openChat currently refuses generation/turn navigation; architecture explicitly retains temporary guard"
+      ]
     },
     {
       "historicalLine": 975,
@@ -1150,74 +1243,99 @@
     {
       "historicalLine": 980,
       "name": "'FC узкий экран: «Среда» и форма положения без горизонтальной прокрутки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 987,
       "name": "'D 390 px: кнопка инициативы видна целиком, без горизонтальной прокрутки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 991,
       "name": "'FC узкий экран: «Среда» и форма положения без горизонтальной прокрутки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-messenger.py: setup/system timezone, immutable mode, actual request frame/time/reasons, unchanged environment, mobile form/control bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 1011,
       "name": "'узкий экран: все 7 разделов редактора нажимаются, активный раздел виден'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 1012,
       "name": "'узкий экран: лента разделов прокручивается, страница без горизонтальной прокрутки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 1013,
       "name": "'узкий экран: раздел «Мир» — выбор пака, линза и превью'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 1021,
       "name": "'узкий экран: сохранение из дальнего раздела работает'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 1026,
       "name": "'H-UI: ядро — запасное, показано, что использует Prism'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-card-fields.py: F07 full selected source fields with optional Core disabled by default replace compulsory fallback Core",
+        "js/cards/model.js: CONTEXT_DEFAULTS"
+      ]
     },
     {
       "historicalLine": 1035,
       "name": "'H-UI: явное ядро сохранено и используется Prism'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-card-fields.py: real editor enables explicit Core; both adapters include complete Core; export/reload preserve selection at 1440/390"
+      ]
     },
     {
       "historicalLine": 1037,
       "name": "'H-UI 390 px: редактор с ядром без горизонтальной прокрутки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: real seven-section editor, lore/metadata, literal data, empty greeting, header entry and viewport bounds at 1440/390"
+      ]
     },
     {
       "historicalLine": 1045,
       "name": "'H-UI: сброс — снова запасное ядро; модель не вызывалась'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-editor-contracts.py: explicit Core reset preserves complete primary fields without any model call; compulsory fallback Core was removed in F07"
+      ]
     },
     {
       "historicalLine": 1053,
       "name": "'нет ошибок JS (standalone)'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py and tests/e2e-memory-panel-isolation.py: no pageerror in all standalone cases"
+      ]
     },
     {
       "historicalLine": 1083,
@@ -1238,92 +1356,137 @@
     {
       "historicalLine": 1101,
       "name": "'W1-19: бэкап включает мир, восстановление его возвращает'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1102,
       "name": "'W2-33: бэкап включает мир чата, восстановление его возвращает'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1108,
       "name": "'W2-33: удаление чата удаляет его мир, пак остаётся'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1130,
       "name": "'FC: восстановление (замена) — среда только для переписки из бэкапа; для сцены и сироты отброшена до записи'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1132,
       "name": "'W2 fix: восстановление (замена) — запись мира без своего чата не записана, остальные восстановлены'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1148,
       "name": "'W2 fix: восстановление (добавление) — запись для существующего чата принята, сирота — нет'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1164,
       "name": "'FC fix: добавление — конфликт режима: местная сцена не стала перепиской, чужие сообщения и среда не записаны'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1186,
       "name": "'H: замена бэкапом — коллекции, которых нет в бэкапе, пусты; сирота бэкапа не записана; данные бэкапа на месте'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1189,
       "name": "'H: замена бэкапом без настроек — настройки по умолчанию после перезагрузки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1191,
       "name": "'H: после замены приложение открывается с данными бэкапа'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1225,
       "name": "'H-FIX: отказ запроса посреди замены — отказ промиса, все старые данные целы, ни одной новой записи'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1227,
       "name": "'H-FIX: синхронная ошибка постановки в очередь — откат, старые данные целы'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1229,
       "name": "'H-FIX: успешная замена на настоящем IndexedDB — данные бэкапа на месте, старых нет, отсутствующие коллекции пусты'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1242,
       "name": "'H-FIX UI: ошибка записи — «Бэкап не загружен», без сообщения об успехе, данные не изменены'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1254,
       "name": "'H-FIX UI: повтор тем же файлом после ошибки проходит'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-backup-restore.py: real IDB rollback, UI retry, replace/additive ownership and cleanup at 1440/390",
+        "tests/e2e-backup-snapshot.py: coherent downloaded snapshot and UI restore"
+      ]
     },
     {
       "historicalLine": 1285,
@@ -1408,62 +1571,82 @@
     {
       "historicalLine": 1399,
       "name": "'Perchance: выбран по умолчанию'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1405,
       "name": "'Perchance: стриминг ответа'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1407,
       "name": "'Perchance: инструкция содержит Prism и историю'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1412,
       "name": "'Perchance: продолжение через startWith'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1416,
       "name": "'Perchance: рисование через image()'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1418,
       "name": "'Perchance: рисование через image()'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1420,
       "name": "'Perchance: разрешение и без LoRA'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1422,
       "name": "'Perchance: контекст из плагина'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 1432,
       "name": "'D Perchance: инициатива — решение последней строкой инструкции, без строк пользователя; ответ сохранён как сообщение-инициатива'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: closing instruction without fake user; persisted initiative; current Messenger body-only empty seed replaces old name-prefixed seed"
+      ]
     },
     {
       "historicalLine": 1436,
       "name": "'нет ошибок JS (perchance)'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-perchance-workflows.py: compiled Perchance HTML with fixture ai/image plugins, streaming/continue/image/meta/reload at 1440/390"
+      ]
     }
   ]
 }
