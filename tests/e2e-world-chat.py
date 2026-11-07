@@ -35,14 +35,19 @@ try:
    page.fill('#wc-timeline','canon');page.click('[data-act=wc-sel-save]')
    page.wait_for_function('document.querySelector("#toast").innerText.includes("Таймлайн и вариант чата сохранены")')
    page.click('[data-act=wc-new]');page.wait_for_selector('#wc-text')
+   # The controller focuses this field asynchronously; wait before filling other fields.
+   page.wait_for_function('document.activeElement && document.activeElement.id==="wc-text"')
    assert page.is_checked('input[name=wc-scope][value=branch]')
-   page.fill('#wc-text','WF-BRANCH: Вера вступила в клуб.');page.fill('#wc-ent',' Вера, , Борис ');page.fill('#wc-top',' клуб, книги ');page.fill('#wc-loc',' библиотека, ');page.click('[data-act=wc-save]')
+   page.fill('#wc-text','WF-BRANCH: Вера вступила в клуб.');page.fill('#wc-ent',' Вера, , Борис ');page.fill('#wc-top',' клуб, книги ');page.fill('#wc-loc',' библиотека, ')
+   form={key:page.input_value('#wc-'+key) for key in ['text','ent','top','loc']}
+   assert form=={'text':'WF-BRANCH: Вера вступила в клуб.','ent':' Вера, , Борис ','top':' клуб, книги ','loc':' библиотека, '},form
+   page.click('[data-act=wc-save]')
    page.wait_for_function('PRP.app.S.worldOverlay.entries.length===1')
    overlay=page.evaluate('PRP.app.S.worldOverlay');entry=overlay['entries'][0]
    assert overlay['timeline']=='canon' and entry['scope']=='branch' and entry['op']=='assert'
    assert entry['provenance']['messageIds'] and entry['provenance']['anchorId']
    assert entry['fact']['entities']==['Вера','Борис'],entry
-   assert entry['fact']['topics']==['клуб','книги'] and entry['fact']['locations']==['библиотека']
+   assert entry['fact']['topics']==['клуб','книги'] and entry['fact']['locations']==['библиотека'],entry
    selected=page.evaluate('PRP.app.ctx.svc.worldChat.context().facts')
    texts=json.dumps(selected,ensure_ascii=False)
    assert 'WF-BRANCH' in texts and 'WF-OVERRIDE' in texts
