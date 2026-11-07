@@ -68,7 +68,31 @@ try:
                     return JSON.stringify(PRP.assembler.build({card,mode:'rp',contextTokens:32000,
                       history:[{role:'user',text:'Здравствуйте.'}]}).messages);
                 }''')
+            def send_payload():
+                page.evaluate('''async()=>{
+                    const {ctx,S}=PRP.app,card=S.cards[0];
+                    const id=await ctx.svc.chat.createChat('rp',card.id);await ctx.nav.openChat(id);
+                    S.settings.images.enabled=false;S.settings.autoContext=false;S.settings.contextTokens=32000;
+                    S.settings.providers=[{id:'fixture',kind:'openai',name:'Fixture',baseUrl:'https://fixture.invalid/v1',model:'fixture'}];
+                    S.settings.activeProvider='fixture';ctx.svc.memory.observe=async()=>({status:'disabled'});
+                    PRP.llm.simple=async()=>JSON.stringify({events:[]});window.__directiveCalls=[];
+                    const original=window.fetch;window.fetch=async(url,opts)=>{
+                        if(String(url)==='https://fixture.invalid/v1/chat/completions'){
+                            __directiveCalls.push(JSON.parse(opts.body));const nl=String.fromCharCode(10);
+                            return new Response('data: '+JSON.stringify({choices:[{delta:{content:'Ответ.'}}]})+nl+nl+'data: [DONE]'+nl+nl,
+                                {status:200,headers:{'Content-Type':'text/event-stream'}});
+                        }return original(url,opts);
+                    };
+                }''')
+                page.fill('#input','Проверка указаний.');page.click('[data-act=send]')
+                page.wait_for_function('__directiveCalls.length===1 && !PRP.app.S.gen && !PRP.app.S.turn')
+                request = page.evaluate('JSON.stringify(__directiveCalls[0].messages)')
+                page.evaluate('PRP.app.ctx.nav.goCharacters()');page.wait_for_selector('.tile[data-id]')
+                return request
             assert all(s not in payload() for s in ['IMPORT_SYSTEM_SENTINEL', 'IMPORT_POST_SENTINEL', 'COMPILED_SENTINEL', 'SOURCE_ONLY'])
+            disabled = send_payload()
+            assert 'Короткие волосы.' in disabled
+            assert all(s not in disabled for s in ['IMPORT_SYSTEM_SENTINEL', 'IMPORT_POST_SENTINEL', 'COMPILED_SENTINEL', 'SOURCE_ONLY'])
             page.locator('.tile', has_text='Мира').locator('.tile-edit').click()
             page.click('[data-act=card-section][data-section=prompts]')
             page.check('[data-cf-dir=system][type=checkbox]')
@@ -77,6 +101,9 @@ try:
             text = payload()
             assert 'IMPORT_SYSTEM_SENTINEL' in text
             assert all(s not in text for s in ['IMPORT_POST_SENTINEL', 'COMPILED_SENTINEL', 'SOURCE_ONLY'])
+            enabled = send_payload()
+            assert 'IMPORT_SYSTEM_SENTINEL' in enabled
+            assert all(s not in enabled for s in ['IMPORT_POST_SENTINEL', 'COMPILED_SENTINEL', 'SOURCE_ONLY'])
             assert errors == [], errors
             page.screenshot(path=str(out / f'import-{width}.png'), full_page=True)
             results.append({'width': width, 'status': 'PASS'})

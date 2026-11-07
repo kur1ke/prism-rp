@@ -79,6 +79,15 @@ try:
             page.evaluate(async_edit, 'Аля')
             page.click('[data-act=card-section][data-section=world]')
             assert 'WF-OSAKA' in page.inner_text('.eff-world') and 'WF-NEIGHBOR' in page.inner_text('.eff-world')
+            page.click('[data-act=modal-close]')
+            page.evaluate('PRP.app.ctx.nav.openWorld()')
+            pack_id = page.evaluate('PRP.app.S.worldPacks[0].id')
+            page.click('[data-act=world-open][data-id="'+pack_id+'"]')
+            page.once('dialog', lambda dialog: dialog.accept())
+            page.click('[data-act=world-delete]')
+            page.wait_for_function('document.querySelector("#toast").innerText.includes("Мир используют персонажи")')
+            assert all(name in page.inner_text('#toast') for name in ['Аля','Юки'])
+            assert page.evaluate('async()=>(await PRP.store.all("worldPacks")).length') == 1
             assert not errors, errors
             page.screenshot(path=str(out / f'worlds-{width}.png'))
             results.append({'width': width, 'passed': True})

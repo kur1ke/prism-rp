@@ -1,7 +1,7 @@
 """Build current sources and run every focused browser regression.
 
 Usage: python3 tests/browser_regressions.py <artifact-directory> [--jobs 2]
-The historical e2e.py flow is not included until its retired UI checks are ported.
+The historical e2e.py flow was retired after all 203 call sites received dispositions.
 """
 import argparse
 import concurrent.futures

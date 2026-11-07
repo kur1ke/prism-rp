@@ -79,6 +79,11 @@ try:
    page.wait_for_function('''()=>{const d=document.querySelector('.drawer.open'),b=d.getBoundingClientRect();
     const body=document.querySelector('#drawer-body');return b.left>=-1 && b.right<=innerWidth+1 && body.scrollWidth<=body.clientWidth+1;}''')
    page.screenshot(path=str(out/f'world-chat-{width}.png'))
+   page.evaluate("PRP.app.S.settings.developerMode=true;PRP.app.S.drawerOpen=false;PRP.app.ctx.ui.renderAll()")
+   page.click('[data-act=debug-open]');page.wait_for_selector('.debug-modal')
+   assert 'Отбор мира' in page.inner_text('.debug-modal') and 'релевантных' in page.inner_text('.debug-modal')
+   page.screenshot(path=str(out/f'world-report-{width}.png'))
+   page.click('[data-act=modal-close]')
    page.reload();page.wait_for_function('window.PRP && PRP.app && PRP.app.S.worldOverlay && PRP.app.S.worldOverlay.entries.length===1')
    assert page.evaluate('PRP.app.S.worldOverlay')==overlay
    assert page.evaluate('PRP.app.ctx.svc.worldChat.canon().facts.some(f=>f.text.includes("WF-BRANCH"))')
