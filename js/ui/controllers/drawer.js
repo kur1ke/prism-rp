@@ -8,6 +8,7 @@
   PRP.controllers.drawer = function (ctx) {
     const { S, ui, svc } = ctx;
     const { $ } = ui;
+    const csv = (value) => String(value || "").split(",").map((part) => part.trim()).filter(Boolean);
 
     // Copy only the currently open Debug section, not other tabs or hidden
     // application state. A legacy fallback is needed in embedded Perchance frames.
