@@ -470,6 +470,7 @@ details.think div { white-space: pre-wrap; margin-top: 6px; padding: 8px 12px; b
 .lore { border: 1px solid var(--line-soft); border-radius: var(--r-m); padding: 12px; margin-bottom: 8px; background: var(--raised); }
 
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--line); padding: 10px 16px; border-radius: var(--r-m); z-index: 90; max-width: min(560px, 92vw); box-shadow: var(--shadow); display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; }
+.toast { pointer-events: none; }
 .toast.err { border-color: var(--danger); }
 .toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
 .toast.err svg { color: var(--danger); }
