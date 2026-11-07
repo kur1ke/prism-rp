@@ -82,3 +82,22 @@ A04: `e2e-perchance-abort.py` использует настоящий адапт
 A05: `e2e-openai-done.py` использует настоящий HTTP SSE-сервер без EOF после `[DONE]`, router/OpenAI adapter, RP/Messenger UI и IndexedDB. Проверяет завершение без Stop, отмену reader/закрытие соединения, текст/reasoning/preview, отсутствие повторного запроса и reload на 1440/390. Узкие границы парсера/cleanup/отмены: `openai-sse-done.js`. Живой провайдер не вызывается.
 
 A06: `e2e-image-translation-budget.py` — ImageService/compiler/router + реальный IndexedDB и UI-повтор, подменены модель и графический backend. RP/Messenger × API/Perchance × 1440/390, tags/intent: overflow без текстового/графического вызова, повтор, кэш, timeout/late-result, источник и reload. Node-контракт: `image-translation-budget.js`.
+
+F29 import/opening migration: `e2e-import-directives.py` checks unknown/broken JSON,
+review cancellation, URV source preservation, default-disabled imported directives,
+editor save/reload and explicit system-directive consent at 1440/390 px. Prompt
+membership is checked with the real assembler using the persisted card; this test
+does not claim a provider call. The fixture is synthetic and has no dialogue examples.
+`e2e-empty-opening.py` checks no automatic call or placeholder turn, user-first
+requests, failed opening/retry, assistant-only opening persistence, and single-system
+preflight plus user-first recovery, using the actual OpenAI adapter with a local
+response fixture, at both widths. These suites do not exercise a live model.
+`e2e-storage-upgrade.py` uses real IndexedDB connections in separate browser tabs:
+v3/v4/v5 → current v8, exact preservation of seeded rows, empty added stores,
+blocked startup/reload, unresponsive-open timeout without writes, versionchange
+release/warning, unique character lens, and an old Messenger chat whose empty
+environment remains unpersisted. Every case runs at 1440/390 px in isolated TEST storage.
+`e2e-world-chat.py` checks the real world fact form (including comma-separated
+entities/topics/locations), branch ownership, timeline/lens relevance in an actual
+OpenAI-adapter request, no implicit model-to-world writes and reload at 1440/390 px.
+It reproduced the missing `csv` helper before the controller fix.

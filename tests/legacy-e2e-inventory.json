@@ -714,44 +714,58 @@
     {
       "historicalLine": 560,
       "name": "'FA: неизвестный и битый файл — ошибки на проверке'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 561,
       "name": "'FA: импортировать нечего — кнопка выключена'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 566,
       "name": "'FA: после ошибок карточка не создана (и после перезагрузки)'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 571,
       "name": "'FA: URV — формат, поля, собранный промпт не включается'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 572,
       "name": "'FA: URV — указания выключены по умолчанию'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 575,
       "name": "'FA: отмена — ничего не сохранено'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 580,
       "name": "'FA: URV импортирован'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 583,
@@ -764,20 +778,26 @@
     {
       "historicalLine": 585,
       "name": "'FA: редактор — импортированное указание с пометкой и выключено'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 587,
       "name": "'FA: редактор — сведения об исходнике'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 593,
       "name": "'FA: сохранение в редакторе не включает импортированное'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-import-directives.py"
+      ]
     },
     {
       "historicalLine": 610,
@@ -800,38 +820,50 @@
     {
       "historicalLine": 648,
       "name": "'B-26/B-31: пустая сцена — кнопка начала, без пустых сообщений'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 649,
       "name": "'B-27: модель сама не вызывается'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 655,
       "name": "'B-28/B-29: пользователь пишет первым — ответ получает сценарий'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 661,
       "name": "'B-30: следующий ответ — без сценария'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-scenario-cutoff.py: configurable reply-count cutoff replaces old one-reply rule"
+      ]
     },
     {
       "historicalLine": 670,
       "name": "'B-36: ошибка начала — чат пуст, можно повторить'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 679,
       "name": "'B-32/B-33: начало сцены — один вызов, сценарий и указание начать, без реплик пользователя'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 681,
@@ -842,20 +874,26 @@
     {
       "historicalLine": 684,
       "name": "'B-35: после перезагрузки начало на месте'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 694,
       "name": "'FB single-system: начало отклонено до вызова, чат пуст, причина показана'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 701,
       "name": "'FB single-system: можно написать первым — настоящая реплика, без «[Начало]»'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-empty-opening.py"
+      ]
     },
     {
       "historicalLine": 712,
@@ -922,38 +960,50 @@
     {
       "historicalLine": 787,
       "name": "'W1-36/W2: без выбранного таймлайна и без связи с ходом мир в модель не подаётся'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 796,
       "name": "'W2-UI: вкладка «Мир чата» — действующие факты с пометкой отбора'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 802,
       "name": "'W2-UI: по умолчанию — текущая ветка'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 808,
       "name": "'W2-UI: явный факт ветки сохранён с привязкой к ветке'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 824,
       "name": "'W2-30: в модель — факт ветки и замена линзы (таймлайн canon), без выключенного и без постороннего'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 828,
       "name": "'W2: ответ модели не пополнил мир чата'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 830,
@@ -964,14 +1014,18 @@
     {
       "historicalLine": 836,
       "name": "'W2-25: до места привязки факт ветки не действует, на ветке — действует'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 840,
       "name": "'W2: после перезагрузки мир чата на месте'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 855,
@@ -1088,8 +1142,10 @@
     {
       "historicalLine": 975,
       "name": "'W2-UI узкий экран: «Мир чата» открывается без горизонтальной прокрутки'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-world-chat.py: real world form, branch provenance, adapter payload, no model-to-world write and reload at 1440/390"
+      ]
     },
     {
       "historicalLine": 980,
@@ -1166,14 +1222,18 @@
     {
       "historicalLine": 1083,
       "name": "'W1-13: база v3 → v6 без потерь, новые коллекции на месте'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1088,
       "name": "'W1: одна линза на персонажа — вторую отклоняет сама база (уникальный индекс)'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1101,
@@ -1268,62 +1328,82 @@
     {
       "historicalLine": 1285,
       "name": "'IndexedDB: открытое соединение уступает обновлению (versionchange) — без зависания и «занято»'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1287,
       "name": "'IndexedDB: вкладка, уступившая базу, предупреждает обновить страницу'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1297,
       "name": "'IndexedDB: занятая база — видимое сообщение (DB_BLOCKED), не пустой экран'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1303,
       "name": "'IndexedDB: после закрытия другой вкладки — обычный запуск, данные на месте, база v6'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1317,
       "name": "'IndexedDB: зависшее открытие — DB_OPEN_TIMEOUT и сообщение, база не изменена'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1340,
       "name": "'v4→v6: старая вкладка v4 держит базу — видимое DB_BLOCKED'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1347,
       "name": "'v4→v6: обновление только добавляет worldOverlays и messengerEnvironments; карточки, пак и линза целы'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1377,
       "name": "'FC v5→v6: вкладка v5 уступила, обновление без DB_BLOCKED'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1378,
       "name": "'FC v5→v6: только добавлена messengerEnvironments; все прежние коллекции целы'",
-      "status": "pending",
-      "evidence": []
+      "status": "replaced",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1380,
       "name": "'FC: старая переписка без среды открывается — пустая среда в памяти, ничего не придумано, в базу не записано'",
-      "status": "pending",
-      "evidence": []
+      "status": "ported",
+      "evidence": [
+        "tests/e2e-storage-upgrade.py: real v3/v4/v5 → current v8, all old rows preserved; blocked/timeout UI, versionchange, unique lens and unpersisted legacy environment"
+      ]
     },
     {
       "historicalLine": 1399,
