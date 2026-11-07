@@ -33,6 +33,7 @@ try:
    assert all(s in body for s in ['Мир чата','WF-OVERRIDE','таймлайн не выбран','выключено линзой']), body
    assert page.evaluate('PRP.app.ctx.svc.worldChat.context().facts.length')==0
    page.fill('#wc-timeline','canon');page.click('[data-act=wc-sel-save]')
+   page.wait_for_function('document.querySelector("#toast").innerText.includes("Таймлайн и вариант чата сохранены")')
    page.click('[data-act=wc-new]');page.wait_for_selector('#wc-text')
    assert page.is_checked('input[name=wc-scope][value=branch]')
    page.fill('#wc-text','WF-BRANCH: Вера вступила в клуб.');page.fill('#wc-ent',' Вера, , Борис ');page.fill('#wc-top',' клуб, книги ');page.fill('#wc-loc',' библиотека, ');page.click('[data-act=wc-save]')
@@ -40,7 +41,7 @@ try:
    overlay=page.evaluate('PRP.app.S.worldOverlay');entry=overlay['entries'][0]
    assert overlay['timeline']=='canon' and entry['scope']=='branch' and entry['op']=='assert'
    assert entry['provenance']['messageIds'] and entry['provenance']['anchorId']
-   assert entry['fact']['entities']==['Вера','Борис']
+   assert entry['fact']['entities']==['Вера','Борис'],entry
    assert entry['fact']['topics']==['клуб','книги'] and entry['fact']['locations']==['библиотека']
    selected=page.evaluate('PRP.app.ctx.svc.worldChat.context().facts')
    texts=json.dumps(selected,ensure_ascii=False)
@@ -75,6 +76,8 @@ try:
    assert page.evaluate('PRP.app.S.worldOverlay')==overlay
    page.evaluate("PRP.app.S.drawerOpen=true;PRP.app.S.tab='world';PRP.app.ctx.ui.renderAll()")
    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+   page.wait_for_function('''()=>{const d=document.querySelector('.drawer.open'),b=d.getBoundingClientRect();
+    const body=document.querySelector('#drawer-body');return b.left>=-1 && b.right<=innerWidth+1 && body.scrollWidth<=body.clientWidth+1;}''')
    page.screenshot(path=str(out/f'world-chat-{width}.png'))
    page.reload();page.wait_for_function('window.PRP && PRP.app && PRP.app.S.worldOverlay && PRP.app.S.worldOverlay.entries.length===1')
    assert page.evaluate('PRP.app.S.worldOverlay')==overlay
