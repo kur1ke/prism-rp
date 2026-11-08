@@ -5,6 +5,44 @@ module.exports = async function ({ make, setModel, test }) {
   const T = globalThis.PRP.tree;
   const snapshot = (h) => JSON.stringify({ messages: h.S.messages, chat: h.ctx.chat() });
   const stored = (h) => JSON.stringify({ messages: [...h.store.messages], chats: [...h.store.chats] });
+  for (const outputFormat of [null, "message-body"]) {
+    await test(`continue transport ${outputFormat || "rp"}: prefix once, explicit continuation and immutable history`, () => {
+      const messages = [{role:"system",content:"FRAME"},{role:"user",content:"USER_TEXT"},
+        {role:"assistant",content:"OLD_REPLY"},{role:"system",content:"TRAILING_RULE"}];
+      const before = JSON.stringify(messages), options = {continueFrom:"OLD_REPLY",outputFormat};
+      const PC = globalThis.PRP.perchance, names = {char:"N",user:"U"};
+      assert.deepEqual(PC.prepareChat(names,messages,{outputFormat}),PC.toPrompt(messages,names,null,outputFormat));
+      const other = messages.map(m=>m.role==="assistant" ? {...m,content:"DIFFERENT_REPLY"} : m);
+      assert.ok(PC.prepareChat(names,other,options).instruction.includes("DIFFERENT_REPLY"));
+      assert.ok(PC.prepareChat(names,messages,{...options,closing:"EXPLICIT_CLOSING"}).instruction.endsWith("EXPLICIT_CLOSING"));
+      const p = globalThis.PRP.perchance.prepareChat({char:"N",user:"U"},messages,options);
+      assert.equal((p.instruction+p.startWith).split("OLD_REPLY").length-1,1);
+      assert.ok(p.instruction.includes("FRAME") && p.instruction.includes("USER_TEXT") && p.instruction.includes("TRAILING_RULE"));
+      assert.ok(p.instruction.split("\n").at(-1).startsWith("Продолжи уже начатое сообщение N"));
+      assert.equal(p.startWith,outputFormat ? "OLD_REPLY" : "N: OLD_REPLY");
+      assert.equal(JSON.stringify(messages),before);
+      assert.equal(globalThis.PRP.perchance.inputCost({char:"N",user:"U"},messages,options),
+        globalThis.PRP.util.estimateTokens(p.instruction)+globalThis.PRP.util.estimateTokens(p.startWith));
+    });
+  }
+  for (const chatMode of ["rp", "messenger"]) {
+    await test(`continue ${chatMode}: empty output is visible, preserves storage and permits retry`, async () => {
+      const h = make({name:"Мира",description:"Библиотекарь."});
+      await h.chat.createChat(chatMode,"c1");
+      const u = await h.chat.addUserMessage("Привет");
+      const draft = h.chat.newMsg("assistant",u.id,"OLD_REPLY");
+      const m = await h.chat.commitMessage(draft,draft.id);
+      const before = snapshot(h), saved = stored(h);
+      setModel(async()=>({text:"   ",reasoning:""}));
+      const result = await h.gen.generate(m.id,"continue");
+      assert.equal(result.reason,"empty-continuation");
+      assert.equal(snapshot(h),before);assert.equal(stored(h),saved);assert.equal(h.S.gen,null);
+      assert.ok(h.toasts.some(x=>x.t.includes("Модель не вернула текст продолжения")));
+      setModel(async()=>({text:"NEW_REPLY",reasoning:""}));
+      const retried = await h.gen.generate(m.id,"continue");await retried.post;
+      assert.equal(T.activeSwipe(m).text,"OLD_REPLY NEW_REPLY");
+    });
+  }
   for (const chatMode of ["rp", "messenger"]) for (const operation of ["regen", "continue"]) {
     await test(`F19 ${chatMode}/${operation}: stage privately, publish message and preview after commit; abort permits retry`, async () => {
       const h = make({ name: "Аля", description: "Внимательная." });

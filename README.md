@@ -215,7 +215,7 @@ StateTracker теперь хранит **явно снятую вещь** как
 ```
 node tests/run.js                 # основные модульные и сервисные проверки
 node build.js                     # сборка dist/perchance и dist/standalone
-python3 tests/browser_regressions.py <папка>  # свежая сборка и все 50 браузерных наборов (нужен playwright)
+python3 tests/browser_regressions.py <папка>  # свежая сборка и все браузерные наборы (нужен playwright)
 ```
 
 Исходники — классические скрипты без сборщика. Каждый модуль кладёт себя в `window.PRP`, поэтому один и тот же код работает на Perchance, с `file://` и в Node-тестах.

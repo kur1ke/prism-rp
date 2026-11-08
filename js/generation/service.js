@@ -247,6 +247,13 @@
       // создаётся. Служебный текст при этом всё равно удалён из ответа.
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
+      if (mode === "continue" && !error && !ctrl.signal.aborted &&
+          !dr.text.trim() && !dr.draws.length && !dr.stateCalls.length) {
+        S.gen = null;
+        ui.renderFeed();
+        ui.toast("Модель не вернула текст продолжения. Исходный ответ сохранён. Можно повторить попытку.", true);
+        return { ok: false, reason: "empty-continuation" };
+      }
       if (mode === "continue") {
         if (dr.text) sw.text = S.gen.prefix + dr.text;
         sw.draws = (sw.draws || []).concat(dr.draws);
