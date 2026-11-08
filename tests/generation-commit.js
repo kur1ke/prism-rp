@@ -5,6 +5,49 @@ module.exports = async function ({ make, setModel, test }) {
   const T = globalThis.PRP.tree;
   const snapshot = (h) => JSON.stringify({ messages: h.S.messages, chat: h.ctx.chat() });
   const stored = (h) => JSON.stringify({ messages: [...h.store.messages], chats: [...h.store.chats] });
+  for (const chatMode of ["rp", "messenger"]) for (const outcome of ["empty", "spaces", "thinking", "error", "cancelled"]) {
+    await test(`A10 ${chatMode}/${outcome}: empty regeneration retains selected reply and permits retry`, async () => {
+      const h = make({name:"Мира",description:"Библиотекарь."});
+      await h.chat.createChat(chatMode,"c1");
+      const u = await h.chat.addUserMessage("Привет");
+      const draft = h.chat.newMsg("assistant",u.id,"OLD_REPLY");
+      draft.swipes[0].reasoning = "KEEP_REASONING";
+      draft.swipes.push({text:"OTHER_REPLY",createdAt:1});
+      const m = await h.chat.commitMessage(draft,draft.id);
+      const before = snapshot(h), saved = stored(h);
+      setModel(async()=>{
+        if (outcome === "error") throw new Error("FIXTURE_PROVIDER_ERROR");
+        if (outcome === "cancelled") h.gen.stop();
+        return {text:outcome === "thinking" ? "<think>reasoning only</think>" : outcome === "spaces" ? "  \n " : "",reasoning:""};
+      });
+      const result = await h.gen.generate(m.id,"regen");
+      assert.equal(snapshot(h),before,"no empty swipe or selection change");
+      assert.equal(stored(h),saved,"no message/preview write");
+      assert.equal(h.S.gen,null);assert.equal(result.ok,false);assert.equal(result.post,undefined);
+      assert.ok(h.toasts.some(x=>x.t.includes("Исходный ответ сохранён")));
+      setModel(async()=>({text:"NEW_REPLY",reasoning:""}));
+      const retried = await h.gen.generate(m.id,"regen");await retried.post;
+      assert.equal(m.swipes.length,3);assert.equal(m.swipeIdx,2);
+      assert.equal(m.swipes[0].text,"OLD_REPLY");assert.equal(m.swipes[1].text,"OTHER_REPLY");
+      assert.equal(T.activeSwipe(m).text,"NEW_REPLY");
+    });
+  }
+  for (const content of ["draw", "state"]) {
+    await test(`A10 valid ${content}-only regeneration is not classified as empty`, async () => {
+      const h = make({name:"Мира",description:"Библиотекарь."});
+      await h.chat.createChat("rp","c1");
+      const u = await h.chat.addUserMessage("Привет");
+      const draft = h.chat.newMsg("assistant",u.id,"OLD_REPLY");
+      const m = await h.chat.commitMessage(draft,draft.id);
+      Object.assign(h.S.settings.images,{enabled:true,backend:"a1111",autoDraw:false,modelDrawPolicy:"contextual"});
+      h.S.settings.stateToolEnabled = true;
+      setModel(async()=>({text:content === "draw" ? "[draw: 1girl, portrait, 1:1]" : '[state: time.set("18:00")]',reasoning:""}));
+      const result = await h.gen.generate(m.id,"regen");await result.post;
+      assert.equal(m.swipes.length,2);assert.equal(m.swipeIdx,1);
+      assert.equal(m.swipes[0].text,"OLD_REPLY");
+      assert.equal(content === "draw" ? T.activeSwipe(m).draws.length : T.activeSwipe(m).stateCalls.length,1);
+    });
+  }
   for (const outputFormat of [null, "message-body"]) {
     await test(`continue transport ${outputFormat || "rp"}: prefix once, explicit continuation and immutable history`, () => {
       const messages = [{role:"system",content:"FRAME"},{role:"user",content:"USER_TEXT"},
