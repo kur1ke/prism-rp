@@ -135,3 +135,11 @@ cannot duplicate the existing answer; the prefix occurs once in the wire input.
 An empty result shows an explicit message, preserves native-IDB message/chat bytes,
 and permits a successful retry in the same swipe followed by reload. External
 responses are fixtures; live-model behavior is not certified by this test.
+
+`e2e-empty-regeneration.py` covers A10 with real regeneration/Stop buttons, actual
+Perchance/OpenAI adapters and native IndexedDB at 1440/390 in RP/Messenger. Empty,
+whitespace, reasoning-only, provider failure and pre-content cancellation preserve
+the full selected message/chat and Memory/image stores. Late cancelled completion
+cannot publish. Each rejected attempt is followed by a successful retry adding
+exactly one swipe; prior swipes remain intact and reload preserves the result.
+External model responses are fixtures, not live-model validation.
