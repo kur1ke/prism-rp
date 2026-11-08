@@ -62,7 +62,7 @@ All 203 historical named call sites have been individually classified in
 `legacy-e2e-inventory.json`: current semantic coverage, explicitly replaced contract
 or retired contract. There are zero pending entries. The obsolete `tests/e2e.py`
 has been removed; its pinned `sourceRef` retains the historical source. The current
-gate discovers all 50 `e2e-*.py` suites, builds fresh sources, records evidence and
+gate discovers all `e2e-*.py` suites, builds fresh sources, records evidence and
 fails CI/publication on any failure or watchdog timeout.
 
 This closes migration of the old browser flow. It does not certify a live model
@@ -128,3 +128,10 @@ cover timezone/frame/reasons, read-only generation context, mobile forms/control
 bounds and the current navigation guard plus abort. Its Stop click remains reachable
 under the visible warning toast; no force click bypasses hit testing. World tests
 exercise referenced-pack deletion refusal and the report's current Debug location.
+
+`e2e-continue.py` checks the real Continue button in RP/Messenger through Perchance
+and OpenAI-compatible adapters at 1440/390. A seed-inclusive Perchance response
+cannot duplicate the existing answer; the prefix occurs once in the wire input.
+An empty result shows an explicit message, preserves native-IDB message/chat bytes,
+and permits a successful retry in the same swipe followed by reload. External
+responses are fixtures; live-model behavior is not certified by this test.
