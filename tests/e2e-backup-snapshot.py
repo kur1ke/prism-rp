@@ -110,8 +110,10 @@ try:
                 dialog_mode['replace']=kind!='additive'
                 badpath=out/f'cycle-{kind}-{width}.json'
                 badpath.write_text(json.dumps(bad))
+                # Each rejected file produces the same toast; do not observe the previous attempt.
+                page.evaluate('document.querySelector("#toast").textContent=""')
                 page.locator('#file-backup').set_input_files(str(badpath))
-                page.wait_for_function('document.body.innerText.includes("в связях сообщений обнаружен цикл")')
+                page.wait_for_function('document.querySelector("#toast").innerText.includes("в связях сообщений обнаружен цикл") && document.querySelector("#file-backup").value===""')
                 after=page.evaluate('PRP.store.exportAll()');after.pop('exportedAt')
                 assert after==before,(kind,'failed restore changed data')
                 assert page.evaluate('!!PRP.app.S.modal && document.querySelector("#file-backup").value===""')
