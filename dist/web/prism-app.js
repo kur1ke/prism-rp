@@ -7,7 +7,7 @@
   var wrap = d.createElement("div"); wrap.innerHTML = "<div id=\"app\" class=\"app\">\n  <aside class=\"rail\" id=\"rail\" aria-label=\"Навигация\"></aside>\n  <main class=\"stage\" id=\"stage\"></main>\n  <aside class=\"drawer\" id=\"drawer\" aria-label=\"Панель сцены\"></aside>\n  <div class=\"scrim\" id=\"scrim\" hidden></div>\n  <div id=\"pop-root\"></div>\n  <div id=\"modal-root\"></div>\n  <div class=\"toast\" id=\"toast\" role=\"status\" hidden></div>\n  <input type=\"file\" id=\"file-card\" accept=\".png,.json,image/png,application/json\" multiple hidden>\n  <input type=\"file\" id=\"file-backup\" accept=\".json,application/json\" hidden>\n  <input type=\"file\" id=\"file-avatar\" accept=\"image/*\" hidden>\n  <input type=\"file\" id=\"file-world\" accept=\".json,application/json\" hidden>\n</div>\n\n<!-- Порядок загрузки = порядок зависимостей (каждый модуль берёт зависимости из PRP при загрузке).\n     1. ядро → 2. чистые модули предметной области и транспорт → 3. платформенные адаптеры и представления\n     → 4. прикладные сервисы → 5. оболочка интерфейса и контроллеры → 6. корень приложения. -->";
   while (wrap.firstChild) d.body.appendChild(wrap.firstChild);
   window.PRISM_RP_VERSION = "0.5.0";
-  window.PRISM_RP_BUILD_SHA = "19bc9d8faebccba49400ccc5c9b589c9eb36996c";
+  window.PRISM_RP_BUILD_SHA = "71e7b02092ae6deb345bd4a3420ec759953dcd37";
 })();
 /* js/core/util.js */
 /* Prism RP — общие утилиты. Классические скрипты: всё в globalThis.PRP,
@@ -8232,7 +8232,20 @@
   // Pure preparation shared by budget estimation and the actual plugin call.
   function prepareChat(names, messages, opts) {
     const o = opts || {}, n = names || {};
-    const p = toPrompt(messages, n, o.closing, o.outputFormat);
+    let history = messages;
+    const continuing = !!o.continueFrom && o.outputFormat !== "json";
+    if (continuing) {
+      // The selected reply is the completion seed, not a second completed turn.
+      // Preserve trailing system instructions and any non-matching history.
+      let last = messages.length - 1;
+      while (last >= 0 && messages[last].role === "system") last--;
+      if (last >= 0 && messages[last].role === "assistant" && messages[last].content === o.continueFrom)
+        history = messages.filter((_, i) => i !== last);
+    }
+    const closing = o.closing || (continuing
+      ? `Продолжи уже начатое сообщение ${n.char || "Персонаж"} с конца заданного начала. Верни только новый текст продолжения, без повторения начала и без новой реплики за ${n.user || "Пользователь"}.`
+      : null);
+    const p = toPrompt(history, n, closing, o.outputFormat);
     if (o.continueFrom) p.startWith = o.outputFormat === "message-body" || o.outputFormat === "json"
       ? o.continueFrom : `${n.char || "Персонаж"}: ${o.continueFrom}`;
     if (o.imageDataUrl) p.instruction += IMAGE_NOTE;
@@ -8264,11 +8277,12 @@
     function outputText(res) {
       if (simple) return res && res.generatedText != null ? String(res.generatedText)
         : res == null ? text : String(res || "");
-      // In unprefixed modes, streaming already excludes the transport seed
+      // Streaming already excludes the transport seed, including RP continuation.
       // (isFromStartWith). Prefer that exact body over generatedText, whose
       // inclusion of startWith varies across plugin versions.
-      let out = unprefixed && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
-      if (unprefixed && !text && p.startWith && out.startsWith(p.startWith)) {
+      const seeded = unprefixed || !!o.continueFrom;
+      let out = seeded && text ? text : (res && res.generatedText != null ? String(res.generatedText) : text);
+      if (seeded && !text && p.startWith && out.startsWith(p.startWith)) {
         out = out.slice(p.startWith.length); // remove only our exact seed, never a model-written name
       }
       out = out.replace(/^\s+/, "");
@@ -12640,6 +12654,13 @@
       // создаётся. Служебный текст при этом всё равно удалён из ответа.
       if (!built.report.imageDirectiveAllowed) dr.draws = [];
       else dr.draws = dr.draws.slice(0, 1);
+      if (mode === "continue" && !error && !ctrl.signal.aborted &&
+          !dr.text.trim() && !dr.draws.length && !dr.stateCalls.length) {
+        S.gen = null;
+        ui.renderFeed();
+        ui.toast("Модель не вернула текст продолжения. Исходный ответ сохранён. Можно повторить попытку.", true);
+        return { ok: false, reason: "empty-continuation" };
+      }
       if (mode === "continue") {
         if (dr.text) sw.text = S.gen.prefix + dr.text;
         sw.draws = (sw.draws || []).concat(dr.draws);
